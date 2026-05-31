@@ -1,20 +1,45 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# Sahrae Entertainment
 
-# Run and deploy your AI Studio app
+Streaming app for movies, series, podcasts, and live audio. Vite + React 19 + TypeScript, Firebase auth/Firestore, HLS.js.
 
-This contains everything you need to run your app locally.
+## Run locally (web)
 
-View your app in AI Studio: https://ai.studio/apps/32f8c792-ec50-4cb2-9ded-de4f290170c2
+Prerequisites: Node.js 20+
 
-## Run Locally
+```
+npm install
+npm run dev
+```
 
-**Prerequisites:**  Node.js
+## Build the Android APK
 
+Builds run on GitHub Actions on every push to `main`. The workflow is at [`.github/workflows/android.yml`](.github/workflows/android.yml) and produces a debug-signed APK as an artifact.
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+Download the most recent APK:
+
+```
+gh run download <run-id> --dir ./artifacts
+```
+
+Or via the web UI: **Actions → Build Android APK → latest run → Artifacts**.
+
+### Locally (optional)
+
+Requires Node 20, JDK 17, Android SDK with platform 34 + build-tools 34.0.0.
+
+```
+npm install
+npm run build
+npx cap add android        # only if android/ doesn't exist yet
+npx cap sync android
+cd android && ./gradlew assembleDebug
+```
+
+APK lands at `android/app/build/outputs/apk/debug/app-debug.apk`.
+
+## Capacitor
+
+- `appId`: `com.sahrae.entertainment`
+- `webDir`: `dist` (Vite output)
+- Config: [`capacitor.config.ts`](capacitor.config.ts)
+- The `android/` folder is gitignored — CI regenerates it via `npx cap add android` each build. Any native customisations need to be scripted into the workflow or kept as an overlay copied in after `cap add`.
