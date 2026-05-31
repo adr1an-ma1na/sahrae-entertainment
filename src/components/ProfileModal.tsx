@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, FormEvent } from 'react';
 import { X, User, LogOut, Key, Camera, Check } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { updateProfile, updatePassword } from '../firebase';
@@ -31,7 +31,7 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
 
   if (!isOpen || !user) return null;
 
-  const handleUpdateProfile = async (e: React.FormEvent) => {
+  const handleUpdateProfile = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setMessage('');
@@ -51,7 +51,7 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
     }
   };
 
-  const handleUpdatePassword = async (e: React.FormEvent) => {
+  const handleUpdatePassword = async (e: FormEvent) => {
     e.preventDefault();
     if (!newPassword || newPassword.length < 6) {
       setError('Password must be at least 6 characters');

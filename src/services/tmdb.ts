@@ -141,7 +141,7 @@ export const fetchSimilar = async (id: number, type: 'movie' | 'tv' = 'movie'): 
   return data.results.map((item: any) => ({ ...item, media_type: type }));
 };
 
-export const getImageUrl = (path: string | null, size: 'w500' | 'original' | 'w780' | 'w185' = 'w500') => {
+export const getImageUrl = (path: string | null, size: 'w500' | 'original' | 'w780' | 'w185' | 'w300' = 'w500') => {
   if (!path) return 'https://via.placeholder.com/500x750?text=No+Image';
   if (path.startsWith('http')) return path;
   return `https://image.tmdb.org/t/p/${size}${path}`;

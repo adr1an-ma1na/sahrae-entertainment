@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, FormEvent } from 'react';
 import { Plus, Edit2, Check } from 'lucide-react';
 import { useAuth, Profile } from '../hooks/useAuth';
 
@@ -44,7 +44,7 @@ export default function ProfileSelection() {
     setSelectedAvatar(profile.avatar);
   };
 
-  const handleAdd = async (e: React.FormEvent) => {
+  const handleAdd = async (e: FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
     setLoading(true);

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { Mic, ExternalLink, Plus, Trash2, Play } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { db } from '../firebase';
@@ -47,7 +47,7 @@ export default function PodcastsView() {
     }
   }, [user]);
 
-  const handleAddPodcast = async (e: React.FormEvent) => {
+  const handleAddPodcast = async (e: FormEvent) => {
     e.preventDefault();
     if (!user) {
       alert("Please sign in to add custom podcasts.");
