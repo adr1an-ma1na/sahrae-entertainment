@@ -1,0 +1,47 @@
+[
+  {
+    "name": "Reuters",
+    "handle": "@Reuters",
+    "channelId": "UChqUTb7kYRX8-EiaN3XFrSQ"
+  },
+  {
+    "name": "EuroNews",
+    "handle": "@euronews",
+    "channelId": "UCSrZ3UV4jOidv8ppoVuvW9Q"
+  },
+  {
+    "name": "WION",
+    "handle": "@WION",
+    "channelId": "UC_gUM8rL-Lrg6O3adPW9K1g"
+  },
+  {
+    "name": "CNA",
+    "handle": "@channelnewsasia",
+    "channelId": "UC83jt4dlz1Gjl58fzQrrKZg"
+  },
+  {
+    "name": "Arirang TV",
+    "handle": "@arirangtv",
+    "channelId": "UCCW7Z4RTTQoFix1dvn0D3LA"
+  },
+  {
+    "name": "KTN News",
+    "handle": "@ktnnews",
+    "channelId": "UCYViuO63Wp4IlwKWv6uNKig"
+  },
+  {
+    "name": "K24 TV",
+    "handle": "@K24TV",
+    "channelId": "UCt3SE-Mvs3WwP7UW-PiFdqQ"
+  },
+  {
+    "name": "Global News",
+    "handle": "@globalnews",
+    "channelId": "UChLtXXpo4Ge1ReTEboVvTDg"
+  },
+  {
+    "name": "GB News",
+    "handle": "@GBNewsOnline",
+    "channelId": "UC0vn8ISa4LKMunLbzaXLnOQ"
+  }
+]

@@ -1,0 +1,62 @@
+{
+  "entities": {
+    "Profile": {
+      "title": "User Profile",
+      "description": "User profile data.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "avatar": { "type": "string" }
+      },
+      "required": ["id", "name", "avatar"]
+    },
+    "MyListItem": {
+      "title": "My List Item",
+      "description": "An item saved in the user's list.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "title": { "type": "string" },
+        "name": { "type": "string" },
+        "overview": { "type": "string" },
+        "poster_path": { "type": "string" },
+        "backdrop_path": { "type": "string" },
+        "media_type": { "type": "string" },
+        "release_date": { "type": "string" },
+        "first_air_date": { "type": "string" },
+        "addedAt": { "type": "string" }
+      },
+      "required": ["id", "media_type"]
+    },
+    "WatchProgressItem": {
+      "title": "Watch Progress Item",
+      "description": "A user's watch progress state.",
+      "type": "object",
+      "properties": {
+        "mediaId": { "type": "number" },
+        "mediaType": { "type": "string", "enum": ["movie", "tv"] },
+        "season": { "type": "number" },
+        "episode": { "type": "number" },
+        "timestamp": { "type": "number" },
+        "item": { "type": "object" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["mediaId", "mediaType", "timestamp", "item"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/profiles/{profileId}": {
+      "schema": { "$ref": "#/entities/Profile" },
+      "description": "Information about a user profile."
+    },
+    "/users/{userId}/profiles/{profileId}/myList/{mediaId}": {
+      "schema": { "$ref": "#/entities/MyListItem" },
+      "description": "Saved media item for the user profile."
+    },
+    "/users/{userId}/profiles/{profileId}/watchProgress/{mediaId}": {
+      "schema": { "$ref": "#/entities/WatchProgressItem" },
+      "description": "Watch progress for the user profile."
+    }
+  }
+}

@@ -1,0 +1,108 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net
+    match /{document=**} { 
+      allow read, write: if false; 
+    }
+
+    // Primitive Helpers
+    function isSignedIn() { return request.auth != null; }
+    function isValidId(id) { return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+
+    function isValidMediaId(id) { return id is int || (id is string && id.size() > 0 && id.size() <= 128); }
+
+    // Validation Blueprint for Profile
+    function isValidProfile(data) {
+      return data.keys().hasAll(['id', 'name', 'avatar'])
+        && data.id is string && data.id.size() > 0 && data.id.size() <= 128
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && data.avatar is string && data.avatar.size() <= 1024;
+    }
+
+    // Validation Blueprint for MyListItem
+    function isValidMyListItem(data) {
+      return data.keys().hasAll(['id', 'media_type', 'addedAt'])
+        && (data.id is int || (data.id is string && data.id.size() <= 128))
+        && data.media_type is string && (data.media_type == 'movie' || data.media_type == 'tv')
+        && data.addedAt is string && data.addedAt.size() <= 50
+        && (!('title' in data) || (data.title is string && data.title.size() <= 500))
+        && (!('name' in data) || (data.name is string && data.name.size() <= 500))
+        && (!('overview' in data) || (data.overview is string && data.overview.size() <= 10000))
+        && (!('poster_path' in data) || (data.poster_path is string && data.poster_path.size() <= 1024))
+        && (!('backdrop_path' in data) || (data.backdrop_path is string && data.backdrop_path.size() <= 1024))
+        && (!('release_date' in data) || (data.release_date is string && data.release_date.size() <= 50))
+        && (!('first_air_date' in data) || (data.first_air_date is string && data.first_air_date.size() <= 50));
+    }
+
+    // Validation Blueprint for WatchProgressItem
+    function isValidWatchProgressItem(data) {
+      return data.keys().hasAll(['mediaId', 'mediaType', 'timestamp', 'item', 'updatedAt'])
+        && (data.mediaId is int || (data.mediaId is string && data.mediaId.size() <= 128))
+        && data.mediaType is string && (data.mediaType == 'movie' || data.mediaType == 'tv')
+        && data.timestamp is number
+        && data.item is map
+        && data.updatedAt is string && data.updatedAt.size() <= 50
+        && (!('season' in data) || data.season == null || (data.season is number))
+        && (!('episode' in data) || data.episode == null || (data.episode is number));
+    }
+
+    match /users/{userId} {
+      // User Profile basic
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false; // Users cannot list other users
+      
+      match /profiles/{profileId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(profileId);
+        allow list: if isOwner(userId) && isValidId(userId);
+        
+        allow create: if isOwner(userId) && isValidId(userId) && isValidId(profileId)
+          && isValidProfile(incoming())
+          && incoming().id == profileId; // Immutability of ID
+          
+        allow update: if isOwner(userId) && isValidId(userId) && isValidId(profileId)
+          && isValidProfile(incoming())
+          && incoming().id == existing().id // id is immortal
+          && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'avatar']);
+          
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(profileId);
+        
+        match /myList/{mediaId} {
+          allow get: if isOwner(userId) && isValidId(userId) && isValidId(profileId) && isValidMediaId(mediaId);
+          allow list: if isOwner(userId) && isValidId(userId) && isValidId(profileId);
+          
+          allow create: if isOwner(userId) && isValidId(userId) && isValidId(profileId) && isValidMediaId(mediaId)
+            && isValidMyListItem(incoming())
+            && (string(incoming().id).toLower() == string(mediaId).toLower() || string(incoming().id) == string(mediaId));
+            
+          allow update: if isOwner(userId) && isValidId(userId) && isValidId(profileId) && isValidMediaId(mediaId)
+            && isValidMyListItem(incoming())
+            && incoming().id == existing().id // immortal field
+            && incoming().addedAt == existing().addedAt; // immortal field
+            
+          allow delete: if isOwner(userId) && isValidId(userId) && isValidId(profileId) && isValidMediaId(mediaId);
+        }
+        
+        match /watchProgress/{mediaId} {
+          allow get: if isOwner(userId) && isValidId(userId) && isValidId(profileId) && isValidMediaId(mediaId);
+          allow list: if isOwner(userId) && isValidId(userId) && isValidId(profileId);
+          
+          allow create: if isOwner(userId) && isValidId(userId) && isValidId(profileId) && isValidMediaId(mediaId)
+            && isValidWatchProgressItem(incoming())
+            && (string(incoming().mediaId).toLower() == string(mediaId).toLower() || string(incoming().mediaId) == string(mediaId));
+            
+          allow update: if isOwner(userId) && isValidId(userId) && isValidId(profileId) && isValidMediaId(mediaId)
+            && isValidWatchProgressItem(incoming())
+            && incoming().mediaId == existing().mediaId // immortal field
+            && incoming().diff(existing()).affectedKeys().hasOnly(['season', 'episode', 'timestamp', 'item', 'updatedAt']);
+            
+          allow delete: if isOwner(userId) && isValidId(userId) && isValidId(profileId) && isValidMediaId(mediaId);
+        }
+      }
+    }
+  }
+}

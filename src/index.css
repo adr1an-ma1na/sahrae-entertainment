@@ -1,0 +1,111 @@
+@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-zinc-950: var(--zinc-950);
+  --color-zinc-900: var(--zinc-900);
+  --color-zinc-800: var(--zinc-800);
+  --color-zinc-700: var(--zinc-700);
+  --color-zinc-600: var(--zinc-600);
+  --color-zinc-500: var(--zinc-500);
+  --color-zinc-400: var(--zinc-400);
+  --color-zinc-300: var(--zinc-300);
+  --color-zinc-200: var(--zinc-200);
+  --color-zinc-100: var(--zinc-100);
+  --color-zinc-50: var(--zinc-50);
+  --color-white: var(--white);
+  --color-black: var(--black);
+  
+  --font-sans: "Figtree", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  :root {
+    /* Premium Cool Silver Light Theme */
+    --zinc-950: #eef1f4; 
+    --zinc-900: #e5e8ec; 
+    --zinc-800: #d1d7de;
+    --zinc-700: #b5bec8;
+    --zinc-600: #93a0b0;
+    --zinc-500: #748293;
+    --zinc-400: #576372;
+    --zinc-300: #424b57;
+    --zinc-200: #2d333b;
+    --zinc-100: #1c2127;
+    --zinc-50:  #0d1116;
+    
+    --white: #171c22; 
+    --black: #ffffff; 
+  }
+
+  .dark {
+    --zinc-950: #09090b;
+    --zinc-900: #18181b;
+    --zinc-800: #27272a;
+    --zinc-700: #3f3f46;
+    --zinc-600: #52525b;
+    --zinc-500: #71717a;
+    --zinc-400: #a1a1aa;
+    --zinc-300: #d4d4d8;
+    --zinc-200: #e4e4e7;
+    --zinc-100: #f4f4f5;
+    --zinc-50: #fafafa;
+    --white: #ffffff;
+    --black: #000000;
+  }
+
+  .midnight {
+    /* "Midnight Ocean" theme - smooth slate blues that pair elegantly with UI */
+    --zinc-950: #020617; 
+    --zinc-900: #0f172a; 
+    --zinc-800: #1e293b; 
+    --zinc-700: #334155; 
+    --zinc-600: #475569; 
+    --zinc-500: #64748b; 
+    --zinc-400: #94a3b8; 
+    --zinc-300: #cbd5e1; 
+    --zinc-200: #e2e8f0; 
+    --zinc-100: #f1f5f9; 
+    --zinc-50:  #f8fafc; 
+    
+    --white: #ffffff;
+    --black: #000000;
+  }
+}
+
+@layer base {
+  body {
+    font-family: "Figtree", ui-sans-serif, system-ui, sans-serif;
+  }
+}
+
+@layer utilities {
+  .scrollbar-hide {
+    /* IE and Edge */
+    -ms-overflow-style: none;
+    /* Firefox */
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent; 
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2); 
+    border-radius: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.4); 
+  }
+  .custom-scrollbar {
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    scrollbar-width: thin;
+  }
+}

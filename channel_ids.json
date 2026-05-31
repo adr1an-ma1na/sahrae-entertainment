@@ -1,0 +1,82 @@
+[
+  {
+    "name": "Al Jazeera",
+    "handle": "@aljazeeraenglish",
+    "channelId": "UCfiwzLy-8yKzIbsmZTzxDgw"
+  },
+  {
+    "name": "Sky News",
+    "handle": "@SkyNews",
+    "channelId": "UCkFclpi8U9VJjfxLYoms7Aw"
+  },
+  {
+    "name": "DW News",
+    "handle": "@dwnews",
+    "channelId": "UCbbS1GE942k3UVqpLklyhIA"
+  },
+  {
+    "name": "France 24",
+    "handle": "@France24_en",
+    "channelId": "UCCCPCZNChQdGa9EkATeye4g"
+  },
+  {
+    "name": "NBC News",
+    "handle": "@NBCNews",
+    "channelId": "UChDKyKQ59fYz3JO2fl0Z6sg"
+  },
+  {
+    "name": "CBS News",
+    "handle": "@CBSNews",
+    "channelId": "UC-SJ6nODDmufqBzPBwCvYvQ"
+  },
+  {
+    "name": "NASA TV",
+    "handle": "@NASA",
+    "channelId": "UC9SM7V7J1pAhPabOUST01fw"
+  },
+  {
+    "name": "LiveNOW FOX",
+    "handle": "@livenowfox",
+    "channelId": "UCDiPds0v60wueil5B8w3fPQ"
+  },
+  {
+    "name": "Citizen TV",
+    "handle": "@citizentvkenya",
+    "channelId": "UChBQgieUidXV1CmDxSdRm3g"
+  },
+  {
+    "name": "TRT World",
+    "handle": "@trtworld",
+    "channelId": "UCnyCrv8b7bu0oWFXGyHaPzg"
+  },
+  {
+    "name": "NDTV",
+    "handle": "@NDTV",
+    "channelId": "UCXBD5iG5cr4ZYZ99K-fmDHg"
+  },
+  {
+    "name": "AfricaNews",
+    "handle": "@africanews",
+    "channelId": "UC25EuGAePOPvPrUA5cmu3dQ"
+  },
+  {
+    "name": "Firstpost",
+    "handle": "@Firstpost",
+    "channelId": "UCef1-8eOpJgud7szVPlZQAQ"
+  },
+  {
+    "name": "The Sun",
+    "handle": "@thesun",
+    "channelId": "UCxVoBlRQHWr-GKiAH0zMSCg"
+  },
+  {
+    "name": "Telegraph",
+    "handle": "@telegraph",
+    "channelId": "UCZwQE6syN6bBft33STSo0uw"
+  },
+  {
+    "name": "Lofi Girl",
+    "handle": "@LofiGirl",
+    "channelId": "UCc5afI6TobiZjRke2sYBDPA"
+  }
+]

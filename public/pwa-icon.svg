@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+    <defs>
+        <!-- Background radial gradient -->
+        <radialGradient id="bg-grad" cx="50%" cy="50%" r="70%">
+            <stop offset="0%" stop-color="#3b2b11" />
+            <stop offset="50%" stop-color="#121214" />
+            <stop offset="100%" stop-color="#000000" />
+        </radialGradient>
+        
+        <!-- Text golden gradient -->
+        <linearGradient id="text-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#fef08a" />
+            <stop offset="40%" stop-color="#f59e0b" />
+            <stop offset="80%" stop-color="#d97706" />
+            <stop offset="100%" stop-color="#92400e" />
+        </linearGradient>
+        
+        <!-- Ring gradient -->
+        <linearGradient id="ring-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.9"/>
+            <stop offset="100%" stop-color="#ef4444" stop-opacity="0.3"/>
+        </linearGradient>
+
+        <linearGradient id="ring-grad-2" x1="100%" y1="100%" x2="0%" y2="0%">
+            <stop offset="0%" stop-color="#d97706" stop-opacity="0.8"/>
+            <stop offset="100%" stop-color="#ea580c" stop-opacity="0"/>
+        </linearGradient>
+    </defs>
+    
+    <!-- Base background -->
+    <rect width="512" height="512" fill="url(#bg-grad)" />
+    
+    <!-- Simulated Glows using transparent gradients/radial circles -->
+    <circle cx="256" cy="256" r="300" fill="#f59e0b" opacity="0.1" />
+    <circle cx="256" cy="256" r="200" fill="#ea580c" opacity="0.15" />
+    <circle cx="256" cy="256" r="120" fill="#fef08a" opacity="0.1" />
+    
+    <!-- High-res Rings -->
+    <circle cx="256" cy="256" r="230" fill="none" stroke="url(#ring-grad)" stroke-width="4" opacity="0.8" />
+    <circle cx="256" cy="256" r="222" fill="none" stroke="url(#ring-grad-2)" stroke-width="1.5" opacity="0.6" />
+    
+    <!-- Core Flare effect -->
+    <ellipse cx="256" cy="256" rx="200" ry="60" fill="#f59e0b" opacity="0.2" />
+    <ellipse cx="256" cy="256" rx="140" ry="30" fill="#fef08a" opacity="0.3" />
+
+    <style>
+        .title-text {
+            font-family: "Impact", "Arial Black", "Helvetica Neue", sans-serif;
+            font-weight: 900;
+            font-size: 110px;
+            text-anchor: middle;
+            dominant-baseline: middle;
+            letter-spacing: -1.5px;
+        }
+    </style>
+    
+    <!-- 3D Shadow Layers (instead of feDropShadow) -->
+    <text x="256" y="271" class="title-text" fill="#000000" opacity="0.3">Sahrae</text>
+    <text x="256" y="268" class="title-text" fill="#000000" opacity="0.5">Sahrae</text>
+    <text x="256" y="265" class="title-text" fill="#000000" opacity="0.8">Sahrae</text>
+    <text x="256" y="262" class="title-text" fill="#1f1406" opacity="0.9">Sahrae</text>
+    
+    <!-- Main Text -->
+    <text x="256" y="259" class="title-text" fill="url(#text-grad)">Sahrae</text>
+    
+    <!-- Inner stroke brightness simulation -->
+    <text x="256" y="259" class="title-text" fill="none" stroke="#fef08a" stroke-width="2" stroke-opacity="0.8">Sahrae</text>
+</svg>

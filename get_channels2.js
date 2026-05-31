@@ -1,0 +1,40 @@
+import fs from 'fs';
+
+const channels = [
+  { name: 'ABC News', handle: '@NewsOnABC' },
+  { name: 'Reuters', handle: '@Reuters' },
+  { name: 'EuroNews', handle: '@euronews' },
+  { name: 'WION', handle: '@WION' },
+  { name: 'CNA', handle: '@channelnewsasia' },
+  { name: 'Arirang TV', handle: '@arirangtv' },
+  { name: 'Bloomberg', handle: '@bloomberg' },
+  { name: 'KTN News', handle: '@ktnnews' },
+  { name: 'NTV Kenya', handle: '@ntvkenya' },
+  { name: 'K24 TV', handle: '@K24TV' },
+  { name: 'SABC News', handle: '@sabcnews' },
+  { name: 'Channels TV', handle: '@channelsweb' },
+  { name: 'Global News', handle: '@globalnews' },
+  { name: 'GB News', handle: '@GBNewsOnline' }
+];
+
+async function getChannelIds() {
+  const results = [];
+  for (const ch of channels) {
+    try {
+      const res = await fetch(`https://www.youtube.com/${ch.handle}`);
+      const text = await res.text();
+      const match = text.match(/https:\/\/www\.youtube\.com\/channel\/(UC[\w-]+)/);
+      if (match) {
+        results.push({ ...ch, channelId: match[1] });
+        console.log(`Found ${ch.name}: ${match[1]}`);
+      } else {
+        console.log(`Not found for ${ch.name}`);
+      }
+    } catch (e) {
+      console.log(`Error for ${ch.name}`);
+    }
+  }
+  fs.writeFileSync('channel_ids2.json', JSON.stringify(results, null, 2));
+}
+
+getChannelIds();
