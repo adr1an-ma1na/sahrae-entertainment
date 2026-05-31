@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, onAuthStateChanged } from 'firebase/auth';
+import { User, onAuthStateChanged, getRedirectResult } from 'firebase/auth';
 import { auth, loginWithGoogle, logout, db } from '../firebase';
 import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 
@@ -46,6 +46,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [activeProfile, setActiveProfile] = useState<Profile | null>(null);
 
   useEffect(() => {
+    // Consume any pending Google redirect sign-in result (native Capacitor flow).
+    // Errors here are non-fatal — onAuthStateChanged will still fire if the user
+    // was already signed in or if no redirect was pending.
+    getRedirectResult(auth).catch((err) => {
+      console.error('getRedirectResult error', err);
+    });
+
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUser(user);
       if (!user) {
