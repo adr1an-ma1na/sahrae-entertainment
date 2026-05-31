@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="512" height="512">
+  <title>Concept 2 — Sahara Sunset (desert horizon + sun + S monogram)</title>
+  <defs>
+    <linearGradient id="sky2" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#1c1917"/>
+      <stop offset="35%" stop-color="#7c2d12"/>
+      <stop offset="60%" stop-color="#c2410c"/>
+      <stop offset="85%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#fde68a"/>
+    </linearGradient>
+    <radialGradient id="sun2" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#fbbf24"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </radialGradient>
+    <linearGradient id="dune2" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#451a03"/>
+      <stop offset="100%" stop-color="#0c0a09"/>
+    </linearGradient>
+    <filter id="sunglow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="30" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Sky / sunset background -->
+  <rect x="0" y="0" width="1024" height="1024" rx="220" fill="url(#sky2)"/>
+
+  <!-- Sun -->
+  <g filter="url(#sunglow)">
+    <circle cx="512" cy="520" r="190" fill="url(#sun2)"/>
+  </g>
+
+  <!-- Stylized 'S' monogram embedded on the sun -->
+  <path d="
+    M 590 460
+    C 590 425, 555 405, 510 405
+    L 470 405
+    C 430 405, 400 425, 400 460
+    C 400 490, 425 505, 460 515
+    L 510 525
+    C 555 535, 580 555, 580 590
+    C 580 625, 545 645, 500 645
+    L 420 645
+    "
+    fill="none" stroke="#7c2d12" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"
+    opacity="0.85"/>
+
+  <!-- Distant dune layer (light) -->
+  <path d="
+    M 0 720
+    C 180 660, 320 700, 480 690
+    C 640 680, 780 720, 1024 700
+    L 1024 1024 L 0 1024 Z
+    "
+    fill="#7c2d12" opacity="0.6"/>
+
+  <!-- Foreground dune (dark) -->
+  <path d="
+    M 0 800
+    C 200 760, 380 820, 560 800
+    C 720 785, 880 830, 1024 810
+    L 1024 1024 L 0 1024 Z
+    "
+    fill="url(#dune2)"/>
+
+  <!-- Wordmark -->
+  <text x="512" y="970" text-anchor="middle"
+        font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="58" font-weight="900" letter-spacing="14" fill="#fde68a">SAHRAE</text>
+</svg>

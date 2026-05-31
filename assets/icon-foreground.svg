@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <title>Sahrae Entertainment — Adaptive Foreground (sun + monogram only)</title>
+  <defs>
+    <radialGradient id="sunFg" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#fbbf24"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </radialGradient>
+    <filter id="sunGlowFg" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="22" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Transparent background -->
+
+  <!-- Sun (sized to fit Android adaptive 66% safe zone: ~626px diameter centered) -->
+  <g filter="url(#sunGlowFg)">
+    <circle cx="512" cy="512" r="195" fill="url(#sunFg)"/>
+  </g>
+
+  <!-- S monogram on the sun -->
+  <path d="
+    M 600 444
+    C 600 405, 562 382, 510 382
+    L 465 382
+    C 420 382, 386 405, 386 444
+    C 386 478, 414 494, 454 505
+    L 510 516
+    C 562 527, 590 550, 590 589
+    C 590 628, 552 651, 500 651
+    L 410 651
+    "
+    fill="none" stroke="#7c2d12" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"
+    opacity="0.92"/>
+</svg>

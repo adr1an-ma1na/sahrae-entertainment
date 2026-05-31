@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="512" height="512">
+  <title>Concept 1 — Cinema S (play triangle cutout)</title>
+  <defs>
+    <radialGradient id="bg1" cx="0.5" cy="0.35" r="0.85">
+      <stop offset="0%" stop-color="#1c1917"/>
+      <stop offset="60%" stop-color="#0c0a09"/>
+      <stop offset="100%" stop-color="#000000"/>
+    </radialGradient>
+    <linearGradient id="amber1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fbbf24"/>
+      <stop offset="55%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#d97706"/>
+    </linearGradient>
+    <filter id="glow1" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="20" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Rounded-square background (Android adaptive friendly) -->
+  <rect x="0" y="0" width="1024" height="1024" rx="220" fill="url(#bg1)"/>
+
+  <!-- Subtle inner ring -->
+  <rect x="80" y="80" width="864" height="864" rx="175" fill="none" stroke="#27272a" stroke-width="2"/>
+
+  <!-- S letterform with play triangle in lower bowl -->
+  <g filter="url(#glow1)">
+    <path d="
+      M 700 320
+      C 700 250, 620 210, 530 210
+      L 430 210
+      C 330 210, 250 270, 250 360
+      C 250 440, 310 490, 410 510
+      L 530 530
+      C 600 540, 640 560, 640 600
+      C 640 640, 590 670, 510 670
+      L 380 670
+      "
+      fill="none" stroke="url(#amber1)" stroke-width="84" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Lower bowl of S replaced by play triangle -->
+    <path d="
+      M 410 740
+      L 720 600
+      L 410 460
+      Z
+      "
+      fill="url(#amber1)"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="512" y="900" text-anchor="middle"
+        font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="68" font-weight="900" letter-spacing="14" fill="#f5f5f4">SAHRAE</text>
+  <text x="512" y="950" text-anchor="middle"
+        font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="26" font-weight="300" letter-spacing="10" fill="#a1a1aa">ENTERTAINMENT</text>
+</svg>

@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <title>Sahrae Entertainment — App Icon</title>
+  <defs>
+    <linearGradient id="sky" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#1c1917"/>
+      <stop offset="35%" stop-color="#7c2d12"/>
+      <stop offset="60%" stop-color="#c2410c"/>
+      <stop offset="85%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#fde68a"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#fbbf24"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </radialGradient>
+    <linearGradient id="duneDark" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#451a03"/>
+      <stop offset="100%" stop-color="#0c0a09"/>
+    </linearGradient>
+    <filter id="sunGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="30" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect x="0" y="0" width="1024" height="1024" fill="url(#sky)"/>
+
+  <g filter="url(#sunGlow)">
+    <circle cx="512" cy="500" r="210" fill="url(#sun)"/>
+  </g>
+
+  <path d="
+    M 600 432
+    C 600 393, 562 370, 510 370
+    L 465 370
+    C 420 370, 386 393, 386 432
+    C 386 466, 414 482, 454 493
+    L 510 504
+    C 562 515, 590 538, 590 577
+    C 590 616, 552 639, 500 639
+    L 410 639
+    "
+    fill="none" stroke="#7c2d12" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"
+    opacity="0.92"/>
+
+  <path d="
+    M 0 720
+    C 180 660, 320 700, 480 690
+    C 640 680, 780 720, 1024 700
+    L 1024 1024 L 0 1024 Z
+    "
+    fill="#7c2d12" opacity="0.65"/>
+
+  <path d="
+    M 0 800
+    C 200 760, 380 820, 560 800
+    C 720 785, 880 830, 1024 810
+    L 1024 1024 L 0 1024 Z
+    "
+    fill="url(#duneDark)"/>
+</svg>

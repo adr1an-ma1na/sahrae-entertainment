@@ -40,6 +40,21 @@ jobs:
       - name: Add Android platform
         run: npx cap add android
 
+      - name: Install rsvg-convert (SVG → PNG)
+        run: sudo apt-get update && sudo apt-get install -y librsvg2-bin
+
+      - name: Rasterize source SVGs to PNGs
+        run: |
+          rsvg-convert -w 1024 -h 1024 assets/icon.svg            -o assets/icon.png
+          rsvg-convert -w 1024 -h 1024 assets/icon-foreground.svg -o assets/icon-foreground.png
+          rsvg-convert -w 1024 -h 1024 assets/icon-background.svg -o assets/icon-background.png
+          rsvg-convert -w 2732 -h 2732 assets/splash.svg          -o assets/splash.png
+          cp assets/splash.png assets/splash-dark.png
+          ls -la assets/
+
+      - name: Generate Android icon + splash assets
+        run: npx capacitor-assets generate --android --assetPath assets
+
       - name: Sync Capacitor
         run: npx cap sync android
 

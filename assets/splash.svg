@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2732 2732" width="2732" height="2732">
+  <title>Sahrae Entertainment — Splash Screen</title>
+  <defs>
+    <linearGradient id="splashSky" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#09090b"/>
+      <stop offset="40%" stop-color="#1c1917"/>
+      <stop offset="70%" stop-color="#7c2d12"/>
+      <stop offset="100%" stop-color="#c2410c"/>
+    </linearGradient>
+    <radialGradient id="splashSun" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#fbbf24"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </radialGradient>
+    <filter id="splashGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="50" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect x="0" y="0" width="2732" height="2732" fill="url(#splashSky)"/>
+
+  <!-- Sun behind logo, centered -->
+  <g filter="url(#splashGlow)">
+    <circle cx="1366" cy="1280" r="340" fill="url(#splashSun)"/>
+  </g>
+
+  <!-- S monogram on sun -->
+  <path d="
+    M 1520 1162
+    C 1520 1093, 1454 1053, 1366 1053
+    L 1288 1053
+    C 1210 1053, 1150 1093, 1150 1162
+    C 1150 1221, 1199 1249, 1268 1268
+    L 1366 1287
+    C 1454 1306, 1502 1346, 1502 1414
+    C 1502 1483, 1436 1523, 1348 1523
+    L 1192 1523
+    "
+    fill="none" stroke="#7c2d12" stroke-width="66" stroke-linecap="round" stroke-linejoin="round"
+    opacity="0.92"/>
+
+  <!-- Wordmark below sun -->
+  <text x="1366" y="1850" text-anchor="middle"
+        font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="130" font-weight="900" letter-spacing="28" fill="#fde68a">SAHRAE</text>
+  <text x="1366" y="1950" text-anchor="middle"
+        font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="50" font-weight="300" letter-spacing="20" fill="#a8a29e">ENTERTAINMENT</text>
+</svg>

@@ -12,7 +12,7 @@ const CHANNELS = [
   { name: 'NBC News NOW', country: 'USA', category: 'News', url: 'youtube_channel:UCeY0bbntWzzVIaj2z3QigXg' },
   { name: 'ABC News', country: 'USA', category: 'News', url: 'youtube_channel:UCBi2mrWuNuyYy4gbM6fU18Q' },
   { name: 'CBS News', country: 'USA', category: 'News', url: 'youtube_channel:UC8p1vwvWtl6T73JiExfWs1g' },
-  { name: 'CNN', country: 'USA', category: 'News', url: 'youtube_channel:UPZ29rFkdtwug8Fk' },
+  { name: 'CNN', country: 'USA', category: 'News', url: 'youtube_channel:UCupvZG-5ko_eiXAupbDfxWw' },
   { name: 'CNA', country: 'Singapore', category: 'News', url: 'youtube_channel:UC83jt4dlz1Gjl58fzQrrKZg' },
   { name: 'EuroNews', country: 'Europe', category: 'News', url: 'youtube_channel:UCSrZ3GWwnb1BvVG0NQA5imw' },
   
