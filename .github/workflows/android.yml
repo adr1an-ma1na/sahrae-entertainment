@@ -65,17 +65,68 @@ jobs:
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon --stacktrace
 
-      - name: Locate APK
-        id: locate_apk
+      - name: Locate debug APK
+        id: locate_debug
         run: |
           APK_PATH=$(find android/app/build/outputs/apk/debug -name '*.apk' | head -n1)
-          echo "Found APK at: $APK_PATH"
+          echo "Found debug APK at: $APK_PATH"
           echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
 
-      - name: Upload APK artifact
+      - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: sahrae-entertainment-debug-apk
-          path: ${{ steps.locate_apk.outputs.apk_path }}
+          path: ${{ steps.locate_debug.outputs.apk_path }}
           if-no-files-found: error
           retention-days: 30
+
+      # ------------------------------------------------------------------
+      # Release-signed APK — runs only if KEYSTORE_BASE64 secret is set.
+      # See .github/workflows/generate-keystore.yml to create one.
+      # ------------------------------------------------------------------
+      - name: Check for release signing secrets
+        id: have_release_secrets
+        run: |
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "ℹ️ KEYSTORE_BASE64 secret not set — skipping release build. Run the 'Generate Release Keystore' workflow to enable." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Decode keystore
+        if: steps.have_release_secrets.outputs.present == 'true'
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/sahrae-release.jks"
+          ls -la "$RUNNER_TEMP/sahrae-release.jks"
+
+      - name: Build release APK (signed)
+        if: steps.have_release_secrets.outputs.present == 'true'
+        working-directory: android
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleRelease --no-daemon --stacktrace \
+            -Pandroid.injected.signing.store.file="$RUNNER_TEMP/sahrae-release.jks" \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
+
+      - name: Locate release APK
+        if: steps.have_release_secrets.outputs.present == 'true'
+        id: locate_release
+        run: |
+          APK_PATH=$(find android/app/build/outputs/apk/release -name '*.apk' | head -n1)
+          echo "Found release APK at: $APK_PATH"
+          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release APK
+        if: steps.have_release_secrets.outputs.present == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sahrae-entertainment-release-apk
+          path: ${{ steps.locate_release.outputs.apk_path }}
+          if-no-files-found: error
+          retention-days: 90
