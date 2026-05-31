@@ -11,6 +11,11 @@ interface State {
 }
 
 export class ErrorBoundary extends Component<Props, State> {
+  // React 19's bundled Component types don't automatically expose `state`/`props`
+  // when `useDefineForClassFields: false`. Re-declare them so TS sees them.
+  declare state: Readonly<State>;
+  declare props: Readonly<Props>;
+
   constructor(props: Props) {
     super(props);
     this.state = { hasError: false, error: null };
