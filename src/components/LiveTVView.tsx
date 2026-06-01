@@ -186,6 +186,8 @@ export default function LiveTVView() {
                       src={`https://player.twitch.tv/?channel=${channel}&parent=${window.location.hostname}&autoplay=true`}
                       className="w-full h-full border-none bg-black absolute inset-0"
                       allowFullScreen
+                      sandbox="allow-same-origin allow-scripts allow-presentation"
+                      referrerPolicy="no-referrer"
                     />
                   );
                 }

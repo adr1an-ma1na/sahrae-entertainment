@@ -276,12 +276,13 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
           <div className="relative w-full aspect-video md:aspect-[2.2/1] bg-black">
             {playingTrailer ? (
               <div className="absolute inset-0 z-10 bg-black flex items-center justify-center">
-                <iframe 
-                  src={`https://www.youtube-nocookie.com/embed/${playingTrailer}?autoplay=1&rel=0&showinfo=0&modestbranding=1&iv_load_policy=3`} 
-                  className="w-full h-full border-none bg-black" 
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                <iframe
+                  src={`https://www.youtube-nocookie.com/embed/${playingTrailer}?autoplay=1&rel=0&showinfo=0&modestbranding=1&iv_load_policy=3`}
+                  className="w-full h-full border-none bg-black"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
-                  sandbox="allow-same-origin allow-scripts allow-presentation allow-popups"
+                  sandbox="allow-same-origin allow-scripts allow-presentation"
+                  referrerPolicy="no-referrer"
                 />
                 <div className="absolute top-4 right-16 md:right-32 z-20 flex gap-2">
                   {/* External YouTube link removed to keep users on platform */}
@@ -300,7 +301,19 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                     })()}
                   </div>
                 ) : (
-                  <iframe key={`player-${refreshKey}`} src={src} frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className="w-full h-full absolute inset-0 bg-black" title="Video Player"></iframe>
+                  <iframe
+                    key={`player-${refreshKey}`}
+                    src={src}
+                    frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    // Strict sandbox: NO allow-popups (kills popunder ads), NO allow-top-navigation
+                    // (kills click-jack redirects). Keeps scripts + same-origin so the player still works.
+                    sandbox="allow-same-origin allow-scripts allow-presentation allow-forms"
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full absolute inset-0 bg-black"
+                    title="Video Player"
+                  />
                 )}
                 {isSandboxed && (['vidlink', 'vidlinkapi', 'vidsrcto', 'vidsrcpm', 'autoembedco', 'vidrock', 'vidsrcicu', 'vidzee'].includes(currentServerObj.id)) && (
                   <div className="absolute top-0 left-0 w-full z-40 bg-[#e50914]/95 text-white text-xs md:text-sm font-bold px-4 py-3 flex flex-col md:flex-row items-center justify-center gap-3 md:gap-4 text-center backdrop-blur shadow-2xl border-b border-white/20 animate-in slide-in-from-top-2">
