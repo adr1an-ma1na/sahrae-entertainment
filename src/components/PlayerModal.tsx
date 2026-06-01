@@ -1,5 +1,5 @@
 import { X, ExternalLink, AlertCircle, Info, Star, Calendar, Clock, Play, RefreshCw, Plus, Check, Maximize, ArrowLeft, SkipBack, SkipForward, ThumbsUp, ThumbsDown, Download } from 'lucide-react';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import ReactPlayer from 'react-player';
 import { fetchMediaDetails, MediaDetails, getImageUrl, fetchSimilar, MediaItem, SeasonDetails, fetchSeasonDetails } from '../services/tmdb';
 import { useWatchProgress } from '../hooks/useWatchProgress';
@@ -37,18 +37,17 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   
   const [showXRay, setShowXRay] = useState(false);
 
-  // Click-shield: when isPlaying flips true (new server / new episode / reload),
-  // the iframe loads with pointer-events:none and we cover it with a "Tap to start"
-  // overlay. The user's first click goes to OUR overlay, not the embed page —
-  // killing the "click anywhere = popunder ad" pattern.
-  const [isPlayerArmed, setIsPlayerArmed] = useState(false);
-
   const hideControlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Disarm the click-shield whenever the iframe content is going to change.
-  useEffect(() => {
-    setIsPlayerArmed(false);
-  }, [isPlaying, selectedServer, selectedSeason, selectedEpisode, refreshKey, currentMediaId, currentMediaType]);
+  // Request fullscreen on the player container. Used to auto-go-fullscreen
+  // when the user explicitly taps Play / an episode — so one tap = fullscreen.
+  // Deferred via setTimeout(0) so the iframe is mounted by the time we ask,
+  // while staying inside Chromium's user-gesture window.
+  const enterFullscreen = useCallback(() => {
+    setTimeout(() => {
+      playerContainerRef.current?.requestFullscreen?.().catch(() => {});
+    }, 50);
+  }, []);
 
   useEffect(() => {
     setIsSandboxed(window.self !== window.top);
@@ -312,35 +311,19 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                     })()}
                   </div>
                 ) : (
-                  <>
-                    <iframe
-                      key={`player-${refreshKey}`}
-                      src={src}
-                      frameBorder="0"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                      // No sandbox attribute — VidZee/VidRock/etc. refuse to play
-                      // in any sandboxed context. The native Android MainActivity
-                      // (block-list + popup refusal + JS shim) handles ad defence.
-                      // `pointer-events` is gated by the click-shield overlay below.
-                      style={{ pointerEvents: isPlayerArmed ? 'auto' : 'none' }}
-                      className="w-full h-full absolute inset-0 bg-black"
-                      title="Video Player"
-                    />
-                    {!isPlayerArmed && (
-                      <button
-                        onClick={() => setIsPlayerArmed(true)}
-                        className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm cursor-pointer group"
-                        title="Tap to start playback (popup blocker is intercepting the first click)"
-                      >
-                        <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-amber-500 group-hover:bg-amber-400 flex items-center justify-center shadow-2xl shadow-amber-500/30 transition-all group-active:scale-95">
-                          <Play className="w-10 h-10 md:w-12 md:h-12 text-amber-950 fill-current ml-1" />
-                        </div>
-                        <p className="mt-5 text-white font-bold text-base md:text-lg">Tap to start</p>
-                        <p className="mt-1 text-zinc-300 text-xs md:text-sm">Popup blocker is intercepting the first click</p>
-                      </button>
-                    )}
-                  </>
+                  <iframe
+                    key={`player-${refreshKey}`}
+                    src={src}
+                    frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    // No sandbox attribute — VidZee/VidRock/etc. refuse to play
+                    // in any sandboxed context. Native Android MainActivity
+                    // (top-frame whitelist + popup refusal + ad-host blocklist
+                    // + JS shim) handles ad defence.
+                    className="w-full h-full absolute inset-0 bg-black"
+                    title="Video Player"
+                  />
                 )}
                 {isSandboxed && (['vidlink', 'vidlinkapi', 'vidsrcto', 'vidsrcpm', 'autoembedco', 'vidrock', 'vidsrcicu', 'vidzee'].includes(currentServerObj.id)) && (
                   <div className="absolute top-0 left-0 w-full z-40 bg-[#e50914]/95 text-white text-xs md:text-sm font-bold px-4 py-3 flex flex-col md:flex-row items-center justify-center gap-3 md:gap-4 text-center backdrop-blur shadow-2xl border-b border-white/20 animate-in slide-in-from-top-2">
@@ -392,7 +375,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                     {details.title || details.name}
                   </h1>
                   <div className="flex gap-3 items-center flex-wrap mt-2">
-                    <button onClick={() => setIsPlaying(true)} className="px-6 md:px-8 py-2 md:py-3 bg-white text-black font-bold rounded flex items-center gap-2 hover:bg-white/80 transition-colors shadow-lg text-sm md:text-base whitespace-nowrap">
+                    <button onClick={() => { setIsPlaying(true); enterFullscreen(); }} className="px-6 md:px-8 py-2 md:py-3 bg-white text-black font-bold rounded flex items-center gap-2 hover:bg-white/80 transition-colors shadow-lg text-sm md:text-base whitespace-nowrap">
                       <Play className="w-5 h-5 md:w-6 md:h-6 fill-current"/>
                       {currentMediaType === 'tv' ? `Play S${selectedSeason} E${selectedEpisode}` : 'Play'}
                     </button>
@@ -514,7 +497,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                   ) : seasonDetails?.episodes && seasonDetails.episodes.length > 0 ? (
                     <div className="flex flex-col gap-0 border-t border-zinc-800">
                       {seasonDetails.episodes.map(episode => (
-                        <div key={episode.id} onClick={() => { setSelectedEpisode(episode.episode_number); setIsPlaying(true); document.getElementById('player-modal-container')?.scrollTo({top: 0, behavior: 'smooth'}); }} className={`flex flex-col md:flex-row items-center gap-4 py-4 md:py-6 border-b border-zinc-800 cursor-pointer hover:bg-zinc-800/50 transition-colors group ${selectedEpisode === episode.episode_number && isPlaying ? 'bg-zinc-800/30' : ''}`}>
+                        <div key={episode.id} onClick={() => { setSelectedEpisode(episode.episode_number); setIsPlaying(true); document.getElementById('player-modal-container')?.scrollTo({top: 0, behavior: 'smooth'}); enterFullscreen(); }} className={`flex flex-col md:flex-row items-center gap-4 py-4 md:py-6 border-b border-zinc-800 cursor-pointer hover:bg-zinc-800/50 transition-colors group ${selectedEpisode === episode.episode_number && isPlaying ? 'bg-zinc-800/30' : ''}`}>
                           <div className="text-4xl font-light text-zinc-500 w-12 text-center shrink-0 hidden md:block opacity-60">
                             {episode.episode_number}
                           </div>
