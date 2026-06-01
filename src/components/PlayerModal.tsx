@@ -307,10 +307,10 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                     frameBorder="0"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
-                    // Strict sandbox: NO allow-popups (kills popunder ads), NO allow-top-navigation
-                    // (kills click-jack redirects). Keeps scripts + same-origin so the player still works.
-                    sandbox="allow-same-origin allow-scripts allow-presentation allow-forms"
-                    referrerPolicy="no-referrer"
+                    // No sandbox here — the third-party embeds (VidZee, VidRock, etc.)
+                    // explicitly refuse to play in ANY sandboxed context. We rely on
+                    // the native Android WebView ad-domain block-list in MainActivity.java
+                    // (Layer 2) to neutralise popups instead.
                     className="w-full h-full absolute inset-0 bg-black"
                     title="Video Player"
                   />

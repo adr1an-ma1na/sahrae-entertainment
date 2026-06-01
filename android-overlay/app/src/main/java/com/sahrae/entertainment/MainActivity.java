@@ -1,6 +1,8 @@
 package com.sahrae.entertainment;
 
 import android.os.Bundle;
+import android.os.Message;
+import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
@@ -15,21 +17,30 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * Sahrae Entertainment — custom MainActivity that installs an ad-blocking
- * WebViewClient. Every HTTP(S) request the WebView (or any iframe inside it)
- * makes is checked against AD_HOSTS; matches return an empty response so the
- * popunder / tracker scripts never load and cannot trigger redirects, popups,
- * or click-jacks.
+ * Sahrae Entertainment — Android shell with multi-layer pop-up/ad protection.
  *
- * The list targets the popunder networks commonly used by piracy-adjacent
- * streaming embeds (popads, propellerads, adsterra, exoclick, etc.) plus the
- * major analytics/tracker domains. CDNs and legitimate video infrastructure
- * are deliberately not blocked.
+ *  Layer A: a custom WebViewClient blocks network requests to known ad /
+ *           popunder / tracker domains. Even if a streaming embed's JS slips
+ *           past the renderer, the ad scripts/tracker beacons cannot load.
+ *
+ *  Layer B: a custom WebChromeClient refuses every JavaScript-initiated
+ *           popup (window.open, target=_blank-without-user-gesture, etc.)
+ *           at the WebView level — this is what kills the "click anywhere
+ *           and a new tab/app opens" pattern that the piracy embed servers
+ *           use, regardless of which ad host they're routed to.
+ *
+ *  Layer C: low-level WebSettings tightening so JS can't bypass the above
+ *           via background window creation.
+ *
+ *  Note: we deliberately do NOT set iframe sandbox attributes on the player
+ *  iframe — VidZee/VidRock/VidLink etc. explicitly refuse to play in any
+ *  sandboxed context and display a "Sandbox Not Allowed" interstitial. The
+ *  three layers above replace the protection sandbox would have given.
  */
 public class MainActivity extends BridgeActivity {
 
     private static final Set<String> AD_HOSTS = new HashSet<>(Arrays.asList(
-        // Popunder / aggressive redirect networks
+        // Popunder / aggressive redirect networks (the heart of piracy-embed monetisation)
         "popads.net",
         "popcash.net",
         "popunder.net",
@@ -60,6 +71,20 @@ public class MainActivity extends BridgeActivity {
         "clksite.com",
         "oktrkme.com",
         "historyoftrust.com",
+        "adcash.com",
+        "airpush.com",
+        "popmyads.com",
+        "popunderjs.com",
+        "popmonster.net",
+        "validclick.com",
+        "voluumtrk.com",
+        "voluumtrk2.com",
+        "voluumtrk3.com",
+        "evadav.com",
+        "vrtzads.com",
+        "highperformancecpm.com",
+        "highperformanceformat.com",
+        "smartclickexpress.com",
 
         // Major ad networks
         "doubleclick.net",
@@ -67,27 +92,41 @@ public class MainActivity extends BridgeActivity {
         "googleadservices.com",
         "googletagmanager.com",
         "googletagservices.com",
+        "amazon-adsystem.com",
+        "adnxs.com",
+        "rubiconproject.com",
+        "openx.net",
+        "pubmatic.com",
+        "bidswitch.net",
 
         // Trackers / analytics
         "google-analytics.com",
         "scorecardresearch.com",
         "quantserve.com",
         "criteo.com",
+        "chartbeat.com",
+        "newrelic.com",
 
         // Content-recommendation chum
         "outbrain.com",
         "taboola.com",
         "mgid.com",
         "revcontent.com",
-        "zergnet.com"
+        "zergnet.com",
+        "nativeads.com",
+
+        // Adult popunder targets piracy embeds commonly redirect to
+        "chaturbate.com",
+        "livejasmin.com",
+        "bongacams.com",
+        "stripchat.com",
+        "camsoda.com"
     ));
 
     private static boolean isBlocked(String host) {
         if (host == null) return false;
         String h = host.toLowerCase();
-        // exact match
         if (AD_HOSTS.contains(h)) return true;
-        // subdomain match (e.g. "tag.adsterra.com" → block because "adsterra.com" is listed)
         for (String bad : AD_HOSTS) {
             if (h.endsWith("." + bad)) return true;
         }
@@ -101,7 +140,7 @@ public class MainActivity extends BridgeActivity {
         final Bridge bridge = this.bridge;
         WebView webView = bridge.getWebView();
 
-        // Subclass Capacitor's default WebViewClient so non-blocked requests
+        // ── Layer A: subclass Capacitor's WebViewClient so non-blocked requests
         // still flow through its bridge handling (file:// loading, JS messages).
         webView.setWebViewClient(new BridgeWebViewClient(bridge) {
             @Override
@@ -125,11 +164,24 @@ public class MainActivity extends BridgeActivity {
             }
         });
 
-        // Belt-and-braces: disallow opening file:// from network content, and
-        // suppress any "create new window" popup the WebView might honour.
+        // ── Layer B: refuse every JS-initiated popup at the WebChromeClient level.
+        // Returning false from onCreateWindow tells the WebView "no, you may not
+        // open a new window," regardless of which target URL the JS asked for.
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onCreateWindow(WebView view, boolean isDialog,
+                                          boolean isUserGesture, Message resultMsg) {
+                // Even if the click came from a user gesture, we refuse — piracy
+                // embed servers fake "user gestures" by binding global click handlers.
+                return false;
+            }
+        });
+
+        // ── Layer C: low-level lockdown.
         webView.getSettings().setAllowFileAccessFromFileURLs(false);
         webView.getSettings().setAllowUniversalAccessFromFileURLs(false);
         webView.getSettings().setSupportMultipleWindows(false);
         webView.getSettings().setJavaScriptCanOpenWindowsAutomatically(false);
+        webView.getSettings().setSafeBrowsingEnabled(true);
     }
 }
