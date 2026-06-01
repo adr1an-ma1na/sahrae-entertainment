@@ -1,8 +1,12 @@
 package com.sahrae.entertainment;
 
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Message;
+import android.view.View;
+import android.view.Window;
+import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -444,6 +448,24 @@ public class MainActivity extends BridgeActivity {
                                           boolean isUserGesture, Message resultMsg) {
                 return false;
             }
+
+            // ── Edge-to-edge fullscreen (fill the screen like Netflix).
+            // Capacitor adds the fullscreen view but leaves the status / nav
+            // bars showing and doesn't draw under the notch — that's the grey
+            // bar at the top. We hide the system bars (immersive) and extend
+            // under the display cutout while a video is fullscreen, then undo
+            // it when fullscreen ends.
+            @Override
+            public void onShowCustomView(View view, CustomViewCallback callback) {
+                super.onShowCustomView(view, callback);
+                enterImmersiveFullscreen();
+            }
+
+            @Override
+            public void onHideCustomView() {
+                super.onHideCustomView();
+                exitImmersiveFullscreen();
+            }
         });
 
         // ── L5 — low-level lockdown
@@ -452,5 +474,48 @@ public class MainActivity extends BridgeActivity {
         webView.getSettings().setSupportMultipleWindows(false);
         webView.getSettings().setJavaScriptCanOpenWindowsAutomatically(false);
         webView.getSettings().setSafeBrowsingEnabled(true);
+    }
+
+    /** Hide the status + navigation bars and draw under the notch — true edge-to-edge. */
+    private void enterImmersiveFullscreen() {
+        final Window window = getWindow();
+        if (window == null) return;
+        runOnUiThread(() -> {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    WindowManager.LayoutParams lp = window.getAttributes();
+                    lp.layoutInDisplayCutoutMode =
+                        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+                    window.setAttributes(lp);
+                }
+                window.getDecorView().setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                );
+                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            } catch (Exception ignore) {}
+        });
+    }
+
+    /** Restore the normal UI when leaving fullscreen. */
+    private void exitImmersiveFullscreen() {
+        final Window window = getWindow();
+        if (window == null) return;
+        runOnUiThread(() -> {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    WindowManager.LayoutParams lp = window.getAttributes();
+                    lp.layoutInDisplayCutoutMode =
+                        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT;
+                    window.setAttributes(lp);
+                }
+                window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
+                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            } catch (Exception ignore) {}
+        });
     }
 }
