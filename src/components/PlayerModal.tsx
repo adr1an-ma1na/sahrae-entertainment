@@ -36,8 +36,19 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const [offlineBlobUrl, setOfflineBlobUrl] = useState<string | null>(null);
   
   const [showXRay, setShowXRay] = useState(false);
-  
+
+  // Click-shield: when isPlaying flips true (new server / new episode / reload),
+  // the iframe loads with pointer-events:none and we cover it with a "Tap to start"
+  // overlay. The user's first click goes to OUR overlay, not the embed page —
+  // killing the "click anywhere = popunder ad" pattern.
+  const [isPlayerArmed, setIsPlayerArmed] = useState(false);
+
   const hideControlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Disarm the click-shield whenever the iframe content is going to change.
+  useEffect(() => {
+    setIsPlayerArmed(false);
+  }, [isPlaying, selectedServer, selectedSeason, selectedEpisode, refreshKey, currentMediaId, currentMediaType]);
 
   useEffect(() => {
     setIsSandboxed(window.self !== window.top);
@@ -301,19 +312,35 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                     })()}
                   </div>
                 ) : (
-                  <iframe
-                    key={`player-${refreshKey}`}
-                    src={src}
-                    frameBorder="0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    // No sandbox here — the third-party embeds (VidZee, VidRock, etc.)
-                    // explicitly refuse to play in ANY sandboxed context. We rely on
-                    // the native Android WebView ad-domain block-list in MainActivity.java
-                    // (Layer 2) to neutralise popups instead.
-                    className="w-full h-full absolute inset-0 bg-black"
-                    title="Video Player"
-                  />
+                  <>
+                    <iframe
+                      key={`player-${refreshKey}`}
+                      src={src}
+                      frameBorder="0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      // No sandbox attribute — VidZee/VidRock/etc. refuse to play
+                      // in any sandboxed context. The native Android MainActivity
+                      // (block-list + popup refusal + JS shim) handles ad defence.
+                      // `pointer-events` is gated by the click-shield overlay below.
+                      style={{ pointerEvents: isPlayerArmed ? 'auto' : 'none' }}
+                      className="w-full h-full absolute inset-0 bg-black"
+                      title="Video Player"
+                    />
+                    {!isPlayerArmed && (
+                      <button
+                        onClick={() => setIsPlayerArmed(true)}
+                        className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm cursor-pointer group"
+                        title="Tap to start playback (popup blocker is intercepting the first click)"
+                      >
+                        <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-amber-500 group-hover:bg-amber-400 flex items-center justify-center shadow-2xl shadow-amber-500/30 transition-all group-active:scale-95">
+                          <Play className="w-10 h-10 md:w-12 md:h-12 text-amber-950 fill-current ml-1" />
+                        </div>
+                        <p className="mt-5 text-white font-bold text-base md:text-lg">Tap to start</p>
+                        <p className="mt-1 text-zinc-300 text-xs md:text-sm">Popup blocker is intercepting the first click</p>
+                      </button>
+                    )}
+                  </>
                 )}
                 {isSandboxed && (['vidlink', 'vidlinkapi', 'vidsrcto', 'vidsrcpm', 'autoembedco', 'vidrock', 'vidsrcicu', 'vidzee'].includes(currentServerObj.id)) && (
                   <div className="absolute top-0 left-0 w-full z-40 bg-[#e50914]/95 text-white text-xs md:text-sm font-bold px-4 py-3 flex flex-col md:flex-row items-center justify-center gap-3 md:gap-4 text-center backdrop-blur shadow-2xl border-b border-white/20 animate-in slide-in-from-top-2">
