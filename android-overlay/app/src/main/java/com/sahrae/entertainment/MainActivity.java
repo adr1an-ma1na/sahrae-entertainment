@@ -1,7 +1,9 @@
 package com.sahrae.entertainment;
 
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Message;
+import android.webkit.CookieManager;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -12,18 +14,37 @@ import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.BridgeWebViewClient;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.zip.GZIPInputStream;
 
 /**
- * Sahrae Entertainment — Android shell with FIVE LAYERS of pop-up / ad
+ * Sahrae Entertainment — Android shell with SIX LAYERS of pop-up / ad
  * protection. The streaming-embed servers (vidrock, vidzee, vidlink, etc.)
  * monetise by injecting popunder ads via several different mechanisms;
  * each layer blocks one class of attack.
  *
  *  L1 — Network blocklist: shouldInterceptRequest drops any request to a
  *       known ad / popunder / tracker host. Subresource and top-frame.
+ *
+ *  L1.5 — DOM-level eradication (THE BIG ONE): shouldInterceptRequest fetches
+ *       the embed's *HTML document* itself, strips its Content-Security-Policy
+ *       / X-Frame-Options headers, and injects an aggressive anti-popup shim
+ *       as the very first thing in <head> — so it runs *inside* the hostile
+ *       cross-origin iframe, BEFORE the embed's own ad scripts, and neuters
+ *       window.open / anchor-popunder / location tricks at the source. This is
+ *       what L4 (below) could never reach, because L4 only runs in the top
+ *       frame.
  *
  *  L2 — Top-frame navigation whitelist: shouldOverrideUrlLoading refuses to
  *       navigate the WebView's top frame to anywhere outside our trusted
@@ -55,8 +76,8 @@ public class MainActivity extends BridgeActivity {
     /** Network-level blocklist of ad/popunder/tracker hosts. */
     private static final Set<String> AD_HOSTS = new HashSet<>(Arrays.asList(
         // Popunder / aggressive redirect networks
-        "popads.net","popcash.net","popunder.net","propellerads.com","propu.sh",
-        "adsterra.com","ad-maven.com","trafficjunky.net","trafficjunky.com",
+        "popads.net","popcash.net","popunder.net","propellerads.com","propellerads.net","propu.sh",
+        "adsterra.com","adsterra.net","ad-maven.com","admaven.com","trafficjunky.net","trafficjunky.com",
         "exoclick.com","exosrv.com","ero-advertising.com","yllix.com",
         "hilltopads.com","clickadu.com","oclasrv.com","onclkds.com","onclickads.net",
         "onclickperformance.com","trafficstars.com","trafficfactory.biz",
@@ -65,13 +86,16 @@ public class MainActivity extends BridgeActivity {
         "airpush.com","popmyads.com","popunderjs.com","popmonster.net","validclick.com",
         "voluumtrk.com","voluumtrk2.com","voluumtrk3.com","evadav.com","vrtzads.com",
         "highperformancecpm.com","highperformanceformat.com","smartclickexpress.com",
+        "a-ads.com","ad-delivery.net","adskeeper.com","adskeeper.co.uk","push.house",
+        "mgcash.com","clickaine.com","clickwinkals.com","luckyforbet.com","bestadbid.com",
+        "adservetx.media","servedby-buysellads.com","poptm.com","popunder.io",
         // Major ad networks
         "doubleclick.net","googlesyndication.com","googleadservices.com",
         "googletagmanager.com","googletagservices.com","amazon-adsystem.com",
         "adnxs.com","rubiconproject.com","openx.net","pubmatic.com","bidswitch.net",
         // Trackers / analytics
         "google-analytics.com","scorecardresearch.com","quantserve.com","criteo.com",
-        "chartbeat.com","newrelic.com",
+        "chartbeat.com","newrelic.com","mc.yandex.ru","histats.com",
         // Content-recommendation chum
         "outbrain.com","taboola.com","mgid.com","revcontent.com","zergnet.com","nativeads.com",
         // Adult popunder redirect targets piracy embeds commonly use
@@ -98,6 +122,36 @@ public class MainActivity extends BridgeActivity {
         return false;
     }
 
+    /** Our own Capacitor app shell — never intercept/rewrite it. */
+    private static boolean isLocalAppHost(String host) {
+        if (host == null) return false;
+        String h = host.toLowerCase();
+        return h.equals("localhost") || h.endsWith(".localhost");
+    }
+
+    /**
+     * The aggressive shim injected INTO the embed iframes (L1.5). Runs before
+     * the embed's own scripts, in the embed's own origin, so it can actually
+     * stop the popunders at their source.
+     */
+    private static final String EMBED_SHIM =
+        "<script>(function(){try{" +
+          "var noop=function(){return null;};" +
+          // 1) Kill window.open at every touchpoint (instance + prototype).
+          "try{Object.defineProperty(window,'open',{value:noop,writable:false,configurable:false});}catch(e){try{window.open=noop;}catch(_){ }}" +
+          "try{Object.defineProperty(Window.prototype,'open',{value:noop,writable:false,configurable:false});}catch(e){}" +
+          // 2) Kill the 'create an <a target=_blank> and .click() it' popunder.
+          //    Swallow programmatic clicks on blank/parent/top anchors and on
+          //    anchors not attached to the document (classic popunder pattern).
+          "try{var _click=HTMLElement.prototype.click;HTMLElement.prototype.click=function(){try{if(this&&this.tagName==='A'){var t=((this.target||'')+'').toLowerCase();var inDoc=document.documentElement&&document.documentElement.contains(this);if(t==='_blank'||t==='_top'||t==='_parent'||!inDoc){return;}}}catch(_){ }return _click.apply(this,arguments);};}catch(e){}" +
+          // 3) On real user clicks, force any _blank/_top/_parent anchor to _self
+          //    so it can't break out of the frame.
+          "document.addEventListener('click',function(e){try{var n=e.target;while(n&&n!==document){if(n.tagName==='A'){var t=((n.target||'')+'').toLowerCase();if(t==='_blank'||t==='_top'||t==='_parent'){n.target='_self';}}n=n.parentNode;}}catch(_){ }},true);" +
+          // 4) Defeat beforeunload/unload/pagehide redirect traps. We leave the
+          //    frame's OWN location alone so the actual video can still load.
+          "['beforeunload','unload','pagehide'].forEach(function(ev){try{window.addEventListener(ev,function(e){try{e.preventDefault();e.stopImmediatePropagation();}catch(_){ }return undefined;},true);}catch(_){ }});" +
+        "}catch(err){}})();</script>";
+
     /** JS that runs on every page-load in the top frame. Neuters popup APIs. */
     private static final String ANTI_POPUP_SHIM =
         "(function(){try{" +
@@ -109,12 +163,178 @@ public class MainActivity extends BridgeActivity {
           "['beforeunload','unload','pagehide'].forEach(function(ev){" +
             "window.addEventListener(ev,function(e){try{e.preventDefault();e.stopImmediatePropagation();}catch(_){ } return false;},true);" +
           "});" +
-          // Rewrite any <a target=_blank> to target=_self at click time so they go through " +
+          // Rewrite any <a target=_blank> to target=_self at click time so they go through
           // Capacitor's normal nav path (which our WebViewClient then arbitrates).
           "document.addEventListener('click',function(e){" +
             "var n=e.target;while(n&&n!==document){if(n.tagName==='A'&&(n.target==='_blank'||n.target==='_top')){n.target='_self';}n=n.parentNode;}" +
           "},true);" +
         "}catch(err){}})();";
+
+    private static WebResourceResponse blockedResponse() {
+        return new WebResourceResponse(
+            "text/plain", "utf-8",
+            new ByteArrayInputStream(new byte[0])
+        );
+    }
+
+    private static int indexOfIgnoreCase(String haystack, String needle, int from) {
+        if (haystack == null) return -1;
+        String h = haystack.toLowerCase();
+        return h.indexOf(needle.toLowerCase(), Math.max(0, from));
+    }
+
+    private static Charset charsetFromContentType(String contentType) {
+        if (contentType != null) {
+            String ct = contentType.toLowerCase();
+            int i = ct.indexOf("charset=");
+            if (i >= 0) {
+                String cs = contentType.substring(i + 8).trim();
+                int sc = cs.indexOf(';');
+                if (sc >= 0) cs = cs.substring(0, sc).trim();
+                cs = cs.replace("\"", "").replace("'", "").trim();
+                try {
+                    if (cs.length() > 0 && Charset.isSupported(cs)) return Charset.forName(cs);
+                } catch (Exception ignore) {}
+            }
+        }
+        return StandardCharsets.UTF_8;
+    }
+
+    private static byte[] readAll(InputStream in) throws Exception {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        byte[] buf = new byte[8192];
+        int n;
+        while ((n = in.read(buf)) != -1) bos.write(buf, 0, n);
+        return bos.toByteArray();
+    }
+
+    /**
+     * L1.5 — fetch a 3rd-party HTML *document*, inject the embed shim into its
+     * <head>, strip CSP/X-Frame-Options so the shim runs and the frame embeds,
+     * and hand the rewritten document back to the WebView. Returns null to fall
+     * back to normal loading for anything that isn't a plain HTML document.
+     */
+    private WebResourceResponse maybeRewriteEmbedHtml(WebResourceRequest request, String host) {
+        HttpURLConnection conn = null;
+        try {
+            if (request.getMethod() != null && !"GET".equalsIgnoreCase(request.getMethod())) return null;
+
+            Uri uri = request.getUrl();
+            String scheme = uri.getScheme();
+            if (scheme == null) return null;
+            scheme = scheme.toLowerCase();
+            if (!scheme.equals("http") && !scheme.equals("https")) return null;
+
+            // Only rewrite the *embed* documents — never our own shell or the
+            // trusted auth/Google pages (stripping their CSP would be reckless).
+            if (isLocalAppHost(host) || isTrustedMainFrameHost(host) || isAdHost(host)) return null;
+
+            Map<String, String> headers = request.getRequestHeaders();
+            String accept = null;
+            if (headers != null) {
+                accept = headers.get("Accept");
+                if (accept == null) accept = headers.get("accept");
+                if (headers.containsKey("Range") || headers.containsKey("range")) return null; // media
+            }
+            // Only document loads advertise text/html. XHR/fetch/media/css/js do not,
+            // so this cleanly targets just the top-frame + iframe navigations.
+            if (accept == null || !accept.toLowerCase().contains("text/html")) return null;
+
+            String urlStr = uri.toString();
+            conn = (HttpURLConnection) new URL(urlStr).openConnection();
+            conn.setInstanceFollowRedirects(false); // let the WebView follow redirects itself
+            conn.setConnectTimeout(15000);
+            conn.setReadTimeout(20000);
+            conn.setRequestMethod("GET");
+
+            if (headers != null) {
+                for (Map.Entry<String, String> e : headers.entrySet()) {
+                    String k = e.getKey();
+                    if (k == null) continue;
+                    String lk = k.toLowerCase();
+                    if (lk.equals("accept-encoding") || lk.equals("connection")
+                        || lk.equals("host") || lk.equals("range") || lk.equals("content-length")) continue;
+                    try { conn.setRequestProperty(k, e.getValue()); } catch (Exception ignore) {}
+                }
+            }
+            conn.setRequestProperty("Accept-Encoding", "identity"); // we want plaintext to rewrite
+
+            int code = conn.getResponseCode();
+            // Redirect or error — bail and let the WebView do its own normal load
+            // (it follows redirects natively; we'll catch the final document then).
+            if (code < 200 || code >= 300) return null;
+
+            String contentType = conn.getContentType();
+            if (contentType == null || !contentType.toLowerCase().contains("text/html")) return null;
+
+            String enc = conn.getContentEncoding();
+            InputStream raw = conn.getInputStream();
+            InputStream in = (enc != null && enc.toLowerCase().contains("gzip"))
+                ? new GZIPInputStream(raw) : raw;
+
+            byte[] bodyBytes = readAll(in);
+            Charset cs = charsetFromContentType(contentType);
+            String html = new String(bodyBytes, cs);
+
+            // Inject the shim as the FIRST thing inside <head> (before embed scripts).
+            int insertAt = -1;
+            int headIdx = indexOfIgnoreCase(html, "<head", 0);
+            if (headIdx >= 0) {
+                int gt = html.indexOf('>', headIdx);
+                if (gt >= 0) insertAt = gt + 1;
+            }
+            if (insertAt < 0) {
+                int htmlIdx = indexOfIgnoreCase(html, "<html", 0);
+                if (htmlIdx >= 0) {
+                    int gt = html.indexOf('>', htmlIdx);
+                    if (gt >= 0) insertAt = gt + 1;
+                }
+            }
+            if (insertAt < 0) insertAt = 0;
+            String rewritten = html.substring(0, insertAt) + EMBED_SHIM + html.substring(insertAt);
+
+            byte[] outBytes = rewritten.getBytes(cs);
+
+            // Build response headers: drop CSP / framing / encoding / length, keep the rest.
+            Map<String, String> respHeaders = new HashMap<>();
+            for (Map.Entry<String, List<String>> e : conn.getHeaderFields().entrySet()) {
+                String k = e.getKey();
+                if (k == null) continue;
+                String lk = k.toLowerCase();
+                if (lk.equals("set-cookie")) {
+                    try {
+                        for (String c : e.getValue()) CookieManager.getInstance().setCookie(urlStr, c);
+                    } catch (Exception ignore) {}
+                    continue;
+                }
+                if (lk.equals("content-encoding") || lk.equals("content-length")
+                    || lk.equals("transfer-encoding") || lk.equals("content-type")
+                    || lk.equals("content-security-policy")
+                    || lk.equals("content-security-policy-report-only")
+                    || lk.equals("x-frame-options")) continue;
+                StringBuilder sb = new StringBuilder();
+                for (String v : e.getValue()) {
+                    if (v == null) continue;
+                    if (sb.length() > 0) sb.append(", ");
+                    sb.append(v);
+                }
+                if (sb.length() > 0) respHeaders.put(k, sb.toString());
+            }
+
+            String csName = cs.name().toLowerCase();
+            WebResourceResponse resp = new WebResourceResponse(
+                "text/html", csName, 200, "OK",
+                respHeaders, new ByteArrayInputStream(outBytes)
+            );
+            return resp;
+        } catch (Exception e) {
+            return null; // any failure → fall back to normal loading
+        } finally {
+            if (conn != null) {
+                try { conn.disconnect(); } catch (Exception ignore) {}
+            }
+        }
+    }
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -123,15 +343,20 @@ public class MainActivity extends BridgeActivity {
         final Bridge bridge = this.bridge;
         final WebView webView = bridge.getWebView();
 
-        // ── L1 + L2 — custom WebViewClient
+        // ── L1 + L1.5 + L2 — custom WebViewClient
         webView.setWebViewClient(new BridgeWebViewClient(bridge) {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                if (request != null && request.getUrl() != null && isAdHost(request.getUrl().getHost())) {
-                    return new WebResourceResponse(
-                        "text/plain", "utf-8",
-                        new ByteArrayInputStream(new byte[0])
-                    );
+                if (request != null && request.getUrl() != null) {
+                    String host = request.getUrl().getHost();
+
+                    // L1 — network blocklist
+                    if (isAdHost(host)) return blockedResponse();
+
+                    // L1.5 — DOM-level eradication: rewrite embed HTML documents,
+                    // injecting the anti-popup shim inside the hostile iframe.
+                    WebResourceResponse rewritten = maybeRewriteEmbedHtml(request, host);
+                    if (rewritten != null) return rewritten;
                 }
                 return super.shouldInterceptRequest(view, request);
             }
