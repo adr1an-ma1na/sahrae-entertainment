@@ -11,6 +11,7 @@ import android.webkit.WebView;
 
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.BridgeWebChromeClient;
 import com.getcapacitor.BridgeWebViewClient;
 
 import java.io.ByteArrayInputStream;
@@ -73,6 +74,18 @@ public class MainActivity extends BridgeActivity {
         "googleusercontent.com"       // Sometimes hit by Google services
     ));
 
+    /**
+     * The streaming-embed providers we actually use (see PlayerModal SERVERS).
+     * A sub-frame (iframe) may navigate freely among these; a *gesture-driven*
+     * navigation to anything outside this + the trusted set is treated as an
+     * on-click popunder/redirect and refused.
+     */
+    private static final Set<String> EMBED_HOSTS = new HashSet<>(Arrays.asList(
+        "vidrock.ru","vidzee.wtf","vidlink.pro","vidsrc.to","vidsrc.pm",
+        "autoembed.co","vidsrc.icu","vidvault.ru",
+        "youtube-nocookie.com","youtube.com","ytimg.com"   // trailer player
+    ));
+
     /** Network-level blocklist of ad/popunder/tracker hosts. */
     private static final Set<String> AD_HOSTS = new HashSet<>(Arrays.asList(
         // Popunder / aggressive redirect networks
@@ -118,6 +131,16 @@ public class MainActivity extends BridgeActivity {
         if (TRUSTED_MAIN_FRAME_HOSTS.contains(h)) return true;
         for (String t : TRUSTED_MAIN_FRAME_HOSTS) {
             if (h.endsWith("." + t)) return true;
+        }
+        return false;
+    }
+
+    private static boolean isEmbedHost(String host) {
+        if (host == null) return false;
+        String h = host.toLowerCase();
+        if (EMBED_HOSTS.contains(h)) return true;
+        for (String e : EMBED_HOSTS) {
+            if (h.endsWith("." + e)) return true;
         }
         return false;
     }
@@ -369,15 +392,34 @@ public class MainActivity extends BridgeActivity {
                     // L1 again at navigation time
                     if (isAdHost(host)) return true;
 
-                    // L2 — top-frame navigation whitelist
-                    if (request.isForMainFrame() && !isTrustedMainFrameHost(host)) {
-                        // Try Capacitor's external-intent handling first (target="_blank"
-                        // to a real external app, custom schemes, etc.)
-                        boolean handledByBridge = super.shouldOverrideUrlLoading(view, request);
-                        if (handledByBridge) return true;
-                        // Bridge wouldn't intercept this — that means it would replace
-                        // our app shell with whatever the iframe asked for. Refuse.
-                        return true;
+                    if (request.isForMainFrame()) {
+                        // L2 — top-frame navigation whitelist. The embeds must NEVER
+                        // replace our shell, so embed hosts are deliberately NOT trusted
+                        // here — only the real app/auth hosts are.
+                        if (!isTrustedMainFrameHost(host)) {
+                            // Try Capacitor's external-intent handling first (target="_blank"
+                            // to a real external app, custom schemes, etc.)
+                            boolean handledByBridge = super.shouldOverrideUrlLoading(view, request);
+                            if (handledByBridge) return true;
+                            // Bridge wouldn't intercept this — that means it would replace
+                            // our app shell with whatever the iframe asked for. Refuse.
+                            return true;
+                        }
+                    } else {
+                        // L2.5 — sub-frame (iframe) popunder / on-click redirect killer.
+                        //
+                        // The embeds plant ad redirects that fire SYNCHRONOUSLY on your
+                        // tap (they need the user gesture to dodge popup blockers) and
+                        // navigate an iframe to a fresh ad host. The actual video plays
+                        // *in place* via media/XHR requests — NOT via a frame navigation —
+                        // so refusing gesture-driven frame navigations to anything that
+                        // isn't a known embed/trusted host kills the ad while leaving
+                        // playback untouched. Non-gesture frame loads (the player wiring
+                        // up its own CDN iframes during page load) are always allowed.
+                        boolean okHost = isTrustedMainFrameHost(host) || isEmbedHost(host);
+                        if (!okHost && request.hasGesture()) {
+                            return true; // refuse the on-click ad redirect
+                        }
                     }
                 }
                 return super.shouldOverrideUrlLoading(view, request);
@@ -391,8 +433,12 @@ public class MainActivity extends BridgeActivity {
             }
         });
 
-        // ── L3 — refuse every JS popup at the WebView level
-        webView.setWebChromeClient(new WebChromeClient() {
+        // ── L3 — refuse every JS popup at the WebView level.
+        // IMPORTANT: subclass Capacitor's BridgeWebChromeClient instead of
+        // replacing it with a bare WebChromeClient — the bridge client provides
+        // onShowCustomView/onHideCustomView (HTML5 fullscreen), the file chooser,
+        // permission prompts, etc. A bare client silently breaks fullscreen.
+        webView.setWebChromeClient(new BridgeWebChromeClient(bridge) {
             @Override
             public boolean onCreateWindow(WebView view, boolean isDialog,
                                           boolean isUserGesture, Message resultMsg) {
