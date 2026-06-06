@@ -10,6 +10,9 @@ coverage/
 # Capacitor / Android — CI generates these fresh each build
 android/
 ios/
+
+# Bundled ad/tracker blocklist — fetched fresh in CI, not committed
+android-overlay/app/src/main/assets/adhosts.txt
 .gradle/
 local.properties
 *.apk

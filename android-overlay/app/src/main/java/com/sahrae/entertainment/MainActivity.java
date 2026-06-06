@@ -85,13 +85,23 @@ public class MainActivity extends BridgeActivity {
      * on-click popunder/redirect and refused.
      */
     private static final Set<String> EMBED_HOSTS = new HashSet<>(Arrays.asList(
+        // Movie / TV embed providers
         "vidrock.ru","vidzee.wtf","vidlink.pro","vidsrc.to","vidsrc.pm",
         "autoembed.co","vidsrc.icu","vidvault.ru",
-        "youtube-nocookie.com","youtube.com","ytimg.com"   // trailer player
+        "youtube-nocookie.com","youtube.com","ytimg.com",   // trailer player
+        // Live Sports (Streamed API + its stream embed hosts)
+        "streamed.pk","streamed.su","streamed.st",
+        "embed.st","embedme.top","embedsports.top","embedstreams.top","rr.buytommy.top"
     ));
 
-    /** Network-level blocklist of ad/popunder/tracker hosts. */
-    private static final Set<String> AD_HOSTS = new HashSet<>(Arrays.asList(
+    /**
+     * Core, always-present blocklist of ad/popunder/tracker hosts. At startup
+     * we ALSO fold in a large bundled host list (assets/adhosts.txt, fetched in
+     * CI from a maintained ad/malware list) for near-total coverage — see
+     * loadBundledBlocklistAsync(). Reads go through the volatile {@link #adHosts}
+     * reference so the swap-in is thread-safe.
+     */
+    private static final Set<String> CORE_AD_HOSTS = new HashSet<>(Arrays.asList(
         // Popunder / aggressive redirect networks
         "popads.net","popcash.net","popunder.net","propellerads.com","propellerads.net","propu.sh",
         "adsterra.com","adsterra.net","ad-maven.com","admaven.com","trafficjunky.net","trafficjunky.com",
@@ -119,14 +129,53 @@ public class MainActivity extends BridgeActivity {
         "chaturbate.com","livejasmin.com","bongacams.com","stripchat.com","camsoda.com"
     ));
 
+    /** Live blocklist used for lookups. Starts as the core set, swapped for the
+     *  full (core + bundled) set once the asset loads. Volatile = safe to swap. */
+    private static volatile Set<String> adHosts = CORE_AD_HOSTS;
+
+    /**
+     * Match a host against the blocklist using a progressive suffix walk:
+     * for "a.b.tracker.com" we test "a.b.tracker.com", "b.tracker.com",
+     * "tracker.com", "com" — at most a handful of O(1) HashSet lookups,
+     * so a 150k-entry blocklist stays fast (no linear scan).
+     */
     private static boolean isAdHost(String host) {
         if (host == null) return false;
         String h = host.toLowerCase();
-        if (AD_HOSTS.contains(h)) return true;
-        for (String bad : AD_HOSTS) {
-            if (h.endsWith("." + bad)) return true;
+        Set<String> set = adHosts;
+        int idx = 0;
+        while (idx >= 0 && idx < h.length()) {
+            if (set.contains(idx == 0 ? h : h.substring(idx))) return true;
+            int dot = h.indexOf('.', idx);
+            idx = (dot < 0) ? -1 : dot + 1;
         }
         return false;
+    }
+
+    /**
+     * Load the bundled host list (assets/adhosts.txt) off the UI thread, fold it
+     * into a fresh set together with the core hosts, then atomically swap it in.
+     * Each line is a bare domain (lines starting with '#' or blank are skipped).
+     */
+    private void loadBundledBlocklistAsync() {
+        new Thread(() -> {
+            try {
+                Set<String> full = new HashSet<>(CORE_AD_HOSTS);
+                java.io.InputStream is = getAssets().open("adhosts.txt");
+                java.io.BufferedReader br = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(is, StandardCharsets.UTF_8), 1 << 16);
+                String line;
+                while ((line = br.readLine()) != null) {
+                    line = line.trim();
+                    if (line.isEmpty() || line.charAt(0) == '#') continue;
+                    full.add(line.toLowerCase());
+                }
+                br.close();
+                adHosts = full; // atomic swap — readers see core or full, never a torn set
+            } catch (Exception ignore) {
+                // No bundled list (e.g. local build) — core set stays in effect.
+            }
+        }, "adhosts-loader").start();
     }
 
     private static boolean isTrustedMainFrameHost(String host) {
@@ -366,6 +415,9 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // Fold the large bundled ad/tracker blocklist in off the UI thread.
+        loadBundledBlocklistAsync();
 
         final Bridge bridge = this.bridge;
         final WebView webView = bridge.getWebView();

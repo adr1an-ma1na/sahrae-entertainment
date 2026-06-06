@@ -5,6 +5,10 @@ import './index.css';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { AuthProvider } from './hooks/useAuth.tsx';
 import { RadioProvider } from './hooks/useRadio.tsx';
+import { initSpatialNavigation } from './tv/spatialNavigation.ts';
+
+// Enable D-pad / arrow-key navigation for TV remotes & keyboards.
+initSpatialNavigation();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -90,9 +90,13 @@ export default function MediaRow({ title, items, onPlay, defaultType = 'movie', 
           {items.map((item) => {
             const type = item.media_type || defaultType;
             return (
-              <div 
-                key={`${type}-${item.id}`} 
-                className="relative flex-none w-[130px] md:w-[160px] lg:w-[200px] aspect-[2/3] rounded-xl overflow-hidden group cursor-pointer snap-start bg-zinc-900 border border-white/5 transition-all duration-300 hover:scale-105 hover:shadow-[0_0_20px_rgba(245,158,11,0.15)] hover:border-white/20 hover:z-10"
+              <div
+                key={`${type}-${item.id}`}
+                tabIndex={0}
+                data-tv-focusable
+                role="button"
+                aria-label={item.title || item.name}
+                className="relative flex-none w-[130px] md:w-[160px] lg:w-[200px] aspect-[2/3] rounded-xl overflow-hidden group cursor-pointer snap-start bg-zinc-900 border border-white/5 transition-all duration-300 hover:scale-105 hover:shadow-[0_0_20px_rgba(245,158,11,0.15)] hover:border-white/20 hover:z-10 focus:outline-none"
                 onClick={() => onPlay(item.id, type, true)}
               >
                 <img
@@ -110,7 +114,7 @@ export default function MediaRow({ title, items, onPlay, defaultType = 'movie', 
                   </div>
                 ) : null}
 
-                <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-3 md:p-4">
+                <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-3 md:p-4">
                   <h3 className="text-white font-display font-medium text-xs md:text-sm line-clamp-2 mb-1.5 drop-shadow-md">
                     {item.title || item.name}
                   </h3>

@@ -14,6 +14,7 @@ import MediaGrid from './components/MediaGrid';
 import PlayerModal from './components/PlayerModal';
 import AudioHubView from './components/AudioHubView';
 import LiveTVView from './components/LiveTVView';
+import SportsView from './components/SportsView';
 import ContinueWatchingView from './components/ContinueWatchingView';
 import FlowChannelsView from './components/FlowChannelsView';
 import GlobalAudioPlayer from './components/GlobalAudioPlayer';
@@ -321,7 +322,7 @@ export default function App() {
   };
 
   const renderContent = () => {
-    if (loading && activeTab !== 'home' && activeTab !== 'radio' && activeTab !== 'tv' && activeTab !== 'podcasts' && activeTab !== 'continue') {
+    if (loading && activeTab !== 'home' && activeTab !== 'radio' && activeTab !== 'tv' && activeTab !== 'sports' && activeTab !== 'podcasts' && activeTab !== 'continue') {
       return (
         <div className="min-h-screen flex items-center justify-center">
           <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
@@ -457,6 +458,8 @@ export default function App() {
         return <AudioHubView />;
       case 'tv':
         return <LiveTVView />;
+      case 'sports':
+        return <SportsView />;
       default:
         return null;
     }

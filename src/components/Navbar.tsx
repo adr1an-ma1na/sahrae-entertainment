@@ -63,11 +63,12 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
     { id: 'mylist', label: 'My List' },
     { id: 'continue', label: 'Continue Watching' },
     { id: 'tv', label: 'Live TV' },
+    { id: 'sports', label: 'Live Sports' },
     { id: 'audio', label: 'Audio Hub' },
   ];
 
   return (
-    <nav className={`fixed top-0 w-full z-40 transition-all duration-500 ${isScrolled ? 'bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800/50 shadow-sm' : 'bg-zinc-950/50 backdrop-blur-sm'}`}>
+    <nav className={`fixed top-0 w-full z-40 transition-all duration-500 pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] ${isScrolled ? 'bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800/50 shadow-sm' : 'bg-zinc-950/50 backdrop-blur-sm'}`}>
       <div className="px-4 md:px-12 py-4 flex items-center justify-between">
         <div className="flex items-center gap-8 md:gap-12">
           <h1 

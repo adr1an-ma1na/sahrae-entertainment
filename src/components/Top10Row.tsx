@@ -72,9 +72,13 @@ export default function Top10Row({ items, onPlay, title = "Top 10 Trending Today
           {top10Items.map((item, index) => {
             const type = item.media_type || 'movie';
             return (
-              <div 
-                key={`top10-${type}-${item.id}`} 
-                className="relative flex-none w-[130px] md:w-[160px] lg:w-[200px] aspect-[2/3] rounded-xl group cursor-pointer snap-start flex items-center"
+              <div
+                key={`top10-${type}-${item.id}`}
+                tabIndex={0}
+                data-tv-focusable
+                role="button"
+                aria-label={item.title || item.name}
+                className="relative flex-none w-[130px] md:w-[160px] lg:w-[200px] aspect-[2/3] rounded-xl group cursor-pointer snap-start flex items-center focus:outline-none"
                 onClick={() => onPlay(item.id, type, true)}
               >
                 {/* Giant Number */}
@@ -91,7 +95,7 @@ export default function Top10Row({ items, onPlay, title = "Top 10 Trending Today
                 </div>
 
                 {/* Poster Image */}
-                <div className="w-full h-full rounded-xl overflow-hidden relative bg-zinc-900 z-20 ml-6 md:ml-8 shadow-2xl border border-white/5 transition-all duration-300 group-hover:scale-105 group-hover:shadow-[0_0_20px_rgba(245,158,11,0.15)] group-hover:border-white/20">
+                <div className="w-full h-full rounded-xl overflow-hidden relative bg-zinc-900 z-20 ml-6 md:ml-8 shadow-2xl border border-white/5 transition-all duration-300 group-hover:scale-105 group-hover:shadow-[0_0_20px_rgba(245,158,11,0.15)] group-hover:border-white/20 group-focus-within:scale-105 group-focus-within:border-amber-400">
                   <img
                     src={getImageUrl(item.poster_path)}
                     alt={item.title || item.name}

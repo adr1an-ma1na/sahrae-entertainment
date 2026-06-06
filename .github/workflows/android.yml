@@ -43,6 +43,24 @@ jobs:
       - name: Add Android platform
         run: npx cap add android
 
+      - name: Fetch ad / tracker blocklist (bundled into the app)
+        run: |
+          mkdir -p android-overlay/app/src/main/assets
+          OUT=android-overlay/app/src/main/assets/adhosts.txt
+          # Maintained ads + malware host list (conservative — does not block CDNs).
+          # Two mirrors; fall back gracefully so a hiccup never fails the build.
+          if curl -fsSL --retry 3 --max-time 120 https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts -o /tmp/hosts.txt \
+             || curl -fsSL --retry 3 --max-time 120 https://o0.pages.dev/Pro/hosts.txt -o /tmp/hosts.txt; then
+            # Extract bare domains from "0.0.0.0 domain" / "127.0.0.1 domain" lines.
+            grep -E '^(0\.0\.0\.0|127\.0\.0\.1)[[:space:]]+' /tmp/hosts.txt \
+              | awk '{print $2}' \
+              | grep -vE '^(localhost|localhost\.localdomain|local|broadcasthost|0\.0\.0\.0|ip6-.*)$' \
+              | tr 'A-Z' 'a-z' | sort -u > "$OUT" || true
+          fi
+          # Guarantee the file exists even if the fetch failed.
+          touch "$OUT"
+          echo "Bundled blocklist size: $(wc -l < "$OUT") domains"
+
       - name: Apply Android overlay (ad-blocking MainActivity, etc.)
         run: |
           if [ -d android-overlay ]; then

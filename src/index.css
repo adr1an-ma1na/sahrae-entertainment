@@ -80,6 +80,29 @@
   }
 }
 
+/* ─────────────────────────────────────────────────────────────
+   TV / D-pad focus highlight. Applied by src/tv/spatialNavigation.ts
+   to whatever element the remote is currently on. Bright amber ring
+   so the selected item is unmistakable across a room.
+   ───────────────────────────────────────────────────────────── */
+.tv-focused {
+  outline: none !important;
+  box-shadow: 0 0 0 3px #f59e0b, 0 0 26px 4px rgba(245, 158, 11, 0.55) !important;
+  border-radius: 0.75rem;
+  position: relative;
+  z-index: 40;
+  transition: box-shadow 0.12s ease, transform 0.12s ease;
+}
+/* Keyboard focus everywhere else (laptop / TV) gets a visible ring too. */
+button:focus-visible,
+a:focus-visible,
+select:focus-visible,
+input:focus-visible,
+[role="button"]:focus-visible {
+  outline: 3px solid rgba(245, 158, 11, 0.9);
+  outline-offset: 2px;
+}
+
 @layer utilities {
   .scrollbar-hide {
     /* IE and Edge */
