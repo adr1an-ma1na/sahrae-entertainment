@@ -173,7 +173,8 @@ export default function SportsView() {
   const badgeUrl = (badge?: string) => (badge ? `${apiBase}/api/images/badge/${badge}.webp` : '');
   const posterUrl = (m: Match) => (m.poster ? `${apiBase}${m.poster}` : '');
 
-  const categories = ['live', 'all', ...Array.from(new Set(matches.map((m) => m.category)))];
+  const uniqueCategories: string[] = Array.from(new Set<string>(matches.map((m) => m.category)));
+  const categories: string[] = ['live', 'all', ...uniqueCategories];
 
   const visibleMatches = matches.filter((m) => {
     if (category === 'live') return liveIds.has(m.id);
