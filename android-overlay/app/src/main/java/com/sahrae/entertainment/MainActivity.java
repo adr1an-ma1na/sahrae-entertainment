@@ -582,21 +582,9 @@ public class MainActivity extends BridgeActivity {
 
         // ── Single-tap playback: don't demand a fresh user gesture for every
         //    <video>, so a movie/sport starts on the first tap instead of 3-4.
+        //    (The clean Chrome user-agent that gets embeds to play is set in
+        //    capacitor.config.ts via overrideUserAgent, applied at WebView init.)
         webView.getSettings().setMediaPlaybackRequiresUserGesture(false);
-
-        // ── Present as ordinary mobile Chrome. The default WebView UA carries
-        //    the "; wv" + "Version/4.0" markers; some stream embeds (the live
-        //    sports players especially) refuse to run in a WebView and show
-        //    "Remove sandbox attributes on the iframe tag". Stripping those
-        //    markers makes them treat us as a normal browser and play.
-        String ua = webView.getSettings().getUserAgentString();
-        if (ua != null) {
-            ua = ua.replace("; wv", "")
-                   .replaceAll("Version/\\d+\\.\\d+\\s*", "")
-                   .replaceAll("\\s+", " ")
-                   .trim();
-            webView.getSettings().setUserAgentString(ua);
-        }
     }
 
     /** Hide the status + navigation bars and draw under the notch — true edge-to-edge. */

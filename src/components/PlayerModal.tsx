@@ -39,14 +39,13 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
 
   const hideControlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Request fullscreen on the player container. Used to auto-go-fullscreen
-  // when the user explicitly taps Play / an episode — so one tap = fullscreen.
-  // Deferred via setTimeout(0) so the iframe is mounted by the time we ask,
-  // while staying inside Chromium's user-gesture window.
+  // Go fullscreen AFTER the embed has loaded and started playing (fired from the
+  // iframe's onLoad), not the instant Play is tapped. Tapping Play then waiting
+  // for the embed to autostart and only then fullscreening avoids the old
+  // "fullscreen first → tap play → drops out of fullscreen" double-tap mess.
   const enterFullscreen = useCallback(() => {
-    setTimeout(() => {
-      playerContainerRef.current?.requestFullscreen?.().catch(() => {});
-    }, 50);
+    if (document.fullscreenElement) return; // already fullscreen — don't re-request
+    playerContainerRef.current?.requestFullscreen?.().catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -314,12 +313,16 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                     key={`player-${refreshKey}`}
                     src={src}
                     frameBorder="0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
                     allowFullScreen
                     // No sandbox attribute — VidZee/VidRock/etc. refuse to play
                     // in any sandboxed context. Native Android MainActivity
                     // (top-frame whitelist + popup refusal + ad-host blocklist
                     // + JS shim) handles ad defence.
+                    // Auto-fullscreen once the embed has loaded + autostarted
+                    // (media playback no longer needs a separate gesture), so a
+                    // single Play tap ends up fullscreen and playing.
+                    onLoad={() => setTimeout(enterFullscreen, 600)}
                     className="w-full h-full absolute inset-0 bg-black"
                     title="Video Player"
                   />
@@ -374,7 +377,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                     {details.title || details.name}
                   </h1>
                   <div className="flex gap-3 items-center flex-wrap mt-2">
-                    <button onClick={() => { setIsPlaying(true); enterFullscreen(); }} className="px-6 md:px-8 py-2 md:py-3 bg-white text-black font-bold rounded flex items-center gap-2 hover:bg-white/80 transition-colors shadow-lg text-sm md:text-base whitespace-nowrap">
+                    <button onClick={() => { setIsPlaying(true); }} className="px-6 md:px-8 py-2 md:py-3 bg-white text-black font-bold rounded flex items-center gap-2 hover:bg-white/80 transition-colors shadow-lg text-sm md:text-base whitespace-nowrap">
                       <Play className="w-5 h-5 md:w-6 md:h-6 fill-current"/>
                       {currentMediaType === 'tv' ? `Play S${selectedSeason} E${selectedEpisode}` : 'Play'}
                     </button>
@@ -496,7 +499,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                   ) : seasonDetails?.episodes && seasonDetails.episodes.length > 0 ? (
                     <div className="flex flex-col gap-0 border-t border-zinc-800">
                       {seasonDetails.episodes.map(episode => (
-                        <div key={episode.id} onClick={() => { setSelectedEpisode(episode.episode_number); setIsPlaying(true); document.getElementById('player-modal-container')?.scrollTo({top: 0, behavior: 'smooth'}); enterFullscreen(); }} className={`flex flex-col md:flex-row items-center gap-4 py-4 md:py-6 border-b border-zinc-800 cursor-pointer hover:bg-zinc-800/50 transition-colors group ${selectedEpisode === episode.episode_number && isPlaying ? 'bg-zinc-800/30' : ''}`}>
+                        <div key={episode.id} onClick={() => { setSelectedEpisode(episode.episode_number); setIsPlaying(true); document.getElementById('player-modal-container')?.scrollTo({top: 0, behavior: 'smooth'}); }} className={`flex flex-col md:flex-row items-center gap-4 py-4 md:py-6 border-b border-zinc-800 cursor-pointer hover:bg-zinc-800/50 transition-colors group ${selectedEpisode === episode.episode_number && isPlaying ? 'bg-zinc-800/30' : ''}`}>
                           <div className="text-4xl font-light text-zinc-500 w-12 text-center shrink-0 hidden md:block opacity-60">
                             {episode.episode_number}
                           </div>
