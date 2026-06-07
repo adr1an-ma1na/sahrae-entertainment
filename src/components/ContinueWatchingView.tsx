@@ -58,13 +58,14 @@ export default function ContinueWatchingView({ onPlay }: ContinueWatchingViewPro
               </div>
             </div>
             
-            <button 
+            <button
               onClick={(e) => {
                 e.stopPropagation();
                 removeProgress(item.mediaId);
               }}
-              className="absolute top-2 right-2 p-2 bg-black/60 hover:bg-red-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all duration-200 z-20"
+              className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-red-500 text-white rounded-full transition-colors duration-200 z-20 shadow-lg backdrop-blur-sm border border-white/10"
               title="Remove from Continue Watching"
+              aria-label="Remove from Continue Watching"
             >
               <Trash2 className="w-4 h-4" />
             </button>

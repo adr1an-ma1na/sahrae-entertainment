@@ -60,7 +60,7 @@ export default function App() {
   const [searchPage, setSearchPage] = useState(1);
   const [hasMoreSearch, setHasMoreSearch] = useState(true);
   
-  const { myList } = useMyList();
+  const { myList, toggleMyList } = useMyList();
   const { progress } = useWatchProgress();
   const { theme, toggleTheme } = useTheme();
 
@@ -377,7 +377,7 @@ export default function App() {
       case 'channels':
         return <FlowChannelsView onPlay={handlePlay} />;
       case 'mylist':
-        return <MediaGrid title="My List" items={myList} onPlay={handlePlay} />;
+        return <MediaGrid title="My List" items={myList} onPlay={handlePlay} onRemove={toggleMyList} />;
       case 'continue':
         return <ContinueWatchingView onPlay={handlePlay} />;
       case 'search':

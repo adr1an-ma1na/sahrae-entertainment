@@ -1,4 +1,4 @@
-import { Play, Star } from 'lucide-react';
+import { Play, Star, Trash2 } from 'lucide-react';
 import { MediaItem, getImageUrl, Genre } from '../services/tmdb';
 
 interface MediaGridProps {
@@ -10,9 +10,11 @@ interface MediaGridProps {
   selectedGenre?: number | null;
   onGenreSelect?: (id: number | null) => void;
   showRanking?: boolean;
+  /** When provided, each card shows a delete button that calls this (e.g. My List). */
+  onRemove?: (item: MediaItem) => void;
 }
 
-export default function MediaGrid({ title, items, onPlay, defaultType = 'movie', genres, selectedGenre, onGenreSelect, showRanking = false }: MediaGridProps) {
+export default function MediaGrid({ title, items, onPlay, defaultType = 'movie', genres, selectedGenre, onGenreSelect, showRanking = false, onRemove }: MediaGridProps) {
   if (!items || items.length === 0) {
     return (
       <div className="pt-32 px-4 md:px-12 text-center">
@@ -69,7 +71,19 @@ export default function MediaGrid({ title, items, onPlay, defaultType = 'movie',
                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                 loading="lazy"
               />
-              
+
+              {/* Remove button (e.g. My List) — always visible so it works on touch */}
+              {onRemove && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onRemove(item); }}
+                  className="absolute top-2 left-2 z-30 p-1.5 bg-black/70 hover:bg-red-500 text-white rounded-full transition-colors shadow-lg backdrop-blur-sm border border-white/10"
+                  title="Remove from My List"
+                  aria-label="Remove"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+
               {/* Rating Badge */}
               {item.vote_average ? (
                 <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md px-1.5 py-0.5 rounded text-[10px] font-bold text-amber-500 border border-white/10 shadow-lg z-20 flex items-center gap-1 opacity-90 group-hover:opacity-100 transition-opacity">
