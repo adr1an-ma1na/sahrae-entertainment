@@ -58,10 +58,11 @@ interface FeedEvent {
   category: string;
   date: number;
   popular?: boolean;
+  live?: boolean;
   teams?: { home?: { name?: string; badge?: string }; away?: { name?: string; badge?: string } } | null;
   streams: FeedStream[];
 }
-interface Feed { updated: number; base?: string; count: number; events: FeedEvent[] }
+interface Feed { updated: number; base?: string; count: number; resolved?: number; events: FeedEvent[] }
 
 const SPORT_LABELS: Record<string, string> = {
   football: 'Football', 'american-football': 'NFL', basketball: 'Basketball', baseball: 'Baseball',
@@ -161,14 +162,14 @@ export default function SportsView() {
     arr.sort((a, b) => (order.indexOf(a) < 0 ? 99 : order.indexOf(a)) - (order.indexOf(b) < 0 ? 99 : order.indexOf(b)));
     return arr;
   }, [events]);
-  const filters = ['all', ...sportsPresent];
+  const filters = ['all', 'live', ...sportsPresent];
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     return events
-      .filter((m) => (sport === 'all' ? true : m.category === sport))
+      .filter((m) => (sport === 'live' ? m.live : sport === 'all' ? true : m.category === sport))
       .filter((m) => !q || matchTitle(m).toLowerCase().includes(q))
-      .sort((a, b) => (b.popular ? 1 : 0) - (a.popular ? 1 : 0) || a.date - b.date);
+      .sort((a, b) => (b.live ? 1 : 0) - (a.live ? 1 : 0) || (b.popular ? 1 : 0) - (a.popular ? 1 : 0) || a.date - b.date);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [events, sport, search]);
 
@@ -264,7 +265,11 @@ export default function SportsView() {
                       className="group relative bg-zinc-900/60 border border-white/5 rounded-2xl p-4 hover:bg-zinc-800 hover:border-amber-500/30 transition-all cursor-pointer focus:outline-none">
                       <div className="flex items-center justify-between mb-2">
                         <span className="px-2 py-0.5 bg-white/5 rounded text-[10px] font-bold uppercase tracking-wider text-amber-400">{SPORT_LABELS[m.category] || m.category}</span>
-                        <span className="flex items-center gap-1 text-[10px] font-bold text-red-500"><span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> LIVE</span>
+                        {m.live ? (
+                          <span className="flex items-center gap-1 text-[10px] font-bold text-red-500"><span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> LIVE</span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-[11px] text-zinc-400"><CalendarClock className="w-3 h-3" /> {eventTime(m.date)}</span>
+                        )}
                       </div>
                       {home?.name && away?.name ? (
                         <div className="flex items-center justify-center gap-3 py-1">
@@ -282,7 +287,8 @@ export default function SportsView() {
                         <h3 className="text-sm font-bold text-white leading-snug line-clamp-2 min-h-[40px] group-hover:text-amber-400 transition-colors">{m.title}</h3>
                       )}
                       <button className="mt-3 w-full py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm font-bold bg-white/10 text-white group-hover:bg-amber-500 group-hover:text-amber-950 transition-all pointer-events-none">
-                        <Play className="w-4 h-4 fill-current" /> Watch <span className="text-[10px] opacity-70 flex items-center gap-1"><CalendarClock className="w-3 h-3" />{eventTime(m.date)}</span>
+                        <Play className="w-4 h-4 fill-current" /> Watch
+                        {m.streams.length > 0 && <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 group-hover:bg-amber-900/20 group-hover:text-amber-900 font-bold">HD FEED</span>}
                         {m.popular && <Flame className="w-3.5 h-3.5 text-amber-400 group-hover:text-amber-900" />}
                       </button>
                     </div>
