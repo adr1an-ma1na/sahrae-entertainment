@@ -441,8 +441,8 @@ public class MainActivity extends BridgeActivity {
             String ref = uri.getQueryParameter("r");
             conn = (HttpURLConnection) new URL(target).openConnection();
             conn.setInstanceFollowRedirects(true);
-            conn.setConnectTimeout(15000);
-            conn.setReadTimeout(20000);
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(10000);
             conn.setRequestProperty("User-Agent", PROXY_UA);
             conn.setRequestProperty("Accept", "*/*");
             conn.setRequestProperty("Accept-Encoding", "identity");

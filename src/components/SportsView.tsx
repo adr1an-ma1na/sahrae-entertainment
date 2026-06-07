@@ -157,8 +157,10 @@ export default function SportsView() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(false);
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 14000);
     try {
-      const res = await fetch(`${ddFetch(SCHEDULE_URL)}&t=${Date.now()}`, { cache: 'no-store' });
+      const res = await fetch(`${ddFetch(SCHEDULE_URL)}&t=${Date.now()}`, { cache: 'no-store', signal: ctrl.signal });
       if (!res.ok) throw new Error('schedule');
       const json = await res.json();
       const parsed = parseSchedule(json);
@@ -166,8 +168,10 @@ export default function SportsView() {
       setEvents(parsed);
     } catch {
       setError(true);
+    } finally {
+      clearTimeout(to);
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -274,7 +278,7 @@ export default function SportsView() {
         </div>
       </div>
 
-      {loading ? (
+      {tab === 'events' && loading ? (
         <div className="flex flex-col items-center justify-center min-h-[40vh] gap-4 text-zinc-400"><Loader2 className="w-10 h-10 animate-spin text-amber-500" /><span>Loading today's full schedule…</span></div>
       ) : tab === 'events' ? (
         error || events.length === 0 ? (
