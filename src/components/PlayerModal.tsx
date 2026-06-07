@@ -63,12 +63,15 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const playerContainerRef = useRef<HTMLDivElement>(null);
 
   const toggleFullScreen = () => {
-    if (!document.fullscreenElement) {
-      playerContainerRef.current?.requestFullscreen().catch((err: any) => {
-        console.error(`Error attempting to enable fullscreen: ${err.message}`);
-      });
-    } else {
-      document.exitFullscreen();
+    const doc = document as any;
+    const el = playerContainerRef.current as any;
+    const fsEl = doc.fullscreenElement || doc.webkitFullscreenElement;
+    if (fsEl) {
+      const exit = doc.exitFullscreen || doc.webkitExitFullscreen;
+      try { exit?.call(document); } catch { /* noop */ }
+    } else if (el) {
+      const req = el.requestFullscreen || el.webkitRequestFullscreen;
+      try { const p = req?.call(el); if (p && p.catch) p.catch(() => {}); } catch { /* noop */ }
     }
   };
 

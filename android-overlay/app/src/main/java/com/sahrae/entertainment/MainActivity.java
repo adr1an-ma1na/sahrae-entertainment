@@ -719,6 +719,10 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    /** True while a video/element is in WebView fullscreen, so Back can exit it. */
+    private boolean inFullscreen = false;
+    private WebChromeClient.CustomViewCallback fsCallback;
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -870,12 +874,16 @@ public class MainActivity extends BridgeActivity {
             // it when fullscreen ends.
             @Override
             public void onShowCustomView(View view, CustomViewCallback callback) {
+                fsCallback = callback;
+                inFullscreen = true;
                 super.onShowCustomView(view, callback);
                 enterImmersiveFullscreen();
             }
 
             @Override
             public void onHideCustomView() {
+                inFullscreen = false;
+                fsCallback = null;
                 super.onHideCustomView();
                 exitImmersiveFullscreen();
             }
@@ -935,5 +943,30 @@ public class MainActivity extends BridgeActivity {
                 window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             } catch (Exception ignore) {}
         });
+    }
+
+    /**
+     * Hardware Back / gesture: if a video is fullscreen, exit fullscreen instead
+     * of closing the player — a guaranteed escape even when the embed's own
+     * video element grabbed fullscreen (where the in-page button can't reach it).
+     */
+    @Override
+    public void onBackPressed() {
+        if (inFullscreen) {
+            try {
+                WebView wv = (this.bridge != null) ? this.bridge.getWebView() : null;
+                if (wv != null) {
+                    wv.evaluateJavascript(
+                        "(function(){try{if(document.fullscreenElement&&document.exitFullscreen){document.exitFullscreen();}}catch(e){}})();",
+                        null);
+                }
+            } catch (Exception ignore) {}
+            WebChromeClient.CustomViewCallback cb = fsCallback;
+            if (cb != null) {
+                try { cb.onCustomViewHidden(); } catch (Exception ignore) {}
+            }
+            return;
+        }
+        super.onBackPressed();
     }
 }
