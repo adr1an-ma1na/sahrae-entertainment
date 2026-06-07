@@ -1,36 +1,33 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <title>Sahrae Entertainment — Adaptive Foreground (sun + monogram only)</title>
+  <title>Sahrae Entertainment — Adaptive Foreground (gold S monogram)</title>
   <defs>
-    <radialGradient id="sunFg" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0%" stop-color="#fef3c7"/>
-      <stop offset="50%" stop-color="#fbbf24"/>
-      <stop offset="100%" stop-color="#f59e0b"/>
-    </radialGradient>
-    <filter id="sunGlowFg" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="22" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    <linearGradient id="goldS" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0%" stop-color="#fff6d5"/>
+      <stop offset="28%" stop-color="#fcd34d"/>
+      <stop offset="58%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#b45309"/>
+    </linearGradient>
+    <filter id="sGlow" x="-45%" y="-45%" width="190%" height="190%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000000" flood-opacity="0.45"/>
+      <feGaussianBlur stdDeviation="16" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
     </filter>
   </defs>
 
-  <!-- Transparent background -->
-
-  <!-- Sun (sized to fit Android adaptive 66% safe zone: ~626px diameter centered) -->
-  <g filter="url(#sunGlowFg)">
-    <circle cx="512" cy="512" r="195" fill="url(#sunFg)"/>
+  <!-- Hero gold S, centred within the Android adaptive safe zone -->
+  <g filter="url(#sGlow)">
+    <g transform="translate(540 512) scale(1.5) translate(-512 -512)">
+      <path d="M 600 432 C 600 393 562 370 510 370 L 465 370 C 420 370 386 393 386 432 C 386 466 414 482 454 493 L 510 504 C 562 515 590 538 590 577 C 590 616 552 639 500 639 L 410 639"
+        fill="none" stroke="url(#goldS)" stroke-width="58" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
   </g>
 
-  <!-- S monogram on the sun -->
-  <path d="
-    M 600 444
-    C 600 405, 562 382, 510 382
-    L 465 382
-    C 420 382, 386 405, 386 444
-    C 386 478, 414 494, 454 505
-    L 510 516
-    C 562 527, 590 550, 590 589
-    C 590 628, 552 651, 500 651
-    L 410 651
-    "
-    fill="none" stroke="#7c2d12" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"
-    opacity="0.92"/>
+  <!-- Soft top sheen ridge for a metallic finish -->
+  <g transform="translate(540 504) scale(1.5) translate(-512 -512)" opacity="0.45">
+    <path d="M 600 432 C 600 393 562 370 510 370 L 465 370 C 420 370 386 393 386 432 C 386 466 414 482 454 493 L 510 504 C 562 515 590 538 590 577 C 590 616 552 639 500 639 L 410 639"
+      fill="none" stroke="#fff7e0" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
 </svg>

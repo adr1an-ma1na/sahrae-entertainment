@@ -68,6 +68,7 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
   ];
 
   return (
+    <>
     <nav className={`fixed top-0 w-full z-40 transition-all duration-500 pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] ${isScrolled ? 'bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800/50 shadow-sm' : 'bg-zinc-950/50 backdrop-blur-sm'}`}>
       <div className="px-4 md:px-12 py-4 flex items-center justify-between">
         <div className="flex items-center gap-8 md:gap-12">
@@ -230,9 +231,6 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
         </div>
       </div>
       
-      <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
-      <ProfileModal isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} />
-      
       {/* Mobile Tabs */}
       <div className="md:hidden flex overflow-x-auto px-4 pb-3 gap-4 scrollbar-hide bg-zinc-950/95">
         {tabs.map(tab => (
@@ -248,5 +246,11 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
         ))}
       </div>
     </nav>
+
+    {/* Modals live OUTSIDE <nav>: the nav's backdrop-blur creates a containing
+        block that would otherwise trap these fixed overlays in the top strip. */}
+    <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
+    <ProfileModal isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} />
+    </>
   );
 }

@@ -3,27 +3,32 @@ import { useState, useRef, useEffect } from 'react';
 import Hls from 'hls.js';
 
 const CHANNELS = [
-  // News
+  // ── News — direct HLS feeds (most reliable, play instantly) ──
+  { name: 'DW News', country: 'Germany', category: 'News', url: 'https://dwamdstream102.akamaized.net/hls/live/2015525/dwstream102/index.m3u8' },
+  { name: 'France 24 English', country: 'France', category: 'News', url: 'https://static.france24.com/live/F24_EN_HI_HLS/live_web.m3u8' },
+  { name: 'CNA', country: 'Singapore', category: 'News', url: 'https://d2e1asnsl7br7b.cloudfront.net/7782e205e72f43aeb4a48ec97f66ebbe/index.m3u8' },
+  { name: 'TRT World', country: 'Turkey', category: 'News', url: 'https://tv-trtworld.medya.trt.com.tr/master.m3u8' },
+
+  // ── News — YouTube 24/7 live ──
   { name: 'Al Jazeera English', country: 'Qatar', category: 'News', url: 'youtube_channel:UCNye-wNBqNL5ZzHSJj3l8Bg' },
-  { name: 'BBC News', country: 'UK', category: 'News', url: 'youtube_channel:UC16niRr50-MSBwiO3YDb3RA' },
   { name: 'Sky News', country: 'UK', category: 'News', url: 'youtube_channel:UCoMdktPbSTixAyNGr4S4p4w' },
-  { name: 'DW News', country: 'Germany', category: 'News', url: 'youtube_channel:UCknLrEdhRCp1aegoMqRaCZg' },
-  { name: 'France 24', country: 'France', category: 'News', url: 'youtube_channel:UCQfwfsi5VrQ8yKZ-UWmAEFg' },
-  { name: 'NBC News NOW', country: 'USA', category: 'News', url: 'youtube_channel:UCeY0bbntWzzVIaj2z3QigXg' },
   { name: 'ABC News', country: 'USA', category: 'News', url: 'youtube_channel:UCBi2mrWuNuyYy4gbM6fU18Q' },
+  { name: 'NBC News NOW', country: 'USA', category: 'News', url: 'youtube_channel:UCeY0bbntWzzVIaj2z3QigXg' },
   { name: 'CBS News', country: 'USA', category: 'News', url: 'youtube_channel:UC8p1vwvWtl6T73JiExfWs1g' },
-  { name: 'CNN', country: 'USA', category: 'News', url: 'youtube_channel:UCupvZG-5ko_eiXAupbDfxWw' },
-  { name: 'CNA', country: 'Singapore', category: 'News', url: 'youtube_channel:UC83jt4dlz1Gjl58fzQrrKZg' },
   { name: 'EuroNews', country: 'Europe', category: 'News', url: 'youtube_channel:UCSrZ3GWwnb1BvVG0NQA5imw' },
-  
-  // Science, Documentary & Nature
+  { name: 'Bloomberg Television', country: 'USA', category: 'News', url: 'youtube_channel:UCIALMKvObZNtJ6AmdCLP7Lg' },
+  { name: 'WION', country: 'India', category: 'News', url: 'youtube_channel:UC_gUM8rL-Lrg6O3adPW9K1g' },
+
+  // ── Africa (new) ──
+  { name: 'Citizen TV Kenya', country: 'Kenya', category: 'Africa', url: 'youtube_channel:UChBQgieUidXV1CmDxSdRm3g' },
+  { name: 'Africanews', country: 'Africa', category: 'Africa', url: 'youtube_channel:UC1_E8NeF5QHY2dtdLRBCCLA' },
+
+  // ── Sports / Science / Nature / Music ──
   { name: 'Red Bull TV', country: 'Global', category: 'Sports', url: 'https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master.m3u8' },
-  { name: 'NASA TV', country: 'USA', category: 'Science', url: 'youtube_channel:UCLA_DiR1FfKNvjuUpBHmylQ' },
+  { name: 'NASA TV', country: 'USA', category: 'Science', url: 'https://ntv1.akamaized.net/hls/live/2014075/NASA-NTV1-HLS/master.m3u8' },
   { name: 'Explore Oceans', country: 'Global', category: 'Nature', url: 'youtube_channel:UCFv7U50w6EksLhX0S4hHwGw' },
   { name: 'Monterey Bay Aquarium', country: 'USA', category: 'Nature', url: 'youtube_channel:UCr6_XoQvX1j1S_J5lZlIeag' },
-
-  // Music
-  { name: 'Lofi Girl - Beats to relax', country: 'Global', category: 'Music', url: 'youtube_channel:UCSJ4gkVC6NrvII8umztf0Ow' },
+  { name: 'Lofi Girl — Beats to Relax', country: 'Global', category: 'Music', url: 'youtube_channel:UCSJ4gkVC6NrvII8umztf0Ow' },
 ];
 
 const HLSPlayer = ({ src }: { src: string }) => {

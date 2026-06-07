@@ -8,6 +8,8 @@ import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
+import android.webkit.JsPromptResult;
+import android.webkit.JsResult;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -198,6 +200,16 @@ public class MainActivity extends BridgeActivity {
         return false;
     }
 
+    /** Safely extract the host from a URL string (null on any parse failure). */
+    private static String uriHost(String url) {
+        if (url == null) return null;
+        try {
+            return Uri.parse(url).getHost();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     /** Our own Capacitor app shell — never intercept/rewrite it. */
     private static boolean isLocalAppHost(String host) {
         if (host == null) return false;
@@ -301,9 +313,14 @@ public class MainActivity extends BridgeActivity {
             scheme = scheme.toLowerCase();
             if (!scheme.equals("http") && !scheme.equals("https")) return null;
 
-            // Only rewrite the *embed* documents — never our own shell or the
-            // trusted auth/Google pages (stripping their CSP would be reckless).
-            if (isLocalAppHost(host) || isTrustedMainFrameHost(host) || isAdHost(host)) return null;
+            // Never rewrite our own shell, the trusted auth/Google pages, ad
+            // hosts, or our KNOWN embed providers. Several player embeds run an
+            // anti-tamper check and refuse to play ("Remove sandbox attributes
+            // on the iframe tag") if their document was modified — so we leave
+            // every allow-listed provider completely untouched and rely on the
+            // blocklist + nav guards + JS-dialog suppression for ad protection.
+            if (isLocalAppHost(host) || isTrustedMainFrameHost(host)
+                || isAdHost(host) || isEmbedHost(host)) return null;
 
             Map<String, String> headers = request.getRequestHeaders();
             String accept = null;
@@ -499,6 +516,42 @@ public class MainActivity extends BridgeActivity {
             public boolean onCreateWindow(WebView view, boolean isDialog,
                                           boolean isUserGesture, Message resultMsg) {
                 return false;
+            }
+
+            // ── Kill the embeds' JS dialog spam.
+            // The "Confirm Navigation / Changes you made may not be saved" box is
+            // a beforeunload dialog the ad fires to interrupt you — always cancel
+            // it so it never appears. alert()/confirm()/prompt() are suppressed
+            // when they come from an embed (non-localhost) frame, but still allowed
+            // from our own app UI (localhost) so legitimate messages work.
+            @Override
+            public boolean onJsBeforeUnload(WebView view, String url, String message, JsResult result) {
+                result.cancel(); // stay on the page, show nothing
+                return true;
+            }
+
+            @Override
+            public boolean onJsAlert(WebView view, String url, String message, JsResult result) {
+                if (isLocalAppHost(uriHost(url))) return super.onJsAlert(view, url, message, result);
+                result.cancel();
+                return true;
+            }
+
+            @Override
+            public boolean onJsConfirm(WebView view, String url, String message, JsResult result) {
+                if (isLocalAppHost(uriHost(url))) return super.onJsConfirm(view, url, message, result);
+                result.cancel();
+                return true;
+            }
+
+            @Override
+            public boolean onJsPrompt(WebView view, String url, String message,
+                                      String defaultValue, JsPromptResult result) {
+                if (isLocalAppHost(uriHost(url))) {
+                    return super.onJsPrompt(view, url, message, defaultValue, result);
+                }
+                result.cancel();
+                return true;
             }
 
             // ── Edge-to-edge fullscreen (fill the screen like Netflix).

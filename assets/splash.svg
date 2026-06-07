@@ -1,50 +1,58 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2732 2732" width="2732" height="2732">
   <title>Sahrae Entertainment — Splash Screen</title>
   <defs>
-    <linearGradient id="splashSky" x1="0.5" y1="0" x2="0.5" y2="1">
-      <stop offset="0%" stop-color="#09090b"/>
-      <stop offset="40%" stop-color="#1c1917"/>
-      <stop offset="70%" stop-color="#7c2d12"/>
-      <stop offset="100%" stop-color="#c2410c"/>
-    </linearGradient>
-    <radialGradient id="splashSun" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0%" stop-color="#fef3c7"/>
-      <stop offset="50%" stop-color="#fbbf24"/>
-      <stop offset="100%" stop-color="#f59e0b"/>
+    <radialGradient id="obsidian" cx="0.5" cy="0.44" r="0.8">
+      <stop offset="0%" stop-color="#292524"/>
+      <stop offset="45%" stop-color="#1c1917"/>
+      <stop offset="78%" stop-color="#0c0a09"/>
+      <stop offset="100%" stop-color="#000000"/>
     </radialGradient>
-    <filter id="splashGlow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="50" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    <radialGradient id="warmGlow" cx="0.5" cy="0.43" r="0.45">
+      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.28"/>
+      <stop offset="60%" stop-color="#b45309" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="goldS" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0%" stop-color="#fff6d5"/>
+      <stop offset="28%" stop-color="#fcd34d"/>
+      <stop offset="58%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#b45309"/>
+    </linearGradient>
+    <linearGradient id="goldText" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fff6d5"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+    <filter id="sGlow" x="-45%" y="-45%" width="190%" height="190%">
+      <feDropShadow dx="0" dy="18" stdDeviation="26" flood-color="#000000" flood-opacity="0.5"/>
+      <feGaussianBlur stdDeviation="30" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
     </filter>
   </defs>
 
-  <rect x="0" y="0" width="2732" height="2732" fill="url(#splashSky)"/>
+  <rect x="0" y="0" width="2732" height="2732" fill="url(#obsidian)"/>
+  <rect x="0" y="0" width="2732" height="2732" fill="url(#warmGlow)"/>
+  <path d="M -100 1700 C 760 1560 1972 1560 2832 1700" fill="none" stroke="#f59e0b" stroke-width="8" opacity="0.14"/>
 
-  <!-- Sun behind logo, centered -->
-  <g filter="url(#splashGlow)">
-    <circle cx="1366" cy="1280" r="340" fill="url(#splashSun)"/>
+  <!-- Hero gold S -->
+  <g filter="url(#sGlow)">
+    <g transform="translate(1366 1150) scale(2.08) translate(-493 -504)">
+      <path d="M 600 432 C 600 393 562 370 510 370 L 465 370 C 420 370 386 393 386 432 C 386 466 414 482 454 493 L 510 504 C 562 515 590 538 590 577 C 590 616 552 639 500 639 L 410 639"
+        fill="none" stroke="url(#goldS)" stroke-width="56" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </g>
+  <g transform="translate(1366 1138) scale(2.08) translate(-493 -504)" opacity="0.45">
+    <path d="M 600 432 C 600 393 562 370 510 370 L 465 370 C 420 370 386 393 386 432 C 386 466 414 482 454 493 L 510 504 C 562 515 590 538 590 577 C 590 616 552 639 500 639 L 410 639"
+      fill="none" stroke="#fff7e0" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
   </g>
 
-  <!-- S monogram on sun -->
-  <path d="
-    M 1520 1162
-    C 1520 1093, 1454 1053, 1366 1053
-    L 1288 1053
-    C 1210 1053, 1150 1093, 1150 1162
-    C 1150 1221, 1199 1249, 1268 1268
-    L 1366 1287
-    C 1454 1306, 1502 1346, 1502 1414
-    C 1502 1483, 1436 1523, 1348 1523
-    L 1192 1523
-    "
-    fill="none" stroke="#7c2d12" stroke-width="66" stroke-linecap="round" stroke-linejoin="round"
-    opacity="0.92"/>
-
-  <!-- Wordmark below sun -->
-  <text x="1366" y="1850" text-anchor="middle"
+  <!-- Wordmark -->
+  <text x="1366" y="1815" text-anchor="middle"
         font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
-        font-size="130" font-weight="900" letter-spacing="28" fill="#fde68a">SAHRAE</text>
-  <text x="1366" y="1950" text-anchor="middle"
+        font-size="150" font-weight="900" letter-spacing="30" fill="url(#goldText)">SAHRAE</text>
+  <text x="1366" y="1925" text-anchor="middle"
         font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
-        font-size="50" font-weight="300" letter-spacing="20" fill="#a8a29e">ENTERTAINMENT</text>
+        font-size="54" font-weight="300" letter-spacing="34" fill="#d6d3d1">ENTERTAINMENT</text>
 </svg>
