@@ -34,7 +34,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
+
+import android.util.Base64;
+import org.json.JSONObject;
 
 /**
  * Sahrae Entertainment — Android shell with SIX LAYERS of pop-up / ad
@@ -311,12 +316,14 @@ public class MainActivity extends BridgeActivity {
      * URL form: https://localhost/__hlsproxy?u={encoded target}&r={encoded referer?}
      */
     private static WebResourceResponse hlsProxy(Uri uri) {
+        String target = uri.getQueryParameter("u");
+        if (target == null || target.isEmpty()) return null;
+        return proxyFetch(target, uri.getQueryParameter("r"));
+    }
+
+    private static WebResourceResponse proxyFetch(String target, String ref) {
         HttpURLConnection conn = null;
         try {
-            String target = uri.getQueryParameter("u");
-            if (target == null || target.isEmpty()) return null;
-            String ref = uri.getQueryParameter("r");
-
             conn = (HttpURLConnection) new URL(target).openConnection();
             conn.setInstanceFollowRedirects(true);
             conn.setConnectTimeout(15000);
@@ -412,6 +419,171 @@ public class MainActivity extends BridgeActivity {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  On-device DaddyLive resolver.
+    //  DaddyLive's stream domains block datacenter/CI IPs, so resolution runs
+    //  HERE on the device (residential IP, where they're reachable). The flow
+    //  mirrors the maintained StepDaddyLiveHD project: stream page → player
+    //  iframe → CHANNEL_KEY + auth bundle → auth.php → server_lookup.php →
+    //  newkso.ru mono.m3u8, which we then serve through the HLS proxy (with the
+    //  Referer the CDN requires).
+    // ─────────────────────────────────────────────────────────────
+    private static final String[] DADDY_BASES = { "https://dlhd.dad", "https://daddylive.mp", "https://thedaddy.to" };
+
+    /** Passthrough fetch (raw bytes, CORS *) — used for the no-CORS schedule JSON. */
+    private static WebResourceResponse passthroughFetch(Uri uri) {
+        HttpURLConnection conn = null;
+        try {
+            String target = uri.getQueryParameter("u");
+            if (target == null || target.isEmpty()) return null;
+            String ref = uri.getQueryParameter("r");
+            conn = (HttpURLConnection) new URL(target).openConnection();
+            conn.setInstanceFollowRedirects(true);
+            conn.setConnectTimeout(15000);
+            conn.setReadTimeout(20000);
+            conn.setRequestProperty("User-Agent", PROXY_UA);
+            conn.setRequestProperty("Accept", "*/*");
+            conn.setRequestProperty("Accept-Encoding", "identity");
+            if (ref != null && !ref.isEmpty()) conn.setRequestProperty("Referer", ref);
+            int code = conn.getResponseCode();
+            if (code < 200 || code >= 400) return null;
+            byte[] body = readAll(conn.getInputStream());
+            String ct = conn.getContentType();
+            String mime = (ct != null) ? ct.split(";")[0].trim() : "application/json";
+            Map<String, String> h = new HashMap<>();
+            h.put("Access-Control-Allow-Origin", "*");
+            h.put("Cache-Control", "no-cache");
+            return new WebResourceResponse(mime, "utf-8", 200, "OK", h, new ByteArrayInputStream(body));
+        } catch (Exception e) {
+            return null;
+        } finally {
+            if (conn != null) try { conn.disconnect(); } catch (Exception ignore) {}
+        }
+    }
+
+    private static WebResourceResponse daddyResolve(Uri uri) {
+        String id = uri.getQueryParameter("id");
+        if (id == null || id.isEmpty()) return null;
+        for (String base : DADDY_BASES) {
+            try {
+                WebResourceResponse r = daddyResolveBase(base, id);
+                if (r != null) return r;
+            } catch (Exception ignore) {}
+        }
+        return null;
+    }
+
+    private static WebResourceResponse daddyResolveBase(String base, String id) throws Exception {
+        String streamPage = base + "/stream/stream-" + id + ".php";
+        String html1 = ddBody(streamPage, base + "/");
+        if (html1 == null) return null;
+        Matcher m = Pattern.compile("iframe src=\"(.*?)\"\\s*width").matcher(html1);
+        if (!m.find()) return null;
+        String sourceUrl = m.group(1);
+        String html2 = ddBody(sourceUrl, streamPage);
+        if (html2 == null) return null;
+        String channelKey = ddLastGroup("const\\s+CHANNEL_KEY\\s*=\\s*\"(.*?)\";", html2);
+        if (channelKey == null) return null;
+        String[] b = ddDecodeBundle(html2); // [ts, sig, rnd, host]
+        if (b == null) return null;
+        String authUrl = b[3] + "auth.php?channel_id=" + channelKey + "&ts=" + b[0] + "&rnd=" + b[2] + "&sig=" + b[1];
+        if (ddCode(authUrl, sourceUrl) != 200) return null;
+        URL su = new URL(sourceUrl);
+        String lookup = su.getProtocol() + "://" + su.getAuthority() + "/server_lookup.php?channel_id=" + channelKey;
+        String lookupJson = ddBody(lookup, sourceUrl);
+        if (lookupJson == null) return null;
+        String serverKey;
+        try { serverKey = new JSONObject(lookupJson).optString("server_key", ""); }
+        catch (Exception e) { serverKey = ddJson(lookupJson, "server_key"); }
+        if (serverKey == null || serverKey.isEmpty()) return null;
+        String m3u8 = serverKey.equals("top1/cdn")
+            ? "https://top1.newkso.ru/top1/cdn/" + channelKey + "/mono.m3u8"
+            : "https://" + serverKey + "new.newkso.ru/" + serverKey + "/" + channelKey + "/mono.m3u8";
+        return proxyFetch(m3u8, sourceUrl);
+    }
+
+    private static String ddBody(String url, String referer) {
+        HttpURLConnection c = null;
+        try {
+            c = (HttpURLConnection) new URL(url).openConnection();
+            c.setInstanceFollowRedirects(true);
+            c.setConnectTimeout(15000);
+            c.setReadTimeout(20000);
+            c.setRequestProperty("User-Agent", PROXY_UA);
+            c.setRequestProperty("Referer", referer);
+            c.setRequestProperty("Accept", "*/*");
+            c.setRequestProperty("Accept-Encoding", "identity");
+            int code = c.getResponseCode();
+            if (code < 200 || code >= 400) return null;
+            return new String(readAll(c.getInputStream()), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return null;
+        } finally {
+            if (c != null) try { c.disconnect(); } catch (Exception ignore) {}
+        }
+    }
+
+    private static int ddCode(String url, String referer) {
+        HttpURLConnection c = null;
+        try {
+            c = (HttpURLConnection) new URL(url).openConnection();
+            c.setInstanceFollowRedirects(true);
+            c.setConnectTimeout(15000);
+            c.setReadTimeout(20000);
+            c.setRequestProperty("User-Agent", PROXY_UA);
+            c.setRequestProperty("Referer", referer);
+            return c.getResponseCode();
+        } catch (Exception e) {
+            return -1;
+        } finally {
+            if (c != null) try { c.disconnect(); } catch (Exception ignore) {}
+        }
+    }
+
+    private static String ddLastGroup(String regex, String text) {
+        Matcher m = Pattern.compile(regex).matcher(text);
+        String last = null;
+        while (m.find()) last = m.group(1);
+        return last;
+    }
+
+    private static String ddJson(String json, String key) {
+        Matcher m = Pattern.compile("\"" + Pattern.quote(key) + "\"\\s*:\\s*\"(.*?)\"").matcher(json);
+        return m.find() ? m.group(1) : null;
+    }
+
+    private static String ddB64(String s) {
+        try {
+            int pad = (4 - (s.length() % 4)) % 4;
+            StringBuilder sb = new StringBuilder(s);
+            for (int i = 0; i < pad; i++) sb.append('=');
+            return new String(Base64.decode(sb.toString(), Base64.DEFAULT), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return s;
+        }
+    }
+
+    private static String[] ddDecodeBundle(String html) {
+        Set<String> cands = new HashSet<>();
+        Matcher m1 = Pattern.compile("\"(eyJ[A-Za-z0-9+/=]{40,})\"").matcher(html);
+        while (m1.find()) cands.add(m1.group(1));
+        Matcher m2 = Pattern.compile("\"([A-Za-z0-9+/=]{80,})\"").matcher(html);
+        while (m2.find()) cands.add(m2.group(1));
+        for (String c : cands) {
+            try {
+                int pad = (4 - (c.length() % 4)) % 4;
+                StringBuilder sb = new StringBuilder(c);
+                for (int i = 0; i < pad; i++) sb.append('=');
+                String js = new String(Base64.decode(sb.toString(), Base64.DEFAULT), StandardCharsets.UTF_8);
+                JSONObject o = new JSONObject(js);
+                if (o.has("b_ts") && o.has("b_sig") && o.has("b_rnd") && o.has("b_host")) {
+                    return new String[]{ ddB64(o.getString("b_ts")), ddB64(o.getString("b_sig")), ddB64(o.getString("b_rnd")), ddB64(o.getString("b_host")) };
+                }
+            } catch (Exception ignore) {}
+        }
+        return null;
     }
 
     /**
@@ -564,13 +736,22 @@ public class MainActivity extends BridgeActivity {
                 if (request != null && request.getUrl() != null) {
                     String host = request.getUrl().getHost();
 
-                    // HLS proxy — premium live-sports streams (DaddyLive/world-proxifier)
-                    // are fetched here from the device with the right headers and
-                    // re-served same-origin, so they play despite CORS / referer locks.
+                    // On-device proxy + DaddyLive resolver. DaddyLive's stream
+                    // domains block datacenter IPs, so we resolve + proxy here
+                    // from the device's own (residential) IP, then serve the
+                    // stream same-origin so the player can play it.
                     String path = request.getUrl().getPath();
-                    if (path != null && path.startsWith("/__hlsproxy") && "localhost".equals(host)) {
-                        WebResourceResponse proxied = hlsProxy(request.getUrl());
-                        if (proxied != null) return proxied;
+                    if (path != null && "localhost".equals(host)) {
+                        if (path.startsWith("/__hlsproxy")) {
+                            WebResourceResponse r = hlsProxy(request.getUrl());
+                            if (r != null) return r;
+                        } else if (path.startsWith("/__ddresolve")) {
+                            WebResourceResponse r = daddyResolve(request.getUrl());
+                            if (r != null) return r;
+                        } else if (path.startsWith("/__ddfetch")) {
+                            WebResourceResponse r = passthroughFetch(request.getUrl());
+                            if (r != null) return r;
+                        }
                     }
 
                     // L1 — network blocklist
