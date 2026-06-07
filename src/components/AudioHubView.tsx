@@ -3,32 +3,29 @@ import { Play, Pause, Radio, Headphones } from 'lucide-react';
 import { useRadio } from '../hooks/useRadio';
 
 const STATIONS = [
-  // Expanded Radio Stations with Real URLs
-  { name: 'Capital FM', country: 'Kenya', category: 'Pop', frequency: '98.4', url: 'https://capitalfm.cloudrad.io/stream' },
-  { name: 'Nation FM', country: 'Kenya', category: 'Talk', frequency: '96.3', url: 'https://nimbus.iono.fm/stream/nation_fm_kenya' },
-  { name: 'Classic 105', country: 'Kenya', category: 'Classic', frequency: '105.2', url: 'https://classic105-atunwadigital.streamguys1.com/classic105' },
-  { name: 'Radio Jambo', country: 'Kenya', category: 'Talk', frequency: '97.5', url: 'https://radiojambo-atunwadigital.streamguys1.com/radiojambo' },
-  { name: 'East FM', country: 'Kenya', category: 'Asian', frequency: '106.3', url: 'https://eastfm-atunwadigital.streamguys1.com/eastfm' },
+  // ── Kenya (all verified working) ──
+  { name: 'Capital FM', country: 'Kenya', category: 'Kenyan', frequency: '98.4', url: 'https://capitalfm.cloudrad.io/stream' },
+  { name: 'Kiss 100', country: 'Kenya', category: 'Kenyan', frequency: '100.3', url: 'https://kiss100fm-atunwadigital.streamguys1.com/kiss100fm' },
+  { name: 'Classic 105', country: 'Kenya', category: 'Kenyan', frequency: '105.2', url: 'https://classic105-atunwadigital.streamguys1.com/classic105' },
+  { name: 'Radio Jambo', country: 'Kenya', category: 'Kenyan', frequency: '97.5', url: 'https://radiojambo-atunwadigital.streamguys1.com/radiojambo' },
+  { name: 'Nation FM', country: 'Kenya', category: 'Kenyan', frequency: '96.3', url: 'https://stream.zeno.fm/vy0gmg7pb2zuv' },
+  { name: 'Radio Maisha', country: 'Kenya', category: 'Kenyan', frequency: '94.0', url: 'https://radiomaisha-atunwadigital.streamguys1.com/radiomaisha' },
+  { name: 'Hot 96', country: 'Kenya', category: 'Kenyan', frequency: '96.3', url: 'https://hot96-atunwadigital.streamguys1.com/hot96' },
+  { name: 'East FM', country: 'Kenya', category: 'Kenyan', frequency: '106.3', url: 'https://eastfm-atunwadigital.streamguys1.com/eastfm' },
+
+  // ── News / Talk ──
   { name: 'BBC World Service', country: 'UK', category: 'News', frequency: 'Digital', url: 'https://stream.live.vc.bbcmedia.co.uk/bbc_world_service' },
-  { name: 'NPR', country: 'USA', category: 'News', frequency: 'Digital', url: 'https://npr-ice.streamguys1.com/npr-live' },
-  { name: 'KEXP', country: 'USA', category: 'Indie', frequency: '90.3', url: 'https://kexp-mp3-128.streamguys1.com/kexp128.mp3' },
-  { name: 'SomaFM Groove Salad', country: 'USA', category: 'Ambient', frequency: 'Digital', url: 'https://ice1.somafm.com/groovesalad-128-mp3' },
-  { name: 'SomaFM Drone Zone', country: 'USA', category: 'Ambient', frequency: 'Digital', url: 'https://ice1.somafm.com/dronezone-128-mp3' },
-  { name: 'SomaFM Secret Agent', country: 'USA', category: 'Lounge', frequency: 'Digital', url: 'https://ice1.somafm.com/secretagent-128-mp3' },
-  { name: 'SomaFM Def Con Radio', country: 'USA', category: 'Electronic', frequency: 'Digital', url: 'https://ice1.somafm.com/defcon-128-mp3' },
-  { name: 'Dance Wave', country: 'Global', category: 'Dance', frequency: 'Digital', url: 'https://dancewave.online/dance.mp3' },
-  { name: 'Jazz24', country: 'USA', category: 'Jazz', frequency: 'Digital', url: 'https://live.wostreaming.net/direct/ppm-jazz24aac256-ibc1' },
+  { name: 'NPR', country: 'USA', category: 'News', frequency: 'Digital', url: 'https://npr-ice.streamguys1.com/live.mp3' },
+
+  // ── Music ──
   { name: 'Classic FM', country: 'UK', category: 'Classical', frequency: '100.0', url: 'https://media-ice.musicradio.com/ClassicFMMP3' },
-  { name: 'WNYC FM', country: 'USA', category: 'Public', frequency: '93.9', url: 'https://fm939.wnyc.org/wnycfm.aac' },
-  { name: 'KCRW', country: 'USA', category: 'Public', frequency: '89.9', url: 'https://kcrw.streamguys1.com/kcrw_192k_mp3_on_air' },
   { name: 'Radio Swiss Jazz', country: 'Switzerland', category: 'Jazz', frequency: 'Digital', url: 'https://stream.srg-ssr.ch/m/rsj/mp3_128' },
-  { name: 'Radio Swiss Classic', country: 'Switzerland', category: 'Classical', frequency: 'Digital', url: 'https://stream.srg-ssr.ch/m/rsc_de/mp3_128' },
+  { name: 'KEXP', country: 'USA', category: 'Indie', frequency: '90.3', url: 'https://kexp-mp3-128.streamguys1.com/kexp128.mp3' },
   { name: 'NRJ', country: 'France', category: 'Pop', frequency: 'Digital', url: 'https://cdn.nrjaudio.fm/audio1/fr/30001/mp3_128.mp3' },
-  { name: 'Amsterdam Trance', country: 'Netherlands', category: 'Trance', frequency: 'Digital', url: 'https://strm112.1.fm/atr_mobile_mp3' },
-  { name: 'Ibiza Global Radio', country: 'Spain', category: 'Electronic', frequency: 'Digital', url: 'https://listenssl.ibizaglobalradio.com:8024/igr' },
-  { name: 'Chill Trax', country: 'Global', category: 'Chillout', frequency: 'Digital', url: 'https://icecast.chilltrax.com:8000/chilltrax_128.mp3' },
-  { name: 'Venice Classic Radio', country: 'Italy', category: 'Classical', frequency: 'Digital', url: 'https://174.36.206.197:8000/stream' },
-  { name: '1.FM - Acoustic Guitar', country: 'Switzerland', category: 'Acoustic', frequency: 'Digital', url: 'https://strm112.1.fm/acg_mobile_mp3' },
+  { name: 'Radio Paradise', country: 'USA', category: 'Eclectic', frequency: 'Digital', url: 'https://stream.radioparadise.com/aac-128' },
+  { name: 'SomaFM Groove Salad', country: 'USA', category: 'Chillout', frequency: 'Digital', url: 'https://ice1.somafm.com/groovesalad-128-mp3' },
+  { name: 'SomaFM Secret Agent', country: 'USA', category: 'Lounge', frequency: 'Digital', url: 'https://ice1.somafm.com/secretagent-128-mp3' },
+  { name: 'Amsterdam Trance', country: 'Netherlands', category: 'Dance', frequency: 'Digital', url: 'https://strm112.1.fm/atr_mobile_mp3' },
 ];
 
 export default function AudioHubView() {

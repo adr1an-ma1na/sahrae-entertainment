@@ -3,32 +3,34 @@ import { useState, useRef, useEffect } from 'react';
 import Hls from 'hls.js';
 
 const CHANNELS = [
-  // ── News — direct HLS feeds (most reliable, play instantly) ──
+  // ── News — verified direct HLS (play instantly, reliable) ──
+  { name: 'Al Jazeera English', country: 'Qatar', category: 'News', url: 'https://live-hls-apps-aje-fa.getaj.net/AJE/index.m3u8' },
+  { name: 'NBC News NOW', country: 'USA', category: 'News', url: 'https://d1si3n1st4nkgb.cloudfront.net/10502/88896001/hls/master.m3u8?ads.xumo_channelId=88896001' },
+  { name: 'WION', country: 'India', category: 'News', url: 'https://d7x8z4yuq42qn.cloudfront.net/index_7.m3u8' },
+  { name: 'Africanews', country: 'Africa', category: 'News', url: 'https://c3c275b999764df8a2dd55ffe2996818.mediatailor.eu-west-1.amazonaws.com/v1/master/0547f18649bd788bec7b67b746e47670f558b6b2/production-LiveChannel-6576/bitok/eyJzdGlkIjoiOTU0NDAyODQtOTU0My00Yzc2LThmZjQtNDRhY2YwYmQxYTYwIiwibWt0IjoicGwiLCJjaCI6NjYwNiwicHRmIjo1fQ==/26036/africanews-en.m3u8' },
+  { name: 'CBS News', country: 'USA', category: 'News', url: 'https://cbsn-us-vtt.cbsnstream.cbsnews.com/out/v1/ef868690d34144509eda696884bf1619/master.m3u8' },
+  { name: 'India Today', country: 'India', category: 'News', url: 'https://d1rc86nwwc9fag.cloudfront.net/vglive-sk-293160/master.m3u8' },
   { name: 'DW News', country: 'Germany', category: 'News', url: 'https://dwamdstream102.akamaized.net/hls/live/2015525/dwstream102/index.m3u8' },
   { name: 'France 24 English', country: 'France', category: 'News', url: 'https://static.france24.com/live/F24_EN_HI_HLS/live_web.m3u8' },
   { name: 'CNA', country: 'Singapore', category: 'News', url: 'https://d2e1asnsl7br7b.cloudfront.net/7782e205e72f43aeb4a48ec97f66ebbe/index.m3u8' },
   { name: 'TRT World', country: 'Turkey', category: 'News', url: 'https://tv-trtworld.medya.trt.com.tr/master.m3u8' },
+  { name: 'CGTN', country: 'China', category: 'News', url: 'https://amg00405-rakutentv-cgtn-rakuten-i9tar.amagi.tv/master.m3u8' },
 
-  // ── News — YouTube 24/7 live ──
-  { name: 'Al Jazeera English', country: 'Qatar', category: 'News', url: 'youtube_channel:UCNye-wNBqNL5ZzHSJj3l8Bg' },
-  { name: 'Sky News', country: 'UK', category: 'News', url: 'youtube_channel:UCoMdktPbSTixAyNGr4S4p4w' },
-  { name: 'ABC News', country: 'USA', category: 'News', url: 'youtube_channel:UCBi2mrWuNuyYy4gbM6fU18Q' },
-  { name: 'NBC News NOW', country: 'USA', category: 'News', url: 'youtube_channel:UCeY0bbntWzzVIaj2z3QigXg' },
-  { name: 'CBS News', country: 'USA', category: 'News', url: 'youtube_channel:UC8p1vwvWtl6T73JiExfWs1g' },
-  { name: 'EuroNews', country: 'Europe', category: 'News', url: 'youtube_channel:UCSrZ3GWwnb1BvVG0NQA5imw' },
-  { name: 'Bloomberg Television', country: 'USA', category: 'News', url: 'youtube_channel:UCIALMKvObZNtJ6AmdCLP7Lg' },
-  { name: 'WION', country: 'India', category: 'News', url: 'youtube_channel:UC_gUM8rL-Lrg6O3adPW9K1g' },
+  // ── News — YouTube live (best-effort; live when the channel is broadcasting) ──
+  { name: 'CNN', country: 'USA', category: 'News', url: 'youtube_channel:UCupvZG-5ko_eiXAupbDfxWw' },
+  { name: 'Firstpost', country: 'India', category: 'News', url: 'youtube_channel:UCz8QaiQxApLq8sLNcszYyJw' },
 
-  // ── Africa (new) ──
-  { name: 'Citizen TV Kenya', country: 'Kenya', category: 'Africa', url: 'youtube_channel:UChBQgieUidXV1CmDxSdRm3g' },
-  { name: 'Africanews', country: 'Africa', category: 'Africa', url: 'youtube_channel:UC1_E8NeF5QHY2dtdLRBCCLA' },
+  // ── Documentary ──
+  { name: 'BBC Earth', country: 'UK', category: 'Documentary', url: 'https://amg00793-amg00793c6-xumo-us-2669.playouts.now.amagi.tv/BBCStudios-BBCEarthA-hls/playlist.m3u8' },
+  { name: 'CGTN Documentary', country: 'China', category: 'Documentary', url: 'https://amg00405-rakutentv-cgtndocumentary-rakuten-0ql8j.amagi.tv/master.m3u8' },
+  { name: 'CNA Originals', country: 'Singapore', category: 'Documentary', url: 'https://amg01082-cna-amg01082c1-rlaxx-us-11304.playouts.now.amagi.tv/playlist.m3u8' },
 
-  // ── Sports / Science / Nature / Music ──
-  { name: 'Red Bull TV', country: 'Global', category: 'Sports', url: 'https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master.m3u8' },
+  // ── Animation ──
+  { name: 'FilmRise Anime', country: 'Global', category: 'Animation', url: 'https://dvu7aia8rjlfm.cloudfront.net/master.m3u8' },
+  { name: 'Naruto', country: 'Global', category: 'Animation', url: 'https://d21vn5eki5qsdi.cloudfront.net/playlist.m3u8' },
+
+  // ── Science (bonus) ──
   { name: 'NASA TV', country: 'USA', category: 'Science', url: 'https://ntv1.akamaized.net/hls/live/2014075/NASA-NTV1-HLS/master.m3u8' },
-  { name: 'Explore Oceans', country: 'Global', category: 'Nature', url: 'youtube_channel:UCFv7U50w6EksLhX0S4hHwGw' },
-  { name: 'Monterey Bay Aquarium', country: 'USA', category: 'Nature', url: 'youtube_channel:UCr6_XoQvX1j1S_J5lZlIeag' },
-  { name: 'Lofi Girl — Beats to Relax', country: 'Global', category: 'Music', url: 'youtube_channel:UCSJ4gkVC6NrvII8umztf0Ow' },
 ];
 
 const HLSPlayer = ({ src }: { src: string }) => {
