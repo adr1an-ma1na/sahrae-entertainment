@@ -25,6 +25,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -296,6 +297,123 @@ public class MainActivity extends BridgeActivity {
         return bos.toByteArray();
     }
 
+    private static final String PROXY_UA =
+        "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36";
+
+    /**
+     * Same-origin HLS proxy. The premium live-sports streams (DaddyLive via
+     * world-proxifier) are CORS-locked and sometimes referer-gated, and the
+     * WebView/JS can't set a Referer header. So we fetch the playlist/segment
+     * here (native, from the device's own IP), rewrite every child URL back
+     * through this same proxy, and re-serve it from https://localhost so hls.js
+     * can play it as if it were same-origin.
+     *
+     * URL form: https://localhost/__hlsproxy?u={encoded target}&r={encoded referer?}
+     */
+    private static WebResourceResponse hlsProxy(Uri uri) {
+        HttpURLConnection conn = null;
+        try {
+            String target = uri.getQueryParameter("u");
+            if (target == null || target.isEmpty()) return null;
+            String ref = uri.getQueryParameter("r");
+
+            conn = (HttpURLConnection) new URL(target).openConnection();
+            conn.setInstanceFollowRedirects(true);
+            conn.setConnectTimeout(15000);
+            conn.setReadTimeout(20000);
+            conn.setRequestProperty("User-Agent", PROXY_UA);
+            conn.setRequestProperty("Accept", "*/*");
+            conn.setRequestProperty("Accept-Encoding", "identity");
+            if (ref != null && !ref.isEmpty()) {
+                conn.setRequestProperty("Referer", ref);
+                String origin = originOf(ref);
+                if (origin != null) conn.setRequestProperty("Origin", origin);
+            }
+
+            int code = conn.getResponseCode();
+            if (code < 200 || code >= 400) return null;
+
+            String contentType = conn.getContentType();
+            String finalUrl = conn.getURL().toString();
+            byte[] body = readAll(conn.getInputStream());
+
+            boolean isPlaylist =
+                (contentType != null && contentType.toLowerCase().contains("mpegurl"))
+                || finalUrl.toLowerCase().contains(".m3u8")
+                || (body.length >= 7 && new String(body, 0, 7, StandardCharsets.UTF_8).startsWith("#EXTM3U"));
+
+            Map<String, String> headers = new HashMap<>();
+            headers.put("Access-Control-Allow-Origin", "*");
+            headers.put("Cache-Control", "no-cache");
+
+            if (isPlaylist) {
+                String rewritten = rewriteM3u8(new String(body, StandardCharsets.UTF_8), finalUrl, ref);
+                return new WebResourceResponse(
+                    "application/vnd.apple.mpegurl", "utf-8", 200, "OK", headers,
+                    new ByteArrayInputStream(rewritten.getBytes(StandardCharsets.UTF_8)));
+            }
+            String mime = (contentType != null) ? contentType.split(";")[0].trim() : "application/octet-stream";
+            return new WebResourceResponse(mime, null, 200, "OK", headers, new ByteArrayInputStream(body));
+        } catch (Exception e) {
+            return null;
+        } finally {
+            if (conn != null) try { conn.disconnect(); } catch (Exception ignore) {}
+        }
+    }
+
+    private static String rewriteM3u8(String text, String baseUrl, String ref) {
+        StringBuilder sb = new StringBuilder(text.length() + 256);
+        for (String line : text.split("\n", -1)) {
+            String t = line.trim();
+            if (t.isEmpty()) { sb.append(line).append('\n'); continue; }
+            if (t.charAt(0) == '#') {
+                sb.append(rewriteUriAttr(line, baseUrl, ref)).append('\n');
+            } else {
+                sb.append(proxyUrl(resolveUrl(baseUrl, t), ref)).append('\n');
+            }
+        }
+        return sb.toString();
+    }
+
+    /** Rewrite a URI="..." attribute (EXT-X-KEY / EXT-X-MEDIA / EXT-X-MAP). */
+    private static String rewriteUriAttr(String line, String baseUrl, String ref) {
+        int i = line.indexOf("URI=\"");
+        if (i < 0) return line;
+        int start = i + 5;
+        int end = line.indexOf('"', start);
+        if (end < 0) return line;
+        String inner = line.substring(start, end);
+        return line.substring(0, start) + proxyUrl(resolveUrl(baseUrl, inner), ref) + line.substring(end);
+    }
+
+    private static String resolveUrl(String baseUrl, String rel) {
+        try {
+            return new URL(new URL(baseUrl), rel).toString();
+        } catch (Exception e) {
+            return rel;
+        }
+    }
+
+    private static String proxyUrl(String abs, String ref) {
+        try {
+            String u = URLEncoder.encode(abs, "UTF-8").replace("+", "%20");
+            String r = (ref != null && !ref.isEmpty())
+                ? "&r=" + URLEncoder.encode(ref, "UTF-8").replace("+", "%20") : "";
+            return "https://localhost/__hlsproxy?u=" + u + r;
+        } catch (Exception e) {
+            return abs;
+        }
+    }
+
+    private static String originOf(String url) {
+        try {
+            URL u = new URL(url);
+            return u.getProtocol() + "://" + u.getHost() + (u.getPort() > 0 ? ":" + u.getPort() : "");
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     /**
      * L1.5 — fetch a 3rd-party HTML *document*, inject the embed shim into its
      * <head>, strip CSP/X-Frame-Options so the shim runs and the frame embeds,
@@ -445,6 +563,15 @@ public class MainActivity extends BridgeActivity {
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 if (request != null && request.getUrl() != null) {
                     String host = request.getUrl().getHost();
+
+                    // HLS proxy — premium live-sports streams (DaddyLive/world-proxifier)
+                    // are fetched here from the device with the right headers and
+                    // re-served same-origin, so they play despite CORS / referer locks.
+                    String path = request.getUrl().getPath();
+                    if (path != null && path.startsWith("/__hlsproxy") && "localhost".equals(host)) {
+                        WebResourceResponse proxied = hlsProxy(request.getUrl());
+                        if (proxied != null) return proxied;
+                    }
 
                     // L1 — network blocklist
                     if (isAdHost(host)) return blockedResponse();
