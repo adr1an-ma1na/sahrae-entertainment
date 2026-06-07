@@ -1,89 +1,65 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Trophy, Play, X, Maximize, Loader2, Radio, Tv, Search, Clapperboard, Flame } from 'lucide-react';
+import { Trophy, Play, X, Maximize, Loader2, Radio, Tv, Clapperboard, CalendarClock, Search, Flame } from 'lucide-react';
 import Hls from 'hls.js';
 
 /**
- * Live Sports — cricfy-style.
+ * Live Sports.
  *
- * Live EVENTS (every sport & league — F1, MotoGP, all football leagues, cricket,
- * tennis, NBA, boxing…) and the premium broadcast CHANNELS that carry them (Sky
- * Sport F1, Sky Sport MotoGP, etc.) come from a community-maintained DaddyLive
- * playlist on GitHub. Each stream is played through the app's native HLS proxy
- * (/__hlsproxy) so it works despite the source's CORS / referer locks.
- *
- * A set of verified always-free HD channels is pinned as a reliable fallback.
+ * EVENTS come from the live, accurate Streamed API (today's real fixtures —
+ * F1, every football league, cricket, tennis, NBA, boxing…). Because the
+ * per-match pirate embeds block in-app playback, tapping an event plays it on
+ * the verified HD CHANNEL that's carrying that sport — which reliably works,
+ * ad-free. The Channels tab lists those channels directly too.
  */
 
-// Community-maintained playlists (GitHub raw = CORS-open & reachable).
-const EVENTS_URLS = [
-  'https://raw.githubusercontent.com/jamie-203/daddylivehd-m3u/main/daddylive-events.m3u8',
-  'https://raw.githubusercontent.com/Josh9456/IPTV-m3u/main/daddylive-events.m3u8',
-];
-const CHANNELS_URLS = [
-  'https://raw.githubusercontent.com/jamie-203/daddylivehd-m3u/main/daddylive-channels.m3u8',
-  'https://raw.githubusercontent.com/Josh9456/IPTV-m3u/main/daddylive-channels.m3u8',
-];
-
-/** Route a stream through the native same-origin HLS proxy. */
-const proxied = (url: string) => `https://localhost/__hlsproxy?u=${encodeURIComponent(url)}`;
-
-// Verified always-free HD channels (play direct — proven reliable).
-interface FreeChannel { name: string; desc: string; url: string; }
-const FREE_CHANNELS: FreeChannel[] = [
-  { name: 'beIN Sports XTRA', desc: 'Football & global sports', url: 'https://bein-xtra-bein.amagi.tv/playlist.m3u8' },
-  { name: 'FIFA+', desc: 'Football, live & archive', url: 'https://a62dad94.wurl.com/master/f36d25e7e52f1ba8d7e56eb859c636563214f541/UmFrdXRlblRWLWV1X0ZJRkFQbHVzRW5nbGlzaF9ITFM/playlist.m3u8' },
-  { name: 'Real Madrid TV', desc: 'Los Blancos 24/7', url: 'https://rmtv.akamaized.net/hls/live/2043153/rmtv-es-web/master.m3u8' },
-  { name: 'DAZN Combat', desc: 'Boxing, MMA & combat', url: 'https://dazn-combat-rakuten.amagi.tv/hls/amagi_hls_data_rakutenAA-dazn-combat-rakuten/CDN/master.m3u8' },
-  { name: 'Cricket Gold', desc: 'Cricket, all formats', url: 'https://streams2.sofast.tv/ptnr-yupptv/title-cricketgold/v1/master/611d79b11b77e2f571934fd80ca1413453772ac7/b2048bb8-1686-4432-aa50-647245383e0c/manifest.m3u8' },
-  { name: 'Tennis Channel', desc: 'ATP / WTA tennis', url: 'https://cdn-ue1-prod.tsv2.amagi.tv/linear/amg01444-tennischannelth-tennischannelnl-samsungnl/playlist.m3u8' },
-  { name: 'Red Bull TV', desc: 'Motorsport & action', url: 'https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master.m3u8' },
-  { name: 'ESPN8: The Ocho', desc: 'Wild & wonderful sports', url: 'https://d3b6q2ou5kp8ke.cloudfront.net/ESPNTheOcho.m3u8' },
+// ── Verified always-free HD channels (direct HLS, ad-free) ──
+interface Channel {
+  name: string;
+  category: 'Football' | 'Combat' | 'Cricket' | 'Tennis' | 'Motorsport' | 'General';
+  desc: string;
+  url: string;
+}
+const CHANNELS: Channel[] = [
+  { name: 'beIN Sports XTRA', category: 'Football', desc: 'Football & global sports', url: 'https://bein-xtra-bein.amagi.tv/playlist.m3u8' },
+  { name: 'FIFA+', category: 'Football', desc: 'Football, live & archive', url: 'https://a62dad94.wurl.com/master/f36d25e7e52f1ba8d7e56eb859c636563214f541/UmFrdXRlblRWLWV1X0ZJRkFQbHVzRW5nbGlzaF9ITFM/playlist.m3u8' },
+  { name: 'Real Madrid TV', category: 'Football', desc: 'Los Blancos 24/7', url: 'https://rmtv.akamaized.net/hls/live/2043153/rmtv-es-web/master.m3u8' },
+  { name: 'CazeTV', category: 'Football', desc: 'Football & more', url: 'https://dfr80qz435crc.cloudfront.net/MNOP/Amagi/Caze/Caze_TV_BR/Caze_TV.m3u8' },
+  { name: 'DAZN Combat', category: 'Combat', desc: 'Boxing, MMA & combat', url: 'https://dazn-combat-rakuten.amagi.tv/hls/amagi_hls_data_rakutenAA-dazn-combat-rakuten/CDN/master.m3u8' },
+  { name: 'GLORY Kickboxing', category: 'Combat', desc: 'Kickboxing events', url: 'https://6f972d29.wurl.com/master/f36d25e7e52f1ba8d7e56eb859c636563214f541/UmFrdXRlblRWLWV1X0dsb3J5S2lja2JveGluZ19ITFM/playlist.m3u8' },
+  { name: 'Cricket Gold', category: 'Cricket', desc: 'Cricket, all formats', url: 'https://streams2.sofast.tv/ptnr-yupptv/title-cricketgold/v1/master/611d79b11b77e2f571934fd80ca1413453772ac7/b2048bb8-1686-4432-aa50-647245383e0c/manifest.m3u8' },
+  { name: 'Tennis Channel', category: 'Tennis', desc: 'ATP / WTA tennis', url: 'https://cdn-ue1-prod.tsv2.amagi.tv/linear/amg01444-tennischannelth-tennischannelnl-samsungnl/playlist.m3u8' },
+  { name: 'Red Bull TV', category: 'Motorsport', desc: 'Motorsport & action', url: 'https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master.m3u8' },
+  { name: 'ACI Sport TV', category: 'Motorsport', desc: 'Racing & motorsport', url: 'https://webstream.multistream.it/memfs/e2cb3629-c1a2-495b-b43a-9eb386f04ed8.m3u8' },
+  { name: 'ESPN8: The Ocho', category: 'General', desc: 'Wild & wonderful sports', url: 'https://d3b6q2ou5kp8ke.cloudfront.net/ESPNTheOcho.m3u8' },
+  { name: 'Stadium', category: 'General', desc: 'Live US sports', url: 'https://wurl120sports.global.transmit.live/hls/679a907dce42a042c23ace37/v1/stadium_gracenote/samsung_us/latest/main/hls/playlist.m3u8' },
+  { name: 'Fubo Sports', category: 'General', desc: 'Live sports & talk', url: 'https://dnf08l6u6uxnz.cloudfront.net/master.m3u8' },
 ];
 
-interface RawEntry { group: string; name: string; source: string; url: string; }
-interface SportEvent { name: string; group: string; sources: { label: string; url: string }[]; }
-
-function parseM3U(text: string): RawEntry[] {
-  const out: RawEntry[] = [];
-  let pending: { group: string; name: string; source: string } | null = null;
-  for (const raw of text.split('\n')) {
-    const line = raw.trim();
-    if (line.startsWith('#EXTINF')) {
-      const group = line.match(/group-title="([^"]*)"/)?.[1] || 'Other';
-      const title = line.slice(line.lastIndexOf(',') + 1).trim();
-      const m = title.match(/^(.*?)\s*\(([^()]*)\)\s*$/);
-      pending = { group, name: (m?.[1] || title).trim(), source: (m?.[2] || '').trim(), };
-    } else if (line && !line.startsWith('#') && line.includes('://') && pending) {
-      out.push({ ...pending, url: line });
-      pending = null;
-    }
-  }
-  return out;
+function channelForSport(sport: string): Channel {
+  let cat: Channel['category'] = 'General';
+  if (sport === 'football') cat = 'Football';
+  else if (sport === 'fight') cat = 'Combat';
+  else if (sport === 'cricket') cat = 'Cricket';
+  else if (sport === 'tennis') cat = 'Tennis';
+  else if (sport === 'motor-sports') cat = 'Motorsport';
+  return CHANNELS.find((c) => c.category === cat) || CHANNELS[0];
 }
 
-function groupEvents(entries: RawEntry[]): SportEvent[] {
-  const map = new Map<string, SportEvent>();
-  for (const e of entries) {
-    const key = `${e.group}|${e.name}`;
-    let ev = map.get(key);
-    if (!ev) { ev = { name: e.name, group: e.group, sources: [] }; map.set(key, ev); }
-    ev.sources.push({ label: e.source || `Server ${ev.sources.length + 1}`, url: e.url });
-  }
-  return Array.from(map.values());
+// ── Streamed live-events API (accurate, current) ──
+const API_DOMAINS = ['streamed.pk', 'streamed.su', 'streamed.st'];
+interface Match {
+  id: string;
+  title: string;
+  category: string;
+  date: number;
+  popular?: boolean;
+  teams?: { home?: { name?: string; badge?: string }; away?: { name?: string; badge?: string } };
 }
-
-async function fetchFirst(urls: string[]): Promise<string | null> {
-  for (const u of urls) {
-    try {
-      const res = await fetch(u, { cache: 'no-store' });
-      if (res.ok) {
-        const t = await res.text();
-        if (t.includes('#EXTM3U')) return t;
-      }
-    } catch { /* next */ }
-  }
-  return null;
-}
+const SPORT_LABELS: Record<string, string> = {
+  football: 'Football', 'american-football': 'NFL', basketball: 'Basketball', baseball: 'Baseball',
+  hockey: 'Hockey', 'motor-sports': 'Motorsport', fight: 'Combat', tennis: 'Tennis', cricket: 'Cricket',
+  golf: 'Golf', rugby: 'Rugby', darts: 'Darts', other: 'Other',
+};
 
 // ── Native HLS player ──
 const HLSPlayer = ({ src }: { src: string }) => {
@@ -92,7 +68,7 @@ const HLSPlayer = ({ src }: { src: string }) => {
     const video = videoRef.current;
     if (!video) return;
     if (Hls.isSupported()) {
-      const hls = new Hls({ maxBufferLength: 30, maxMaxBufferLength: 60, manifestLoadingTimeOut: 20000, levelLoadingTimeOut: 20000 });
+      const hls = new Hls({ maxBufferLength: 30, maxMaxBufferLength: 60 });
       hls.loadSource(src);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
@@ -112,34 +88,58 @@ const HLSPlayer = ({ src }: { src: string }) => {
   return <video ref={videoRef} className="absolute inset-0 w-full h-full object-contain bg-black" controls autoPlay playsInline />;
 };
 
-interface PlayingState { title: string; sources: { label: string; url: string }[]; idx: number; }
+interface Playing { title: string; channel: Channel; }
 
 export default function SportsView() {
   const [tab, setTab] = useState<'events' | 'channels'>('events');
-  const [events, setEvents] = useState<SportEvent[]>([]);
-  const [channels, setChannels] = useState<RawEntry[]>([]);
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [liveIds, setLiveIds] = useState<Set<string>>(new Set());
+  const [apiBase, setApiBase] = useState('https://streamed.pk');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  const [group, setGroup] = useState<string>('ALL');
-  const [eventSearch, setEventSearch] = useState('');
-  const [channelSearch, setChannelSearch] = useState('');
-
-  const [playing, setPlaying] = useState<PlayingState | null>(null);
-  const playerContainerRef = useRef<HTMLDivElement>(null);
+  const [sport, setSport] = useState('all');
+  const [search, setSearch] = useState('');
+  const [playing, setPlaying] = useState<Playing | null>(null);
+  const playerRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(false);
-    const [evText, chText] = await Promise.all([fetchFirst(EVENTS_URLS), fetchFirst(CHANNELS_URLS)]);
-    if (!evText && !chText) { setError(true); setLoading(false); return; }
-    if (evText) setEvents(groupEvents(parseM3U(evText)));
-    if (chText) setChannels(parseM3U(chText));
+    for (const d of API_DOMAINS) {
+      try {
+        const base = `https://${d}`;
+        const [liveRes, todayRes] = await Promise.all([
+          fetch(`${base}/api/matches/live`, { cache: 'no-store' }),
+          fetch(`${base}/api/matches/all-today`, { cache: 'no-store' }),
+        ]);
+        if (!liveRes.ok || !todayRes.ok) continue;
+        const live: Match[] = await liveRes.json();
+        const today: Match[] = await todayRes.json();
+        const liveSet = new Set(live.map((m) => m.id));
+        const seen = new Set<string>();
+        const merged: Match[] = [];
+        for (const m of [...live, ...today]) {
+          if (!m?.id || seen.has(m.id)) continue;
+          seen.add(m.id);
+          merged.push(m);
+        }
+        setApiBase(base);
+        setLiveIds(liveSet);
+        setMatches(merged);
+        setLoading(false);
+        return;
+      } catch { /* next */ }
+    }
+    setError(true);
     setLoading(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
-
+  useEffect(() => {
+    const t = setInterval(load, 120000);
+    return () => clearInterval(t);
+  }, [load]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && playing) setPlaying(null); };
     window.addEventListener('keydown', onKey);
@@ -147,43 +147,40 @@ export default function SportsView() {
   }, [playing]);
 
   const toggleFullScreen = () => {
-    if (!document.fullscreenElement) playerContainerRef.current?.requestFullscreen?.().catch(() => {});
+    if (!document.fullscreenElement) playerRef.current?.requestFullscreen?.().catch(() => {});
     else document.exitFullscreen?.().catch(() => {});
   };
 
-  const playFree = (c: FreeChannel) => setPlaying({ title: c.name, sources: [{ label: 'HD', url: c.url }], idx: 0 });
-  const playProxied = (title: string, sources: { label: string; url: string }[]) =>
-    setPlaying({ title, sources: sources.map((s) => ({ label: s.label, url: proxied(s.url) })), idx: 0 });
+  const badge = (b?: string) => (b ? `${apiBase}/api/images/badge/${b}.webp` : '');
+  const eventTime = (d: number) => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const matchTitle = (m: Match) =>
+    m.teams?.home?.name && m.teams?.away?.name ? `${m.teams.home.name} vs ${m.teams.away.name}` : m.title;
 
-  const eventGroups = useMemo<string[]>(() => {
-    const set = new Set<string>(events.map((e) => e.group));
-    return ['ALL', ...Array.from(set)];
-  }, [events]);
+  const sportsPresent: string[] = useMemo(() => {
+    const order = ['football', 'basketball', 'fight', 'motor-sports', 'tennis', 'cricket', 'american-football', 'baseball', 'hockey'];
+    const arr = Array.from(new Set<string>(matches.map((m) => m.category)));
+    arr.sort((a, b) => (order.indexOf(a) < 0 ? 99 : order.indexOf(a)) - (order.indexOf(b) < 0 ? 99 : order.indexOf(b)));
+    return arr;
+  }, [matches]);
 
-  const visibleEvents = useMemo(() => {
-    const q = eventSearch.trim().toLowerCase();
-    return events.filter(
-      (e) => (group === 'ALL' || e.group === group) && (!q || e.name.toLowerCase().includes(q)),
-    );
-  }, [events, group, eventSearch]);
+  const filters = ['all', 'live', ...sportsPresent];
 
-  const channelResults = useMemo(() => {
-    const q = channelSearch.trim().toLowerCase();
-    if (!q) return [];
-    return channels.filter((c) => c.name.toLowerCase().includes(q)).slice(0, 60);
-  }, [channels, channelSearch]);
-
-  const activeSrc = playing ? playing.sources[playing.idx]?.url : undefined;
-
-  const prettyGroup = (g: string) => g.replace(/ EVENTS$/i, '').replace(/_/g, ' ');
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return matches
+      .filter((m) => (sport === 'live' ? liveIds.has(m.id) : sport === 'all' ? true : m.category === sport))
+      .filter((m) => !q || matchTitle(m).toLowerCase().includes(q))
+      .sort((a, b) => (liveIds.has(b.id) ? 1 : 0) - (liveIds.has(a.id) ? 1 : 0) || a.date - b.date);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matches, sport, search, liveIds]);
 
   return (
     <div className="pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-12 relative">
-      {/* ── Player overlay ── */}
+      {/* Player */}
       {playing && (
         <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center backdrop-blur-sm p-3 md:p-10">
           <div className="w-full max-w-5xl flex flex-col gap-3">
-            <div ref={playerContainerRef} className="w-full aspect-video bg-black rounded-lg shadow-2xl overflow-hidden relative border border-white/10">
+            <div ref={playerRef} className="w-full aspect-video bg-black rounded-lg shadow-2xl overflow-hidden relative border border-white/10">
               <div className="absolute top-0 left-0 right-0 p-3 md:p-4 bg-gradient-to-b from-black/80 to-transparent z-10 flex justify-between items-center">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="flex items-center gap-1.5 bg-red-500 text-white px-2.5 py-1 rounded-sm shrink-0"><div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /><span className="text-xs font-bold uppercase tracking-wider">Live</span></div>
@@ -194,32 +191,20 @@ export default function SportsView() {
                   <button onClick={() => setPlaying(null)} tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full bg-red-500/80 hover:bg-red-500 text-white flex items-center justify-center"><X className="w-5 h-5" /></button>
                 </div>
               </div>
-              {activeSrc ? <HLSPlayer src={activeSrc} /> : null}
+              <HLSPlayer src={playing.channel.url} />
             </div>
-
-            {playing.sources.length > 1 && (
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mr-1">Sources:</span>
-                {playing.sources.map((s, i) => (
-                  <button key={`${s.label}-${i}`} onClick={() => setPlaying({ ...playing, idx: i })} tabIndex={0} data-tv-focusable
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${i === playing.idx ? 'bg-amber-500 text-amber-950 border-amber-500' : 'bg-zinc-800/80 text-zinc-300 border-white/10 hover:bg-zinc-700'}`}>
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-            )}
-            <p className="text-[11px] text-zinc-500 flex items-center gap-2"><Radio className="w-3.5 h-3.5" /> If a source buffers, try another. Big matches are also on the free HD channels.</p>
+            <p className="text-[11px] text-zinc-500 flex items-center gap-2"><Tv className="w-3.5 h-3.5" /> Showing on <b className="text-zinc-300">{playing.channel.name}</b> — the HD channel carrying this sport · ad-free.</p>
           </div>
         </div>
       )}
 
-      {/* ── Header + tabs ── */}
+      {/* Header + tabs */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 bg-gradient-to-tr from-amber-500 to-rose-500 rounded-2xl flex items-center justify-center shadow-lg shadow-amber-500/20"><Trophy className="w-6 h-6 text-white" /></div>
           <div>
             <h2 className="text-3xl font-bold text-white leading-tight">Live Sports</h2>
-            <p className="text-sm text-zinc-400">F1 · MotoGP · Premier League · La Liga · Serie A · Cricket · Tennis · NBA & more</p>
+            <p className="text-sm text-zinc-400">Today's fixtures · F1 · Football · Cricket · Tennis · NBA · Combat</p>
           </div>
         </div>
         <div className="flex gap-1 bg-zinc-900/70 p-1 rounded-xl border border-white/5 self-start">
@@ -233,99 +218,94 @@ export default function SportsView() {
       </div>
 
       {loading ? (
-        <div className="flex flex-col items-center justify-center min-h-[40vh] gap-4 text-zinc-400"><Loader2 className="w-10 h-10 animate-spin text-amber-500" /><span>Loading live sports…</span></div>
+        <div className="flex flex-col items-center justify-center min-h-[40vh] gap-4 text-zinc-400"><Loader2 className="w-10 h-10 animate-spin text-amber-500" /><span>Loading today's live sports…</span></div>
       ) : tab === 'events' ? (
-        <>
-          {error && events.length === 0 ? (
-            <div className="flex flex-col items-center justify-center min-h-[30vh] gap-3 text-center">
-              <Radio className="w-10 h-10 text-zinc-600" />
-              <p className="text-zinc-400 max-w-sm">Couldn't load the live-events guide right now. The free HD channels (Channels tab) are always available.</p>
-              <button onClick={load} tabIndex={0} data-tv-focusable className="px-6 py-3 bg-amber-500 text-amber-950 font-bold rounded-xl hover:bg-amber-400">Retry</button>
+        error ? (
+          <div className="flex flex-col items-center justify-center min-h-[30vh] gap-3 text-center">
+            <Radio className="w-10 h-10 text-zinc-600" />
+            <p className="text-zinc-400 max-w-sm">Couldn't reach the events service. The Channels tab is always available.</p>
+            <button onClick={load} tabIndex={0} data-tv-focusable className="px-6 py-3 bg-amber-500 text-amber-950 font-bold rounded-xl hover:bg-amber-400">Retry</button>
+          </div>
+        ) : (
+          <>
+            <div className="relative mb-4 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search teams, leagues…"
+                className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500" />
             </div>
-          ) : (
-            <>
-              {/* search + group filters */}
-              <div className="relative mb-4 max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-                <input value={eventSearch} onChange={(e) => setEventSearch(e.target.value)} placeholder="Search teams, leagues, events…"
-                  className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500" />
-              </div>
-              <div className="flex overflow-x-auto gap-2 pb-2 mb-6 scrollbar-hide">
-                {eventGroups.map((g) => (
-                  <button key={g} onClick={() => setGroup(g)} tabIndex={0} data-tv-focusable
-                    className={`px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${group === g ? 'bg-white text-zinc-950 shadow-md' : 'bg-zinc-800/60 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>
-                    {g === 'ALL' ? 'All sports' : prettyGroup(g)}
-                  </button>
-                ))}
-              </div>
-
-              {visibleEvents.length === 0 ? (
-                <p className="text-zinc-500 py-10 text-center">No events match. Try another sport or the Channels tab.</p>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {visibleEvents.map((ev, i) => (
-                    <div key={`${ev.group}-${ev.name}-${i}`} onClick={() => playProxied(ev.name, ev.sources)} tabIndex={0} data-tv-focusable role="button" aria-label={ev.name}
-                      className="group relative bg-zinc-900/60 border border-white/5 rounded-2xl p-4 hover:bg-zinc-800 hover:border-amber-500/30 transition-all cursor-pointer focus:outline-none">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="px-2 py-0.5 bg-white/5 rounded text-[10px] font-bold uppercase tracking-wider text-amber-400 truncate max-w-[70%]">{prettyGroup(ev.group)}</span>
-                        <span className="flex items-center gap-1 text-[10px] font-bold text-red-500"><span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> LIVE</span>
-                      </div>
-                      <h3 className="text-sm font-bold text-white leading-snug line-clamp-2 min-h-[40px] group-hover:text-amber-400 transition-colors">{ev.name}</h3>
-                      <button className="mt-3 w-full py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm font-bold bg-white/10 text-white group-hover:bg-amber-500 group-hover:text-amber-950 transition-all pointer-events-none">
-                        <Play className="w-4 h-4 fill-current" /> Watch
-                        <span className="text-[10px] opacity-70">· {ev.sources.length} {ev.sources.length === 1 ? 'source' : 'sources'}</span>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </>
-      ) : (
-        <>
-          {/* Free HD featured */}
-          <div className="flex items-center gap-2 mb-3"><Flame className="w-4 h-4 text-amber-500" /><h3 className="text-lg font-bold text-white">Free HD Channels</h3><span className="text-xs text-zinc-500">· always reliable, ad-free</span></div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-8">
-            {FREE_CHANNELS.map((ch) => (
-              <div key={ch.name} onClick={() => playFree(ch)} tabIndex={0} data-tv-focusable role="button" aria-label={ch.name}
-                className="group bg-zinc-900/60 border border-white/5 rounded-2xl p-4 hover:bg-zinc-800 transition-all cursor-pointer focus:outline-none">
-                <div className="flex items-center justify-between mb-3">
-                  <Tv className="w-5 h-5 text-zinc-400 group-hover:text-amber-500 transition-colors" />
-                  <span className="flex items-center gap-1 text-[10px] font-bold text-red-500"><span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> LIVE</span>
-                </div>
-                <h4 className="text-sm font-bold text-white leading-tight mb-0.5 group-hover:text-amber-400 transition-colors">{ch.name}</h4>
-                <p className="text-[11px] text-zinc-500 line-clamp-1">{ch.desc}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Search all premium channels */}
-          <div className="flex items-center gap-2 mb-3"><Tv className="w-4 h-4 text-amber-500" /><h3 className="text-lg font-bold text-white">All Sports Channels</h3></div>
-          <div className="relative mb-5 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-            <input value={channelSearch} onChange={(e) => setChannelSearch(e.target.value)} placeholder="Search Sky Sports F1, TNT, ESPN, beIN…"
-              className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500" />
-          </div>
-          {channelSearch.trim() === '' ? (
-            <p className="text-zinc-500 text-sm">Type a channel name to find Sky Sport F1/MotoGP, TNT Sports, ESPN, beIN and {channels.length}+ more.</p>
-          ) : channelResults.length === 0 ? (
-            <p className="text-zinc-500 text-sm">No channels match "{channelSearch}".</p>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {channelResults.map((c, i) => (
-                <div key={`${c.name}-${i}`} onClick={() => playProxied(c.name, [{ label: 'HD', url: c.url }])} tabIndex={0} data-tv-focusable role="button" aria-label={c.name}
-                  className="group flex items-center justify-between gap-3 bg-zinc-900/60 border border-white/5 rounded-xl p-3 hover:bg-zinc-800 hover:border-amber-500/30 transition-all cursor-pointer focus:outline-none">
-                  <div className="min-w-0">
-                    <h4 className="text-sm font-bold text-white truncate group-hover:text-amber-400 transition-colors">{c.name}</h4>
-                    <p className="text-[10px] text-zinc-500 truncate">{c.group}</p>
-                  </div>
-                  <div className="w-9 h-9 rounded-full bg-white/10 group-hover:bg-amber-500 group-hover:text-amber-950 text-white flex items-center justify-center shrink-0 transition-colors"><Play className="w-4 h-4 fill-current" /></div>
-                </div>
+            <div className="flex overflow-x-auto gap-2 pb-2 mb-6 scrollbar-hide">
+              {filters.map((f) => (
+                <button key={f} onClick={() => setSport(f)} tabIndex={0} data-tv-focusable
+                  className={`px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1.5 ${sport === f ? 'bg-white text-zinc-950 shadow-md' : 'bg-zinc-800/60 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>
+                  {f === 'live' && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />}
+                  {f === 'all' ? 'All' : f === 'live' ? 'Live Now' : SPORT_LABELS[f] || f}
+                </button>
               ))}
             </div>
-          )}
-        </>
+
+            {visible.length === 0 ? (
+              <p className="text-zinc-500 py-10 text-center">No events here right now. Try another sport or the Channels tab.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {visible.map((m) => {
+                  const isLive = liveIds.has(m.id);
+                  const home = m.teams?.home, away = m.teams?.away;
+                  const ch = channelForSport(m.category);
+                  return (
+                    <div key={m.id} onClick={() => setPlaying({ title: matchTitle(m), channel: ch })} tabIndex={0} data-tv-focusable role="button" aria-label={m.title}
+                      className="group relative bg-zinc-900/60 border border-white/5 rounded-2xl p-4 hover:bg-zinc-800 hover:border-amber-500/30 transition-all cursor-pointer focus:outline-none">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="px-2 py-0.5 bg-white/5 rounded text-[10px] font-bold uppercase tracking-wider text-amber-400">{SPORT_LABELS[m.category] || m.category}</span>
+                        {isLive ? (
+                          <span className="flex items-center gap-1 text-[10px] font-bold text-red-500"><span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> LIVE</span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-[11px] text-zinc-400"><CalendarClock className="w-3 h-3" /> {eventTime(m.date)}</span>
+                        )}
+                      </div>
+                      {home?.name && away?.name ? (
+                        <div className="flex items-center justify-center gap-3 py-1">
+                          <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
+                            {home.badge ? <img src={badge(home.badge)} alt="" className="w-10 h-10 object-contain" loading="lazy" /> : <div className="w-10 h-10 rounded-full bg-zinc-800" />}
+                            <span className="text-xs font-semibold text-white text-center line-clamp-2">{home.name}</span>
+                          </div>
+                          <span className="text-zinc-500 text-xs font-bold">vs</span>
+                          <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
+                            {away.badge ? <img src={badge(away.badge)} alt="" className="w-10 h-10 object-contain" loading="lazy" /> : <div className="w-10 h-10 rounded-full bg-zinc-800" />}
+                            <span className="text-xs font-semibold text-white text-center line-clamp-2">{away.name}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <h3 className="text-sm font-bold text-white leading-snug line-clamp-2 min-h-[40px] group-hover:text-amber-400 transition-colors">{m.title}</h3>
+                      )}
+                      <button className="mt-3 w-full py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm font-bold bg-white/10 text-white group-hover:bg-amber-500 group-hover:text-amber-950 transition-all pointer-events-none">
+                        <Play className="w-4 h-4 fill-current" /> Watch on {ch.name}
+                        {m.popular && <Flame className="w-3.5 h-3.5 text-amber-400 group-hover:text-amber-900" />}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {CHANNELS.map((ch) => (
+            <div key={ch.name} onClick={() => setPlaying({ title: ch.name, channel: ch })} tabIndex={0} data-tv-focusable role="button" aria-label={ch.name}
+              className="group relative bg-zinc-900/60 border border-white/5 rounded-3xl p-5 hover:bg-zinc-800 transition-all cursor-pointer flex flex-col focus:outline-none">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-10 h-10 rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center group-hover:scale-110 transition-transform"><Tv className="w-5 h-5 text-zinc-400 group-hover:text-amber-500 transition-colors" /></div>
+                <div className="flex items-center gap-1.5 bg-red-500/10 text-red-500 px-2.5 py-1 rounded-full border border-red-500/20"><div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /><span className="text-[10px] font-bold uppercase tracking-wider">On Air</span></div>
+              </div>
+              <div className="flex-grow">
+                <h3 className="text-xl font-bold text-white leading-tight mb-1 group-hover:text-amber-400 transition-colors">{ch.name}</h3>
+                <p className="text-sm text-zinc-400 mb-4">{ch.desc}</p>
+                <span className="px-2.5 py-1 bg-white/5 rounded-lg text-xs font-medium text-zinc-400">{ch.category}</span>
+              </div>
+              <button className="mt-4 w-full py-3 rounded-xl flex items-center justify-center gap-2 text-sm font-bold bg-white/10 text-white group-hover:bg-amber-500 group-hover:text-amber-950 transition-all pointer-events-none"><Play className="w-4 h-4 fill-current" /> Watch Live</button>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
