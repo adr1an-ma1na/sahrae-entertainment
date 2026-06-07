@@ -203,7 +203,7 @@ export default function SportsView() {
     m.teams?.home?.name && m.teams?.away?.name ? `${m.teams.home.name} vs ${m.teams.away.name}` : m.title;
 
   // Event sports present, ordered with the common ones first
-  const sportsPresent = Array.from(new Set(matches.map((m) => m.category)));
+  const sportsPresent: string[] = Array.from(new Set<string>(matches.map((m) => m.category)));
   const sportOrder = ['football', 'basketball', 'fight', 'motor-sports', 'tennis', 'cricket', 'american-football', 'baseball', 'hockey'];
   sportsPresent.sort((a, b) => {
     const ia = sportOrder.indexOf(a), ib = sportOrder.indexOf(b);
