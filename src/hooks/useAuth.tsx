@@ -1,7 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, onAuthStateChanged, getRedirectResult } from 'firebase/auth';
-import { auth, loginWithGoogle, logout, db } from '../firebase';
-import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { User, auth, onAuthStateChanged, loginWithGoogle, logout } from '../firebase';
 
 export interface Profile {
   id: string;
@@ -39,6 +37,19 @@ const AuthContext = createContext<AuthContextType>({
 
 export const useAuth = () => useContext(AuthContext);
 
+const profilesKey = (uid: string) => `sahrae_profiles_${uid}`;
+
+function loadProfiles(uid: string): Profile[] {
+  try {
+    return JSON.parse(localStorage.getItem(profilesKey(uid)) || '[]');
+  } catch {
+    return [];
+  }
+}
+function persistProfiles(uid: string, profiles: Profile[]) {
+  localStorage.setItem(profilesKey(uid), JSON.stringify(profiles));
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -46,89 +57,64 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [activeProfile, setActiveProfile] = useState<Profile | null>(null);
 
   useEffect(() => {
-    // Consume any pending Google redirect sign-in result (native Capacitor flow).
-    // Errors here are non-fatal — onAuthStateChanged will still fire if the user
-    // was already signed in or if no redirect was pending.
-    getRedirectResult(auth).catch((err) => {
-      console.error('getRedirectResult error', err);
-    });
-
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
-      if (!user) {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      if (u) {
+        setProfiles(loadProfiles(u.uid));
+      } else {
         setProfiles([]);
         setActiveProfile(null);
       }
       setLoading(false);
     });
-
-    return () => unsubscribe();
+    return unsubscribe;
   }, []);
-
-  useEffect(() => {
-    if (user) {
-      const unsubscribe = onSnapshot(collection(db, `users/${user.uid}/profiles`), (snapshot) => {
-        const loadedProfiles = snapshot.docs.map(doc => doc.data() as Profile);
-        setProfiles(loadedProfiles);
-      });
-      return () => unsubscribe();
-    }
-  }, [user]);
 
   const addProfile = async (name: string, avatar: string) => {
     if (!user) return;
-    if (profiles.length >= 5) throw new Error("Maximum 5 profiles allowed");
-    
+    if (profiles.length >= 5) throw new Error('Maximum 5 profiles allowed');
     const id = `profile_${Date.now()}`;
-    await setDoc(doc(db, `users/${user.uid}/profiles`, id), {
-      id,
-      name,
-      avatar
-    });
+    const next = [...profiles, { id, name, avatar }];
+    persistProfiles(user.uid, next);
+    setProfiles(next);
   };
 
   const updateProfileData = async (id: string, name: string, avatar: string) => {
     if (!user) return;
-    await setDoc(doc(db, `users/${user.uid}/profiles`, id), {
-      id,
-      name,
-      avatar
-    }, { merge: true });
-    
-    if (activeProfile?.id === id) {
-      setActiveProfile({ id, name, avatar });
-    }
+    const next = profiles.map((p) => (p.id === id ? { id, name, avatar } : p));
+    persistProfiles(user.uid, next);
+    setProfiles(next);
+    if (activeProfile?.id === id) setActiveProfile({ id, name, avatar });
   };
 
   const deleteProfile = async (id: string) => {
     if (!user) return;
-    await deleteDoc(doc(db, `users/${user.uid}/profiles`, id));
-    if (activeProfile?.id === id) {
-      setActiveProfile(null);
-    }
+    const next = profiles.filter((p) => p.id !== id);
+    persistProfiles(user.uid, next);
+    setProfiles(next);
+    if (activeProfile?.id === id) setActiveProfile(null);
   };
 
   const reloadUser = async () => {
-    if (auth.currentUser) {
-      await auth.currentUser.reload();
-      setUser({ ...auth.currentUser } as User);
-    }
+    setUser(auth.currentUser ? { ...auth.currentUser } : null);
   };
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      loading, 
-      login: loginWithGoogle, 
-      logout, 
-      reloadUser,
-      profiles,
-      activeProfile,
-      setActiveProfile,
-      addProfile,
-      updateProfileData,
-      deleteProfile
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        login: loginWithGoogle,
+        logout,
+        reloadUser,
+        profiles,
+        activeProfile,
+        setActiveProfile,
+        addProfile,
+        updateProfileData,
+        deleteProfile,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -1,8 +1,6 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { Mic, ExternalLink, Plus, Trash2, Play } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
-import { db } from '../firebase';
-import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 
 interface Podcast {
   id: string;
@@ -30,49 +28,42 @@ export default function PodcastsView() {
   const [newTitle, setNewTitle] = useState('');
   const [newUrl, setNewUrl] = useState('');
   const { user } = useAuth();
+  const storageKey = `sahrae_podcasts_${user?.uid || 'local'}`;
+
+  const loadCustom = (): Podcast[] => {
+    try {
+      return JSON.parse(localStorage.getItem(storageKey) || '[]');
+    } catch {
+      return [];
+    }
+  };
 
   useEffect(() => {
-    if (user) {
-      const unsubscribe = onSnapshot(collection(db, `users/${user.uid}/podcasts`), (snapshot) => {
-        const customPodcasts = snapshot.docs.map(doc => ({
-          ...doc.data(),
-          id: doc.id,
-          custom: true
-        })) as Podcast[];
-        setPodcasts([...DEFAULT_PODCASTS, ...customPodcasts]);
-      });
-      return () => unsubscribe();
-    } else {
-      setPodcasts(DEFAULT_PODCASTS);
-    }
+    setPodcasts([...DEFAULT_PODCASTS, ...loadCustom()]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  const handleAddPodcast = async (e: FormEvent) => {
+  const handleAddPodcast = (e: FormEvent) => {
     e.preventDefault();
-    if (!user) {
-      alert("Please sign in to add custom podcasts.");
-      return;
-    }
     if (!newTitle || !newUrl) return;
 
-    const newId = `custom_${Date.now()}`;
-    const docRef = doc(db, `users/${user.uid}/podcasts`, newId);
-    await setDoc(docRef, {
-      id: newId,
-      title: newTitle,
-      url: newUrl,
-      category: 'Custom'
-    });
+    const custom = loadCustom();
+    const next = [
+      ...custom,
+      { id: `custom_${Date.now()}`, title: newTitle, url: newUrl, category: 'Custom', custom: true },
+    ];
+    localStorage.setItem(storageKey, JSON.stringify(next));
+    setPodcasts([...DEFAULT_PODCASTS, ...next]);
 
     setNewTitle('');
     setNewUrl('');
     setIsAdding(false);
   };
 
-  const handleDeletePodcast = async (id: string) => {
-    if (!user) return;
-    const docRef = doc(db, `users/${user.uid}/podcasts`, id);
-    await deleteDoc(docRef);
+  const handleDeletePodcast = (id: string) => {
+    const next = loadCustom().filter((p) => p.id !== id);
+    localStorage.setItem(storageKey, JSON.stringify(next));
+    setPodcasts([...DEFAULT_PODCASTS, ...next]);
   };
 
   const categories = ['All', ...Array.from(new Set(podcasts.map(p => p.category)))].sort();

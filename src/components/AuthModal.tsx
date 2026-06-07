@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react';
-import { X, Mail, Lock, User, AlertCircle, Chrome } from 'lucide-react';
+import { X, Mail, Lock, User, AlertCircle, UserCircle2 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { 
   auth, 
@@ -151,17 +151,17 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                   <div className="w-full border-t border-zinc-800"></div>
                 </div>
                 <div className="relative flex justify-center text-sm">
-                  <span className="px-2 bg-zinc-900 text-zinc-500">Or continue with</span>
+                  <span className="px-2 bg-zinc-900 text-zinc-500">Or</span>
                 </div>
               </div>
 
-              <button 
+              <button
                 onClick={handleGoogleLogin}
                 type="button"
-                className="w-full bg-white text-black font-bold py-3 rounded-lg hover:bg-zinc-200 transition-colors flex items-center justify-center gap-2"
+                className="w-full bg-white/10 border border-white/10 text-white font-bold py-3 rounded-lg hover:bg-white/20 transition-colors flex items-center justify-center gap-2"
               >
-                <Chrome className="w-5 h-5" />
-                Google
+                <UserCircle2 className="w-5 h-5" />
+                Continue as Guest
               </button>
             </>
           )}
