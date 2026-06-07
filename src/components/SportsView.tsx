@@ -186,7 +186,7 @@ export default function SportsView() {
                   <button onClick={() => setPlaying(null)} tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full bg-red-500/80 hover:bg-red-500 text-white flex items-center justify-center"><X className="w-5 h-5" /></button>
                 </div>
               </div>
-              {activeUrl ? <HLSPlayer key={activeUrl} src={activeUrl} /> : null}
+              {activeUrl ? <HLSPlayer src={activeUrl} /> : null}
             </div>
             {playing.sources.length > 1 && (
               <div className="flex flex-wrap items-center gap-2">
