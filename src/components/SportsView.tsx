@@ -5,16 +5,44 @@ import Hls from 'hls.js';
 /**
  * Live Sports.
  *
- * EVENTS come from our auto-updating feed (github.com/adr1an-ma1na/sahrae-sports-feed):
- * a scheduled resolver captures each live event's real .m3u8 and publishes the
- * full schedule as feed.json (GitHub raw = reachable & CORS-open everywhere).
- * Resolved streams play through the native HLS proxy with the captured Referer;
- * every event also offers its sport's verified free HD channel as a fallback.
+ * SCHEDULE comes from our auto-updating feed (github.com/adr1an-ma1na/sahrae-sports-feed):
+ * the full day's events + each event's EMBED URLs, published as feed.json
+ * (GitHub raw = reachable & CORS-open everywhere).
+ *
+ * STREAMS resolve ON-DEVICE: tapping an event sends its embed URLs to the native
+ * resolver (/__embed2m3u8), which runs the embed's player in a hidden WebView and
+ * captures the live .m3u8 — so the CDN token binds to the user's own IP and plays
+ * (server-resolved tokens are IP-locked and 403 elsewhere). The resolved stream
+ * plays through the native HLS proxy; every event also offers its sport's verified
+ * free HD channel as an instant, always-reliable fallback.
  */
 
 const FEED_URL = 'https://raw.githubusercontent.com/adr1an-ma1na/sahrae-sports-feed/main/feed.json';
 const proxied = (m3u8: string, referer?: string) =>
   `https://localhost/__hlsproxy?u=${encodeURIComponent(m3u8)}${referer ? `&r=${encodeURIComponent(referer)}` : ''}`;
+
+/**
+ * Resolve an embed URL → playable .m3u8 ON THIS DEVICE.
+ * The native layer (/__embed2m3u8) loads the embed in a hidden WebView, lets its
+ * player JS run, and captures the stream URL — so the CDN token binds to *this*
+ * device's IP and actually plays (server-resolved tokens are IP-locked → 403).
+ */
+async function resolveEmbed(embed: string): Promise<string | null> {
+  try {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 16000);
+    const r = await fetch(`https://localhost/__embed2m3u8?u=${encodeURIComponent(embed)}`, {
+      cache: 'no-store',
+      signal: ctrl.signal,
+    });
+    clearTimeout(to);
+    if (!r.ok) return null;
+    const j = await r.json();
+    return j && typeof j.m3u8 === 'string' && j.m3u8 ? j.m3u8 : null;
+  } catch {
+    return null;
+  }
+}
 
 // ── Verified always-free HD channels (fallback + Channels tab) ──
 interface Channel { name: string; category: 'Football' | 'Combat' | 'Cricket' | 'Tennis' | 'Motorsport' | 'General'; desc: string; url: string }
@@ -42,7 +70,6 @@ function channelForSport(sport: string): Channel {
   return CHANNELS.find((c) => c.category === cat) || CHANNELS[0];
 }
 
-interface FeedStream { label: string; m3u8: string; referer?: string }
 interface FeedEvent {
   id: string;
   title: string;
@@ -51,7 +78,8 @@ interface FeedEvent {
   popular?: boolean;
   live?: boolean;
   teams?: { home?: { name?: string; badge?: string }; away?: { name?: string; badge?: string } } | null;
-  streams: FeedStream[];
+  /** Embed URLs (streamed.su/embed.st) — resolved to a playable stream on-device. */
+  embeds?: string[];
 }
 interface Feed { updated: number; base?: string; count: number; resolved?: number; events: FeedEvent[] }
 
@@ -88,7 +116,7 @@ const HLSPlayer = ({ src }: { src: string }) => {
   return <video ref={videoRef} className="absolute inset-0 w-full h-full object-contain bg-black" controls autoPlay playsInline />;
 };
 
-interface Playing { title: string; sources: { label: string; url: string }[]; idx: number; }
+interface Playing { title: string; sources: { label: string; url: string }[]; idx: number; resolving?: boolean; }
 
 export default function SportsView() {
   const [tab, setTab] = useState<'events' | 'channels'>('events');
@@ -142,11 +170,30 @@ export default function SportsView() {
 
   const openEvent = (m: FeedEvent) => {
     const ch = channelForSport(m.category);
-    const sources = [
-      ...m.streams.map((s) => ({ label: s.label || 'HD', url: proxied(s.m3u8, s.referer) })),
-      { label: `📺 ${ch.name}`, url: ch.url },
-    ];
-    setPlaying({ title: matchTitle(m), sources, idx: 0 });
+    const channelSource = { label: `📺 ${ch.name}`, url: ch.url };
+    const embeds = (m.embeds || []).slice(0, 3);
+
+    // Channel plays instantly; we resolve the real match feed on-device and
+    // auto-upgrade to it the moment one comes back (token binds to this device).
+    setPlaying({ title: matchTitle(m), sources: [channelSource], idx: 0, resolving: embeds.length > 0 });
+    if (!embeds.length) return;
+
+    const found: { label: string; url: string }[] = [];
+    let done = 0;
+    embeds.forEach((embed) => {
+      resolveEmbed(embed).then((m3u8) => {
+        done += 1;
+        if (m3u8) found.push({ label: `HD ${found.length + 1}`, url: proxied(m3u8, 'https://embed.st/') });
+        setPlaying((p) => {
+          if (!p) return p;
+          const sources = [...found, channelSource];
+          // First HD that resolves takes over from the channel.
+          const onChannel = p.sources[p.idx]?.label.startsWith('📺') ?? true;
+          const idx = found.length > 0 && onChannel ? 0 : Math.min(p.idx, sources.length - 1);
+          return { ...p, sources, idx, resolving: done < embeds.length };
+        });
+      });
+    });
   };
 
   const events = feed?.events || [];
@@ -163,7 +210,7 @@ export default function SportsView() {
     return events
       .filter((m) => (sport === 'live' ? m.live : sport === 'all' ? true : m.category === sport))
       .filter((m) => !q || matchTitle(m).toLowerCase().includes(q))
-      .sort((a, b) => (b.live ? 1 : 0) - (a.live ? 1 : 0) || (b.streams.length ? 1 : 0) - (a.streams.length ? 1 : 0) || a.date - b.date);
+      .sort((a, b) => (b.live ? 1 : 0) - (a.live ? 1 : 0) || ((b.embeds?.length || 0) ? 1 : 0) - ((a.embeds?.length || 0) ? 1 : 0) || a.date - b.date);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [events, sport, search]);
 
@@ -187,6 +234,12 @@ export default function SportsView() {
                 </div>
               </div>
               {activeUrl ? <HLSPlayer src={activeUrl} /> : null}
+              {playing.resolving && (
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-[6] flex items-center gap-2 bg-black/75 px-3 py-1.5 rounded-full border border-white/10 backdrop-blur-sm pointer-events-none">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-500" />
+                  <span className="text-[11px] text-white font-medium">Finding the live match feed…</span>
+                </div>
+              )}
             </div>
             {playing.sources.length > 1 && (
               <div className="flex flex-wrap items-center gap-2">
@@ -300,7 +353,7 @@ export default function SportsView() {
                     )}
                     <button className="mt-3 w-full py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm font-bold bg-white/10 text-white group-hover:bg-amber-500 group-hover:text-amber-950 transition-all pointer-events-none">
                       <Play className="w-4 h-4 fill-current" /> Watch
-                      {m.streams.length > 0 && <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 group-hover:bg-amber-900/20 group-hover:text-amber-900 font-bold">HD FEED</span>}
+                      {(m.embeds?.length || 0) > 0 && <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 group-hover:bg-amber-900/20 group-hover:text-amber-900 font-bold">HD FEED</span>}
                     </button>
                   </div>
                 );

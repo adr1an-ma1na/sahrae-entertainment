@@ -5,6 +5,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Message;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
@@ -13,7 +14,9 @@ import android.webkit.JsResult;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
+import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
 
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
@@ -34,6 +37,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
@@ -336,6 +342,12 @@ public class MainActivity extends BridgeActivity {
                 String origin = originOf(ref);
                 if (origin != null) conn.setRequestProperty("Origin", origin);
             }
+            // Forward any cookies the on-device resolver's WebView established for
+            // this host (some CDN stream tokens are tied to a handshake cookie).
+            try {
+                String ck = CookieManager.getInstance().getCookie(target);
+                if (ck != null && !ck.isEmpty()) conn.setRequestProperty("Cookie", ck);
+            } catch (Exception ignore) {}
 
             int code = conn.getResponseCode();
             if (code < 200 || code >= 400) return null;
@@ -419,6 +431,153 @@ public class MainActivity extends BridgeActivity {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  On-device embed resolver (THE fix for IP-locked sports streams).
+    //
+    //  streamed.su/embed.st hands out .m3u8 tokens that are LOCKED to the IP
+    //  that resolved them — so a stream resolved in CI 403s on the user's phone.
+    //  The embed's playlist URL is computed by a 510 KB obfuscated JWPlayer
+    //  bundle, so we can't replicate it natively. Instead — exactly like Cricfy —
+    //  we spin up a throwaway WebView HERE on the device, load the embed as a
+    //  TOP-LEVEL page (no anti-framing), let its JS run, and capture the .m3u8 it
+    //  requests. Because the device's own IP did the handshake, the token is
+    //  valid for this device, and the HLS proxy can then play it.
+    //
+    //  URL form: https://localhost/__embed2m3u8?u={encoded embed url}
+    //  Returns:  {"m3u8":"<url>"}  (or {"m3u8":null} on failure → app falls back)
+    // ─────────────────────────────────────────────────────────────
+    private static final Map<String, String> EMBED_CACHE = new ConcurrentHashMap<>();
+    private static final Map<String, Long> EMBED_EXPIRY = new ConcurrentHashMap<>();
+
+    /** Kick playback in the throwaway WebView so the player requests its stream. */
+    private static final String PLAY_KICK =
+        "(function(){try{document.querySelectorAll('video').forEach(function(v){try{v.muted=true;var p=v.play();if(p&&p.catch)p.catch(function(){});}catch(e){}});" +
+        "var b=document.querySelector('.vjs-big-play-button,.play-button,[class*=\"play\"],button');" +
+        "try{(b||document.getElementById('player')||document.body).click();}catch(e){}}catch(e){}})();";
+
+    /** True for HLS playlist URLs (incl. extensionless streamed /secure/ masters), false for segments/assets. */
+    private static boolean looksLikeStreamUrl(String u) {
+        if (u == null) return false;
+        String l = u.toLowerCase();
+        if (l.matches(".*\\.(ts|m4s|mp4|aac|mpd|jpg|jpeg|png|gif|webp|ico|css|js|woff2?|svg|json|html?|txt|map)(\\?.*)?$")) return false;
+        return l.contains(".m3u8") || l.contains("/secure/");
+    }
+
+    private static String jsonStr(String s) {
+        StringBuilder b = new StringBuilder("\"");
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '"' || c == '\\') b.append('\\').append(c);
+            else if (c == '\n') b.append("\\n");
+            else if (c == '\r') b.append("\\r");
+            else if (c == '\t') b.append("\\t");
+            else if (c < 0x20) b.append(String.format("\\u%04x", (int) c));
+            else b.append(c);
+        }
+        return b.append('"').toString();
+    }
+
+    private static WebResourceResponse jsonResponse(String body) {
+        Map<String, String> h = new HashMap<>();
+        h.put("Access-Control-Allow-Origin", "*");
+        h.put("Cache-Control", "no-cache");
+        return new WebResourceResponse("application/json", "utf-8", 200, "OK", h,
+            new ByteArrayInputStream(body.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    private WebResourceResponse embedResolve(Uri uri) {
+        final String embed = uri.getQueryParameter("u");
+        if (embed == null || embed.isEmpty()) return null;
+
+        Long exp = EMBED_EXPIRY.get(embed);
+        String m3u8 = (exp != null && exp > System.currentTimeMillis()) ? EMBED_CACHE.get(embed) : null;
+        if (m3u8 == null) {
+            m3u8 = runEmbedResolver(embed);
+            if (m3u8 != null) {
+                EMBED_CACHE.put(embed, m3u8);
+                EMBED_EXPIRY.put(embed, System.currentTimeMillis() + 120000); // 2 min
+            }
+        }
+        return jsonResponse(m3u8 != null ? "{\"m3u8\":" + jsonStr(m3u8) + "}" : "{\"m3u8\":null}");
+    }
+
+    /** Load the embed in a hidden WebView and capture the first playlist URL it fetches. */
+    private String runEmbedResolver(final String embed) {
+        final String[] result = new String[1];
+        final WebView[] holder = new WebView[1];
+        final CountDownLatch latch = new CountDownLatch(1);
+
+        runOnUiThread(() -> {
+            try {
+                WebView wv = new WebView(MainActivity.this);
+                holder[0] = wv;
+                WebSettings s = wv.getSettings();
+                s.setJavaScriptEnabled(true);
+                s.setDomStorageEnabled(true);
+                s.setMediaPlaybackRequiresUserGesture(false);
+                s.setUserAgentString(PROXY_UA);
+                try { s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW); } catch (Exception ignore) {}
+                wv.setWebChromeClient(new WebChromeClient());
+                wv.setWebViewClient(new WebViewClient() {
+                    @Override
+                    public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest req) {
+                        try {
+                            if (req != null && req.getUrl() != null) {
+                                String us = req.getUrl().toString();
+                                if (isAdHost(req.getUrl().getHost())) return blockedResponse();
+                                if (result[0] == null && looksLikeStreamUrl(us)) {
+                                    result[0] = us;
+                                    latch.countDown();
+                                    return blockedResponse(); // don't waste bandwidth in the throwaway view
+                                }
+                            }
+                        } catch (Exception ignore) {}
+                        return null;
+                    }
+                    @Override
+                    public void onPageFinished(WebView v, String url) {
+                        try {
+                            v.evaluateJavascript(PLAY_KICK, null);
+                            v.postDelayed(() -> { try { v.evaluateJavascript(PLAY_KICK, null); } catch (Exception e) {} }, 1500);
+                            v.postDelayed(() -> { try { v.evaluateJavascript(PLAY_KICK, null); } catch (Exception e) {} }, 4000);
+                        } catch (Exception ignore) {}
+                    }
+                });
+                // Attach off-screen (1x1, transparent) so the player gets a real
+                // surface and actually initialises + fetches its manifest.
+                try {
+                    ViewGroup root = findViewById(android.R.id.content);
+                    if (root != null) {
+                        wv.setLayoutParams(new ViewGroup.LayoutParams(1, 1));
+                        wv.setAlpha(0f);
+                        wv.setEnabled(false);
+                        root.addView(wv);
+                    }
+                } catch (Exception ignore) {}
+
+                Map<String, String> hdrs = new HashMap<>();
+                hdrs.put("Referer", "https://streamed.pk/");
+                wv.loadUrl(embed, hdrs);
+            } catch (Exception e) {
+                latch.countDown();
+            }
+        });
+
+        try { latch.await(14, TimeUnit.SECONDS); } catch (InterruptedException ignore) {}
+        runOnUiThread(() -> {
+            try {
+                if (holder[0] != null) {
+                    holder[0].stopLoading();
+                    holder[0].loadUrl("about:blank");
+                    ViewGroup parent = (ViewGroup) holder[0].getParent();
+                    if (parent != null) parent.removeView(holder[0]);
+                    holder[0].destroy();
+                }
+            } catch (Exception ignore) {}
+        });
+        return result[0];
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -748,6 +907,9 @@ public class MainActivity extends BridgeActivity {
                     if (path != null && "localhost".equals(host)) {
                         if (path.startsWith("/__hlsproxy")) {
                             WebResourceResponse r = hlsProxy(request.getUrl());
+                            if (r != null) return r;
+                        } else if (path.startsWith("/__embed2m3u8")) {
+                            WebResourceResponse r = embedResolve(request.getUrl());
                             if (r != null) return r;
                         } else if (path.startsWith("/__ddresolve")) {
                             WebResourceResponse r = daddyResolve(request.getUrl());
