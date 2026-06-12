@@ -44,6 +44,38 @@ async function resolveEmbed(embed: string): Promise<string | null> {
   }
 }
 
+/**
+ * Confirm a resolved stream actually serves a live playlist (filters dead /
+ * 403 / slate sources before we ever show them) — fetched through the same
+ * device-side proxy the player uses, so "it validated" means "it will play".
+ */
+async function validateStream(proxiedUrl: string): Promise<boolean> {
+  try {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 9000);
+    const r = await fetch(proxiedUrl, { cache: 'no-store', signal: ctrl.signal });
+    clearTimeout(to);
+    if (!r.ok) return false;
+    const txt = await r.text();
+    return txt.includes('#EXTM3U') && txt.length > 40;
+  } catch {
+    return false;
+  }
+}
+
+const MATCH_STOP = new Set(['vs', 'the', 'and', 'live', 'stream', 'hd', 'sd', 'match', 'game', 'full', 'fc', 'sc', 'afc', 'cf']);
+/** Significant lowercase tokens identifying an event (title + team names). */
+function eventTokens(m: FeedEvent): string[] {
+  const s = `${m.title} ${m.teams?.home?.name || ''} ${m.teams?.away?.name || ''}`.toLowerCase();
+  return Array.from(new Set<string>(s.split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !MATCH_STOP.has(w))));
+}
+/** Does the resolved stream's own URL slug look like it belongs to this event? */
+function streamMatchesEvent(m3u8: string, tokens: string[]): boolean {
+  if (!tokens.length) return true;
+  const slug = decodeURIComponent(m3u8).toLowerCase();
+  return tokens.some((t) => slug.includes(t));
+}
+
 // ── Verified always-free HD channels (fallback + Channels tab) ──
 interface Channel { name: string; category: 'Football' | 'Combat' | 'Cricket' | 'Tennis' | 'Motorsport' | 'General'; desc: string; url: string }
 const CHANNELS: Channel[] = [
@@ -90,27 +122,52 @@ const SPORT_LABELS: Record<string, string> = {
 };
 
 // ── Native HLS player ──
-const HLSPlayer = ({ src }: { src: string }) => {
+// Reports `onUnplayable` when a source is dead (manifest 403/404/timeout, or it
+// never produces a frame) so the parent can auto-skip to the next source. Brief
+// in-stream network blips are retried, not treated as dead.
+const HLSPlayer = ({ src, onUnplayable }: { src: string; onUnplayable?: () => void }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const deadRef = useRef(onUnplayable);
+  deadRef.current = onUnplayable;
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
+    let dead = false;
+    const giveUp = () => { if (!dead) { dead = true; deadRef.current?.(); } };
+
     if (Hls.isSupported()) {
-      const hls = new Hls({ maxBufferLength: 30, maxMaxBufferLength: 60, manifestLoadingTimeOut: 25000, levelLoadingTimeOut: 25000 });
+      const hls = new Hls({ maxBufferLength: 30, maxMaxBufferLength: 60, manifestLoadingTimeOut: 12000, levelLoadingTimeOut: 12000, fragLoadingTimeOut: 18000 });
+      let started = false;
+      let netRetries = 0;
+      // If nothing plays within 14s, consider the source dead and move on.
+      const watchdog = setTimeout(() => { if (!started) { hls.destroy(); giveUp(); } }, 14000);
       hls.loadSource(src);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
+      hls.on(Hls.Events.FRAG_BUFFERED, () => { started = true; });
       hls.on(Hls.Events.ERROR, (_e, data) => {
-        if (data.fatal) {
-          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
-          else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
-          else hls.destroy();
+        if (!data.fatal) return;
+        const d = String(data.details || '');
+        const manifestDead = d.includes('manifestLoad') || d.includes('manifestParsing');
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+          if (manifestDead || netRetries >= 2) { hls.destroy(); giveUp(); }
+          else { netRetries += 1; hls.startLoad(); }
+        } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          hls.recoverMediaError();
+        } else {
+          hls.destroy();
+          giveUp();
         }
       });
-      return () => hls.destroy();
+      return () => { clearTimeout(watchdog); hls.destroy(); };
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = src;
-      video.addEventListener('loadedmetadata', () => video.play().catch(() => {}));
+      const onMeta = () => video.play().catch(() => {});
+      const onErr = () => giveUp();
+      video.addEventListener('loadedmetadata', onMeta);
+      video.addEventListener('error', onErr);
+      const watchdog = setTimeout(() => { if (video.readyState < 2) giveUp(); }, 14000);
+      return () => { clearTimeout(watchdog); video.removeEventListener('loadedmetadata', onMeta); video.removeEventListener('error', onErr); };
     }
   }, [src]);
   return <video ref={videoRef} className="absolute inset-0 w-full h-full object-contain bg-black" controls autoPlay playsInline />;
@@ -181,29 +238,47 @@ export default function SportsView() {
     const ch = channelForSport(m.category);
     const channelSource = { label: `📺 ${ch.name}`, url: ch.url };
     const embeds = (m.embeds || []).slice(0, 4);
+    const tokens = eventTokens(m);
 
-    // Channel plays instantly; we resolve the real match feed on-device and
-    // auto-upgrade to it the moment one comes back (token binds to this device).
+    // Channel plays instantly. Meanwhile we resolve each source on-device,
+    // VERIFY it actually serves a live playlist, rank the ones whose stream
+    // looks like THIS match first, and auto-upgrade to the best — dead and
+    // clearly-wrong sources are filtered out so it "just works".
     setPlaying({ title: matchTitle(m), sources: [channelSource], idx: 0, resolving: embeds.length > 0 });
     if (!embeds.length) return;
 
-    const found: { label: string; url: string }[] = [];
+    const good: { label: string; url: string; matched: boolean }[] = [];
     let done = 0;
     embeds.forEach((embed) => {
-      resolveEmbed(embed).then((m3u8) => {
+      resolveEmbed(embed).then(async (m3u8) => {
+        if (m3u8) {
+          const url = proxied(m3u8, 'https://embed.st/');
+          if (await validateStream(url)) {
+            good.push({ label: sourceLabel(embed), url, matched: streamMatchesEvent(m3u8, tokens) });
+          }
+        }
         done += 1;
-        if (m3u8) found.push({ label: sourceLabel(embed), url: proxied(m3u8, 'https://embed.st/') });
         setPlaying((p) => {
           if (!p) return p;
-          const sources = [...found, channelSource];
-          // First HD that resolves takes over from the channel.
+          // Correct-looking sources first, then the rest; channel always last.
+          const ranked = [...good].sort((a, b) => (b.matched ? 1 : 0) - (a.matched ? 1 : 0));
+          const sources = [
+            ...ranked.map((s) => ({ label: s.matched ? s.label : `${s.label} ?`, url: s.url })),
+            channelSource,
+          ];
           const onChannel = p.sources[p.idx]?.label.startsWith('📺') ?? true;
-          const idx = found.length > 0 && onChannel ? 0 : Math.min(p.idx, sources.length - 1);
+          const idx = ranked.length > 0 && onChannel ? 0 : Math.min(p.idx, sources.length - 1);
           return { ...p, sources, idx, resolving: done < embeds.length };
         });
       });
     });
   };
+
+  // A playing source went dead → automatically fall through to the next one
+  // (and ultimately the always-reliable channel), no manual switching needed.
+  const skipSource = useCallback(() => {
+    setPlaying((p) => (p && p.idx < p.sources.length - 1 ? { ...p, idx: p.idx + 1 } : p));
+  }, []);
 
   const events = feed?.events || [];
   const sportsPresent: string[] = useMemo(() => {
@@ -242,7 +317,7 @@ export default function SportsView() {
                   <button onClick={() => setPlaying(null)} tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full bg-red-500/80 hover:bg-red-500 text-white flex items-center justify-center"><X className="w-5 h-5" /></button>
                 </div>
               </div>
-              {activeUrl ? <HLSPlayer src={activeUrl} /> : null}
+              {activeUrl ? <HLSPlayer src={activeUrl} onUnplayable={skipSource} /> : null}
               {playing.resolving && (
                 <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-[6] flex items-center gap-2 bg-black/75 px-3 py-1.5 rounded-full border border-white/10 backdrop-blur-sm pointer-events-none">
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-500" />
