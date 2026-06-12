@@ -103,6 +103,48 @@ input:focus-visible,
   outline-offset: 2px;
 }
 
+/* ─────────────────────────────────────────────────────────────
+   TV MODE — switched on by the first arrow-key press (spatialNavigation.ts).
+   Keeps the top navigation always visible + reachable by remote, gives the
+   focused item room to breathe under the fixed bar, and turns the section
+   tabs into comfortable D-pad targets. No effect for touch/mouse users.
+   ───────────────────────────────────────────────────────────── */
+html.tv-mode {
+  scroll-padding-top: 7rem;     /* focused items never hide under the navbar */
+  scroll-padding-bottom: 3rem;
+  scroll-behavior: auto;        /* instant — never animate remote moves */
+}
+.tv-mode [data-tv-focusable],
+.tv-mode a,
+.tv-mode button,
+.tv-mode input,
+.tv-mode select,
+.tv-mode textarea {
+  scroll-margin: 7rem 2.5rem 3rem 2.5rem;  /* breathing room on every side */
+}
+/* The section nav (Home / Movies / Series / Live TV / Audio Hub …) is hidden
+   below md; on a TV we force it visible + reachable and drop the horizontal
+   mobile strip that's awkward to drive with a remote. */
+.tv-mode .nav-sections {
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+}
+.tv-mode .nav-sections-mobile { display: none !important; }
+.tv-mode .nav-sections button {
+  font-size: 1rem;
+  padding: 0.3rem 0.55rem;
+  border-radius: 0.5rem;
+}
+/* Opaque navbar in TV mode so the menu is legible across a room. */
+.tv-mode nav {
+  background-color: rgba(9, 9, 11, 0.95) !important;
+}
+/* A touch more pop on the focused item for living-room legibility. */
+.tv-mode .tv-focused {
+  box-shadow: 0 0 0 4px #f59e0b, 0 0 30px 6px rgba(245, 158, 11, 0.6) !important;
+}
+
 @layer utilities {
   .scrollbar-hide {
     /* IE and Edge */

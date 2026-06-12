@@ -10,10 +10,14 @@
  *   - on an arrow press, moves focus to the nearest element in that direction
  *     using a geometric score,
  *   - on Enter, activates the focused element,
- *   - draws a clear highlight ring on whatever is focused.
+ *   - draws a clear highlight ring on whatever is focused,
+ *   - the FIRST time an arrow key is seen, switches the app into "TV mode"
+ *     (<html class="tv-mode">) so the CSS can keep the top navigation bar always
+ *     visible/reachable and give focus room to breathe.
  *
- * It's a no-op for touch/mouse users (they never send arrow keys), so phones and
- * desktop pointer use are unaffected.
+ * Movement is INSTANT (no smooth-scroll animation) so it feels as snappy as
+ * Netflix on low-powered TV hardware. It's a no-op for touch/mouse users (they
+ * never send arrow keys), so phones and desktop pointer use are unaffected.
  */
 
 type Dir = 'up' | 'down' | 'left' | 'right';
@@ -30,6 +34,16 @@ const FOCUSABLE_SELECTOR = [
 
 const FOCUS_CLASS = 'tv-focused';
 
+let tvMode = false;
+/** Elements we've already auto-focused once (so dialogs don't trap focus). */
+const autoFocused = new WeakSet<HTMLElement>();
+
+function enableTvMode() {
+  if (tvMode) return;
+  tvMode = true;
+  document.documentElement.classList.add('tv-mode');
+}
+
 function isElementVisible(el: HTMLElement): boolean {
   const rect = el.getBoundingClientRect();
   if (rect.width <= 1 || rect.height <= 1) return false;
@@ -44,8 +58,17 @@ function isElementVisible(el: HTMLElement): boolean {
   return true;
 }
 
+/** Within an open modal/dialog, only its own focusables should be reachable. */
+function topLayerRoot(): HTMLElement | null {
+  const dialogs = Array.from(
+    document.querySelectorAll<HTMLElement>('[role="dialog"], [data-tv-layer]'),
+  ).filter(isElementVisible);
+  return dialogs.length ? dialogs[dialogs.length - 1] : null;
+}
+
 function getFocusables(): HTMLElement[] {
-  const all = Array.from(document.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+  const scope: ParentNode = topLayerRoot() ?? document;
+  const all = Array.from(scope.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
   return all.filter((el) => {
     // Skip focusables nested inside a card — the card itself is the focus unit.
     const card = el.closest('[data-tv-focusable]');
@@ -76,7 +99,9 @@ function focusElement(el: HTMLElement) {
     el.focus();
   }
   highlight(el);
-  el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+  // INSTANT — no smooth animation. CSS scroll-padding/scroll-margin (see
+  // index.css .tv-mode rules) keeps it clear of the fixed navbar and screen edges.
+  el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }
 
 /** Pick the best element in `dir` from `current` using a directional + alignment score. */
@@ -162,6 +187,20 @@ export function initSpatialNavigation() {
   window.addEventListener('mousedown', clearHighlight, true);
   window.addEventListener('touchstart', clearHighlight, true);
 
+  // When a dialog (modal / sign-in / player) appears, jump focus to its primary
+  // action so "press OK to play / sign in" is a single click. Each element is
+  // auto-focused only once, so the user can freely move away afterwards.
+  const observer = new MutationObserver(() => {
+    if (!tvMode) return;
+    const target = document.querySelector<HTMLElement>('[data-tv-autofocus]');
+    if (target && !autoFocused.has(target) && isElementVisible(target)) {
+      autoFocused.add(target);
+      // Defer so the element is laid out before we scroll to it.
+      requestAnimationFrame(() => focusElement(target));
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+
   window.addEventListener(
     'keydown',
     (e: KeyboardEvent) => {
@@ -169,6 +208,7 @@ export function initSpatialNavigation() {
 
       // Enter / "OK" — activate the focused element.
       if (e.key === 'Enter') {
+        enableTvMode();
         if (active && active !== document.body && !isTypingTarget(active)) {
           const tag = active.tagName.toLowerCase();
           const isNative = tag === 'button' || tag === 'a' || tag === 'select' || tag === 'textarea' || tag === 'input';
@@ -182,6 +222,8 @@ export function initSpatialNavigation() {
 
       const dir = KEY_TO_DIR[e.key];
       if (!dir) return;
+
+      enableTvMode();
 
       // Let arrow keys move the caret while typing in a text field.
       if (isTypingTarget(active)) return;
@@ -207,9 +249,12 @@ export function initSpatialNavigation() {
       if (next) {
         e.preventDefault();
         focusElement(next);
+      } else {
+        // No candidate in that direction. Don't let the page jump-scroll the
+        // focus off-screen — keep the current item put (feels controlled).
+        e.preventDefault();
+        current.scrollIntoView({ block: 'nearest', inline: 'nearest' });
       }
-      // No candidate in that direction → let the browser do its default
-      // (e.g. scroll), so the user is never stuck.
     },
     true,
   );

@@ -279,7 +279,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
 
   return (
     <>
-      <div id="player-modal-container" className="fixed inset-0 z-[100] flex justify-center bg-black/60 backdrop-blur-sm overflow-y-auto scroll-smooth py-[5vh] px-4 custom-scrollbar" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div id="player-modal-container" role="dialog" data-tv-layer className="fixed inset-0 z-[100] flex justify-center bg-black/60 backdrop-blur-sm overflow-y-auto scroll-smooth py-[5vh] px-4 custom-scrollbar" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
         <div className="relative w-full max-w-[900px] bg-zinc-950 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300 ring-1 ring-zinc-800 h-fit">
           <button onClick={onClose} className="absolute top-4 right-4 z-50 w-10 h-10 flex items-center justify-center bg-zinc-950/60 hover:bg-zinc-800 backdrop-blur rounded-full text-white ring-1 ring-white/20 transition-all">
             <X className="w-5 h-5"/>
@@ -380,7 +380,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                     {details.title || details.name}
                   </h1>
                   <div className="flex gap-3 items-center flex-wrap mt-2">
-                    <button onClick={() => { setIsPlaying(true); }} className="px-6 md:px-8 py-2 md:py-3 bg-white text-black font-bold rounded flex items-center gap-2 hover:bg-white/80 transition-colors shadow-lg text-sm md:text-base whitespace-nowrap">
+                    <button data-tv-autofocus onClick={() => { setIsPlaying(true); }} className="px-6 md:px-8 py-2 md:py-3 bg-white text-black font-bold rounded flex items-center gap-2 hover:bg-white/80 transition-colors shadow-lg text-sm md:text-base whitespace-nowrap">
                       <Play className="w-5 h-5 md:w-6 md:h-6 fill-current"/>
                       {currentMediaType === 'tv' ? `Play S${selectedSeason} E${selectedEpisode}` : 'Play'}
                     </button>

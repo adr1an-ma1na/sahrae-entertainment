@@ -168,10 +168,19 @@ export default function SportsView() {
   const matchTitle = (m: FeedEvent) =>
     m.teams?.home?.name && m.teams?.away?.name ? `${m.teams.home.name} vs ${m.teams.away.name}` : m.title;
 
+  // Friendly, distinct name per source server, parsed from its embed URL
+  // (embed.st/embed/{server}/{id}/{streamNo}) so switching to find the right
+  // match is obvious — the free providers occasionally mislabel a feed.
+  const sourceLabel = (embed: string): string => {
+    const m = embed.match(/\/embed\/([^/]+)\/[^/]+\/(\d+)/);
+    if (!m) return 'HD';
+    return `${m[1].charAt(0).toUpperCase()}${m[1].slice(1)} ${m[2]}`;
+  };
+
   const openEvent = (m: FeedEvent) => {
     const ch = channelForSport(m.category);
     const channelSource = { label: `📺 ${ch.name}`, url: ch.url };
-    const embeds = (m.embeds || []).slice(0, 3);
+    const embeds = (m.embeds || []).slice(0, 4);
 
     // Channel plays instantly; we resolve the real match feed on-device and
     // auto-upgrade to it the moment one comes back (token binds to this device).
@@ -183,7 +192,7 @@ export default function SportsView() {
     embeds.forEach((embed) => {
       resolveEmbed(embed).then((m3u8) => {
         done += 1;
-        if (m3u8) found.push({ label: `HD ${found.length + 1}`, url: proxied(m3u8, 'https://embed.st/') });
+        if (m3u8) found.push({ label: sourceLabel(embed), url: proxied(m3u8, 'https://embed.st/') });
         setPlaying((p) => {
           if (!p) return p;
           const sources = [...found, channelSource];
@@ -220,7 +229,7 @@ export default function SportsView() {
     <div className="pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-12 relative">
       {/* Player */}
       {playing && (
-        <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center backdrop-blur-sm p-3 md:p-10">
+        <div role="dialog" data-tv-layer className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center backdrop-blur-sm p-3 md:p-10">
           <div className="w-full max-w-5xl flex flex-col gap-3">
             <div ref={playerRef} className="w-full aspect-video bg-black rounded-lg shadow-2xl overflow-hidden relative border border-white/10">
               <div className="absolute top-0 left-0 right-0 p-3 md:p-4 bg-gradient-to-b from-black/80 to-transparent z-10 flex justify-between items-center">
@@ -252,7 +261,7 @@ export default function SportsView() {
                 ))}
               </div>
             )}
-            <p className="text-[11px] text-zinc-500 flex items-center gap-2"><Radio className="w-3.5 h-3.5" /> If a source doesn't load, try another — the 📺 channel is the always-reliable fallback.</p>
+            <p className="text-[11px] text-zinc-500 flex items-center gap-2"><Radio className="w-3.5 h-3.5" /> Wrong match or won't load? Switch to another source above — the 📺 channel is the always-reliable fallback.</p>
           </div>
         </div>
       )}

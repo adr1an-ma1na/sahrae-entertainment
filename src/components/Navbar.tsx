@@ -79,7 +79,7 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
             SAHRAE <span className="text-white font-light text-xl md:text-2xl tracking-normal hidden sm:inline-block">ENTERTAINMENT</span>
           </h1>
           
-          <div className="hidden md:flex items-center gap-6">
+          <div className="nav-sections hidden md:flex items-center gap-6">
             {tabs.map(tab => (
               <button
                 key={tab.id}
@@ -232,7 +232,7 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
       </div>
       
       {/* Mobile Tabs */}
-      <div className="md:hidden flex overflow-x-auto px-4 pb-3 gap-4 scrollbar-hide bg-zinc-950/95">
+      <div className="nav-sections-mobile md:hidden flex overflow-x-auto px-4 pb-3 gap-4 scrollbar-hide bg-zinc-950/95">
         {tabs.map(tab => (
           <button
             key={tab.id}
