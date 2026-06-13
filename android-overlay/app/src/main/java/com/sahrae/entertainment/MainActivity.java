@@ -1,10 +1,16 @@
 package com.sahrae.entertainment;
 
+import android.annotation.SuppressLint;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.Signature;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Message;
 import android.view.View;
+import android.widget.Toast;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
@@ -29,6 +35,7 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.security.MessageDigest;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -882,9 +889,68 @@ public class MainActivity extends BridgeActivity {
     private boolean inFullscreen = false;
     private WebChromeClient.CustomViewCallback fsCallback;
 
+    // SHA-256 of the official Sahrae release signing certificate. A repackaged
+    // clone must be re-signed with a different key, so its cert won't match.
+    private static final String RELEASE_CERT_SHA256 =
+        "637424623d70da4d6558ccf200d778a322ab716a2d8a5df420571a44d3d3f2fd";
+
+    /**
+     * Anti-tamper: true ONLY when we positively read a signing certificate that
+     * isn't ours. Any failure to read returns false (fail-open) so a quirk on
+     * some device can never brick the genuine, correctly-signed app.
+     */
+    @SuppressWarnings("deprecation")
+    @SuppressLint("PackageManagerGetSignatures")
+    private boolean isTampered() {
+        try {
+            byte[] cert = null;
+            PackageManager pm = getPackageManager();
+            String pkg = getPackageName();
+            if (Build.VERSION.SDK_INT >= 28) {
+                PackageInfo info = pm.getPackageInfo(pkg, PackageManager.GET_SIGNING_CERTIFICATES);
+                if (info.signingInfo != null) {
+                    Signature[] sigs = info.signingInfo.getApkContentsSigners();
+                    if (sigs != null && sigs.length > 0) cert = sigs[0].toByteArray();
+                }
+            } else {
+                PackageInfo info = pm.getPackageInfo(pkg, PackageManager.GET_SIGNATURES);
+                if (info.signatures != null && info.signatures.length > 0) cert = info.signatures[0].toByteArray();
+            }
+            if (cert == null) return false;
+            byte[] dig = MessageDigest.getInstance("SHA-256").digest(cert);
+            StringBuilder sb = new StringBuilder(dig.length * 2);
+            for (byte b : dig) {
+                String h = Integer.toHexString(b & 0xff);
+                if (h.length() == 1) sb.append('0');
+                sb.append(h);
+            }
+            return !sb.toString().equalsIgnoreCase(RELEASE_CERT_SHA256);
+        } catch (Exception e) {
+            return false; // fail open — never block the genuine app on our own error
+        }
+    }
+
+    private void blockTamperedAndExit() {
+        try {
+            Toast.makeText(this, "This copy of Sahrae has been modified and can't run.", Toast.LENGTH_LONG).show();
+        } catch (Exception ignore) {}
+        finishAffinity();
+    }
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // ── Release hardening ──
+        // On a shipped (non-debuggable) build: turn off remote WebView debugging
+        // so no one can attach Chrome DevTools to inspect the running app, and
+        // refuse to run if the APK was repackaged & re-signed with another key
+        // (a tampered clone). Both are skipped on debug builds for development.
+        boolean debuggable = (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+        if (!debuggable) {
+            try { WebView.setWebContentsDebuggingEnabled(false); } catch (Exception ignore) {}
+            if (isTampered()) { blockTamperedAndExit(); return; }
+        }
 
         // Fold the large bundled ad/tracker blocklist in off the UI thread.
         loadBundledBlocklistAsync();

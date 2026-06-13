@@ -20,10 +20,12 @@ import Hls from 'hls.js';
 // Two mirrors of the same file: GitHub raw + the jsDelivr CDN (very reliable,
 // edge-cached). We try both, retry once, and fall back to the last good feed
 // cached on-device — so the events screen should never be left empty.
+// Stored base64-encoded so a casual `strings`/grep of the APK doesn't surface
+// the backing repo; decoded at runtime.
 const FEED_URLS = [
-  'https://raw.githubusercontent.com/adr1an-ma1na/sahrae-sports-feed/main/feed.json',
-  'https://cdn.jsdelivr.net/gh/adr1an-ma1na/sahrae-sports-feed@main/feed.json',
-];
+  'aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL2FkcjFhbi1tYTFuYS9zYWhyYWUtc3BvcnRzLWZlZWQvbWFpbi9mZWVkLmpzb24=',
+  'aHR0cHM6Ly9jZG4uanNkZWxpdnIubmV0L2doL2FkcjFhbi1tYTFuYS9zYWhyYWUtc3BvcnRzLWZlZWRAbWFpbi9mZWVkLmpzb24=',
+].map((s) => atob(s));
 const FEED_CACHE_KEY = 'sahrae.sportsFeed.v1';
 const proxied = (m3u8: string, referer?: string) =>
   `https://localhost/__hlsproxy?u=${encodeURIComponent(m3u8)}${referer ? `&r=${encodeURIComponent(referer)}` : ''}`;

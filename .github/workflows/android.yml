@@ -73,6 +73,15 @@ jobs:
             echo "No android-overlay directory; skipping."
           fi
 
+      - name: Enable R8 shrink + obfuscation (release only)
+        run: |
+          # Capacitor generates `minifyEnabled false` in the release buildType and
+          # already wires in proguard-rules.pro (supplied by our overlay). Flip it on
+          # so the release APK is shrunk + obfuscated. Debug builds are unaffected.
+          sed -i 's/minifyEnabled false/minifyEnabled true/' android/app/build.gradle
+          echo "--- release buildType ---"
+          grep -n -A4 'release {' android/app/build.gradle || true
+
       - name: Install rsvg-convert (SVG → PNG)
         run: sudo apt-get update && sudo apt-get install -y librsvg2-bin
 
