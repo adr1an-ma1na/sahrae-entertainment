@@ -72,20 +72,20 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
     <nav className={`fixed top-0 w-full z-40 transition-all duration-500 pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] ${isScrolled ? 'bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800/50 shadow-sm' : 'bg-zinc-950/50 backdrop-blur-sm'}`}>
       <div className="px-4 md:px-12 py-4 flex items-center justify-between">
         <div className="flex items-center gap-8 md:gap-12">
-          <h1 
-            className="text-2xl md:text-3xl font-black text-amber-500 tracking-tighter cursor-pointer whitespace-nowrap"
+          <h1
+            className="text-2xl md:text-3xl font-black tracking-tighter cursor-pointer whitespace-nowrap"
             onClick={() => setActiveTab('home')}
           >
-            SAHRAE <span className="text-white font-light text-xl md:text-2xl tracking-normal hidden sm:inline-block">ENTERTAINMENT</span>
+            <span className="text-gold drop-shadow-[0_1px_8px_rgba(245,158,11,0.25)]">SAHRAE</span> <span className="text-white font-light text-xl md:text-2xl tracking-normal hidden sm:inline-block">ENTERTAINMENT</span>
           </h1>
-          
+
           <div className="nav-sections hidden md:flex items-center gap-6">
             {tabs.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`text-sm font-medium transition-colors ${
-                  activeTab === tab.id ? 'text-white font-bold' : 'text-zinc-300 hover:text-white'
+                className={`relative text-sm font-medium transition-colors after:content-[''] after:absolute after:-bottom-1.5 after:left-0 after:h-[2px] after:rounded-full after:bg-amber-500 after:transition-all after:duration-300 ${
+                  activeTab === tab.id ? 'text-white after:w-full' : 'text-zinc-300 hover:text-white after:w-0'
                 }`}
               >
                 {tab.label}
@@ -220,9 +220,9 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
               </div>
             </div>
           ) : (
-            <button 
+            <button
               onClick={() => setIsAuthModalOpen(true)}
-              className="flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-amber-950 px-3 py-1.5 rounded-full font-medium transition-colors text-sm"
+              className="btn-gold flex items-center gap-2 px-4 py-1.5 rounded-full font-semibold text-sm"
             >
               <LogIn className="w-4 h-4" />
               <span className="hidden sm:inline">Sign In</span>

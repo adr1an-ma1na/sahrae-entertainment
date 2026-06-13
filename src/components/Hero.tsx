@@ -59,21 +59,21 @@ export default function Hero({ item, onPlay }: HeroProps) {
           <div className="flex flex-wrap items-center gap-4">
             <button
               onClick={() => onPlay(item.id, type, false)}
-              className="flex items-center justify-center gap-2 px-6 md:px-8 py-3 bg-amber-500 text-amber-950 rounded font-bold text-lg hover:bg-amber-400 hover:scale-105 transition-all shadow-[0_0_20px_rgba(245,158,11,0.4)]"
+              className="btn-gold flex items-center justify-center gap-2 px-7 md:px-9 py-3 rounded-xl font-bold text-lg hover:scale-[1.03]"
             >
               <Play className="w-6 h-6 fill-current" />
               Play
             </button>
-            <button 
+            <button
               onClick={() => onPlay(item.id, type, true, true)}
-              className="flex items-center justify-center gap-2 px-6 md:px-8 py-3 bg-zinc-600/80 text-white rounded font-bold text-lg hover:bg-zinc-500/80 transition-colors backdrop-blur-md border border-white/10 shadow-lg"
+              className="flex items-center justify-center gap-2 px-7 md:px-9 py-3 bg-white/10 text-white rounded-xl font-bold text-lg hover:bg-white/15 transition-colors backdrop-blur-md border border-white/15 shadow-lg"
             >
               <Play className="w-6 h-6 fill-current" />
               Trailer
             </button>
             <button 
               onClick={() => onPlay(item.id, type, true)}
-              className="w-12 h-12 flex items-center justify-center bg-zinc-800/60 text-white rounded-full hover:bg-zinc-700/80 hover:scale-105 transition-all backdrop-blur-md border border-white/40 shadow-lg cursor-pointer shrink-0"
+              className="w-12 h-12 flex items-center justify-center bg-white/10 text-white rounded-full hover:bg-white/15 hover:scale-105 transition-all backdrop-blur-md border border-white/15 shadow-lg cursor-pointer shrink-0"
               title="More Info"
             >
               <Info className="w-6 h-6" />

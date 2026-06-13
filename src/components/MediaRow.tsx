@@ -85,7 +85,7 @@ export default function MediaRow({ title, items, onPlay, defaultType = 'movie', 
 
         <div 
           ref={rowRef}
-          className="flex overflow-x-auto gap-4 pb-4 scrollbar-hide snap-x scroll-smooth"
+          className="flex overflow-x-auto gap-4 pt-3 pb-6 scrollbar-hide snap-x scroll-smooth"
         >
           {items.map((item) => {
             const type = item.media_type || defaultType;
@@ -96,30 +96,30 @@ export default function MediaRow({ title, items, onPlay, defaultType = 'movie', 
                 data-tv-focusable
                 role="button"
                 aria-label={item.title || item.name}
-                className="relative flex-none w-[130px] md:w-[160px] lg:w-[200px] aspect-[2/3] rounded-xl overflow-hidden group cursor-pointer snap-start bg-zinc-900 border border-white/5 transition-all duration-300 hover:scale-105 hover:shadow-[0_0_20px_rgba(245,158,11,0.15)] hover:border-white/20 hover:z-10 focus:outline-none"
+                className="card-lift relative flex-none w-[140px] md:w-[168px] lg:w-[200px] xl:w-[220px] aspect-[2/3] rounded-2xl overflow-hidden group cursor-pointer snap-start bg-zinc-900 border border-white/10 hover:z-10 focus:outline-none"
                 onClick={() => onPlay(item.id, type, true)}
               >
                 <img
                   src={getImageUrl(item.poster_path)}
                   alt={item.title || item.name}
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                  className="w-full h-full object-cover transition-transform duration-[600ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-110"
                   loading="lazy"
                 />
 
                 {/* Rating Badge */}
                 {item.vote_average ? (
-                  <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md px-1.5 py-0.5 rounded text-[10px] font-bold text-amber-500 border border-white/10 shadow-lg z-20 flex items-center gap-1 opacity-90 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute top-2 right-2 bg-black/55 backdrop-blur-md px-2 py-0.5 rounded-full text-[10px] font-bold text-amber-400 border border-white/10 shadow-lg z-20 flex items-center gap-1 opacity-90 group-hover:opacity-100 transition-opacity">
                     <Star className="w-2.5 h-2.5 fill-current" />
                     <span>{item.vote_average.toFixed(1)}</span>
                   </div>
                 ) : null}
 
-                <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-3 md:p-4">
-                  <h3 className="text-white font-display font-medium text-xs md:text-sm line-clamp-2 mb-1.5 drop-shadow-md">
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/45 to-transparent opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-3 md:p-4">
+                  <h3 className="text-white font-display font-semibold text-xs md:text-sm line-clamp-2 mb-2 drop-shadow-md">
                     {item.title || item.name}
                   </h3>
                   <div className="flex items-center gap-2">
-                    <button className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-amber-500 text-amber-950 flex items-center justify-center hover:bg-amber-400 hover:scale-110 transition-all shadow-[0_0_10px_rgba(245,158,11,0.5)]">
+                    <button className="btn-gold w-7 h-7 md:w-9 md:h-9 rounded-full flex items-center justify-center hover:scale-110">
                       <Play className="w-3 h-3 md:w-4 md:h-4 fill-current ml-0.5" />
                     </button>
                     <span className="text-[10px] md:text-xs text-zinc-300 font-medium drop-shadow-md">
