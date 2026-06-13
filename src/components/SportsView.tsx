@@ -17,7 +17,14 @@ import Hls from 'hls.js';
  * free HD channel as an instant, always-reliable fallback.
  */
 
-const FEED_URL = 'https://raw.githubusercontent.com/adr1an-ma1na/sahrae-sports-feed/main/feed.json';
+// Two mirrors of the same file: GitHub raw + the jsDelivr CDN (very reliable,
+// edge-cached). We try both, retry once, and fall back to the last good feed
+// cached on-device — so the events screen should never be left empty.
+const FEED_URLS = [
+  'https://raw.githubusercontent.com/adr1an-ma1na/sahrae-sports-feed/main/feed.json',
+  'https://cdn.jsdelivr.net/gh/adr1an-ma1na/sahrae-sports-feed@main/feed.json',
+];
+const FEED_CACHE_KEY = 'sahrae.sportsFeed.v1';
 const proxied = (m3u8: string, referer?: string) =>
   `https://localhost/__hlsproxy?u=${encodeURIComponent(m3u8)}${referer ? `&r=${encodeURIComponent(referer)}` : ''}`;
 
@@ -189,18 +196,45 @@ export default function SportsView() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(false);
-    const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 14000);
-    try {
-      const res = await fetch(`${FEED_URL}?t=${Date.now()}`, { cache: 'no-store', signal: ctrl.signal });
-      if (!res.ok) throw new Error('feed');
-      setFeed(await res.json());
-    } catch {
-      setError(true);
-    } finally {
-      clearTimeout(to);
-      setLoading(false);
+
+    const tryFetch = async (): Promise<Feed | null> => {
+      for (const url of FEED_URLS) {
+        try {
+          const ctrl = new AbortController();
+          const to = setTimeout(() => ctrl.abort(), 11000);
+          const res = await fetch(`${url}?t=${Date.now()}`, { cache: 'no-store', signal: ctrl.signal });
+          clearTimeout(to);
+          if (res.ok) {
+            const data = (await res.json()) as Feed;
+            if (data && Array.isArray(data.events)) return data;
+          }
+        } catch {
+          /* try the next mirror */
+        }
+      }
+      return null;
+    };
+
+    let data = await tryFetch();
+    if (!data) {
+      await new Promise((r) => setTimeout(r, 1500));
+      data = await tryFetch();
     }
+
+    if (data) {
+      try { localStorage.setItem(FEED_CACHE_KEY, JSON.stringify(data)); } catch { /* ignore */ }
+      setFeed(data);
+    } else {
+      // Never strand the user on an error if we've ever loaded a feed before.
+      let cached: Feed | null = null;
+      try {
+        const s = localStorage.getItem(FEED_CACHE_KEY);
+        cached = s ? (JSON.parse(s) as Feed) : null;
+      } catch { /* ignore */ }
+      if (cached) setFeed(cached);
+      else setError(true);
+    }
+    setLoading(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -281,22 +315,31 @@ export default function SportsView() {
   }, []);
 
   const events = feed?.events || [];
+  // Only show what's live, in progress, or still to come — drop events that are
+  // clearly finished (not live and started more than ~3.5h ago).
+  const activeEvents = useMemo(() => {
+    const now = Date.now();
+    const MAX_AGE = 3.5 * 60 * 60 * 1000;
+    return events.filter((m) => m.live || !m.date || now - m.date <= MAX_AGE);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feed]);
+
   const sportsPresent: string[] = useMemo(() => {
     const order = ['football', 'basketball', 'fight', 'motor-sports', 'tennis', 'cricket', 'american-football', 'baseball', 'hockey', 'golf', 'rugby'];
-    const arr = Array.from(new Set<string>(events.map((m) => m.category)));
+    const arr = Array.from(new Set<string>(activeEvents.map((m) => m.category)));
     arr.sort((a, b) => (order.indexOf(a) < 0 ? 99 : order.indexOf(a)) - (order.indexOf(b) < 0 ? 99 : order.indexOf(b)));
     return arr;
-  }, [events]);
+  }, [activeEvents]);
   const filters = ['all', 'live', ...sportsPresent];
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return events
+    return activeEvents
       .filter((m) => (sport === 'live' ? m.live : sport === 'all' ? true : m.category === sport))
       .filter((m) => !q || matchTitle(m).toLowerCase().includes(q))
       .sort((a, b) => (b.live ? 1 : 0) - (a.live ? 1 : 0) || ((b.embeds?.length || 0) ? 1 : 0) - ((a.embeds?.length || 0) ? 1 : 0) || a.date - b.date);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [events, sport, search]);
+  }, [activeEvents, sport, search]);
 
   const activeUrl = playing ? playing.sources[playing.idx]?.url : undefined;
 
