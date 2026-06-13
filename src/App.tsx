@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { AnimatePresence } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
 import SplashScreen from './components/SplashScreen';
@@ -26,6 +26,7 @@ import { useMyList } from './hooks/useMyList';
 import { useWatchProgress } from './hooks/useWatchProgress';
 import { useTheme } from './hooks/useTheme';
 import { useAuth } from './hooks/useAuth';
+import { haptics } from './services/haptics';
 
 export default function App() {
   const { user, activeProfile, loading: authLoading } = useAuth();
@@ -318,6 +319,7 @@ export default function App() {
   });
 
   const handlePlay = (id: number, type: 'movie' | 'tv', startInInfo: boolean = true, playTrailer: boolean = false, season?: number, episode?: number) => {
+    haptics.press();
     setPlayerConfig({ isOpen: true, mediaId: id, mediaType: type, startInInfo, initialSeason: season, initialEpisode: episode, playTrailer });
   };
 
@@ -479,19 +481,36 @@ export default function App() {
     }
 
     return (
-      <div className="min-h-screen bg-zinc-950 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-zinc-900/20 via-zinc-950 to-zinc-950 text-zinc-50 font-sans selection:bg-amber-500/30 transition-colors duration-300">
-        <Navbar 
-          activeTab={activeTab} 
+      <div className="aurora-bg isolate min-h-screen text-zinc-50 font-sans selection:bg-amber-500/30 transition-colors duration-300">
+        {/* Ambient cinematic glow field — viewport-fixed, above the base canvas
+            but behind all content (root is `isolate` so -z stays contained). */}
+        <div className="aurora-glow pointer-events-none fixed inset-0 -z-10" aria-hidden="true" />
+        <Navbar
+          activeTab={activeTab}
           setActiveTab={(tab) => {
+            haptics.tap();
             setActiveTab(tab);
             if (tab !== 'search') setSearchQuery('');
-          }} 
-          onSearch={handleSearch} 
+          }}
+          onSearch={handleSearch}
           onPlay={handlePlay}
         />
-        
+
         <main>
-          {renderContent()}
+          {/* Cinematic crossfade between sections. Opacity-only on purpose:
+              a transform here would re-anchor fixed overlays (e.g. the Sports
+              fullscreen player) to this wrapper instead of the viewport. */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+            >
+              {renderContent()}
+            </motion.div>
+          </AnimatePresence>
         </main>
 
         <PlayerModal 

@@ -240,6 +240,16 @@
 
   /* Slow cinematic Ken-Burns drift for hero artwork */
   .kenburns { animation: sahrae-kenburns 22s ease-in-out infinite alternate; transform-origin: 50% 40%; }
+
+  /* App canvas: deep cinematic base (theme-aware) + a viewport-fixed glow field. */
+  .aurora-bg { background-color: var(--zinc-950); }
+  .aurora-glow {
+    background-image:
+      radial-gradient(55% 70% at 12% -8%, rgba(245,158,11,0.12), transparent 60%),
+      radial-gradient(50% 65% at 95% 4%, rgba(124,45,18,0.14), transparent 60%),
+      radial-gradient(75% 55% at 50% 112%, rgba(245,158,11,0.06), transparent 70%);
+    animation: aurora-breathe 24s ease-in-out infinite alternate;
+  }
 }
 
 @keyframes sahrae-shimmer { 100% { transform: translateX(100%); } }
@@ -247,11 +257,13 @@
   from { transform: scale(1.04) translate(0, 0); }
   to   { transform: scale(1.14) translate(0, -2%); }
 }
+@keyframes aurora-breathe { from { opacity: 0.72; } to { opacity: 1; } }
 
 /* Respect reduced-motion: stop ambient animation, keep content readable */
 @media (prefers-reduced-motion: reduce) {
   .kenburns { animation: none; }
   .skeleton::after { animation: none; }
+  .aurora-glow { animation: none; }
 }
 
 /* ─────────────────────────────────────────────────────────────
