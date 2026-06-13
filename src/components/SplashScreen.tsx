@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { motion } from 'motion/react';
+import { ShaderAnimation } from '@/components/ui/shader-animation';
 
 interface SplashScreenProps {
   onComplete: () => void;
@@ -22,6 +23,20 @@ export default function SplashScreen({ onComplete }: SplashScreenProps) {
       exit={{ opacity: 0, scale: 1.08, filter: 'blur(8px)', pointerEvents: 'none' }}
       transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
     >
+      {/* Premium golden shader filaments, masked to a soft vignette and faded in */}
+      <motion.div
+        className="absolute inset-0 -z-20"
+        style={{
+          WebkitMaskImage: 'radial-gradient(ellipse at 50% 50%, black 30%, transparent 78%)',
+          maskImage: 'radial-gradient(ellipse at 50% 50%, black 30%, transparent 78%)',
+        }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 0.7 }}
+        transition={{ duration: 1.4, ease: 'easeOut' }}
+      >
+        <ShaderAnimation className="h-full w-full" />
+      </motion.div>
+
       {/* Ambient sunset glow that blooms then settles */}
       <motion.div
         className="absolute inset-0 -z-10"

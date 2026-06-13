@@ -1,6 +1,7 @@
 import { useState, FormEvent } from 'react';
 import { Plus, Edit2, Check } from 'lucide-react';
 import { useAuth, Profile } from '../hooks/useAuth';
+import { ShaderAnimation } from '@/components/ui/shader-animation';
 
 const AVATARS = [
   'https://api.dicebear.com/8.x/micah/svg?seed=Picasso&backgroundColor=ffdfbf',
@@ -143,7 +144,17 @@ export default function ProfileSelection() {
   }
 
   return (
-    <div className="fixed inset-0 z-[200] bg-zinc-950 flex flex-col items-center justify-center p-4 animate-in fade-in duration-300">
+    <div className="fixed inset-0 z-[200] isolate bg-zinc-950 flex flex-col items-center justify-center p-4 animate-in fade-in duration-300">
+      {/* Premium golden shader ambience behind the profiles */}
+      <div
+        className="absolute inset-0 -z-10 opacity-50 pointer-events-none"
+        style={{
+          WebkitMaskImage: 'radial-gradient(ellipse at 50% 45%, black 25%, transparent 75%)',
+          maskImage: 'radial-gradient(ellipse at 50% 45%, black 25%, transparent 75%)',
+        }}
+      >
+        <ShaderAnimation className="h-full w-full" />
+      </div>
       <h1 className="text-4xl md:text-5xl font-bold text-white mb-12 text-center">Who's watching?</h1>
       
       <div className="flex flex-wrap justify-center gap-6 md:gap-10 max-w-4xl">
