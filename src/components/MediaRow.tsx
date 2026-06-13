@@ -54,12 +54,15 @@ export default function MediaRow({ title, items, onPlay, defaultType = 'movie', 
   if (isLoading) {
     return (
       <div className="px-4 md:px-12 py-6 relative">
-        <h2 className="text-2xl font-bold text-white mb-4">{title}</h2>
+        <div className="flex items-center gap-3 mb-4">
+          <span className="w-1 h-5 md:h-6 rounded-full bg-gradient-to-b from-amber-300 to-amber-600" />
+          <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">{title}</h2>
+        </div>
         <div className="flex overflow-x-hidden gap-4 pb-4">
           {[...Array(6)].map((_, i) => (
-            <div 
-              key={i} 
-              className="relative flex-none w-[160px] md:w-[200px] lg:w-[240px] aspect-[2/3] rounded-xl bg-zinc-800 animate-pulse"
+            <div
+              key={i}
+              className="skeleton flex-none w-[140px] md:w-[168px] lg:w-[200px] xl:w-[220px] aspect-[2/3] rounded-2xl border border-white/5"
             />
           ))}
         </div>
@@ -71,7 +74,10 @@ export default function MediaRow({ title, items, onPlay, defaultType = 'movie', 
 
   return (
     <div className="px-4 md:px-12 py-6 relative group/row">
-      <h2 className="text-xl md:text-2xl font-display font-bold text-white mb-4 tracking-tight">{title}</h2>
+      <div className="flex items-center gap-3 mb-4">
+        <span className="w-1 h-5 md:h-6 rounded-full bg-gradient-to-b from-amber-300 to-amber-600" />
+        <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">{title}</h2>
+      </div>
       
       <div className="relative">
         {isScrolled && (

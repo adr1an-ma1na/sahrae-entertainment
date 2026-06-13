@@ -19,43 +19,52 @@ export default function Hero({ item, onPlay }: HeroProps) {
         <img
           src={getImageUrl(item.backdrop_path, 'original')}
           alt={title}
-          className="w-full h-full object-cover"
+          className="w-full h-full object-cover kenburns"
         />
-        
+
         {/* Dynamic Glow from Poster mapping (top color cast) */}
         <div className="absolute top-0 left-0 right-0 h-[80%] opacity-50 blur-[120px] mix-blend-screen z-10 pointer-events-none animate-pulse duration-[8000ms]">
           <img src={getImageUrl(item.poster_path, 'w500')} className="w-full h-full object-cover opacity-60" alt="" />
         </div>
 
-        {/* Gradient Overlays */}
-        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-zinc-950/80 to-zinc-950 z-10 hidden md:block opacity-50"></div>
-        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/80 to-transparent z-10"></div>
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent via-zinc-950/20 to-zinc-950 z-10 mix-blend-multiply"></div>
+        {/* Cinematic gradient scrims — side + deep bottom letterbox */}
+        <div className="absolute inset-0 bg-gradient-to-r from-black/10 via-black/70 to-black z-10 hidden md:block opacity-70"></div>
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/75 to-transparent z-10"></div>
+        <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black to-transparent z-10"></div>
       </div>
 
       {/* Content */}
-      <div className="absolute bottom-0 left-0 w-full px-4 md:px-12 pb-32 pt-32 z-20">
+      <div className="absolute bottom-0 left-0 w-full px-4 md:px-12 pb-24 md:pb-32 pt-32 z-20">
         <div className="max-w-2xl">
-          <div className="flex items-center gap-4 mb-4">
-            <span className="px-2 py-1 bg-amber-500 text-amber-950 text-xs font-bold uppercase tracking-wider rounded shadow-[0_0_10px_rgba(245,158,11,0.3)]">
-              {type === 'movie' ? 'Movie' : 'Series'}
-            </span>
-            {item.vote_average ? (
-              <div className="flex items-center gap-1 text-amber-500 font-semibold drop-shadow-md">
-                <Star className="w-4 h-4 fill-current" />
-                <span>{item.vote_average.toFixed(1)}</span>
-              </div>
-            ) : null}
+          <div className="overline mb-3 flex items-center gap-2.5">
+            <span className="inline-block w-7 h-px bg-amber-400/70" />
+            Featured {type === 'movie' ? 'Film' : 'Series'}
           </div>
-          
-          <h1 className="text-4xl md:text-5xl lg:text-7xl font-display font-bold text-white mb-4 leading-tight drop-shadow-2xl tracking-tight">
+
+          <h1 className="font-display font-extrabold text-white mb-4 leading-[1.03] drop-shadow-2xl tracking-tight text-4xl md:text-6xl lg:text-7xl">
             {title}
           </h1>
-          
-          <p className="text-zinc-300 text-lg md:text-xl mb-8 line-clamp-3 max-w-xl drop-shadow-lg font-medium">
+
+          <div className="flex items-center flex-wrap gap-2.5 mb-5">
+            {item.vote_average ? (
+              <span className="chip inline-flex items-center gap-1.5 px-2.5 py-1 text-amber-400 text-sm font-semibold tabular">
+                <Star className="w-3.5 h-3.5 fill-current" /> {item.vote_average.toFixed(1)}
+              </span>
+            ) : null}
+            {(item.release_date || item.first_air_date) && (
+              <span className="chip px-2.5 py-1 text-zinc-200 text-sm font-medium tabular">
+                {(item.release_date || item.first_air_date || '').slice(0, 4)}
+              </span>
+            )}
+            <span className="chip px-2.5 py-1 text-zinc-200 text-sm font-medium uppercase tracking-wide">
+              {type === 'movie' ? 'Movie' : 'Series'}
+            </span>
+          </div>
+
+          <p className="text-zinc-300 text-base md:text-xl mb-8 line-clamp-3 max-w-xl drop-shadow-lg leading-relaxed">
             {item.overview}
           </p>
-          
+
           <div className="flex flex-wrap items-center gap-4">
             <button
               onClick={() => onPlay(item.id, type, false)}

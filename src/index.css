@@ -76,9 +76,36 @@
 
 @layer base {
   :root {
-    /* Premium easing + radii used across the app */
+    /* ── Sahrae "Cinematic Luxury" design tokens (dark-first) ── */
     --ease-premium: cubic-bezier(0.16, 1, 0.3, 1);
     --radius-card: 1rem;
+
+    /* Surfaces */
+    --ink: #050506;
+    --surface-1: #121214;
+    --surface-2: #17171a;
+    --surface-3: #1f1f23;
+    --hairline: rgba(255, 255, 255, 0.08);
+    --hairline-2: rgba(255, 255, 255, 0.12);
+    --scrim: rgba(0, 0, 0, 0.62);
+
+    /* Gold ramp — bright gold for text/icons on dark; deep gold fills carry dark text */
+    --gold-100: #fbe7b6;
+    --gold-300: #f5c97a;
+    --gold-400: #fbbf24; /* gold text/icon on dark */
+    --gold-500: #f59e0b; /* decorative / button fill */
+    --on-gold: #2a1d02;
+
+    /* Text on dark */
+    --text-1: rgba(255, 255, 255, 0.96);
+    --text-2: rgba(255, 255, 255, 0.64);
+    --text-3: rgba(255, 255, 255, 0.40);
+
+    /* Elevation */
+    --e1: 0 1px 2px rgba(0,0,0,.40), 0 8px 24px rgba(0,0,0,.28);
+    --e2: 0 10px 30px rgba(0,0,0,.50), 0 30px 70px rgba(0,0,0,.42);
+    --glow-gold: 0 0 0 1px rgba(245,158,11,.40), 0 14px 44px rgba(245,158,11,.16);
+    --edge-top: inset 0 1px 0 rgba(255,255,255,.06);
   }
 
   body {
@@ -153,6 +180,78 @@
     border-color: rgba(245,158,11,.45);
     box-shadow: 0 18px 44px rgba(0,0,0,.55), 0 0 30px rgba(245,158,11,.16);
   }
+
+  /* Frosted glass — nav, sheets, chips. Blur signals layering/dismissal. */
+  .glass {
+    background: rgba(10, 10, 12, 0.66);
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid var(--hairline);
+  }
+
+  /* Secondary button — quiet glass with a hairline */
+  .btn-glass {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--hairline-2);
+    color: #fff;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    transition: background .2s var(--ease-premium), transform .2s var(--ease-premium);
+  }
+  .btn-glass:hover { background: rgba(255, 255, 255, 0.14); transform: translateY(-1px); }
+  .btn-glass:active { transform: translateY(0); }
+
+  /* Editorial overline / kicker — small, tracked, gold */
+  .overline {
+    font-family: "Outfit", ui-sans-serif, system-ui, sans-serif;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--gold-400);
+  }
+
+  /* Frosted metadata pill */
+  .chip {
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid var(--hairline);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-radius: 9999px;
+  }
+
+  /* Tabular figures for times / ratings / counts (no width jitter) */
+  .tabular { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+  /* Premium loading shimmer (use instead of spinners / flat pulse) */
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background: var(--surface-2);
+  }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06) 40%, rgba(255,255,255,0.10) 50%, rgba(255,255,255,0.06) 60%, transparent);
+    animation: sahrae-shimmer 1.6s var(--ease-premium) infinite;
+  }
+
+  /* Slow cinematic Ken-Burns drift for hero artwork */
+  .kenburns { animation: sahrae-kenburns 22s ease-in-out infinite alternate; transform-origin: 50% 40%; }
+}
+
+@keyframes sahrae-shimmer { 100% { transform: translateX(100%); } }
+@keyframes sahrae-kenburns {
+  from { transform: scale(1.04) translate(0, 0); }
+  to   { transform: scale(1.14) translate(0, -2%); }
+}
+
+/* Respect reduced-motion: stop ambient animation, keep content readable */
+@media (prefers-reduced-motion: reduce) {
+  .kenburns { animation: none; }
+  .skeleton::after { animation: none; }
 }
 
 /* ─────────────────────────────────────────────────────────────

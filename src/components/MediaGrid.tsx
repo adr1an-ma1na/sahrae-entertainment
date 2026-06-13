@@ -26,7 +26,10 @@ export default function MediaGrid({ title, items, onPlay, defaultType = 'movie',
 
   return (
     <div className="pt-32 px-4 md:px-12 pb-12">
-      <h2 className="text-xl md:text-2xl font-display font-bold text-white mb-6 tracking-tight">{title}</h2>
+      <div className="flex items-center gap-3 mb-6">
+        <span className="w-1 h-6 rounded-full bg-gradient-to-b from-amber-300 to-amber-600" />
+        <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">{title}</h2>
+      </div>
       
       {genres && genres.length > 0 && onGenreSelect && (
         <div className="flex overflow-x-auto gap-2 pb-6 scrollbar-hide">
