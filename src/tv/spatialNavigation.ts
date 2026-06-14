@@ -44,18 +44,15 @@ function enableTvMode() {
   document.documentElement.classList.add('tv-mode');
 }
 
+// Fast visibility test. `checkVisibility()` (Chromium / Android WebView) covers
+// display:none, visibility:hidden and content-visibility cheaply in native code;
+// the rect check covers size. NO per-element getComputedStyle ancestor walk —
+// that was the source of the remote lag with hundreds of focusables on screen.
 function isElementVisible(el: HTMLElement): boolean {
+  const cv = (el as unknown as { checkVisibility?: () => boolean }).checkVisibility;
+  if (typeof cv === 'function' && !cv.call(el)) return false;
   const rect = el.getBoundingClientRect();
-  if (rect.width <= 1 || rect.height <= 1) return false;
-  let node: HTMLElement | null = el;
-  while (node) {
-    const s = window.getComputedStyle(node);
-    if (s.display === 'none' || s.visibility === 'hidden' || parseFloat(s.opacity || '1') === 0) {
-      return false;
-    }
-    node = node.parentElement;
-  }
-  return true;
+  return rect.width > 1 && rect.height > 1;
 }
 
 /** Within an open modal/dialog, only its own focusables should be reachable. */
@@ -66,15 +63,40 @@ function topLayerRoot(): HTMLElement | null {
   return dialogs.length ? dialogs[dialogs.length - 1] : null;
 }
 
+// The set of focusables only changes when the DOM does, so we cache it and
+// rebuild only on mutation / scope change / resize. Each keypress then just
+// reads geometry (cheap), instead of re-querying + re-filtering the whole tree.
+let cacheDirty = true;
+let cachedScope: ParentNode | null = null;
+let cachedFocusables: HTMLElement[] = [];
+function invalidateFocusCache() { cacheDirty = true; }
+
 function getFocusables(): HTMLElement[] {
   const scope: ParentNode = topLayerRoot() ?? document;
-  const all = Array.from(scope.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
-  return all.filter((el) => {
-    // Skip focusables nested inside a card — the card itself is the focus unit.
-    const card = el.closest('[data-tv-focusable]');
-    if (card && card !== el) return false;
-    return isElementVisible(el);
-  });
+  if (cacheDirty || scope !== cachedScope) {
+    cachedScope = scope;
+    const all = Array.from(scope.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+    cachedFocusables = all.filter((el) => {
+      // Skip focusables nested inside a card — the card itself is the focus unit.
+      const card = el.closest('[data-tv-focusable]');
+      if (card && card !== el) return false;
+      return isElementVisible(el);
+    });
+    cacheDirty = false;
+  }
+  return cachedFocusables;
+}
+
+/** Close the top-most open layer (modal/sheet/player) via its close control. */
+function closeTopLayer(): boolean {
+  const layers = Array.from(document.querySelectorAll<HTMLElement>('[data-tv-layer]')).filter(isElementVisible);
+  const top = layers[layers.length - 1];
+  if (!top) return false;
+  const closer =
+    top.querySelector<HTMLElement>('[data-tv-close]') ||
+    top.querySelector<HTMLElement>('button[aria-label*="lose" i], button[aria-label*="inimize" i], button[aria-label*="ack" i]');
+  if (closer) { closer.click(); return true; }
+  return false;
 }
 
 function isTypingTarget(el: Element | null): boolean {
@@ -191,6 +213,7 @@ export function initSpatialNavigation() {
   // action so "press OK to play / sign in" is a single click. Each element is
   // auto-focused only once, so the user can freely move away afterwards.
   const observer = new MutationObserver(() => {
+    invalidateFocusCache();
     if (!tvMode) return;
     const target = document.querySelector<HTMLElement>('[data-tv-autofocus]');
     if (target && !autoFocused.has(target) && isElementVisible(target)) {
@@ -200,11 +223,22 @@ export function initSpatialNavigation() {
     }
   });
   observer.observe(document.body, { childList: true, subtree: true });
+  window.addEventListener('resize', invalidateFocusCache);
+
+  // Expose a Back handler for the native Android Back button (MainActivity calls
+  // this; if it returns false, the app does its default Back/exit).
+  (window as unknown as { __sahraeBack?: () => boolean }).__sahraeBack = closeTopLayer;
 
   window.addEventListener(
     'keydown',
     (e: KeyboardEvent) => {
       const active = document.activeElement as HTMLElement | null;
+
+      // Escape / Back — close the top-most open layer (player, sheet, modal).
+      if (e.key === 'Escape') {
+        if (closeTopLayer()) e.preventDefault();
+        return;
+      }
 
       // Enter / "OK" — activate the focused element.
       if (e.key === 'Enter') {

@@ -1,5 +1,7 @@
-import { Play, Pause, SkipForward, SkipBack, ChevronDown, Heart, Shuffle, Repeat, Repeat1, Music2, Plus, X } from 'lucide-react';
+import { useState, Fragment } from 'react';
+import { Play, Pause, SkipForward, SkipBack, ChevronDown, Heart, Shuffle, Repeat, Repeat1, Music2, Plus, X, ListMusic } from 'lucide-react';
 import { useMusic } from '../hooks/useMusic';
+import { Track } from '../services/ytmusic';
 
 const fmt = (s: number) => {
   if (!s || !isFinite(s)) return '0:00';
@@ -8,14 +10,29 @@ const fmt = (s: number) => {
   return `${m}:${r < 10 ? '0' : ''}${r}`;
 };
 
+function QueueRow({ track, activeRow, onPlay, onRemove }: { track: Track; activeRow?: boolean; onPlay?: () => void; onRemove?: () => void }) {
+  return (
+    <div tabIndex={onPlay ? 0 : undefined} data-tv-focusable={onPlay ? true : undefined} role={onPlay ? 'button' : undefined} onClick={onPlay}
+      className={`flex items-center gap-3 p-2 rounded-xl ${onPlay ? 'cursor-pointer hover:bg-white/5 focus:outline-none focus:bg-white/5' : ''}`}>
+      <div className="w-11 h-11 rounded-lg overflow-hidden bg-zinc-800 shrink-0 relative">{track.artwork ? <img src={track.artwork} className="w-full h-full object-cover" alt="" loading="lazy" /> : <Music2 className="w-5 h-5 text-zinc-600 absolute inset-0 m-auto" />}</div>
+      <div className="min-w-0 flex-1"><p className={`text-sm font-semibold truncate ${activeRow ? 'text-amber-400' : 'text-white'}`}>{track.title}</p><p className="text-xs text-zinc-500 truncate">{track.artist}</p></div>
+      {onRemove && <button onClick={(e) => { e.stopPropagation(); onRemove(); }} className="p-2 text-zinc-500 hover:text-red-400 shrink-0" aria-label="Remove from queue"><X className="w-4 h-4" /></button>}
+    </div>
+  );
+}
+
 export default function MusicPlayer() {
   const {
     current, isPlaying, position, duration, shuffle, repeat, expanded, active,
+    queue, index, recentlyPlayed, queueSource, jumpTo, removeFromQueue, playQueue,
     toggle, stop, next, prev, seek, toggleShuffle, cycleRepeat, toggleLike, isLiked, setExpanded, openAddSheet,
   } = useMusic();
+  const [showQueue, setShowQueue] = useState(false);
+  const [qTab, setQTab] = useState<'next' | 'recent'>('next');
 
   if (!current || !active) return null;
   const pct = duration ? Math.min(100, (position / duration) * 100) : 0;
+  const upNext = queue.slice(index + 1);
 
   return (
     <>
@@ -41,6 +58,9 @@ export default function MusicPlayer() {
               </div>
               <span className="overline">Now Playing</span>
               <div className="flex items-center gap-2">
+                <button onClick={() => { setQTab('next'); setShowQueue(true); }} tabIndex={0} data-tv-focusable className="w-11 h-11 rounded-full glass flex items-center justify-center text-white" aria-label="Queue">
+                  <ListMusic className="w-5 h-5" />
+                </button>
                 <button onClick={() => openAddSheet(current)} tabIndex={0} data-tv-focusable className="w-11 h-11 rounded-full glass flex items-center justify-center text-white" aria-label="Add to playlist">
                   <Plus className="w-5 h-5" />
                 </button>
@@ -100,6 +120,38 @@ export default function MusicPlayer() {
                 {repeat === 'one' ? <Repeat1 className="w-5 h-5" /> : <Repeat className="w-5 h-5" />}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Queue / Recently played ── */}
+      {showQueue && (
+        <div role="dialog" data-tv-layer className="fixed inset-0 z-[125] bg-zinc-950 flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="flex items-center gap-3 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 border-b border-white/10">
+            <button onClick={() => setShowQueue(false)} data-tv-close tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full glass flex items-center justify-center text-white" aria-label="Back"><ChevronDown className="w-6 h-6" /></button>
+            <div className="flex gap-5">
+              {(['next', 'recent'] as const).map((t) => (
+                <button key={t} onClick={() => setQTab(t)} tabIndex={0} data-tv-focusable className={`text-sm font-bold pb-1.5 border-b-2 transition-colors ${qTab === t ? 'text-white border-amber-500' : 'text-zinc-500 border-transparent hover:text-zinc-300'}`}>{t === 'next' ? 'Queue' : 'Recently played'}</button>
+              ))}
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto custom-scrollbar px-3 py-4 pb-32 max-w-2xl mx-auto w-full">
+            {qTab === 'next' ? (
+              <>
+                <p className="overline mb-2 px-1">Now playing</p>
+                <QueueRow track={current} activeRow />
+                <p className="overline mt-6 mb-2 px-1">{queueSource ? `Next from: ${queueSource}` : 'Next up'}</p>
+                {upNext.length === 0 ? (
+                  <p className="text-zinc-500 text-sm px-1">Autoplay keeps it going with related songs.</p>
+                ) : (
+                  upNext.map((t, i) => <Fragment key={`${t.id}-${i}`}><QueueRow track={t} onPlay={() => jumpTo(index + 1 + i)} onRemove={() => removeFromQueue(index + 1 + i)} /></Fragment>)
+                )}
+              </>
+            ) : recentlyPlayed.length === 0 ? (
+              <p className="text-zinc-500 text-sm px-1">Nothing played yet.</p>
+            ) : (
+              recentlyPlayed.map((t, i) => <Fragment key={`r-${t.id}-${i}`}><QueueRow track={t} onPlay={() => playQueue(recentlyPlayed, i, 'Recently played')} /></Fragment>)
+            )}
           </div>
         </div>
       )}

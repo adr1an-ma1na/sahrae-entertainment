@@ -266,14 +266,14 @@ export default function MusicView() {
               {mix.length > 0 && (
                 <section className="mb-10">
                   <SectionHead icon={<Sparkles className="w-5 h-5 text-amber-400" />}>Your Mix · made from your listening</SectionHead>
-                  <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{mix.map((t, i) => <Fragment key={t.id}><TrackCard track={t} onPlay={() => playQueue(mix, i)} /></Fragment>)}</div>
+                  <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{mix.map((t, i) => <Fragment key={t.id}><TrackCard track={t} onPlay={() => playQueue(mix, i, 'Your Mix')} /></Fragment>)}</div>
                 </section>
               )}
 
               {sections.map((sec) => (
                 <section key={sec.title} className="mb-10">
                   <SectionHead>{sec.title}</SectionHead>
-                  <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{sec.tracks.map((t, i) => <Fragment key={t.id}><TrackCard track={t} onPlay={() => playQueue(sec.tracks, i)} /></Fragment>)}</div>
+                  <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{sec.tracks.map((t, i) => <Fragment key={t.id}><TrackCard track={t} onPlay={() => playQueue(sec.tracks, i, sec.title)} /></Fragment>)}</div>
                 </section>
               ))}
               {loadingHome && sections.length === 0 && <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3 text-zinc-400"><Loader2 className="w-9 h-9 animate-spin text-amber-500" /><span>Loading Sahrae Sound…</span></div>}

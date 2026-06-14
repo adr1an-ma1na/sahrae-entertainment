@@ -67,8 +67,9 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   return (
     <div role="dialog" data-tv-layer className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
       <div className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-md shadow-2xl relative animate-in fade-in zoom-in-95 duration-200 my-auto max-h-[92vh] overflow-y-auto">
-        <button 
+        <button
           onClick={onClose}
+          data-tv-close
           className="absolute top-4 right-4 text-zinc-400 hover:text-white transition-colors"
         >
           <X className="w-6 h-6" />

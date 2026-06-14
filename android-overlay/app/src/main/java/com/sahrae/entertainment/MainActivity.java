@@ -1195,6 +1195,21 @@ public class MainActivity extends BridgeActivity {
             }
             return;
         }
+        // Ask the web layer to close any open modal/sheet/player first; only if
+        // nothing was open do we perform the default Back (navigate / exit).
+        WebView wv = (this.bridge != null) ? this.bridge.getWebView() : null;
+        if (wv != null) {
+            try {
+                wv.evaluateJavascript(
+                    "(function(){try{return (window.__sahraeBack&&window.__sahraeBack())?1:0;}catch(e){return 0;}})();",
+                    value -> {
+                        if (value == null || value.indexOf('1') < 0) {
+                            try { MainActivity.super.onBackPressed(); } catch (Exception ignore) {}
+                        }
+                    });
+                return;
+            } catch (Exception ignore) {}
+        }
         super.onBackPressed();
     }
 }

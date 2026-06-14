@@ -343,6 +343,67 @@ export default function SportsView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeEvents, sport, search]);
 
+  // Organised into shelves: Live Now first, then grouped by sport.
+  const eventGroups = useMemo(() => {
+    const order = ['football', 'basketball', 'fight', 'motor-sports', 'tennis', 'cricket', 'american-football', 'baseball', 'hockey', 'golf', 'rugby'];
+    const live = visible.filter((m) => m.live);
+    const groups: { title: string; live?: boolean; events: FeedEvent[] }[] = [];
+    if (sport === 'all') {
+      if (live.length) groups.push({ title: 'Live Now', live: true, events: live });
+      const byCat = new Map<string, FeedEvent[]>();
+      for (const m of visible) {
+        if (m.live) continue;
+        if (!byCat.has(m.category)) byCat.set(m.category, []);
+        byCat.get(m.category)!.push(m);
+      }
+      const cats = Array.from(byCat.keys()).sort((a, b) => (order.indexOf(a) < 0 ? 99 : order.indexOf(a)) - (order.indexOf(b) < 0 ? 99 : order.indexOf(b)));
+      for (const c of cats) groups.push({ title: SPORT_LABELS[c] || c, events: byCat.get(c)! });
+    } else if (sport === 'live') {
+      groups.push({ title: 'Live Now', live: true, events: visible });
+    } else {
+      if (live.length) groups.push({ title: 'Live Now', live: true, events: live });
+      const rest = visible.filter((m) => !m.live);
+      if (rest.length) groups.push({ title: 'Upcoming', events: rest });
+    }
+    return groups;
+  }, [visible, sport]);
+
+  const renderEvent = (m: FeedEvent) => {
+    const home = m.teams?.home, away = m.teams?.away;
+    return (
+      <div key={m.id} onClick={() => openEvent(m)} tabIndex={0} data-tv-focusable role="button" aria-label={m.title}
+        className="card-lift group relative bg-zinc-900/60 border border-white/10 rounded-2xl p-4 cursor-pointer focus:outline-none">
+        <div className="flex items-center justify-between mb-2">
+          <span className="px-2 py-0.5 bg-white/5 rounded text-[10px] font-bold uppercase tracking-wider text-amber-400">{SPORT_LABELS[m.category] || m.category}</span>
+          {m.live ? (
+            <span className="flex items-center gap-1 text-[10px] font-bold text-red-500"><span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> LIVE</span>
+          ) : (
+            <span className="flex items-center gap-1 text-[11px] text-zinc-400 tabular"><CalendarClock className="w-3 h-3" /> {eventTime(m.date)}</span>
+          )}
+        </div>
+        {home?.name && away?.name ? (
+          <div className="flex items-center justify-center gap-3 py-1">
+            <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
+              {home.badge ? <img src={badge(home.badge)} alt="" className="w-10 h-10 object-contain" loading="lazy" /> : <div className="w-10 h-10 rounded-full bg-zinc-800" />}
+              <span className="text-xs font-semibold text-white text-center line-clamp-2">{home.name}</span>
+            </div>
+            <span className="text-zinc-500 text-xs font-bold">vs</span>
+            <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
+              {away.badge ? <img src={badge(away.badge)} alt="" className="w-10 h-10 object-contain" loading="lazy" /> : <div className="w-10 h-10 rounded-full bg-zinc-800" />}
+              <span className="text-xs font-semibold text-white text-center line-clamp-2">{away.name}</span>
+            </div>
+          </div>
+        ) : (
+          <h3 className="text-sm font-bold text-white leading-snug line-clamp-2 min-h-[40px] group-hover:text-amber-400 transition-colors">{m.title}</h3>
+        )}
+        <button className="mt-3 w-full py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm font-bold bg-white/10 text-white group-hover:bg-amber-500 group-hover:text-amber-950 transition-all pointer-events-none">
+          <Play className="w-4 h-4 fill-current" /> Watch
+          {(m.embeds?.length || 0) > 0 && <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 group-hover:bg-amber-900/20 group-hover:text-amber-900 font-bold">HD FEED</span>}
+        </button>
+      </div>
+    );
+  };
+
   const activeUrl = playing ? playing.sources[playing.idx]?.url : undefined;
 
   return (
@@ -359,7 +420,7 @@ export default function SportsView() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button onClick={toggleFullScreen} tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full bg-black/50 hover:bg-white/20 text-white flex items-center justify-center border border-white/10"><Maximize className="w-5 h-5" /></button>
-                  <button onClick={() => setPlaying(null)} tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full bg-red-500/80 hover:bg-red-500 text-white flex items-center justify-center"><X className="w-5 h-5" /></button>
+                  <button onClick={() => setPlaying(null)} tabIndex={0} data-tv-focusable data-tv-close className="w-10 h-10 rounded-full bg-red-500/80 hover:bg-red-500 text-white flex items-center justify-center"><X className="w-5 h-5" /></button>
                 </div>
               </div>
               {activeUrl ? <HLSPlayer src={activeUrl} onUnplayable={skipSource} /> : null}
@@ -451,42 +512,19 @@ export default function SportsView() {
           {visible.length === 0 ? (
             <p className="text-zinc-500 py-10 text-center">No events match. Try another sport or the Channels tab.</p>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {visible.map((m) => {
-                const home = m.teams?.home, away = m.teams?.away;
-                return (
-                  <div key={m.id} onClick={() => openEvent(m)} tabIndex={0} data-tv-focusable role="button" aria-label={m.title}
-                    className="group relative bg-zinc-900/60 border border-white/5 rounded-2xl p-4 hover:bg-zinc-800 hover:border-amber-500/30 transition-all cursor-pointer focus:outline-none">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="px-2 py-0.5 bg-white/5 rounded text-[10px] font-bold uppercase tracking-wider text-amber-400">{SPORT_LABELS[m.category] || m.category}</span>
-                      {m.live ? (
-                        <span className="flex items-center gap-1 text-[10px] font-bold text-red-500"><span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> LIVE</span>
-                      ) : (
-                        <span className="flex items-center gap-1 text-[11px] text-zinc-400"><CalendarClock className="w-3 h-3" /> {eventTime(m.date)}</span>
-                      )}
-                    </div>
-                    {home?.name && away?.name ? (
-                      <div className="flex items-center justify-center gap-3 py-1">
-                        <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
-                          {home.badge ? <img src={badge(home.badge)} alt="" className="w-10 h-10 object-contain" loading="lazy" /> : <div className="w-10 h-10 rounded-full bg-zinc-800" />}
-                          <span className="text-xs font-semibold text-white text-center line-clamp-2">{home.name}</span>
-                        </div>
-                        <span className="text-zinc-500 text-xs font-bold">vs</span>
-                        <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
-                          {away.badge ? <img src={badge(away.badge)} alt="" className="w-10 h-10 object-contain" loading="lazy" /> : <div className="w-10 h-10 rounded-full bg-zinc-800" />}
-                          <span className="text-xs font-semibold text-white text-center line-clamp-2">{away.name}</span>
-                        </div>
-                      </div>
-                    ) : (
-                      <h3 className="text-sm font-bold text-white leading-snug line-clamp-2 min-h-[40px] group-hover:text-amber-400 transition-colors">{m.title}</h3>
-                    )}
-                    <button className="mt-3 w-full py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm font-bold bg-white/10 text-white group-hover:bg-amber-500 group-hover:text-amber-950 transition-all pointer-events-none">
-                      <Play className="w-4 h-4 fill-current" /> Watch
-                      {(m.embeds?.length || 0) > 0 && <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 group-hover:bg-amber-900/20 group-hover:text-amber-900 font-bold">HD FEED</span>}
-                    </button>
+            <div className="space-y-8">
+              {eventGroups.map((g) => (
+                <section key={g.title}>
+                  <div className="flex items-center gap-2 mb-3">
+                    {g.live && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
+                    <h3 className={`text-lg font-display font-bold tracking-tight ${g.live ? 'text-red-400' : 'text-white'}`}>{g.title}</h3>
+                    <span className="text-xs text-zinc-500 tabular">{g.events.length}</span>
                   </div>
-                );
-              })}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {g.events.map(renderEvent)}
+                  </div>
+                </section>
+              ))}
             </div>
           )}
         </>

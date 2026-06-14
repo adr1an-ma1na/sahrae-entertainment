@@ -25,7 +25,12 @@ interface MusicCtx {
   active: boolean;
   autoplay: boolean;
   toggleAutoplay: () => void;
-  playQueue: (tracks: Track[], startIndex?: number) => void;
+  queueSource: string;
+  playQueue: (tracks: Track[], startIndex?: number, source?: string) => void;
+  addToQueue: (t: Track) => void;
+  playNext: (t: Track) => void;
+  removeFromQueue: (i: number) => void;
+  jumpTo: (i: number) => void;
   toggle: () => void;
   stop: () => void;
   next: () => void;
@@ -93,6 +98,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const [expanded, setExpanded] = useState(false);
   const [active, setActive] = useState(false);
   const [autoplay, setAutoplay] = useState(true);
+  const [queueSource, setQueueSource] = useState('');
   const [likedTracks, setLikedTracks] = useState<Track[]>(() => {
     try { return JSON.parse(localStorage.getItem(LIKED_KEY) || '[]'); } catch { return []; }
   });
@@ -236,14 +242,30 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('sahrae:audioclaim', onClaim);
   }, []);
 
-  const playQueue = (tracks: Track[], startIndex = 0) => {
+  const playQueue = (tracks: Track[], startIndex = 0, source = '') => {
     if (!tracks.length) return;
     haptics.press();
     setActive(true);
     setBuffering(true);
+    setQueueSource(source);
+    extendingRef.current = null;
     setQueue(tracks);
     setIndex(Math.max(0, Math.min(startIndex, tracks.length - 1)));
   };
+  const addToQueue = (t: Track) => {
+    haptics.tap(); setActive(true);
+    setQueue((prev) => { if (!prev.length) { setIndex(0); return [t]; } return [...prev, t]; });
+  };
+  const playNext = (t: Track) => {
+    haptics.tap(); setActive(true);
+    setQueue((prev) => { if (!prev.length) { setIndex(0); return [t]; } const n = [...prev]; n.splice(index + 1, 0, t); return n; });
+  };
+  const removeFromQueue = (i: number) => {
+    if (i === index) return;
+    setQueue((prev) => prev.filter((_, k) => k !== i));
+    if (i < index) setIndex((x) => x - 1);
+  };
+  const jumpTo = (i: number) => { haptics.tap(); setIndex(i); };
 
   const toggle = () => {
     const p = playerRef.current;
@@ -292,8 +314,9 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider
       value={{
         queue, index, current, isPlaying, position, duration, shuffle, repeat, expanded, buffering, active,
-        autoplay, toggleAutoplay,
-        playQueue, toggle, stop, next, prev, seek, toggleShuffle, cycleRepeat, toggleLike, isLiked,
+        autoplay, toggleAutoplay, queueSource,
+        playQueue, addToQueue, playNext, removeFromQueue, jumpTo,
+        toggle, stop, next, prev, seek, toggleShuffle, cycleRepeat, toggleLike, isLiked,
         likedTracks, setExpanded,
         playlists, recentlyPlayed, createPlaylist, deletePlaylist, renamePlaylist, addToPlaylist, removeFromPlaylist,
         addSheetTrack, openAddSheet, closeAddSheet,

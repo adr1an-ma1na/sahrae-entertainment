@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { X, Plus, Check, ListMusic, Music2 } from 'lucide-react';
+import { X, Plus, Check, ListMusic, Music2, Play, ListPlus } from 'lucide-react';
 import { useMusic } from '../hooks/useMusic';
 
 export default function AddToPlaylistSheet() {
-  const { addSheetTrack, closeAddSheet, playlists, createPlaylist, addToPlaylist } = useMusic();
+  const { addSheetTrack, closeAddSheet, playlists, createPlaylist, addToPlaylist, addToQueue, playNext } = useMusic();
   const [name, setName] = useState('');
   const [creating, setCreating] = useState(false);
 
@@ -33,6 +33,12 @@ export default function AddToPlaylistSheet() {
             <p className="text-sm font-semibold text-white truncate">{track.title}</p>
           </div>
           <button onClick={closeAddSheet} className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-white" aria-label="Close"><X className="w-5 h-5" /></button>
+        </div>
+
+        {/* Queue actions */}
+        <div className="grid grid-cols-2 gap-2 p-4 border-b border-white/5">
+          <button onClick={() => { playNext(track); closeAddSheet(); }} className="btn-glass flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold"><Play className="w-4 h-4 fill-current" /> Play next</button>
+          <button onClick={() => { addToQueue(track); closeAddSheet(); }} className="btn-glass flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold"><ListPlus className="w-4 h-4" /> Add to queue</button>
         </div>
 
         {/* New playlist */}
