@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
-import { Search, Play, Pause, Heart, Loader2, Music2, ListMusic } from 'lucide-react';
-import { audius, Track, Playlist, GENRES } from '../services/audius';
+import { useState, useEffect, useRef, Fragment } from 'react';
+import { Search, Play, Pause, Heart, Loader2, Music2 } from 'lucide-react';
+import { ytmusic, Track, GENRES, SECTIONS } from '../services/ytmusic';
 import { useMusic } from '../hooks/useMusic';
 
 const fmt = (s: number) => {
@@ -10,7 +10,6 @@ const fmt = (s: number) => {
   return `${m}:${r < 10 ? '0' : ''}${r}`;
 };
 
-// Three animated bars to mark the now-playing row.
 function Equalizer() {
   return (
     <div className="flex items-end gap-0.5 h-4" aria-hidden>
@@ -26,9 +25,7 @@ function TrackRow({ track, onPlay }: { track: Track; onPlay: () => void }) {
   const active = current?.id === track.id;
   return (
     <div
-      tabIndex={0}
-      data-tv-focusable
-      role="button"
+      tabIndex={0} data-tv-focusable role="button"
       onClick={() => (active ? toggle() : onPlay())}
       className="card-lift group flex items-center gap-3 p-2 pr-3 rounded-xl border border-white/5 bg-zinc-900/40 cursor-pointer focus:outline-none"
     >
@@ -43,11 +40,7 @@ function TrackRow({ track, onPlay }: { track: Track; onPlay: () => void }) {
         <p className="text-xs text-zinc-400 truncate">{track.artist}</p>
       </div>
       {active && isPlaying && <Equalizer />}
-      <button
-        onClick={(e) => { e.stopPropagation(); toggleLike(track); }}
-        className={`p-2 rounded-full transition-colors ${isLiked(track.id) ? 'text-amber-400' : 'text-zinc-500 hover:text-white'}`}
-        aria-label="Like"
-      >
+      <button onClick={(e) => { e.stopPropagation(); toggleLike(track); }} className={`p-2 rounded-full transition-colors ${isLiked(track.id) ? 'text-amber-400' : 'text-zinc-500 hover:text-white'}`} aria-label="Like">
         <Heart className={`w-4 h-4 ${isLiked(track.id) ? 'fill-current' : ''}`} />
       </button>
       <span className="text-xs text-zinc-500 tabular w-10 text-right">{fmt(track.duration)}</span>
@@ -55,74 +48,94 @@ function TrackRow({ track, onPlay }: { track: Track; onPlay: () => void }) {
   );
 }
 
+function TrackCard({ track, onPlay }: { track: Track; onPlay: () => void }) {
+  const { current, isPlaying } = useMusic();
+  const active = current?.id === track.id;
+  return (
+    <div
+      tabIndex={0} data-tv-focusable role="button" onClick={onPlay}
+      className="card-lift group relative flex-none w-[150px] rounded-2xl overflow-hidden border border-white/10 bg-zinc-900 cursor-pointer focus:outline-none"
+    >
+      <div className="aspect-square bg-zinc-800 relative">
+        {track.artwork ? <img src={track.artwork} alt="" className="w-full h-full object-cover" loading="lazy" /> : <Music2 className="w-8 h-8 text-zinc-600 absolute inset-0 m-auto" />}
+        <div className={`absolute inset-0 bg-gradient-to-t from-black/80 to-transparent transition-opacity flex items-end justify-end p-2 ${active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+          <span className="btn-gold w-9 h-9 rounded-full flex items-center justify-center">{active && isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}</span>
+        </div>
+      </div>
+      <div className="p-2.5">
+        <p className={`text-sm font-semibold truncate ${active ? 'text-amber-400' : 'text-white'}`}>{track.title}</p>
+        <p className="text-xs text-zinc-500 truncate">{track.artist}</p>
+      </div>
+    </div>
+  );
+}
+
 export default function MusicView() {
   const { playQueue, likedTracks } = useMusic();
-  const [genre, setGenre] = useState<string>('All');
-  const [trending, setTrending] = useState<Track[]>([]);
-  const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [underground, setUnderground] = useState<Track[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [sections, setSections] = useState<{ title: string; tracks: Track[] }[]>([]);
+  const [loadingHome, setLoadingHome] = useState(true);
 
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
-  const [searchTracks, setSearchTracks] = useState<Track[]>([]);
+  const [results, setResults] = useState<Track[]>([]);
+  const tRef = useRef<number | undefined>(undefined);
 
-  const loadFeed = useCallback(async (g: string) => {
-    setLoading(true);
-    const [tr, pl, ug] = await Promise.all([
-      audius.trending(g === 'All' ? undefined : g),
-      audius.trendingPlaylists(),
-      audius.underground(),
-    ]);
-    setTrending(tr);
-    setPlaylists(pl);
-    setUnderground(ug);
-    setLoading(false);
+  // Progressive home: each shelf appears as it resolves.
+  useEffect(() => {
+    let cancelled = false;
+    setSections([]); setLoadingHome(true);
+    (async () => {
+      for (const s of SECTIONS) {
+        const tracks = await ytmusic.search(s.q);
+        if (cancelled) return;
+        if (tracks.length) setSections((prev) => [...prev, { title: s.title, tracks }]);
+        setLoadingHome(false);
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
-  useEffect(() => { loadFeed(genre); }, [genre, loadFeed]);
-
   // Debounced search
-  const tRef = useRef<number | undefined>(undefined);
   useEffect(() => {
     const q = query.trim();
     window.clearTimeout(tRef.current);
-    if (!q) { setSearching(false); setSearchTracks([]); return; }
+    if (!q) { setSearching(false); setResults([]); return; }
     setSearching(true);
     tRef.current = window.setTimeout(async () => {
-      const tr = await audius.searchTracks(q);
-      setSearchTracks(tr);
+      const tr = await ytmusic.search(q);
+      setResults(tr);
       setSearching(false);
-    }, 350);
+    }, 400);
     return () => window.clearTimeout(tRef.current);
   }, [query]);
 
-  const openPlaylist = async (p: Playlist) => {
-    const tracks = await audius.playlistTracks(p.id);
-    if (tracks.length) playQueue(tracks, 0);
-  };
-
   return (
     <div className="pt-24 px-4 md:px-12 pb-40 max-w-7xl mx-auto min-h-screen">
-      <div className="overline mb-1.5">Sahrae Sound</div>
+      <div className="overline mb-1.5">Sahrae Sound · YouTube Music</div>
       <div className="flex items-center gap-3 mb-6">
         <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-rose-500 flex items-center justify-center shadow-lg shadow-amber-500/20"><Music2 className="w-6 h-6 text-white" /></div>
         <div>
           <h2 className="text-3xl font-display font-bold text-white leading-tight tracking-tight">Music</h2>
-          <p className="text-sm text-zinc-400">Full tracks · trending · playlists · underground</p>
+          <p className="text-sm text-zinc-400">Full songs from across YouTube Music</p>
         </div>
       </div>
 
       {/* Search */}
-      <div className="relative mb-6 max-w-lg">
+      <div className="relative mb-5 max-w-lg">
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search tracks, artists…"
-          className="w-full bg-zinc-900/70 border border-white/10 rounded-full pl-10 pr-4 py-3 text-sm text-white focus:outline-none focus:border-amber-500/60"
-        />
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search any song, artist…"
+          className="w-full bg-zinc-900/70 border border-white/10 rounded-full pl-10 pr-4 py-3 text-sm text-white focus:outline-none focus:border-amber-500/60" />
       </div>
+
+      {/* Genre quick-search chips */}
+      {!query.trim() && (
+        <div className="flex overflow-x-auto gap-2 pb-2 mb-8 scrollbar-hide">
+          {GENRES.map((g) => (
+            <button key={g} onClick={() => setQuery(g)} tabIndex={0} data-tv-focusable
+              className="chip px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap text-zinc-300 hover:text-white">{g}</button>
+          ))}
+        </div>
+      )}
 
       {query.trim() ? (
         <section>
@@ -131,30 +144,18 @@ export default function MusicView() {
             <h3 className="text-xl font-display font-bold text-white tracking-tight">Results</h3>
           </div>
           {searching ? (
-            <div className="flex items-center gap-2 text-zinc-400 py-8"><Loader2 className="w-5 h-5 animate-spin text-amber-500" /> Searching…</div>
-          ) : searchTracks.length === 0 ? (
-            <p className="text-zinc-500 py-8">No tracks found for “{query}”.</p>
+            <div className="flex items-center gap-2 text-zinc-400 py-8"><Loader2 className="w-5 h-5 animate-spin text-amber-500" /> Searching YouTube Music…</div>
+          ) : results.length === 0 ? (
+            <p className="text-zinc-500 py-8">No songs found for “{query}”.</p>
           ) : (
             <div className="grid sm:grid-cols-2 gap-2">
-              {searchTracks.map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(searchTracks, i)} /></Fragment>)}
+              {results.map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(results, i)} /></Fragment>)}
             </div>
           )}
         </section>
-      ) : loading ? (
-        <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3 text-zinc-400"><Loader2 className="w-9 h-9 animate-spin text-amber-500" /><span>Loading Sahrae Sound…</span></div>
       ) : (
         <>
-          {/* Genre / mood chips */}
-          <div className="flex overflow-x-auto gap-2 pb-2 mb-8 scrollbar-hide">
-            {['All', ...GENRES].map((g) => (
-              <button key={g} onClick={() => setGenre(g)} tabIndex={0} data-tv-focusable
-                className={`px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${genre === g ? 'bg-white text-zinc-950 shadow-md' : 'chip text-zinc-300 hover:text-white'}`}>
-                {g}
-              </button>
-            ))}
-          </div>
-
-          {/* Liked shortcut */}
+          {/* Liked */}
           {likedTracks.length > 0 && (
             <section className="mb-10">
               <div className="flex items-center gap-3 mb-4">
@@ -162,61 +163,30 @@ export default function MusicView() {
                 <h3 className="text-xl font-display font-bold text-white tracking-tight">Your Likes</h3>
                 <span className="text-xs text-zinc-500 tabular">{likedTracks.length}</span>
               </div>
-              <div className="grid sm:grid-cols-2 gap-2">
-                {likedTracks.slice(0, 6).map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(likedTracks, i)} /></Fragment>)}
+              <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">
+                {likedTracks.map((t, i) => <Fragment key={t.id}><TrackCard track={t} onPlay={() => playQueue(likedTracks, i)} /></Fragment>)}
               </div>
             </section>
           )}
 
-          {/* Trending playlists */}
-          {playlists.length > 0 && (
-            <section className="mb-10">
+          {/* Home shelves */}
+          {sections.map((sec) => (
+            <section key={sec.title} className="mb-10">
               <div className="flex items-center gap-3 mb-4">
                 <span className="w-1 h-6 rounded-full bg-gradient-to-b from-amber-300 to-amber-600" />
-                <h3 className="text-xl font-display font-bold text-white tracking-tight">Trending Playlists</h3>
+                <h3 className="text-xl font-display font-bold text-white tracking-tight">{sec.title}</h3>
               </div>
               <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">
-                {playlists.slice(0, 14).map((p) => (
-                  <div key={p.id} onClick={() => openPlaylist(p)} tabIndex={0} data-tv-focusable role="button" aria-label={p.name}
-                    className="card-lift group relative flex-none w-[150px] rounded-2xl overflow-hidden border border-white/10 bg-zinc-900 cursor-pointer focus:outline-none">
-                    <div className="aspect-square bg-zinc-800 relative">
-                      {p.artwork ? <img src={p.artwork} alt="" className="w-full h-full object-cover" loading="lazy" /> : <ListMusic className="w-8 h-8 text-zinc-600 absolute inset-0 m-auto" />}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-end p-2">
-                        <span className="btn-gold w-9 h-9 rounded-full flex items-center justify-center"><Play className="w-4 h-4 fill-current ml-0.5" /></span>
-                      </div>
-                    </div>
-                    <div className="p-2.5">
-                      <p className="text-sm font-semibold text-white truncate">{p.name}</p>
-                      <p className="text-xs text-zinc-500 truncate">{p.owner || 'Audius'}</p>
-                    </div>
-                  </div>
-                ))}
+                {sec.tracks.map((t, i) => <Fragment key={t.id}><TrackCard track={t} onPlay={() => playQueue(sec.tracks, i)} /></Fragment>)}
               </div>
             </section>
+          ))}
+
+          {loadingHome && sections.length === 0 && (
+            <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3 text-zinc-400"><Loader2 className="w-9 h-9 animate-spin text-amber-500" /><span>Loading Sahrae Sound…</span></div>
           )}
-
-          {/* Trending tracks */}
-          <section className="mb-10">
-            <div className="flex items-center gap-3 mb-4">
-              <span className="w-1 h-6 rounded-full bg-gradient-to-b from-amber-300 to-amber-600" />
-              <h3 className="text-xl font-display font-bold text-white tracking-tight">Trending{genre !== 'All' ? ` · ${genre}` : ''}</h3>
-            </div>
-            <div className="grid sm:grid-cols-2 gap-2">
-              {trending.map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(trending, i)} /></Fragment>)}
-            </div>
-          </section>
-
-          {/* Underground */}
-          {underground.length > 0 && (
-            <section>
-              <div className="flex items-center gap-3 mb-4">
-                <span className="w-1 h-6 rounded-full bg-gradient-to-b from-amber-300 to-amber-600" />
-                <h3 className="text-xl font-display font-bold text-white tracking-tight">Underground</h3>
-              </div>
-              <div className="grid sm:grid-cols-2 gap-2">
-                {underground.slice(0, 12).map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(underground, i)} /></Fragment>)}
-              </div>
-            </section>
+          {!loadingHome && sections.length === 0 && (
+            <p className="text-zinc-500 py-10 text-center">Couldn't reach the music service right now. Pull a search, or try again shortly.</p>
           )}
         </>
       )}

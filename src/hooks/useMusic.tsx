@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useRef, useEffect, ReactNode } from 'react';
-import { Track } from '../services/audius';
+import { Track } from '../services/ytmusic';
 import { haptics } from '../services/haptics';
 
 type Repeat = 'off' | 'one' | 'all';
@@ -14,6 +14,8 @@ interface MusicCtx {
   shuffle: boolean;
   repeat: Repeat;
   expanded: boolean;
+  buffering: boolean;
+  active: boolean;
   playQueue: (tracks: Track[], startIndex?: number) => void;
   toggle: () => void;
   next: () => void;
@@ -25,18 +27,37 @@ interface MusicCtx {
   isLiked: (id: string) => boolean;
   likedTracks: Track[];
   setExpanded: (v: boolean) => void;
-  /** False when another source (radio) owns the speaker — used to hide the bar. */
-  active: boolean;
 }
 
 const Ctx = createContext<MusicCtx | undefined>(undefined);
 const LIKED_KEY = 'sahrae.music.liked.v1';
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+let apiLoading = false;
+function loadYT(): Promise<any> {
+  return new Promise((resolve) => {
+    const w = window as any;
+    if (w.YT && w.YT.Player) { resolve(w.YT); return; }
+    const prev = w.onYouTubeIframeAPIReady;
+    w.onYouTubeIframeAPIReady = () => { if (prev) prev(); resolve(w.YT); };
+    if (!apiLoading) {
+      apiLoading = true;
+      const s = document.createElement('script');
+      s.src = 'https://www.youtube.com/iframe_api';
+      document.head.appendChild(s);
+    }
+  });
+}
+
 export function MusicProvider({ children }: { children: ReactNode }) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const playerRef = useRef<any>(null);
+  const readyRef = useRef(false);
+  const pendingRef = useRef<string | null>(null);
+
   const [queue, setQueue] = useState<Track[]>([]);
   const [index, setIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [buffering, setBuffering] = useState(false);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const [shuffle, setShuffle] = useState(false);
@@ -49,23 +70,82 @@ export function MusicProvider({ children }: { children: ReactNode }) {
 
   const current = queue[index] || null;
 
-  // Load + play whenever the active track changes.
-  useEffect(() => {
-    const a = audioRef.current;
-    const c = queue[index];
-    if (!a || !c) return;
-    if (a.getAttribute('src') !== c.streamUrl) {
-      a.src = c.streamUrl;
-      setPosition(0);
-      a.play().catch(() => {});
+  // ── transport (fresh closures kept on refs so the YT callbacks see latest state) ──
+  const next = () => {
+    if (!queue.length) return;
+    haptics.tap();
+    let ni = shuffle ? Math.floor(Math.random() * queue.length) : index + 1;
+    if (ni >= queue.length) {
+      if (repeat === 'all') ni = 0;
+      else { playerRef.current?.pauseVideo?.(); return; }
     }
+    setIndex(ni);
+  };
+  const handleEnded = () => {
+    if (repeat === 'one') { playerRef.current?.seekTo?.(0, true); playerRef.current?.playVideo?.(); return; }
+    next();
+  };
+  const endedRef = useRef(handleEnded); endedRef.current = handleEnded;
+  const skipRef = useRef(next); skipRef.current = next;
+
+  // ── init the hidden YouTube player once ──
+  useEffect(() => {
+    let cancelled = false;
+    loadYT().then((YT) => {
+      if (cancelled || playerRef.current) return;
+      playerRef.current = new YT.Player('sahrae-yt-player', {
+        height: '1', width: '1',
+        playerVars: { autoplay: 1, controls: 0, disablekb: 1, playsinline: 1, rel: 0, origin: window.location.origin },
+        events: {
+          onReady: () => {
+            readyRef.current = true;
+            if (pendingRef.current) { playerRef.current.loadVideoById(pendingRef.current); pendingRef.current = null; }
+          },
+          onStateChange: (e: any) => {
+            // ENDED 0 · PLAYING 1 · PAUSED 2 · BUFFERING 3
+            if (e.data === 1) {
+              setIsPlaying(true); setBuffering(false); setActive(true);
+              window.dispatchEvent(new CustomEvent('sahrae:audioclaim', { detail: 'music' }));
+            } else if (e.data === 2) { setIsPlaying(false); }
+            else if (e.data === 3) { setBuffering(true); }
+            else if (e.data === 0) { endedRef.current(); }
+          },
+          onError: () => { skipRef.current(); }, // embed disabled / unavailable → skip on
+        },
+      });
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  // ── load the active track whenever it changes ──
+  useEffect(() => {
+    const c = queue[index];
+    if (!c) return;
+    setPosition(0);
+    if (readyRef.current && playerRef.current) playerRef.current.loadVideoById(c.id);
+    else pendingRef.current = c.id;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, queue]);
 
-  // Cross-pause: if any other source (radio) claims the speaker, pause music.
+  // ── poll position / duration from the player ──
+  useEffect(() => {
+    const iv = setInterval(() => {
+      const p = playerRef.current;
+      if (p && typeof p.getCurrentTime === 'function') {
+        try {
+          setPosition(p.getCurrentTime() || 0);
+          const d = p.getDuration?.() || 0;
+          if (d) setDuration(d);
+        } catch { /* player not ready */ }
+      }
+    }, 500);
+    return () => clearInterval(iv);
+  }, []);
+
+  // ── cross-pause: another source (radio) claimed the speaker ──
   useEffect(() => {
     const onClaim = (e: Event) => {
-      if ((e as CustomEvent).detail !== 'music') { setActive(false); audioRef.current?.pause(); }
+      if ((e as CustomEvent).detail !== 'music') { setActive(false); playerRef.current?.pauseVideo?.(); }
     };
     window.addEventListener('sahrae:audioclaim', onClaim);
     return () => window.removeEventListener('sahrae:audioclaim', onClaim);
@@ -74,32 +154,22 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const playQueue = (tracks: Track[], startIndex = 0) => {
     if (!tracks.length) return;
     haptics.press();
+    setActive(true);
+    setBuffering(true);
     setQueue(tracks);
     setIndex(Math.max(0, Math.min(startIndex, tracks.length - 1)));
   };
 
   const toggle = () => {
-    const a = audioRef.current;
-    if (!a || !current) return;
+    const p = playerRef.current;
+    if (!p || !current) return;
     haptics.tap();
-    if (a.paused) a.play().catch(() => {});
-    else a.pause();
-  };
-
-  const next = () => {
-    if (!queue.length) return;
-    haptics.tap();
-    let ni = shuffle ? Math.floor(Math.random() * queue.length) : index + 1;
-    if (ni >= queue.length) {
-      if (repeat === 'all') ni = 0;
-      else { audioRef.current?.pause(); return; }
-    }
-    setIndex(ni);
+    if (isPlaying) p.pauseVideo?.(); else p.playVideo?.();
   };
 
   const prev = () => {
-    const a = audioRef.current;
-    if (a && a.currentTime > 3) { a.currentTime = 0; return; }
+    const p = playerRef.current;
+    if (p && p.getCurrentTime && p.getCurrentTime() > 3) { p.seekTo?.(0, true); return; }
     if (!queue.length) return;
     haptics.tap();
     let ni = index - 1;
@@ -107,16 +177,9 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     setIndex(ni);
   };
 
-  const seek = (sec: number) => {
-    const a = audioRef.current;
-    if (a) { a.currentTime = sec; setPosition(sec); }
-  };
-
+  const seek = (sec: number) => { playerRef.current?.seekTo?.(sec, true); setPosition(sec); };
   const toggleShuffle = () => { haptics.tap(); setShuffle((s) => !s); };
-  const cycleRepeat = () => {
-    haptics.tap();
-    setRepeat((r) => (r === 'off' ? 'all' : r === 'all' ? 'one' : 'off'));
-  };
+  const cycleRepeat = () => { haptics.tap(); setRepeat((r) => (r === 'off' ? 'all' : r === 'all' ? 'one' : 'off')); };
 
   const toggleLike = (t: Track) => {
     haptics.tap();
@@ -129,36 +192,23 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   };
   const isLiked = (id: string) => likedTracks.some((x) => x.id === id);
 
-  const handleEnded = () => {
-    if (repeat === 'one') {
-      const a = audioRef.current;
-      if (a) { a.currentTime = 0; a.play().catch(() => {}); }
-      return;
-    }
-    next();
-  };
-
   return (
     <Ctx.Provider
       value={{
-        queue, index, current, isPlaying, position, duration, shuffle, repeat, expanded,
+        queue, index, current, isPlaying, position, duration, shuffle, repeat, expanded, buffering, active,
         playQueue, toggle, next, prev, seek, toggleShuffle, cycleRepeat, toggleLike, isLiked,
-        likedTracks, setExpanded, active,
+        likedTracks, setExpanded,
       }}
     >
       {children}
-      <audio
-        ref={audioRef}
-        onTimeUpdate={(e) => setPosition(e.currentTarget.currentTime || 0)}
-        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
-        onDurationChange={(e) => setDuration(e.currentTarget.duration || 0)}
-        onPlay={() => { setIsPlaying(true); setActive(true); window.dispatchEvent(new CustomEvent('sahrae:audioclaim', { detail: 'music' })); }}
-        onPause={() => setIsPlaying(false)}
-        onEnded={handleEnded}
-      />
+      {/* Hidden YouTube player — 1x1, present in the viewport so it isn't throttled. */}
+      <div aria-hidden style={{ position: 'fixed', right: 0, bottom: 0, width: 1, height: 1, opacity: 0, pointerEvents: 'none', zIndex: -1 }}>
+        <div id="sahrae-yt-player" />
+      </div>
     </Ctx.Provider>
   );
 }
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 export function useMusic() {
   const ctx = useContext(Ctx);
