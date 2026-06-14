@@ -31,7 +31,11 @@ import com.getcapacitor.BridgeWebViewClient;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.BufferedInputStream;
+import java.io.FilterInputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.PushbackInputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
@@ -361,30 +365,73 @@ public class MainActivity extends BridgeActivity {
 
             String contentType = conn.getContentType();
             String finalUrl = conn.getURL().toString();
-            byte[] body = readAll(conn.getInputStream());
-
-            boolean isPlaylist =
-                (contentType != null && contentType.toLowerCase().contains("mpegurl"))
-                || finalUrl.toLowerCase().contains(".m3u8")
-                || (body.length >= 7 && new String(body, 0, 7, StandardCharsets.UTF_8).startsWith("#EXTM3U"));
+            String ctLower = contentType != null ? contentType.toLowerCase() : "";
+            String urlLower = finalUrl.toLowerCase();
 
             Map<String, String> headers = new HashMap<>();
             headers.put("Access-Control-Allow-Origin", "*");
             headers.put("Cache-Control", "no-cache");
 
+            // Fast classification from metadata, no body read.
+            boolean isPlaylist = ctLower.contains("mpegurl") || urlLower.contains(".m3u8");
+
+            // Wrap with a generous buffer; only sniff the head when the type is
+            // ambiguous (some CDNs serve playlists as octet-stream with no .m3u8).
+            InputStream raw = new BufferedInputStream(conn.getInputStream(), 1 << 16);
+            if (!isPlaylist && !looksLikeSegment(urlLower, ctLower)) {
+                PushbackInputStream pin = new PushbackInputStream(raw, 16);
+                byte[] sniff = new byte[7];
+                int got = 0, n;
+                while (got < 7 && (n = pin.read(sniff, got, 7 - got)) != -1) got += n;
+                if (got > 0) pin.unread(sniff, 0, got);
+                if (got >= 7 && new String(sniff, 0, 7, StandardCharsets.UTF_8).startsWith("#EXTM3U")) isPlaylist = true;
+                raw = pin;
+            }
+
             if (isPlaylist) {
+                // Playlists are tiny — read fully so we can rewrite child URLs back
+                // through this proxy. (conn is closed by the outer finally.)
+                byte[] body = readAll(raw);
                 String rewritten = rewriteM3u8(new String(body, StandardCharsets.UTF_8), finalUrl, ref);
                 return new WebResourceResponse(
                     "application/vnd.apple.mpegurl", "utf-8", 200, "OK", headers,
                     new ByteArrayInputStream(rewritten.getBytes(StandardCharsets.UTF_8)));
             }
-            String mime = (contentType != null) ? contentType.split(";")[0].trim() : "application/octet-stream";
-            return new WebResourceResponse(mime, null, 200, "OK", headers, new ByteArrayInputStream(body));
+
+            // ── MEDIA SEGMENT (.ts/.m4s/.aac/.mp4/key) ──
+            // Stream straight through: the player receives bytes AS THEY ARRIVE
+            // instead of waiting for the whole segment to download on-device.
+            // This is the single biggest win against rebuffering.
+            int len = conn.getContentLength();
+            if (len >= 0) headers.put("Content-Length", String.valueOf(len));
+            String mime = (contentType != null && !contentType.isEmpty())
+                ? contentType.split(";")[0].trim() : "video/mp2t";
+            final HttpURLConnection fconn = conn;
+            InputStream passthrough = new FilterInputStream(raw) {
+                @Override public void close() throws IOException {
+                    try { super.close(); } finally { try { fconn.disconnect(); } catch (Exception ignore) {} }
+                }
+            };
+            conn = null; // keep the live connection open until the player drains it
+            return new WebResourceResponse(mime, null, 200, "OK", headers, passthrough);
         } catch (Exception e) {
             return null;
         } finally {
             if (conn != null) try { conn.disconnect(); } catch (Exception ignore) {}
         }
+    }
+
+    /** True when the URL/content-type clearly names a media segment — lets us skip
+     *  head-sniffing and stream immediately. */
+    private static boolean looksLikeSegment(String urlLower, String ctLower) {
+        if (ctLower.startsWith("video/") || ctLower.startsWith("audio/")
+            || ctLower.contains("mp2t")) return true;
+        // strip query before extension test
+        int q = urlLower.indexOf('?');
+        String path = q >= 0 ? urlLower.substring(0, q) : urlLower;
+        return path.endsWith(".ts") || path.endsWith(".m4s") || path.endsWith(".mp4")
+            || path.endsWith(".aac") || path.endsWith(".m4a") || path.endsWith(".cmf")
+            || path.endsWith(".cmfv") || path.endsWith(".cmfa") || path.endsWith(".key");
     }
 
     private static String rewriteM3u8(String text, String baseUrl, String ref) {

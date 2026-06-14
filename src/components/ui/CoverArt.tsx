@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 type Size = 'sm' | 'md' | 'lg' | 'hero';
 
@@ -25,6 +25,10 @@ export function CoverArt({
   className?: string;
 }) {
   const [loaded, setLoaded] = useState(false);
+  // Re-fade whenever the source changes so a card/now-playing never shows the
+  // PREVIOUS track's art (the "stale art" bug): reset to the dominant colour,
+  // then fade the new image in once it has actually decoded.
+  useEffect(() => { setLoaded(false); }, [imageUrl]);
   return (
     <div
       className={`relative overflow-hidden ${rounded} ${className}`}
@@ -32,9 +36,11 @@ export function CoverArt({
     >
       {imageUrl ? (
         <img
+          key={imageUrl}
           src={imageUrl}
           alt={alt}
           loading="lazy"
+          decoding="async"
           draggable={false}
           onLoad={() => setLoaded(true)}
           onError={() => setLoaded(false)}

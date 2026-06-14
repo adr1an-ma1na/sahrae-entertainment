@@ -76,7 +76,16 @@ function HLSPlayer({ src, onOffline }: { src: string; onOffline: () => void }) {
       const url = usingProxy ? proxied(src) : src;
       if (hls) { hls.destroy(); hls = null; }
       if (Hls.isSupported()) {
-        hls = new Hls({ maxBufferLength: 30, manifestLoadingTimeOut: 12000, levelLoadingTimeOut: 12000 });
+        hls = new Hls({
+          enableWorker: true, lowLatencyMode: false,
+          backBufferLength: 90, maxBufferLength: 60, maxMaxBufferLength: 180,
+          maxBufferSize: 120 * 1000 * 1000, maxBufferHole: 0.5, startFragPrefetch: true,
+          liveSyncDurationCount: 4, liveMaxLatencyDurationCount: 18,
+          manifestLoadingTimeOut: 15000, manifestLoadingMaxRetry: 4,
+          levelLoadingTimeOut: 15000, levelLoadingMaxRetry: 4,
+          fragLoadingTimeOut: 30000, fragLoadingMaxRetry: 8, nudgeMaxRetry: 10,
+          startLevel: -1, abrEwmaDefaultEstimate: 1_200_000,
+        });
         hls.loadSource(url);
         hls.attachMedia(video);
         hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));

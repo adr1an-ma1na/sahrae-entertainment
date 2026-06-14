@@ -145,7 +145,27 @@ const HLSPlayer = ({ src, onUnplayable }: { src: string; onUnplayable?: () => vo
     const giveUp = () => { if (!dead) { dead = true; deadRef.current?.(); } };
 
     if (Hls.isSupported()) {
-      const hls = new Hls({ maxBufferLength: 30, maxMaxBufferLength: 60, manifestLoadingTimeOut: 12000, levelLoadingTimeOut: 12000, fragLoadingTimeOut: 18000 });
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: false,
+        // Deep buffer so a single slow segment never drains us to a stall.
+        backBufferLength: 90,
+        maxBufferLength: 60,
+        maxMaxBufferLength: 180,
+        maxBufferSize: 120 * 1000 * 1000,
+        maxBufferHole: 0.5,
+        startFragPrefetch: true,
+        // Sit a few segments behind the live edge — much steadier than chasing it.
+        liveSyncDurationCount: 4,
+        liveMaxLatencyDurationCount: 18,
+        // Retry hard before giving up on a flaky CDN segment.
+        manifestLoadingTimeOut: 15000, manifestLoadingMaxRetry: 4,
+        levelLoadingTimeOut: 15000, levelLoadingMaxRetry: 4,
+        fragLoadingTimeOut: 30000, fragLoadingMaxRetry: 8,
+        nudgeMaxRetry: 10,
+        startLevel: -1,
+        abrEwmaDefaultEstimate: 1_200_000,
+      });
       let started = false;
       let netRetries = 0;
       // If nothing plays within 14s, consider the source dead and move on.

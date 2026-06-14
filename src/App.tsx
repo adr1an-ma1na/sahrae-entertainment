@@ -153,6 +153,29 @@ export default function App() {
     loadInitialData();
   }, []);
 
+  // ── Global tactile layer ──────────────────────────────────────────────
+  // One delegated listener gives the WHOLE app a native "tap" on every
+  // interactive press (buttons, links, focusables, tabs), not just music.
+  // pointerdown = feedback fires the instant the finger lands. Throttled so a
+  // tap never double-buzzes, and fully guarded so it no-ops off-device.
+  useEffect(() => {
+    let last = 0;
+    const SEL = 'button, a, [role="button"], [role="tab"], [data-tv-focusable], input[type="range"], select, summary, label';
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Element | null;
+      if (!t || !t.closest) return;
+      const hit = t.closest(SEL);
+      if (!hit) return;
+      if ((hit as HTMLButtonElement).disabled) return;
+      const now = Date.now();
+      if (now - last < 60) return; // de-dupe rapid synthetic events
+      last = now;
+      haptics.tap();
+    };
+    window.addEventListener('pointerdown', onDown, { capture: true, passive: true });
+    return () => window.removeEventListener('pointerdown', onDown, { capture: true } as EventListenerOptions);
+  }, []);
+
   useEffect(() => {
     const loadRecommendations = async () => {
       if (progress.length > 0) {

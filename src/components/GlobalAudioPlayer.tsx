@@ -1,5 +1,5 @@
 import { useRadio } from '../hooks/useRadio';
-import { Play, Pause, X, Radio } from 'lucide-react';
+import { Pause, X, Radio } from 'lucide-react';
 
 export default function GlobalAudioPlayer() {
   const { playingUrl, playingName, togglePlay, stop } = useRadio();
@@ -7,29 +7,31 @@ export default function GlobalAudioPlayer() {
   if (!playingUrl) return null;
 
   return (
-    <div className="fixed bottom-0 left-0 w-full bg-zinc-900 border-t border-white/10 p-4 z-[100] animate-in slide-in-from-bottom-full">
-      <div className="max-w-7xl mx-auto flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
-            <Radio className="w-5 h-5 text-amber-500 animate-pulse" />
+    <div className="fixed bottom-0 left-0 right-0 z-[100] px-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] pointer-events-none">
+      <div className="pointer-events-auto max-w-3xl mx-auto dark glass rounded-2xl border border-white/10 shadow-[0_8px_30px_rgba(0,0,0,0.45)] overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
+        <div className="flex items-center gap-3 p-2 pr-3">
+          <div className="w-11 h-11 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0">
+            <Radio className="w-5 h-5 text-amber-400 animate-pulse" />
           </div>
-          <div>
-            <p className="text-white font-bold text-sm md:text-base">{playingName || 'Live Audio'}</p>
-            <p className="text-zinc-400 text-xs">Now Playing</p>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-white truncate">{playingName || 'Live Audio'}</p>
+            <p className="text-xs text-zinc-400 truncate">Live radio · now playing</p>
           </div>
-        </div>
-        
-        <div className="flex items-center gap-4">
-          <button 
+          <button
             onClick={() => togglePlay(playingUrl, playingName || '')}
-            className="w-10 h-10 rounded-full bg-amber-500 text-amber-950 flex items-center justify-center hover:scale-110 transition-transform"
+            tabIndex={0}
+            data-tv-focusable
+            className="btn-sauti w-11 h-11 rounded-full flex items-center justify-center shrink-0"
+            aria-label="Pause radio"
           >
             <Pause className="w-5 h-5 fill-current" />
           </button>
-          
-          <button 
+          <button
             onClick={stop}
-            className="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20 transition-colors"
+            tabIndex={0}
+            data-tv-focusable
+            className="w-10 h-10 rounded-full flex items-center justify-center text-zinc-400 hover:text-red-400 shrink-0"
+            aria-label="Stop radio"
           >
             <X className="w-5 h-5" />
           </button>

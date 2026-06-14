@@ -70,6 +70,17 @@ const vId = (u: string) => (u || '').match(/[?&]v=([^&]+)/)?.[1] || '';
 const listId = (u: string) => (u || '').match(/[?&]list=([^&]+)/)?.[1] || '';
 const chanId = (u: string) => (u || '').match(/\/channel\/([^/?&]+)/)?.[1] || '';
 
+// Upgrade a thumbnail to a crisp, large square. YT-Music cover art comes from
+// lh3/googleusercontent with `=w120-h120` style sizing we can simply bump; plain
+// video thumbnails are requested at hqdefault. Falls back to a direct i.ytimg URL.
+function hiRes(url: string | undefined, id: string): string {
+  if (!url) return `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+  if (/=w\d+-h\d+/.test(url)) return url.replace(/=w\d+-h\d+[^&]*/, '=w720-h720-l90-rj');
+  if (/=s\d+/.test(url)) return url.replace(/=s\d+[^&]*/, '=s720');
+  if (/(\/vi\/[^/]+\/)[a-z0-9]+\.jpg/i.test(url)) return url.replace(/(\/vi\/[^/]+\/)[a-z0-9]+\.jpg/i, '$1hqdefault.jpg');
+  return url;
+}
+
 function mapItem(it: any): Track | null {
   const id = vId(it.url || '');
   if (!id || !it.duration || it.duration <= 0) return null;
@@ -77,7 +88,7 @@ function mapItem(it: any): Track | null {
     id,
     title: it.title || 'Unknown',
     artist: (it.uploaderName || '').replace(/\s*-\s*Topic$/i, '').trim() || 'Unknown Artist',
-    artwork: it.thumbnail, artworkLarge: it.thumbnail, duration: it.duration,
+    artwork: it.thumbnail, artworkLarge: hiRes(it.thumbnail, id), duration: it.duration,
     dominantColor: dominantColor(id),
   };
 }

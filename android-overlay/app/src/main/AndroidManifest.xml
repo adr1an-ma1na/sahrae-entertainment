@@ -43,6 +43,9 @@
     <!-- Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Tactile feedback (@capacitor/haptics). Without this Android silently
+         denies all vibration, so the app never "feels" anything. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <!-- Run on phones, tablets, laptops (Chromebook) AND Android TV.
          Declaring these as NOT required keeps the app installable everywhere. -->
