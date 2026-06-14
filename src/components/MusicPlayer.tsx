@@ -1,4 +1,4 @@
-import { Play, Pause, SkipForward, SkipBack, ChevronDown, Heart, Shuffle, Repeat, Repeat1, Music2, Plus } from 'lucide-react';
+import { Play, Pause, SkipForward, SkipBack, ChevronDown, Heart, Shuffle, Repeat, Repeat1, Music2, Plus, X } from 'lucide-react';
 import { useMusic } from '../hooks/useMusic';
 
 const fmt = (s: number) => {
@@ -11,7 +11,7 @@ const fmt = (s: number) => {
 export default function MusicPlayer() {
   const {
     current, isPlaying, position, duration, shuffle, repeat, expanded, active,
-    toggle, next, prev, seek, toggleShuffle, cycleRepeat, toggleLike, isLiked, setExpanded, openAddSheet,
+    toggle, stop, next, prev, seek, toggleShuffle, cycleRepeat, toggleLike, isLiked, setExpanded, openAddSheet,
   } = useMusic();
 
   if (!current || !active) return null;
@@ -31,9 +31,14 @@ export default function MusicPlayer() {
           <div className="h-full flex flex-col px-5 md:px-8 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1.5rem)] max-w-xl mx-auto">
             {/* Top bar */}
             <div className="flex items-center justify-between">
-              <button onClick={() => setExpanded(false)} tabIndex={0} data-tv-focusable className="w-11 h-11 rounded-full glass flex items-center justify-center text-white" aria-label="Collapse">
-                <ChevronDown className="w-6 h-6" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setExpanded(false)} tabIndex={0} data-tv-focusable className="w-11 h-11 rounded-full glass flex items-center justify-center text-white" aria-label="Minimize">
+                  <ChevronDown className="w-6 h-6" />
+                </button>
+                <button onClick={stop} tabIndex={0} data-tv-focusable className="w-11 h-11 rounded-full glass flex items-center justify-center text-white" aria-label="Stop music">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
               <span className="overline">Now Playing</span>
               <div className="flex items-center gap-2">
                 <button onClick={() => openAddSheet(current)} tabIndex={0} data-tv-focusable className="w-11 h-11 rounded-full glass flex items-center justify-center text-white" aria-label="Add to playlist">
@@ -119,6 +124,7 @@ export default function MusicPlayer() {
                 {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
               </button>
               <button onClick={next} tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full flex items-center justify-center text-zinc-300 hover:text-white shrink-0" aria-label="Next"><SkipForward className="w-5 h-5 fill-current" /></button>
+              <button onClick={stop} tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full flex items-center justify-center text-zinc-400 hover:text-red-400 shrink-0" aria-label="Stop music"><X className="w-5 h-5" /></button>
             </div>
           </div>
         </div>

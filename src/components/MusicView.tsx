@@ -152,7 +152,10 @@ export default function MusicView() {
   const openAlbum = async (al: Album) => {
     setDetail({ kind: 'album', id: al.id, name: al.name, thumbnail: al.thumbnail, subtitle: al.artist || 'Album' });
     setDetailLoading(true); setDetailTracks([]); setDetailAlbums([]);
-    const tracks = await ytmusic.playlistTracks(al.id);
+    let tracks = await ytmusic.playlistTracks(al.id);
+    // YouTube-Music album IDs (OLAK5uy_…) can't be expanded by the proxies, so
+    // fall back to finding the album's songs by name + artist.
+    if (!tracks.length) tracks = await ytmusic.search(`${al.artist || ''} ${al.name}`.trim());
     setDetailTracks(tracks); setDetailLoading(false);
   };
 

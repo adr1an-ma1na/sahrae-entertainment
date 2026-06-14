@@ -75,6 +75,13 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     }
   };
 
+  // When a movie/show starts playing, silence music & radio (claim the speaker).
+  useEffect(() => {
+    if (isOpen && isPlaying) {
+      window.dispatchEvent(new CustomEvent('sahrae:audioclaim', { detail: 'video' }));
+    }
+  }, [isOpen, isPlaying]);
+
   // Prevent screen from sleeping while video is active
   useEffect(() => {
     const acquireWakeLock = async () => {

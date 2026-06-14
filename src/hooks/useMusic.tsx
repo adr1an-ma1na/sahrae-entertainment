@@ -27,6 +27,7 @@ interface MusicCtx {
   toggleAutoplay: () => void;
   playQueue: (tracks: Track[], startIndex?: number) => void;
   toggle: () => void;
+  stop: () => void;
   next: () => void;
   prev: () => void;
   seek: (sec: number) => void;
@@ -251,6 +252,16 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     if (isPlaying) p.pauseVideo?.(); else p.playVideo?.();
   };
 
+  // Stop entirely + dismiss the player (e.g. "I want to watch something else").
+  const stop = () => {
+    haptics.tap();
+    try { playerRef.current?.stopVideo?.(); } catch { /* ignore */ }
+    loadedIdRef.current = null;
+    extendingRef.current = null;
+    setIsPlaying(false); setActive(false); setExpanded(false);
+    setQueue([]); setIndex(0); setPosition(0); setDuration(0);
+  };
+
   const prev = () => {
     const p = playerRef.current;
     if (p && p.getCurrentTime && p.getCurrentTime() > 3) { p.seekTo?.(0, true); return; }
@@ -282,7 +293,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       value={{
         queue, index, current, isPlaying, position, duration, shuffle, repeat, expanded, buffering, active,
         autoplay, toggleAutoplay,
-        playQueue, toggle, next, prev, seek, toggleShuffle, cycleRepeat, toggleLike, isLiked,
+        playQueue, toggle, stop, next, prev, seek, toggleShuffle, cycleRepeat, toggleLike, isLiked,
         likedTracks, setExpanded,
         playlists, recentlyPlayed, createPlaylist, deletePlaylist, renamePlaylist, addToPlaylist, removeFromPlaylist,
         addSheetTrack, openAddSheet, closeAddSheet,
