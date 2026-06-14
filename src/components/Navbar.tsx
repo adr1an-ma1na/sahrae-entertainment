@@ -64,6 +64,7 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
     { id: 'continue', label: 'Continue Watching' },
     { id: 'tv', label: 'Live TV' },
     { id: 'sports', label: 'Live Sports' },
+    { id: 'music', label: 'Music' },
     { id: 'audio', label: 'Audio Hub' },
   ];
 

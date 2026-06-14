@@ -20,6 +20,8 @@ import FlowChannelsView from './components/FlowChannelsView';
 import GlobalAudioPlayer from './components/GlobalAudioPlayer';
 import ProfileSelection from './components/ProfileSelection';
 import DiscoveryView from './components/DiscoveryView';
+import MusicView from './components/MusicView';
+import MusicPlayer from './components/MusicPlayer';
 import { ChevronDown, AlertCircle, RefreshCw } from 'lucide-react';
 import { fetchTrending, fetchDiscover, searchMedia, fetchGenres, fetchRecommendations, MediaItem, Genre } from './services/tmdb';
 import { useMyList } from './hooks/useMyList';
@@ -458,6 +460,8 @@ export default function App() {
         );
       case 'audio':
         return <AudioHubView />;
+      case 'music':
+        return <MusicView />;
       case 'tv':
         return <LiveTVView />;
       case 'sports':
@@ -525,6 +529,7 @@ export default function App() {
         />
         
         <GlobalAudioPlayer />
+        <MusicPlayer />
       </div>
     );
   };

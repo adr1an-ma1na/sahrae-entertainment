@@ -258,6 +258,8 @@
   to   { transform: scale(1.14) translate(0, -2%); }
 }
 @keyframes aurora-breathe { from { opacity: 0.72; } to { opacity: 1; } }
+@keyframes vinyl-spin { to { transform: rotate(360deg); } }
+@keyframes eq { 0%, 100% { height: 28%; } 50% { height: 100%; } }
 
 /* Respect reduced-motion: stop ambient animation, keep content readable */
 @media (prefers-reduced-motion: reduce) {

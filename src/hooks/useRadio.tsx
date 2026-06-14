@@ -22,6 +22,19 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Cross-pause: if music (or any non-radio source) claims the speaker, stop radio.
+  useEffect(() => {
+    const onClaim = (e: Event) => {
+      if ((e as CustomEvent).detail !== 'radio') {
+        audioRef.current?.pause();
+        setPlayingUrl(null);
+        setPlayingName(null);
+      }
+    };
+    window.addEventListener('sahrae:audioclaim', onClaim);
+    return () => window.removeEventListener('sahrae:audioclaim', onClaim);
+  }, []);
+
   const togglePlay = (url: string, name: string) => {
     if (playingUrl === url) {
       audioRef.current?.pause();
@@ -39,6 +52,7 @@ export function RadioProvider({ children }: { children: ReactNode }) {
         setPlayingName(null);
       });
       audioRef.current = audio;
+      window.dispatchEvent(new CustomEvent('sahrae:audioclaim', { detail: 'radio' }));
       setPlayingUrl(url);
       setPlayingName(name);
     }
