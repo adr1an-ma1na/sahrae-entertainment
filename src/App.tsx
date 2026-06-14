@@ -22,6 +22,7 @@ import ProfileSelection from './components/ProfileSelection';
 import DiscoveryView from './components/DiscoveryView';
 import MusicView from './components/MusicView';
 import MusicPlayer from './components/MusicPlayer';
+import AddToPlaylistSheet from './components/AddToPlaylistSheet';
 import { ChevronDown, AlertCircle, RefreshCw } from 'lucide-react';
 import { fetchTrending, fetchDiscover, searchMedia, fetchGenres, fetchRecommendations, MediaItem, Genre } from './services/tmdb';
 import { useMyList } from './hooks/useMyList';
@@ -530,6 +531,7 @@ export default function App() {
         
         <GlobalAudioPlayer />
         <MusicPlayer />
+        <AddToPlaylistSheet />
       </div>
     );
   };

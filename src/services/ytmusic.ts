@@ -27,12 +27,14 @@ export const GENRES = [
 
 // Home shelves — each is a YouTube Music search.
 export const SECTIONS: { title: string; q: string }[] = [
+  { title: 'New Music Friday', q: 'new music friday 2026 latest songs' },
   { title: 'Top Hits', q: 'top hits this week' },
   { title: 'Afrobeats', q: 'afrobeats 2026 hits' },
   { title: 'Amapiano', q: 'amapiano 2026 mix songs' },
   { title: 'Bongo Flava', q: 'bongo flava 2026 hits' },
   { title: 'Hip-Hop & Rap', q: 'hip hop rap hits 2026' },
   { title: 'R&B Slow Jams', q: 'rnb slow jams 2026' },
+  { title: 'Gospel', q: 'gospel hits 2026' },
 ];
 
 // Piped API instances (failover order). Public; some come and go — the loop

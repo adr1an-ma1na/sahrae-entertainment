@@ -4,6 +4,13 @@ import { haptics } from '../services/haptics';
 
 type Repeat = 'off' | 'one' | 'all';
 
+export interface Playlist {
+  id: string;
+  name: string;
+  createdAt: number;
+  tracks: Track[];
+}
+
 interface MusicCtx {
   queue: Track[];
   index: number;
@@ -27,10 +34,26 @@ interface MusicCtx {
   isLiked: (id: string) => boolean;
   likedTracks: Track[];
   setExpanded: (v: boolean) => void;
+  // Library
+  playlists: Playlist[];
+  recentlyPlayed: Track[];
+  createPlaylist: (name: string) => string;
+  deletePlaylist: (id: string) => void;
+  renamePlaylist: (id: string, name: string) => void;
+  addToPlaylist: (id: string, track: Track) => void;
+  removeFromPlaylist: (id: string, trackId: string) => void;
+  // Add-to-playlist sheet
+  addSheetTrack: Track | null;
+  openAddSheet: (t: Track) => void;
+  closeAddSheet: () => void;
 }
 
 const Ctx = createContext<MusicCtx | undefined>(undefined);
 const LIKED_KEY = 'sahrae.music.liked.v1';
+const PL_KEY = 'sahrae.music.playlists.v1';
+const RECENT_KEY = 'sahrae.music.recent.v1';
+const loadLS = <T,>(k: string, fb: T): T => { try { const s = localStorage.getItem(k); return s ? JSON.parse(s) : fb; } catch { return fb; } };
+const saveLS = (k: string, v: unknown) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ } };
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 let apiLoading = false;
@@ -67,8 +90,43 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const [likedTracks, setLikedTracks] = useState<Track[]>(() => {
     try { return JSON.parse(localStorage.getItem(LIKED_KEY) || '[]'); } catch { return []; }
   });
+  const [playlists, setPlaylists] = useState<Playlist[]>(() => loadLS<Playlist[]>(PL_KEY, []));
+  const [recentlyPlayed, setRecentlyPlayed] = useState<Track[]>(() => loadLS<Track[]>(RECENT_KEY, []));
+  const [addSheetTrack, setAddSheetTrack] = useState<Track | null>(null);
 
   const current = queue[index] || null;
+
+  // Track recently played (most recent first, de-duped, capped).
+  useEffect(() => {
+    const c = queue[index];
+    if (!c) return;
+    setRecentlyPlayed((prev) => {
+      const nextList = [c, ...prev.filter((t) => t.id !== c.id)].slice(0, 40);
+      saveLS(RECENT_KEY, nextList);
+      return nextList;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current?.id]);
+
+  // Library mutations
+  const createPlaylist = (name: string): string => {
+    const p: Playlist = { id: `pl_${Date.now()}`, name: name.trim() || 'New Playlist', createdAt: Date.now(), tracks: [] };
+    setPlaylists((prev) => { const n = [p, ...prev]; saveLS(PL_KEY, n); return n; });
+    return p.id;
+  };
+  const deletePlaylist = (id: string) => setPlaylists((prev) => { const n = prev.filter((p) => p.id !== id); saveLS(PL_KEY, n); return n; });
+  const renamePlaylist = (id: string, name: string) => setPlaylists((prev) => { const n = prev.map((p) => (p.id === id ? { ...p, name: name.trim() || p.name } : p)); saveLS(PL_KEY, n); return n; });
+  const addToPlaylist = (id: string, track: Track) => {
+    haptics.tap();
+    setPlaylists((prev) => {
+      const n = prev.map((p) => (p.id === id && !p.tracks.some((t) => t.id === track.id) ? { ...p, tracks: [...p.tracks, track] } : p));
+      saveLS(PL_KEY, n);
+      return n;
+    });
+  };
+  const removeFromPlaylist = (id: string, trackId: string) => setPlaylists((prev) => { const n = prev.map((p) => (p.id === id ? { ...p, tracks: p.tracks.filter((t) => t.id !== trackId) } : p)); saveLS(PL_KEY, n); return n; });
+  const openAddSheet = (t: Track) => setAddSheetTrack(t);
+  const closeAddSheet = () => setAddSheetTrack(null);
 
   // ── transport (fresh closures kept on refs so the YT callbacks see latest state) ──
   const next = () => {
@@ -198,6 +256,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         queue, index, current, isPlaying, position, duration, shuffle, repeat, expanded, buffering, active,
         playQueue, toggle, next, prev, seek, toggleShuffle, cycleRepeat, toggleLike, isLiked,
         likedTracks, setExpanded,
+        playlists, recentlyPlayed, createPlaylist, deletePlaylist, renamePlaylist, addToPlaylist, removeFromPlaylist,
+        addSheetTrack, openAddSheet, closeAddSheet,
       }}
     >
       {children}

@@ -1,4 +1,4 @@
-import { Play, Pause, SkipForward, SkipBack, ChevronDown, Heart, Shuffle, Repeat, Repeat1, Music2 } from 'lucide-react';
+import { Play, Pause, SkipForward, SkipBack, ChevronDown, Heart, Shuffle, Repeat, Repeat1, Music2, Plus } from 'lucide-react';
 import { useMusic } from '../hooks/useMusic';
 
 const fmt = (s: number) => {
@@ -11,7 +11,7 @@ const fmt = (s: number) => {
 export default function MusicPlayer() {
   const {
     current, isPlaying, position, duration, shuffle, repeat, expanded, active,
-    toggle, next, prev, seek, toggleShuffle, cycleRepeat, toggleLike, isLiked, setExpanded,
+    toggle, next, prev, seek, toggleShuffle, cycleRepeat, toggleLike, isLiked, setExpanded, openAddSheet,
   } = useMusic();
 
   if (!current || !active) return null;
@@ -35,9 +35,14 @@ export default function MusicPlayer() {
                 <ChevronDown className="w-6 h-6" />
               </button>
               <span className="overline">Now Playing</span>
-              <button onClick={() => toggleLike(current)} tabIndex={0} data-tv-focusable className={`w-11 h-11 rounded-full glass flex items-center justify-center ${isLiked(current.id) ? 'text-amber-400' : 'text-white'}`} aria-label="Like">
-                <Heart className={`w-5 h-5 ${isLiked(current.id) ? 'fill-current' : ''}`} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => openAddSheet(current)} tabIndex={0} data-tv-focusable className="w-11 h-11 rounded-full glass flex items-center justify-center text-white" aria-label="Add to playlist">
+                  <Plus className="w-5 h-5" />
+                </button>
+                <button onClick={() => toggleLike(current)} tabIndex={0} data-tv-focusable className={`w-11 h-11 rounded-full glass flex items-center justify-center ${isLiked(current.id) ? 'text-amber-400' : 'text-white'}`} aria-label="Like">
+                  <Heart className={`w-5 h-5 ${isLiked(current.id) ? 'fill-current' : ''}`} />
+                </button>
+              </div>
             </div>
 
             {/* Spinning vinyl */}
