@@ -1,7 +1,9 @@
-import { useState, Fragment } from 'react';
-import { Play, Pause, SkipForward, SkipBack, ChevronDown, Heart, Shuffle, Repeat, Repeat1, Music2, Plus, X, ListMusic } from 'lucide-react';
+import { useState, useEffect, useRef, Fragment } from 'react';
+import { Play, Pause, SkipForward, SkipBack, ChevronDown, Heart, Shuffle, Repeat, Repeat1, Music2, Plus, X, ListMusic, Mic2 } from 'lucide-react';
 import { useMusic } from '../hooks/useMusic';
 import { Track } from '../services/ytmusic';
+import { CoverArt } from './ui/CoverArt';
+import { DynamicBackground } from './ui/DynamicBackground';
 
 const fmt = (s: number) => {
   if (!s || !isFinite(s)) return '0:00';
@@ -10,12 +12,82 @@ const fmt = (s: number) => {
   return `${m}:${r < 10 ? '0' : ''}${r}`;
 };
 
+/* ─────────── Lyrics (lrclib.net, key-less, CORS-enabled) ─────────── */
+type LyricLine = { t: number; text: string };
+function parseLRC(lrc: string): LyricLine[] {
+  const out: LyricLine[] = [];
+  for (const raw of lrc.split('\n')) {
+    const tags = raw.match(/\[(\d+):(\d+)(?:[.:](\d+))?\]/g);
+    if (!tags) continue;
+    const text = raw.replace(/\[[^\]]*\]/g, '').trim();
+    for (const tag of tags) {
+      const mm = tag.match(/\[(\d+):(\d+)(?:[.:](\d+))?\]/);
+      if (!mm) continue;
+      const t = parseInt(mm[1], 10) * 60 + parseInt(mm[2], 10) + (mm[3] ? parseFloat('0.' + mm[3]) : 0);
+      out.push({ t, text });
+    }
+  }
+  return out.sort((a, b) => a.t - b.t);
+}
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function LyricsPanel({ track, position }: { track: Track; position: number }) {
+  const [state, setState] = useState<'loading' | 'synced' | 'plain' | 'none'>('loading');
+  const [synced, setSynced] = useState<LyricLine[]>([]);
+  const [plain, setPlain] = useState('');
+  const activeRef = useRef<HTMLParagraphElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setState('loading'); setSynced([]); setPlain('');
+    (async () => {
+      try {
+        const q = `${track.artist} ${track.title}`.replace(/\([^)]*\)|\[[^\]]*\]/g, '').replace(/\s+/g, ' ').trim();
+        const r = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(q)}`);
+        const arr = r.ok ? await r.json() : [];
+        if (cancelled) return;
+        const list: any[] = Array.isArray(arr) ? arr : [];
+        const s = list.find((x) => x.syncedLyrics);
+        if (s?.syncedLyrics) { const p = parseLRC(s.syncedLyrics); if (p.length) { setSynced(p); setState('synced'); return; } }
+        const p = list.find((x) => x.plainLyrics);
+        if (p?.plainLyrics) { setPlain(p.plainLyrics); setState('plain'); return; }
+        setState('none');
+      } catch { if (!cancelled) setState('none'); }
+    })();
+    return () => { cancelled = true; };
+  }, [track.id]);
+
+  let activeIdx = -1;
+  if (state === 'synced') for (let i = 0; i < synced.length; i++) { if (synced[i].t <= position + 0.25) activeIdx = i; else break; }
+
+  useEffect(() => { activeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, [activeIdx]);
+
+  if (state === 'loading') return <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">Finding lyrics…</div>;
+  if (state === 'none') return <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm px-8 text-center">No lyrics found for this track.</div>;
+  if (state === 'plain') return (
+    <div className="flex-1 overflow-y-auto custom-scrollbar px-2 text-center py-8">
+      {plain.split('\n').map((l, i) => <p key={i} className="text-lg font-semibold text-white/80 leading-relaxed py-0.5">{l || ' '}</p>)}
+    </div>
+  );
+  return (
+    <div className="flex-1 overflow-y-auto custom-scrollbar px-2 text-center py-12">
+      {synced.map((l, i) => (
+        <p key={i} ref={i === activeIdx ? activeRef : undefined}
+          className={`text-2xl font-bold leading-snug py-2 transition-all duration-300 ${i === activeIdx ? 'text-white scale-[1.02]' : i < activeIdx ? 'text-white/30' : 'text-white/55'}`}>
+          {l.text || '♪'}
+        </p>
+      ))}
+    </div>
+  );
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 function QueueRow({ track, activeRow, onPlay, onRemove }: { track: Track; activeRow?: boolean; onPlay?: () => void; onRemove?: () => void }) {
   return (
     <div tabIndex={onPlay ? 0 : undefined} data-tv-focusable={onPlay ? true : undefined} role={onPlay ? 'button' : undefined} onClick={onPlay}
       className={`flex items-center gap-3 p-2 rounded-xl ${onPlay ? 'cursor-pointer hover:bg-white/5 focus:outline-none focus:bg-white/5' : ''}`}>
-      <div className="w-11 h-11 rounded-lg overflow-hidden bg-zinc-800 shrink-0 relative">{track.artwork ? <img src={track.artwork} className="w-full h-full object-cover" alt="" loading="lazy" /> : <Music2 className="w-5 h-5 text-zinc-600 absolute inset-0 m-auto" />}</div>
-      <div className="min-w-0 flex-1"><p className={`text-sm font-semibold truncate ${activeRow ? 'text-amber-400' : 'text-white'}`}>{track.title}</p><p className="text-xs text-zinc-500 truncate">{track.artist}</p></div>
+      <CoverArt imageUrl={track.artwork} dominantColor={track.dominantColor} className="w-11 h-11 shrink-0" />
+      <div className="min-w-0 flex-1"><p className={`text-sm font-semibold truncate ${activeRow ? 'text-sauti' : 'text-white'}`}>{track.title}</p><p className="text-xs text-zinc-500 truncate">{track.artist}</p></div>
       {onRemove && <button onClick={(e) => { e.stopPropagation(); onRemove(); }} className="p-2 text-zinc-500 hover:text-red-400 shrink-0" aria-label="Remove from queue"><X className="w-4 h-4" /></button>}
     </div>
   );
@@ -29,6 +101,7 @@ export default function MusicPlayer() {
   } = useMusic();
   const [showQueue, setShowQueue] = useState(false);
   const [qTab, setQTab] = useState<'next' | 'recent'>('next');
+  const [showLyrics, setShowLyrics] = useState(false);
 
   if (!current || !active) return null;
   const pct = duration ? Math.min(100, (position / duration) * 100) : 0;
@@ -36,89 +109,71 @@ export default function MusicPlayer() {
 
   return (
     <>
-      {/* ── Full-screen "vinyl" now-playing ── */}
+      {/* ── Full-screen now-playing (album-art dominant) ── */}
       {expanded && (
-        <div role="dialog" data-tv-layer className="fixed inset-0 z-[120] overflow-hidden animate-in fade-in duration-300">
-          {/* Ambient blurred-art backdrop */}
-          <div className="absolute inset-0 -z-10">
-            {current.artworkLarge && <img src={current.artworkLarge} alt="" className="w-full h-full object-cover scale-150 blur-3xl opacity-50" />}
-            <div className="absolute inset-0 bg-zinc-950/80" />
+        <div role="dialog" data-tv-layer className="sauti fixed inset-0 z-[120] overflow-hidden animate-in fade-in duration-300">
+          <DynamicBackground color={current.dominantColor} />
+          <div className="absolute inset-0 -z-10 pointer-events-none">
+            {current.artworkLarge && <img src={current.artworkLarge} alt="" className="w-full h-full object-cover scale-150 blur-3xl opacity-25" />}
           </div>
 
           <div className="h-full flex flex-col px-5 md:px-8 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1.5rem)] max-w-xl mx-auto">
             {/* Top bar */}
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <button onClick={() => setExpanded(false)} tabIndex={0} data-tv-focusable className="w-11 h-11 rounded-full glass flex items-center justify-center text-white" aria-label="Minimize">
-                  <ChevronDown className="w-6 h-6" />
-                </button>
-                <button onClick={stop} tabIndex={0} data-tv-focusable className="w-11 h-11 rounded-full glass flex items-center justify-center text-white" aria-label="Stop music">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <span className="overline">Now Playing</span>
-              <div className="flex items-center gap-2">
-                <button onClick={() => { setQTab('next'); setShowQueue(true); }} tabIndex={0} data-tv-focusable className="w-11 h-11 rounded-full glass flex items-center justify-center text-white" aria-label="Queue">
-                  <ListMusic className="w-5 h-5" />
-                </button>
-                <button onClick={() => openAddSheet(current)} tabIndex={0} data-tv-focusable className="w-11 h-11 rounded-full glass flex items-center justify-center text-white" aria-label="Add to playlist">
-                  <Plus className="w-5 h-5" />
-                </button>
-                <button onClick={() => toggleLike(current)} tabIndex={0} data-tv-focusable className={`w-11 h-11 rounded-full glass flex items-center justify-center ${isLiked(current.id) ? 'text-amber-400' : 'text-white'}`} aria-label="Like">
-                  <Heart className={`w-5 h-5 ${isLiked(current.id) ? 'fill-current' : ''}`} />
-                </button>
-              </div>
+              <button onClick={() => setExpanded(false)} data-tv-close tabIndex={0} data-tv-focusable className="w-11 h-11 rounded-full glass flex items-center justify-center text-white" aria-label="Minimize">
+                <ChevronDown className="w-6 h-6" />
+              </button>
+              <p className="overline truncate px-3">{queueSource ? `Playing from ${queueSource}` : 'Now Playing'}</p>
+              <button onClick={stop} tabIndex={0} data-tv-focusable className="w-11 h-11 rounded-full glass flex items-center justify-center text-white" aria-label="Stop music">
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            {/* Spinning vinyl */}
-            <div className="flex-1 flex items-center justify-center py-6">
-              <div
-                className="relative w-[68vw] max-w-[340px] aspect-square rounded-full overflow-hidden border-2 border-amber-400/30 shadow-[0_0_60px_rgba(245,158,11,0.18)]"
-                style={{ animation: 'vinyl-spin 18s linear infinite', animationPlayState: isPlaying ? 'running' : 'paused' }}
-              >
-                {current.artworkLarge ? (
-                  <img src={current.artworkLarge} alt={current.title} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full bg-zinc-800 flex items-center justify-center"><Music2 className="w-16 h-16 text-zinc-600" /></div>
-                )}
-                {/* vinyl centre */}
-                <div className="absolute inset-0 m-auto w-[18%] h-[18%] rounded-full bg-zinc-950 border border-white/10" />
-                <div className="absolute inset-0 m-auto w-[5%] h-[5%] rounded-full bg-amber-400/70" />
-              </div>
+            {/* Album art OR lyrics */}
+            <div className="flex-1 flex items-center justify-center py-6 min-h-0">
+              {showLyrics ? (
+                <div className="w-full h-full flex flex-col min-h-0"><LyricsPanel track={current} position={position} /></div>
+              ) : current.artworkLarge || current.artwork ? (
+                <CoverArt imageUrl={current.artworkLarge || current.artwork} dominantColor={current.dominantColor} rounded="rounded-2xl"
+                  className="w-[78vw] max-w-[360px] aspect-square shadow-[0_28px_80px_rgba(0,0,0,0.6)]" />
+              ) : (
+                <div className="w-[78vw] max-w-[360px] aspect-square rounded-2xl bg-zinc-800 flex items-center justify-center"><Music2 className="w-20 h-20 text-zinc-600" /></div>
+              )}
             </div>
 
-            {/* Title */}
-            <div className="text-center mb-5 px-2">
-              <h2 className="text-2xl font-display font-bold text-white truncate">{current.title}</h2>
-              <p className="text-zinc-400 truncate">{current.artist}</p>
+            {/* Title + quick actions */}
+            <div className="flex items-center gap-3 mb-5 px-1">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-2xl font-display font-bold text-white truncate">{current.title}</h2>
+                <p className="text-zinc-300 truncate">{current.artist}</p>
+              </div>
+              <button onClick={() => openAddSheet(current)} tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full flex items-center justify-center text-zinc-300 hover:text-white shrink-0" aria-label="Add to playlist"><Plus className="w-5 h-5" /></button>
+              <button onClick={() => toggleLike(current)} tabIndex={0} data-tv-focusable className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isLiked(current.id) ? 'text-sauti' : 'text-zinc-300 hover:text-white'}`} aria-label="Like"><Heart className={`w-6 h-6 ${isLiked(current.id) ? 'fill-current' : ''}`} /></button>
             </div>
 
             {/* Scrubber */}
             <div className="mb-5">
-              <input
-                type="range" min={0} max={duration || 0} value={position} step={1}
-                onChange={(e) => seek(Number(e.target.value))}
-                style={{ accentColor: '#f59e0b' }}
-                className="w-full h-1.5 cursor-pointer"
-                aria-label="Seek"
-              />
-              <div className="flex justify-between text-[11px] text-zinc-400 tabular mt-1">
-                <span>{fmt(position)}</span>
-                <span>{fmt(duration)}</span>
-              </div>
+              <input type="range" min={0} max={duration || 0} value={position} step={1} onChange={(e) => seek(Number(e.target.value))} style={{ accentColor: '#ff5a4e' }} className="w-full h-1.5 cursor-pointer" aria-label="Seek" />
+              <div className="flex justify-between text-[11px] text-zinc-400 tabular mt-1"><span>{fmt(position)}</span><span>{fmt(duration)}</span></div>
             </div>
 
             {/* Transport */}
             <div className="flex items-center justify-between">
-              <button onClick={toggleShuffle} tabIndex={0} data-tv-focusable className={`w-11 h-11 flex items-center justify-center rounded-full ${shuffle ? 'text-amber-400' : 'text-zinc-400 hover:text-white'}`} aria-label="Shuffle"><Shuffle className="w-5 h-5" /></button>
+              <button onClick={toggleShuffle} tabIndex={0} data-tv-focusable className={`w-11 h-11 flex items-center justify-center rounded-full ${shuffle ? 'text-sauti' : 'text-zinc-400 hover:text-white'}`} aria-label="Shuffle"><Shuffle className="w-5 h-5" /></button>
               <button onClick={prev} tabIndex={0} data-tv-focusable className="w-12 h-12 flex items-center justify-center text-white" aria-label="Previous"><SkipBack className="w-7 h-7 fill-current" /></button>
-              <button onClick={toggle} tabIndex={0} data-tv-focusable className="btn-gold w-16 h-16 rounded-full flex items-center justify-center" aria-label={isPlaying ? 'Pause' : 'Play'}>
+              <button onClick={toggle} tabIndex={0} data-tv-focusable className="btn-sauti w-16 h-16 rounded-full flex items-center justify-center" aria-label={isPlaying ? 'Pause' : 'Play'}>
                 {isPlaying ? <Pause className="w-7 h-7 fill-current" /> : <Play className="w-7 h-7 fill-current ml-1" />}
               </button>
               <button onClick={next} tabIndex={0} data-tv-focusable className="w-12 h-12 flex items-center justify-center text-white" aria-label="Next"><SkipForward className="w-7 h-7 fill-current" /></button>
-              <button onClick={cycleRepeat} tabIndex={0} data-tv-focusable className={`w-11 h-11 flex items-center justify-center rounded-full ${repeat !== 'off' ? 'text-amber-400' : 'text-zinc-400 hover:text-white'}`} aria-label="Repeat">
+              <button onClick={cycleRepeat} tabIndex={0} data-tv-focusable className={`w-11 h-11 flex items-center justify-center rounded-full ${repeat !== 'off' ? 'text-sauti' : 'text-zinc-400 hover:text-white'}`} aria-label="Repeat">
                 {repeat === 'one' ? <Repeat1 className="w-5 h-5" /> : <Repeat className="w-5 h-5" />}
               </button>
+            </div>
+
+            {/* Lyrics / Queue */}
+            <div className="flex items-center justify-center gap-2 mt-5">
+              <button onClick={() => setShowLyrics((v) => !v)} tabIndex={0} data-tv-focusable className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-colors ${showLyrics ? 'bg-sauti text-[#210805]' : 'glass text-white'}`}><Mic2 className="w-4 h-4" /> Lyrics</button>
+              <button onClick={() => { setQTab('next'); setShowQueue(true); }} tabIndex={0} data-tv-focusable className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold glass text-white"><ListMusic className="w-4 h-4" /> Queue</button>
             </div>
           </div>
         </div>
@@ -126,12 +181,12 @@ export default function MusicPlayer() {
 
       {/* ── Queue / Recently played ── */}
       {showQueue && (
-        <div role="dialog" data-tv-layer className="fixed inset-0 z-[125] bg-zinc-950 flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-300">
+        <div role="dialog" data-tv-layer className="sauti fixed inset-0 z-[125] flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-300">
           <div className="flex items-center gap-3 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 border-b border-white/10">
             <button onClick={() => setShowQueue(false)} data-tv-close tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full glass flex items-center justify-center text-white" aria-label="Back"><ChevronDown className="w-6 h-6" /></button>
             <div className="flex gap-5">
               {(['next', 'recent'] as const).map((t) => (
-                <button key={t} onClick={() => setQTab(t)} tabIndex={0} data-tv-focusable className={`text-sm font-bold pb-1.5 border-b-2 transition-colors ${qTab === t ? 'text-white border-amber-500' : 'text-zinc-500 border-transparent hover:text-zinc-300'}`}>{t === 'next' ? 'Queue' : 'Recently played'}</button>
+                <button key={t} onClick={() => setQTab(t)} tabIndex={0} data-tv-focusable className={`text-sm font-bold pb-1.5 border-b-2 transition-colors ${qTab === t ? 'text-white border-[#ff5a4e]' : 'text-zinc-500 border-transparent hover:text-zinc-300'}`}>{t === 'next' ? 'Queue' : 'Recently played'}</button>
               ))}
             </div>
           </div>
@@ -161,18 +216,16 @@ export default function MusicPlayer() {
         <div className="fixed bottom-0 left-0 right-0 z-[60] px-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] pointer-events-none">
           <div className="pointer-events-auto max-w-3xl mx-auto glass rounded-2xl border border-white/10 shadow-[0_8px_30px_rgba(0,0,0,0.45)] overflow-hidden">
             {/* progress hairline */}
-            <div className="h-0.5 bg-white/10"><div className="h-full bg-gradient-to-r from-amber-300 to-amber-500 transition-[width] duration-200" style={{ width: `${pct}%` }} /></div>
+            <div className="h-0.5 bg-white/10"><div className="h-full bg-gradient-to-r from-[#ff8a80] to-[#ff5a4e] transition-[width] duration-200" style={{ width: `${pct}%` }} /></div>
             <div className="flex items-center gap-3 p-2 pr-3">
               <button onClick={() => setExpanded(true)} className="flex items-center gap-3 min-w-0 flex-1 text-left" aria-label="Open player">
-                <div className="w-11 h-11 rounded-lg overflow-hidden bg-zinc-800 shrink-0">
-                  {current.artwork ? <img src={current.artwork} alt="" className="w-full h-full object-cover" /> : <Music2 className="w-5 h-5 text-zinc-600 absolute m-auto" />}
-                </div>
+                <CoverArt imageUrl={current.artwork} dominantColor={current.dominantColor} className="w-11 h-11 shrink-0" />
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-white truncate">{current.title}</p>
                   <p className="text-xs text-zinc-400 truncate">{current.artist}</p>
                 </div>
               </button>
-              <button onClick={toggle} tabIndex={0} data-tv-focusable className="btn-gold w-11 h-11 rounded-full flex items-center justify-center shrink-0" aria-label={isPlaying ? 'Pause' : 'Play'}>
+              <button onClick={toggle} tabIndex={0} data-tv-focusable className="btn-sauti w-11 h-11 rounded-full flex items-center justify-center shrink-0" aria-label={isPlaying ? 'Pause' : 'Play'}>
                 {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
               </button>
               <button onClick={next} tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full flex items-center justify-center text-zinc-300 hover:text-white shrink-0" aria-label="Next"><SkipForward className="w-5 h-5 fill-current" /></button>

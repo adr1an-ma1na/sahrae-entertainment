@@ -11,6 +11,15 @@
 export interface Track {
   id: string; title: string; artist: string;
   artwork?: string; artworkLarge?: string; duration: number;
+  dominantColor?: string;
+}
+
+// Deterministic, pleasant "dominant colour" per track for CoverArt /
+// DynamicBackground. (A real backend can replace this with the true value.)
+export function dominantColor(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return `hsl(${h % 360}, 42%, 26%)`;
 }
 export interface Artist { id: string; name: string; thumbnail?: string }
 export interface Album { id: string; name: string; thumbnail?: string; artist?: string }
@@ -69,6 +78,7 @@ function mapItem(it: any): Track | null {
     title: it.title || 'Unknown',
     artist: (it.uploaderName || '').replace(/\s*-\s*Topic$/i, '').trim() || 'Unknown Artist',
     artwork: it.thumbnail, artworkLarge: it.thumbnail, duration: it.duration,
+    dominantColor: dominantColor(id),
   };
 }
 function mapItems(items: any[]): Track[] {

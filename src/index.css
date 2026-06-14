@@ -269,6 +269,36 @@
 }
 
 /* ─────────────────────────────────────────────────────────────
+   SAUTI — the music sub-brand. True-black base, elevated surfaces
+   (#181818 / #282828) and a single electric-coral accent (#FF5A4E),
+   deliberately not Spotify green. Tokens are global so the player
+   (rendered outside the Sauti view) shares the identity.
+   ───────────────────────────────────────────────────────────── */
+:root {
+  --sauti-accent: #ff5a4e;
+  --sauti-accent-2: #ff7a6f;
+  --sauti-s1: #181818;
+  --sauti-s2: #282828;
+}
+@layer utilities {
+  .sauti { background-color: #000; }            /* the Sauti view canvas */
+  .sauti-s1 { background-color: var(--sauti-s1); }
+  .sauti-s2 { background-color: var(--sauti-s2); }
+  .text-sauti { color: var(--sauti-accent); }
+  .bg-sauti { background-color: var(--sauti-accent); }
+  .btn-sauti {
+    background: var(--sauti-accent);
+    color: #210805;
+    box-shadow: 0 6px 18px rgba(255, 90, 78, .34), inset 0 1px 0 rgba(255, 255, 255, .25);
+    transition: transform .2s var(--ease-premium), box-shadow .2s var(--ease-premium), filter .2s var(--ease-premium);
+  }
+  .btn-sauti:hover { filter: brightness(1.07); transform: translateY(-1px); box-shadow: 0 12px 28px rgba(255, 90, 78, .46), inset 0 1px 0 rgba(255, 255, 255, .35); }
+  .btn-sauti:active { transform: translateY(0); }
+  .sauti-card { background: var(--sauti-s1); border: 1px solid rgba(255, 255, 255, .06); transition: background .25s ease, transform .35s var(--ease-premium), box-shadow .35s var(--ease-premium); }
+  .sauti-card:hover, .sauti-card:focus-within { background: var(--sauti-s2); transform: translateY(-4px); box-shadow: 0 16px 40px rgba(0, 0, 0, .6); }
+}
+
+/* ─────────────────────────────────────────────────────────────
    TV / D-pad focus highlight. Applied by src/tv/spatialNavigation.ts
    to whatever element the remote is currently on. Bright amber ring
    so the selected item is unmistakable across a room.
