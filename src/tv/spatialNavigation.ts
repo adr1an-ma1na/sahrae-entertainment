@@ -20,6 +20,8 @@
  * never send arrow keys), so phones and desktop pointer use are unaffected.
  */
 
+import { haptics } from '../services/haptics';
+
 type Dir = 'up' | 'down' | 'left' | 'right';
 
 const FOCUSABLE_SELECTOR = [
@@ -121,6 +123,9 @@ function focusElement(el: HTMLElement) {
     el.focus();
   }
   highlight(el);
+  // Tactile tick as focus lands on a new tile — the remote/gamepad equivalent of
+  // the touch "selection" haptic. No-ops on devices without a rumble motor.
+  haptics.select();
   // INSTANT — no smooth animation. CSS scroll-padding/scroll-margin (see
   // index.css .tv-mode rules) keeps it clear of the fixed navbar and screen edges.
   el.scrollIntoView({ block: 'nearest', inline: 'nearest' });

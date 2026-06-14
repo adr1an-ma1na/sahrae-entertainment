@@ -181,30 +181,33 @@
     box-shadow: 0 18px 44px rgba(0,0,0,.55), 0 0 30px rgba(245,158,11,.16);
   }
 
-  /* Frosted "liquid" glass — nav, sheets, chips, mini-bar. Now carries a
-     specular top sheen + bright rim + depth so every glass surface in the app
-     reads like Apple's Liquid Glass, not a flat translucent panel. */
+  /* Frosted "liquid" glass — nav, sheets, chips, mini-bar. Pronounced: heavy
+     blur + saturation, a strong specular top sheen, a bright rim and real depth
+     so it clearly reads as glass, not a faint tint. */
   .glass {
     background:
-      linear-gradient(180deg, rgba(255,255,255,.08) 0%, rgba(255,255,255,.02) 42%, rgba(255,255,255,0) 100%),
-      rgba(10, 10, 12, 0.6);
-    backdrop-filter: blur(22px) saturate(165%);
-    -webkit-backdrop-filter: blur(22px) saturate(165%);
-    border: 1px solid rgba(255, 255, 255, .14);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 10px 30px rgba(0,0,0,.4);
+      linear-gradient(180deg, rgba(255,255,255,.16) 0%, rgba(255,255,255,.05) 45%, rgba(255,255,255,.015) 100%),
+      rgba(12, 12, 16, 0.5);
+    backdrop-filter: blur(32px) saturate(195%);
+    -webkit-backdrop-filter: blur(32px) saturate(195%);
+    border: 1px solid rgba(255, 255, 255, .22);
+    box-shadow:
+      inset 0 1.5px 0 rgba(255,255,255,.38),
+      inset 0 0 24px rgba(255,255,255,.05),
+      0 16px 44px rgba(0,0,0,.5);
   }
 
   /* Secondary button — liquid glass with sheen + rim */
   .btn-glass {
-    background: linear-gradient(135deg, rgba(255,255,255,.18), rgba(255,255,255,.06));
-    border: 1px solid rgba(255, 255, 255, .22);
+    background: linear-gradient(135deg, rgba(255,255,255,.32), rgba(255,255,255,.09));
+    border: 1px solid rgba(255, 255, 255, .34);
     color: #fff;
-    backdrop-filter: blur(16px) saturate(170%);
-    -webkit-backdrop-filter: blur(16px) saturate(170%);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 6px 18px rgba(0,0,0,.3);
+    backdrop-filter: blur(22px) saturate(190%);
+    -webkit-backdrop-filter: blur(22px) saturate(190%);
+    box-shadow: inset 0 1.5px 0 rgba(255,255,255,.55), inset 0 -8px 18px rgba(255,255,255,.07), 0 8px 22px rgba(0,0,0,.38);
     transition: background .2s var(--ease-premium), transform .2s var(--ease-premium), box-shadow .2s var(--ease-premium);
   }
-  .btn-glass:hover { background: linear-gradient(135deg, rgba(255,255,255,.26), rgba(255,255,255,.1)); transform: translateY(-1px); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 10px 24px rgba(0,0,0,.36); }
+  .btn-glass:hover { background: linear-gradient(135deg, rgba(255,255,255,.42), rgba(255,255,255,.14)); transform: translateY(-1px); box-shadow: inset 0 1.5px 0 rgba(255,255,255,.65), 0 12px 28px rgba(0,0,0,.44); }
   .btn-glass:active { transform: translateY(0) scale(.98); }
 
   /* Editorial overline / kicker — small, tracked, gold */
@@ -307,23 +310,37 @@
        cleanly over album art or a colour wash; used on the round transport-area
        buttons and the Lyrics / Queue pills. ── */
   .glass-liquid {
-    background: linear-gradient(135deg, rgba(255,255,255,.24) 0%, rgba(255,255,255,.08) 42%, rgba(255,255,255,.03) 100%);
-    backdrop-filter: blur(18px) saturate(180%);
-    -webkit-backdrop-filter: blur(18px) saturate(180%);
-    border: 1px solid rgba(255,255,255,.28);
+    position: relative;
+    isolation: isolate;
+    background: linear-gradient(135deg, rgba(255,255,255,.42) 0%, rgba(255,255,255,.14) 38%, rgba(255,255,255,.05) 68%, rgba(255,255,255,.12) 100%);
+    backdrop-filter: blur(28px) saturate(200%);
+    -webkit-backdrop-filter: blur(28px) saturate(200%);
+    border: 1px solid rgba(255,255,255,.45);
     box-shadow:
-      inset 0 1px 0 rgba(255,255,255,.5),
-      inset 0 -10px 22px rgba(255,255,255,.06),
-      0 8px 26px rgba(0,0,0,.4);
+      inset 0 2px 0 rgba(255,255,255,.75),
+      inset 0 -12px 26px rgba(255,255,255,.12),
+      inset 0 0 0 1px rgba(255,255,255,.08),
+      0 12px 34px rgba(0,0,0,.5);
     transition: transform .2s var(--ease-premium), background .25s ease, box-shadow .25s ease;
   }
+  /* Specular refraction blob — top-left glare that sells the glass. Sits behind
+     content (z-index -1 within the isolated stacking context). */
+  .glass-liquid::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    z-index: -1;
+    background: radial-gradient(130% 90% at 28% 6%, rgba(255,255,255,.6) 0%, rgba(255,255,255,.12) 42%, rgba(255,255,255,0) 70%);
+    pointer-events: none;
+  }
   .glass-liquid:hover {
-    background: linear-gradient(135deg, rgba(255,255,255,.32) 0%, rgba(255,255,255,.12) 44%, rgba(255,255,255,.05) 100%);
+    background: linear-gradient(135deg, rgba(255,255,255,.52) 0%, rgba(255,255,255,.2) 40%, rgba(255,255,255,.08) 70%, rgba(255,255,255,.16) 100%);
     transform: translateY(-1px);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.6), inset 0 -10px 22px rgba(255,255,255,.09), 0 12px 30px rgba(0,0,0,.46);
+    box-shadow: inset 0 2px 0 rgba(255,255,255,.85), inset 0 -12px 26px rgba(255,255,255,.16), 0 16px 38px rgba(0,0,0,.55);
   }
   .glass-liquid:active { transform: translateY(0) scale(.96); }
-  .glass-liquid:focus-visible { outline: none; box-shadow: inset 0 1px 0 rgba(255,255,255,.6), 0 0 0 2px rgba(245,158,11,.7), 0 12px 30px rgba(0,0,0,.46); }
+  .glass-liquid:focus-visible { outline: none; box-shadow: inset 0 2px 0 rgba(255,255,255,.85), 0 0 0 2px rgba(245,158,11,.8), 0 16px 38px rgba(0,0,0,.55); }
 }
 
 /* ─────────────────────────────────────────────────────────────

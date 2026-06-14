@@ -114,7 +114,7 @@ export default function MusicPlayer() {
         <div role="dialog" data-tv-layer className="dark sauti fixed inset-0 z-[120] overflow-hidden animate-in fade-in duration-300">
           <DynamicBackground color={current.dominantColor} />
 
-          <div className="h-full flex flex-col px-5 md:px-8 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1.5rem)] max-w-xl mx-auto">
+          <div className="relative z-10 h-full flex flex-col px-5 md:px-8 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1.5rem)] max-w-xl mx-auto">
             {/* Top bar */}
             <div className="flex items-center justify-between">
               <button onClick={() => setExpanded(false)} data-tv-close tabIndex={0} data-tv-focusable className="w-11 h-11 rounded-full glass-liquid flex items-center justify-center text-white" aria-label="Minimize">
@@ -131,8 +131,8 @@ export default function MusicPlayer() {
               {showLyrics ? (
                 <div className="w-full h-full flex flex-col min-h-0"><LyricsPanel track={current} position={position} /></div>
               ) : current.artworkLarge || current.artwork ? (
-                <CoverArt imageUrl={current.artworkLarge || current.artwork} dominantColor={current.dominantColor} rounded="rounded-2xl"
-                  className="w-[78vw] max-w-[360px] aspect-square shadow-[0_28px_80px_rgba(0,0,0,0.6)]" />
+                <CoverArt imageUrl={current.artworkLarge || current.artwork} fallbackUrl={current.artwork} dominantColor={current.dominantColor} rounded="rounded-2xl"
+                  className="w-[80vw] max-w-[400px] aspect-square shadow-[0_28px_80px_rgba(0,0,0,0.6)]" />
               ) : (
                 <div className="w-[78vw] max-w-[360px] aspect-square rounded-2xl bg-zinc-800 flex items-center justify-center"><Music2 className="w-20 h-20 text-zinc-600" /></div>
               )}

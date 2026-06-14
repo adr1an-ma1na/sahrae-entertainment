@@ -86,6 +86,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const pendingRef = useRef<string | null>(null);
   const loadedIdRef = useRef<string | null>(null);
   const extendingRef = useRef<string | null>(null);
+  // Latest control fns + live position, for the OS MediaSession handlers (which
+  // are registered once but must always act on current state).
+  const ctrlRef = useRef<{ next: () => void; prev: () => void; stop: () => void; seek: (s: number) => void }>({ next: () => {}, prev: () => {}, stop: () => {}, seek: () => {} });
+  const liveRef = useRef({ position: 0, duration: 0 });
 
   const [queue, setQueue] = useState<Track[]>([]);
   const [index, setIndex] = useState(0);
@@ -242,6 +246,55 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('sahrae:audioclaim', onClaim);
   }, []);
 
+  // ── OS MediaSession: now-playing on the lock screen / notification shade with
+  //    working transport buttons (phone & tablet; benign elsewhere). Also gives
+  //    Android the strongest signal to keep audio alive when backgrounded. ──
+  liveRef.current = { position, duration };
+  useEffect(() => {
+    const ms: any = (navigator as any).mediaSession;
+    if (!ms || typeof (window as any).MediaMetadata === 'undefined') return;
+    if (!current) { try { ms.metadata = null; ms.playbackState = 'none'; } catch { /* ignore */ } return; }
+    const art = current.artworkLarge || current.artwork;
+    try {
+      ms.metadata = new (window as any).MediaMetadata({
+        title: current.title,
+        artist: current.artist,
+        album: 'Sauti',
+        artwork: art ? [
+          { src: current.artwork || art, sizes: '256x256', type: 'image/jpeg' },
+          { src: art, sizes: '512x512', type: 'image/jpeg' },
+        ] : [],
+      });
+    } catch { /* ignore */ }
+  }, [current]);
+
+  useEffect(() => {
+    const ms: any = (navigator as any).mediaSession;
+    if (!ms) return;
+    try { ms.playbackState = active ? (isPlaying ? 'playing' : 'paused') : 'none'; } catch { /* ignore */ }
+  }, [isPlaying, active]);
+
+  useEffect(() => {
+    const ms: any = (navigator as any).mediaSession;
+    if (!ms || typeof ms.setActionHandler !== 'function') return;
+    const set = (a: string, h: any) => { try { ms.setActionHandler(a, h); } catch { /* unsupported action */ } };
+    set('play', () => { playerRef.current?.playVideo?.(); setIsPlaying(true); setActive(true); });
+    set('pause', () => { playerRef.current?.pauseVideo?.(); setIsPlaying(false); });
+    set('previoustrack', () => ctrlRef.current.prev());
+    set('nexttrack', () => ctrlRef.current.next());
+    set('stop', () => ctrlRef.current.stop());
+    set('seekto', (d: any) => { if (d && d.seekTime != null) ctrlRef.current.seek(d.seekTime); });
+    set('seekforward', (d: any) => ctrlRef.current.seek(Math.min(liveRef.current.duration || 1e9, liveRef.current.position + ((d && d.seekOffset) || 10))));
+    set('seekbackward', (d: any) => ctrlRef.current.seek(Math.max(0, liveRef.current.position - ((d && d.seekOffset) || 10))));
+    return () => ['play', 'pause', 'previoustrack', 'nexttrack', 'stop', 'seekto', 'seekforward', 'seekbackward'].forEach((a) => set(a, null));
+  }, []);
+
+  useEffect(() => {
+    const ms: any = (navigator as any).mediaSession;
+    if (!ms || typeof ms.setPositionState !== 'function' || !duration || !isFinite(duration)) return;
+    try { ms.setPositionState({ duration, position: Math.min(position, duration), playbackRate: 1 }); } catch { /* ignore */ }
+  }, [position, duration]);
+
   const playQueue = (tracks: Track[], startIndex = 0, source = '') => {
     if (!tracks.length) return;
     haptics.press();
@@ -309,6 +362,9 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     });
   };
   const isLiked = (id: string) => likedTracks.some((x) => x.id === id);
+
+  // Keep the MediaSession handlers pointed at the latest control closures.
+  ctrlRef.current = { next, prev, stop, seek };
 
   return (
     <Ctx.Provider

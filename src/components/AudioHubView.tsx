@@ -1,6 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Play, Pause, Radio, Headphones } from 'lucide-react';
 import { useRadio } from '../hooks/useRadio';
+import { probeAudio, probeAll } from '../services/streamHealth';
+
+type Health = 'checking' | 'ok' | 'dead';
 
 const STATIONS = [
   // ── Kenya (all verified working) ──
@@ -30,8 +33,24 @@ const STATIONS = [
 export default function AudioHubView() {
   const [radioCategory, setRadioCategory] = useState<string>('All');
   const { playingUrl, togglePlay } = useRadio();
-  const radioCategories = ['All', ...Array.from(new Set(STATIONS.map((s) => s.category)))].sort();
-  const filteredStations = radioCategory === 'All' ? STATIONS : STATIONS.filter((s) => s.category === radioCategory);
+
+  // On-device health: probe every station on the user's real network and hide
+  // any that won't play. Dead ones hide only once ≥1 station has verified, so a
+  // probe-hostile network never blanks the whole list.
+  const [health, setHealth] = useState<Record<string, Health>>(() => Object.fromEntries(STATIONS.map((s) => [s.url, 'checking' as Health])));
+  useEffect(() => {
+    let cancelled = false;
+    probeAll(STATIONS, (s) => s.url, (s) => probeAudio(s.url), (url, ok) => {
+      if (!cancelled) setHealth((h) => ({ ...h, [url]: ok ? 'ok' : 'dead' }));
+    }, 4);
+    return () => { cancelled = true; };
+  }, []);
+  const probingWorks = useMemo(() => Object.values(health).some((v) => v === 'ok'), [health]);
+  const alive = (s: { url: string }) => !(probingWorks && health[s.url] === 'dead');
+
+  const liveStations = STATIONS.filter(alive);
+  const radioCategories = ['All', ...Array.from(new Set(liveStations.map((s) => s.category)))].sort();
+  const filteredStations = (radioCategory === 'All' ? liveStations : liveStations.filter((s) => s.category === radioCategory));
 
   return (
     <div className="pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-12">

@@ -74,10 +74,12 @@ const chanId = (u: string) => (u || '').match(/\/channel\/([^/?&]+)/)?.[1] || ''
 // lh3/googleusercontent with `=w120-h120` style sizing we can simply bump; plain
 // video thumbnails are requested at hqdefault. Falls back to a direct i.ytimg URL.
 function hiRes(url: string | undefined, id: string): string {
-  if (!url) return `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
-  if (/=w\d+-h\d+/.test(url)) return url.replace(/=w\d+-h\d+[^&]*/, '=w720-h720-l90-rj');
-  if (/=s\d+/.test(url)) return url.replace(/=s\d+[^&]*/, '=s720');
-  if (/(\/vi\/[^/]+\/)[a-z0-9]+\.jpg/i.test(url)) return url.replace(/(\/vi\/[^/]+\/)[a-z0-9]+\.jpg/i, '$1hqdefault.jpg');
+  if (!url) return `https://i.ytimg.com/vi/${id}/maxresdefault.jpg`;
+  // YT-Music square cover art (lh3/googleusercontent): request a large square.
+  if (/=w\d+-h\d+/.test(url)) return url.replace(/=w\d+-h\d+[^&]*/, '=w1200-h1200-l90-rj');
+  if (/=s\d+/.test(url)) return url.replace(/=s\d+[^&]*/, '=s1200');
+  // Video thumbnail → ask for maxres (CoverArt falls back to the base thumb if 404).
+  if (/(\/vi\/[^/]+\/)[a-z0-9]+\.jpg/i.test(url)) return url.replace(/(\/vi\/[^/]+\/)[a-z0-9]+\.jpg/i, '$1maxresdefault.jpg');
   return url;
 }
 

@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import Hls from 'hls.js';
 import { X, Maximize, Search, Heart, RadioTower, Loader2, WifiOff } from 'lucide-react';
+import { probeHls, probeAll } from '../services/streamHealth';
+
+type Health = 'checking' | 'ok' | 'dead';
 
 interface Channel { name: string; country: string; category: Category; url: string }
 type Category = 'News' | 'Sports' | 'Documentary' | 'Science' | 'Music' | 'Kids' | 'Lifestyle';
@@ -121,6 +124,21 @@ export default function LiveTVView() {
   const [favs, setFavs] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(FAV_KEY) || '[]'); } catch { return []; } });
   const [recent, setRecent] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch { return []; } });
 
+  // On-device health: probe every channel through the proxy on the user's real
+  // network and hide any that don't return a playlist — so a listed channel
+  // always plays. Dead ones are hidden ONLY once probing has proven it works
+  // here (≥1 healthy), so a probe-hostile environment never blanks the list.
+  const [health, setHealth] = useState<Record<string, Health>>(() => Object.fromEntries(CHANNELS.map((c) => [c.url, 'checking' as Health])));
+  useEffect(() => {
+    let cancelled = false;
+    probeAll(CHANNELS, (c) => c.url, (c) => probeHls(proxied(c.url)), (url, ok) => {
+      if (!cancelled) setHealth((h) => ({ ...h, [url]: ok ? 'ok' : 'dead' }));
+    }, 5);
+    return () => { cancelled = true; };
+  }, []);
+  const probingWorks = useMemo(() => Object.values(health).some((v) => v === 'ok'), [health]);
+  const isDead = (url: string) => probingWorks && health[url] === 'dead';
+
   const cats = ['All', 'Favorites', ...Array.from(new Set<string>(CHANNELS.map((c) => c.category)))];
 
   const toggleFav = (name: string) => setFavs((prev) => { const n = prev.includes(name) ? prev.filter((x) => x !== name) : [name, ...prev]; try { localStorage.setItem(FAV_KEY, JSON.stringify(n)); } catch { /* */ } return n; });
@@ -133,11 +151,13 @@ export default function LiveTVView() {
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return CHANNELS
+      .filter((c) => !isDead(c.url))
       .filter((c) => (cat === 'Favorites' ? favs.includes(c.name) : cat === 'All' ? true : c.category === cat))
       .filter((c) => !q || c.name.toLowerCase().includes(q) || c.country.toLowerCase().includes(q));
-  }, [cat, query, favs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cat, query, favs, health, probingWorks]);
 
-  const recentChannels = recent.map((n) => CHANNELS.find((c) => c.name === n)).filter(Boolean) as Channel[];
+  const recentChannels = (recent.map((n) => CHANNELS.find((c) => c.name === n)).filter(Boolean) as Channel[]).filter((c) => !isDead(c.url));
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && active) setActive(null); };
