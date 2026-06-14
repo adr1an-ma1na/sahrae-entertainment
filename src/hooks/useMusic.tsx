@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useRef, useEffect, ReactNode } from 'react';
-import { Track } from '../services/ytmusic';
+import { Track, ytmusic } from '../services/ytmusic';
 import { haptics } from '../services/haptics';
 
 type Repeat = 'off' | 'one' | 'all';
@@ -23,6 +23,8 @@ interface MusicCtx {
   expanded: boolean;
   buffering: boolean;
   active: boolean;
+  autoplay: boolean;
+  toggleAutoplay: () => void;
   playQueue: (tracks: Track[], startIndex?: number) => void;
   toggle: () => void;
   next: () => void;
@@ -76,6 +78,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const playerRef = useRef<any>(null);
   const readyRef = useRef(false);
   const pendingRef = useRef<string | null>(null);
+  const loadedIdRef = useRef<string | null>(null);
+  const extendingRef = useRef<string | null>(null);
 
   const [queue, setQueue] = useState<Track[]>([]);
   const [index, setIndex] = useState(0);
@@ -87,6 +91,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const [repeat, setRepeat] = useState<Repeat>('off');
   const [expanded, setExpanded] = useState(false);
   const [active, setActive] = useState(false);
+  const [autoplay, setAutoplay] = useState(true);
   const [likedTracks, setLikedTracks] = useState<Track[]>(() => {
     try { return JSON.parse(localStorage.getItem(LIKED_KEY) || '[]'); } catch { return []; }
   });
@@ -175,15 +180,36 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     return () => { cancelled = true; };
   }, []);
 
-  // ── load the active track whenever it changes ──
+  // ── load the active track whenever it actually changes (guarded so that
+  //    appending radio tracks to the queue never restarts the current song) ──
   useEffect(() => {
     const c = queue[index];
-    if (!c) return;
+    if (!c || loadedIdRef.current === c.id) return;
+    loadedIdRef.current = c.id;
     setPosition(0);
     if (readyRef.current && playerRef.current) playerRef.current.loadVideoById(c.id);
     else pendingRef.current = c.id;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, queue]);
+
+  // ── Autoplay radio: as the queue nears its end, extend it with songs related
+  //    to what's playing (YouTube-Music-style "Up Next") so music never stops. ──
+  useEffect(() => {
+    const c = queue[index];
+    if (!c || !autoplay) return;
+    if (index < queue.length - 2) return; // only when ≤2 tracks remain
+    if (extendingRef.current === c.id) return;
+    extendingRef.current = c.id;
+    ytmusic.related(c.id).then((rel) => {
+      if (!rel.length) return;
+      setQueue((prev) => {
+        const have = new Set(prev.map((t) => t.id));
+        const add = rel.filter((t) => !have.has(t.id)).slice(0, 20);
+        return add.length ? [...prev, ...add] : prev;
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current?.id, queue.length, autoplay]);
 
   // ── poll position / duration from the player ──
   useEffect(() => {
@@ -237,6 +263,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
 
   const seek = (sec: number) => { playerRef.current?.seekTo?.(sec, true); setPosition(sec); };
   const toggleShuffle = () => { haptics.tap(); setShuffle((s) => !s); };
+  const toggleAutoplay = () => { haptics.tap(); setAutoplay((s) => !s); };
   const cycleRepeat = () => { haptics.tap(); setRepeat((r) => (r === 'off' ? 'all' : r === 'all' ? 'one' : 'off')); };
 
   const toggleLike = (t: Track) => {
@@ -254,6 +281,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider
       value={{
         queue, index, current, isPlaying, position, duration, shuffle, repeat, expanded, buffering, active,
+        autoplay, toggleAutoplay,
         playQueue, toggle, next, prev, seek, toggleShuffle, cycleRepeat, toggleLike, isLiked,
         likedTracks, setExpanded,
         playlists, recentlyPlayed, createPlaylist, deletePlaylist, renamePlaylist, addToPlaylist, removeFromPlaylist,
