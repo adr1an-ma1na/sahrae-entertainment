@@ -13,7 +13,7 @@ const fmt = (s: number) => {
 function Equalizer() {
   return (
     <div className="flex items-end gap-0.5 h-4" aria-hidden>
-      {[0, 1, 2].map((i) => <span key={i} className="w-0.5 bg-[#ff8a80] rounded-full animate-[eq_0.9s_ease-in-out_infinite]" style={{ height: '60%', animationDelay: `${i * 0.15}s` }} />)}
+      {[0, 1, 2].map((i) => <span key={i} className="w-0.5 bg-amber-400 rounded-full animate-[eq_0.9s_ease-in-out_infinite]" style={{ height: '60%', animationDelay: `${i * 0.15}s` }} />)}
     </div>
   );
 }
@@ -66,7 +66,7 @@ function TrackCard({ track, onPlay }: { track: Track; onPlay: () => void }) {
 
 const SectionHead = ({ children, icon }: { children: ReactNode; icon?: ReactNode }) => (
   <div className="flex items-center gap-3 mb-4">
-    {icon ?? <span className="w-1 h-6 rounded-full bg-gradient-to-b from-[#ff8a80] to-[#ff5a4e]" />}
+    {icon ?? <span className="w-1 h-6 rounded-full bg-gradient-to-b from-amber-400 to-amber-500" />}
     <h3 className="text-xl font-display font-bold text-white tracking-tight">{children}</h3>
   </div>
 );
@@ -199,7 +199,7 @@ export default function MusicView() {
         </div>
 
         {detailLoading ? (
-          <div className="flex items-center gap-2 text-zinc-400 py-10"><Loader2 className="w-6 h-6 animate-spin text-[#ff5a4e]" /> Loading…</div>
+          <div className="flex items-center gap-2 text-zinc-400 py-10"><Loader2 className="w-6 h-6 animate-spin text-amber-500" /> Loading…</div>
         ) : (
           <>
             {detailTracks.length > 0 && (
@@ -223,12 +223,12 @@ export default function MusicView() {
       <div className="overline text-sauti mb-1.5">Sauti · sound on Sahrae</div>
       <div className="flex items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#ff5a4e] to-[#ff7a6f] flex items-center justify-center shadow-lg shadow-[#ff5a4e]/20"><Music2 className="w-6 h-6 text-white" /></div>
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-500 flex items-center justify-center shadow-lg shadow-amber-500/20"><Music2 className="w-6 h-6 text-white" /></div>
           <div><h2 className="text-3xl font-display font-bold text-white leading-tight tracking-tight">Sauti</h2><p className="text-sm text-zinc-400">Songs · artists · albums · radio</p></div>
         </div>
         <div className="flex gap-1 bg-zinc-900/70 p-1 rounded-xl border border-white/5 self-start">
           {(['home', 'library'] as const).map((t) => (
-            <button key={t} onClick={() => { setTab(t); setOpenId(null); }} tabIndex={0} data-tv-focusable className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2 ${tab === t ? 'bg-sauti text-[#210805]' : 'text-zinc-400 hover:text-white'}`}>
+            <button key={t} onClick={() => { setTab(t); setOpenId(null); }} tabIndex={0} data-tv-focusable className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2 ${tab === t ? 'bg-sauti text-amber-950' : 'text-zinc-400 hover:text-white'}`}>
               {t === 'home' ? <><Music2 className="w-4 h-4" /> Home</> : <><Library className="w-4 h-4" /> Library</>}
             </button>
           ))}
@@ -239,7 +239,7 @@ export default function MusicView() {
         <>
           <div className="relative mb-5 max-w-lg">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search songs, artists, albums…" className="w-full bg-zinc-900/70 border border-white/10 rounded-full pl-10 pr-4 py-3 text-sm text-white focus:outline-none focus:border-[#ff5a4e]/60" />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search songs, artists, albums…" className="w-full bg-zinc-900/70 border border-white/10 rounded-full pl-10 pr-4 py-3 text-sm text-white focus:outline-none focus:border-amber-500/60" />
           </div>
 
           {query.trim() ? (
@@ -251,7 +251,7 @@ export default function MusicView() {
                 ))}
               </div>
               {searching ? (
-                <div className="flex items-center gap-2 text-zinc-400 py-8"><Loader2 className="w-5 h-5 animate-spin text-[#ff5a4e]" /> Searching…</div>
+                <div className="flex items-center gap-2 text-zinc-400 py-8"><Loader2 className="w-5 h-5 animate-spin text-amber-500" /> Searching…</div>
               ) : searchTab === 'songs' ? (
                 rSongs.length ? <div className="grid sm:grid-cols-2 gap-2">{rSongs.map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(rSongs, i)} /></Fragment>)}</div> : <p className="text-zinc-500 py-8">No songs found.</p>
               ) : searchTab === 'artists' ? (
@@ -279,7 +279,7 @@ export default function MusicView() {
                   <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{sec.tracks.map((t, i) => <Fragment key={t.id}><TrackCard track={t} onPlay={() => playQueue(sec.tracks, i, sec.title)} /></Fragment>)}</div>
                 </section>
               ))}
-              {loadingHome && sections.length === 0 && <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3 text-zinc-400"><Loader2 className="w-9 h-9 animate-spin text-[#ff5a4e]" /><span>Loading Sauti…</span></div>}
+              {loadingHome && sections.length === 0 && <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3 text-zinc-400"><Loader2 className="w-9 h-9 animate-spin text-amber-500" /><span>Loading Sauti…</span></div>}
               {!loadingHome && sections.length === 0 && <p className="text-zinc-500 py-10 text-center">Couldn't reach the music service right now. Try a search, or again shortly.</p>}
             </>
           )}
@@ -288,7 +288,7 @@ export default function MusicView() {
         <section>
           <button onClick={() => setOpenId(null)} className="flex items-center gap-1 text-zinc-400 hover:text-white mb-4 text-sm"><ChevronLeft className="w-4 h-4" /> Library</button>
           <div className="flex items-end gap-4 mb-6">
-            <div className="w-28 h-28 rounded-2xl bg-gradient-to-br from-[#ff5a4e] to-[#ff7a6f] flex items-center justify-center shadow-xl shrink-0">{openList.id === 'liked' ? <Heart className="w-12 h-12 text-white fill-current" /> : <ListMusic className="w-12 h-12 text-white" />}</div>
+            <div className="w-28 h-28 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-500 flex items-center justify-center shadow-xl shrink-0">{openList.id === 'liked' ? <Heart className="w-12 h-12 text-white fill-current" /> : <ListMusic className="w-12 h-12 text-white" />}</div>
             <div className="min-w-0">
               <h3 className="text-3xl font-display font-bold text-white truncate">{openList.name}</h3>
               <p className="text-sm text-zinc-400 tabular">{openList.tracks.length} songs</p>
@@ -306,8 +306,8 @@ export default function MusicView() {
       ) : (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-10">
-            <button onClick={() => setOpenId('liked')} tabIndex={0} data-tv-focusable className="card-lift flex items-center gap-3 p-4 rounded-2xl bg-gradient-to-br from-[#ff5a4e]/20 to-[#ff7a6f]/20 border border-[#ff5a4e]/20 text-left">
-              <span className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#ff5a4e] to-[#ff7a6f] flex items-center justify-center shrink-0"><Heart className="w-6 h-6 text-white fill-current" /></span>
+            <button onClick={() => setOpenId('liked')} tabIndex={0} data-tv-focusable className="card-lift flex items-center gap-3 p-4 rounded-2xl bg-gradient-to-br from-amber-500/20 to-amber-500/20 border border-amber-500/20 text-left">
+              <span className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-amber-500 flex items-center justify-center shrink-0"><Heart className="w-6 h-6 text-white fill-current" /></span>
               <span><span className="block font-bold text-white">Liked Songs</span><span className="block text-xs text-zinc-300 tabular">{likedTracks.length} songs</span></span>
             </button>
             {creating ? (

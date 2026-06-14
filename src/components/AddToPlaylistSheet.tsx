@@ -20,7 +20,7 @@ export default function AddToPlaylistSheet() {
   };
 
   return (
-    <div role="dialog" data-tv-layer className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200" onClick={(e) => { if (e.target === e.currentTarget) closeAddSheet(); }}>
+    <div role="dialog" data-tv-layer className="dark fixed inset-0 z-[130] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200" onClick={(e) => { if (e.target === e.currentTarget) closeAddSheet(); }}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div className="relative w-full sm:max-w-md glass rounded-t-3xl sm:rounded-3xl border border-white/10 shadow-2xl max-h-[80vh] flex flex-col animate-in slide-in-from-bottom-4 duration-300">
         {/* Header */}
@@ -46,12 +46,12 @@ export default function AddToPlaylistSheet() {
           {creating ? (
             <div className="flex items-center gap-2">
               <input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleCreate()} placeholder="Playlist name"
-                className="flex-1 bg-zinc-900 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#ff5a4e]/60" />
+                className="flex-1 bg-zinc-900 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/60" />
               <button onClick={handleCreate} className="btn-sauti px-4 py-2.5 rounded-xl text-sm font-bold">Create</button>
             </div>
           ) : (
             <button onClick={() => setCreating(true)} className="flex items-center gap-3 w-full text-left text-white">
-              <span className="w-11 h-11 rounded-xl bg-[#ff5a4e]/15 border border-[#ff5a4e]/30 flex items-center justify-center"><Plus className="w-5 h-5 text-sauti" /></span>
+              <span className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center"><Plus className="w-5 h-5 text-sauti" /></span>
               <span className="font-semibold">New playlist</span>
             </button>
           )}

@@ -111,20 +111,17 @@ export default function MusicPlayer() {
     <>
       {/* ── Full-screen now-playing (album-art dominant) ── */}
       {expanded && (
-        <div role="dialog" data-tv-layer className="sauti fixed inset-0 z-[120] overflow-hidden animate-in fade-in duration-300">
+        <div role="dialog" data-tv-layer className="dark sauti fixed inset-0 z-[120] overflow-hidden animate-in fade-in duration-300">
           <DynamicBackground color={current.dominantColor} />
-          <div className="absolute inset-0 -z-10 pointer-events-none">
-            {current.artworkLarge && <img src={current.artworkLarge} alt="" className="w-full h-full object-cover scale-150 blur-3xl opacity-25" />}
-          </div>
 
           <div className="h-full flex flex-col px-5 md:px-8 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1.5rem)] max-w-xl mx-auto">
             {/* Top bar */}
             <div className="flex items-center justify-between">
-              <button onClick={() => setExpanded(false)} data-tv-close tabIndex={0} data-tv-focusable className="w-11 h-11 rounded-full glass flex items-center justify-center text-white" aria-label="Minimize">
+              <button onClick={() => setExpanded(false)} data-tv-close tabIndex={0} data-tv-focusable className="w-11 h-11 rounded-full glass-liquid flex items-center justify-center text-white" aria-label="Minimize">
                 <ChevronDown className="w-6 h-6" />
               </button>
               <p className="overline truncate px-3">{queueSource ? `Playing from ${queueSource}` : 'Now Playing'}</p>
-              <button onClick={stop} tabIndex={0} data-tv-focusable className="w-11 h-11 rounded-full glass flex items-center justify-center text-white" aria-label="Stop music">
+              <button onClick={stop} tabIndex={0} data-tv-focusable className="w-11 h-11 rounded-full glass-liquid flex items-center justify-center text-white" aria-label="Stop music">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -153,7 +150,7 @@ export default function MusicPlayer() {
 
             {/* Scrubber */}
             <div className="mb-5">
-              <input type="range" min={0} max={duration || 0} value={position} step={1} onChange={(e) => seek(Number(e.target.value))} style={{ accentColor: '#ff5a4e' }} className="w-full h-1.5 cursor-pointer" aria-label="Seek" />
+              <input type="range" min={0} max={duration || 0} value={position} step={1} onChange={(e) => seek(Number(e.target.value))} style={{ accentColor: '#f59e0b' }} className="w-full h-1.5 cursor-pointer" aria-label="Seek" />
               <div className="flex justify-between text-[11px] text-zinc-400 tabular mt-1"><span>{fmt(position)}</span><span>{fmt(duration)}</span></div>
             </div>
 
@@ -172,8 +169,8 @@ export default function MusicPlayer() {
 
             {/* Lyrics / Queue */}
             <div className="flex items-center justify-center gap-2 mt-5">
-              <button onClick={() => setShowLyrics((v) => !v)} tabIndex={0} data-tv-focusable className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-colors ${showLyrics ? 'bg-sauti text-[#210805]' : 'glass text-white'}`}><Mic2 className="w-4 h-4" /> Lyrics</button>
-              <button onClick={() => { setQTab('next'); setShowQueue(true); }} tabIndex={0} data-tv-focusable className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold glass text-white"><ListMusic className="w-4 h-4" /> Queue</button>
+              <button onClick={() => setShowLyrics((v) => !v)} tabIndex={0} data-tv-focusable className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-colors ${showLyrics ? 'bg-sauti text-amber-950' : 'glass-liquid text-white'}`}><Mic2 className="w-4 h-4" /> Lyrics</button>
+              <button onClick={() => { setQTab('next'); setShowQueue(true); }} tabIndex={0} data-tv-focusable className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold glass-liquid text-white"><ListMusic className="w-4 h-4" /> Queue</button>
             </div>
           </div>
         </div>
@@ -181,12 +178,12 @@ export default function MusicPlayer() {
 
       {/* ── Queue / Recently played ── */}
       {showQueue && (
-        <div role="dialog" data-tv-layer className="sauti fixed inset-0 z-[125] flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-300">
+        <div role="dialog" data-tv-layer className="dark sauti fixed inset-0 z-[125] flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-300">
           <div className="flex items-center gap-3 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 border-b border-white/10">
-            <button onClick={() => setShowQueue(false)} data-tv-close tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full glass flex items-center justify-center text-white" aria-label="Back"><ChevronDown className="w-6 h-6" /></button>
+            <button onClick={() => setShowQueue(false)} data-tv-close tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full glass-liquid flex items-center justify-center text-white" aria-label="Back"><ChevronDown className="w-6 h-6" /></button>
             <div className="flex gap-5">
               {(['next', 'recent'] as const).map((t) => (
-                <button key={t} onClick={() => setQTab(t)} tabIndex={0} data-tv-focusable className={`text-sm font-bold pb-1.5 border-b-2 transition-colors ${qTab === t ? 'text-white border-[#ff5a4e]' : 'text-zinc-500 border-transparent hover:text-zinc-300'}`}>{t === 'next' ? 'Queue' : 'Recently played'}</button>
+                <button key={t} onClick={() => setQTab(t)} tabIndex={0} data-tv-focusable className={`text-sm font-bold pb-1.5 border-b-2 transition-colors ${qTab === t ? 'text-white border-amber-500' : 'text-zinc-500 border-transparent hover:text-zinc-300'}`}>{t === 'next' ? 'Queue' : 'Recently played'}</button>
               ))}
             </div>
           </div>
@@ -214,9 +211,9 @@ export default function MusicPlayer() {
       {/* ── Persistent mini-bar ── */}
       {!expanded && (
         <div className="fixed bottom-0 left-0 right-0 z-[60] px-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] pointer-events-none">
-          <div className="pointer-events-auto max-w-3xl mx-auto glass rounded-2xl border border-white/10 shadow-[0_8px_30px_rgba(0,0,0,0.45)] overflow-hidden">
+          <div className="pointer-events-auto max-w-3xl mx-auto dark glass rounded-2xl border border-white/10 shadow-[0_8px_30px_rgba(0,0,0,0.45)] overflow-hidden">
             {/* progress hairline */}
-            <div className="h-0.5 bg-white/10"><div className="h-full bg-gradient-to-r from-[#ff8a80] to-[#ff5a4e] transition-[width] duration-200" style={{ width: `${pct}%` }} /></div>
+            <div className="h-0.5 bg-white/10"><div className="h-full bg-gradient-to-r from-amber-400 to-amber-500 transition-[width] duration-200" style={{ width: `${pct}%` }} /></div>
             <div className="flex items-center gap-3 p-2 pr-3">
               <button onClick={() => setExpanded(true)} className="flex items-center gap-3 min-w-0 flex-1 text-left" aria-label="Open player">
                 <CoverArt imageUrl={current.artwork} dominantColor={current.dominantColor} className="w-11 h-11 shrink-0" />
