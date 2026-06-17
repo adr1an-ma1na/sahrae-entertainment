@@ -350,7 +350,12 @@
    ───────────────────────────────────────────────────────────── */
 .tv-focused {
   outline: none !important;
-  box-shadow: 0 0 0 3px #f59e0b, 0 0 26px 4px rgba(245, 158, 11, 0.55) !important;
+  /* Brighter, larger ambient halo — reads clearly across a room and feels alive. */
+  box-shadow:
+    0 0 0 3px #fbbf24,
+    0 0 32px 6px rgba(251, 191, 36, 0.85),
+    0 0 70px 16px rgba(245, 158, 11, 0.5),
+    0 0 120px 30px rgba(245, 158, 11, 0.25) !important;
   border-radius: 0.75rem;
   position: relative;
   z-index: 40;

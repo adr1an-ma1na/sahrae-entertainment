@@ -180,7 +180,7 @@ export default function MusicView() {
   // ── Detail page (artist / album) ──
   if (detail) {
     return (
-      <div className="sauti pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen">
+      <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen">
         <button onClick={() => setDetail(null)} className="flex items-center gap-1 text-zinc-400 hover:text-white mb-5 text-sm"><ChevronLeft className="w-4 h-4" /> Back</button>
         <div className="flex items-end gap-5 mb-8">
           <div className={`w-32 h-32 md:w-40 md:h-40 ${detail.kind === 'artist' ? 'rounded-full' : 'rounded-2xl'} overflow-hidden bg-zinc-800 border border-white/10 shrink-0 shadow-xl`}>
@@ -219,7 +219,7 @@ export default function MusicView() {
   }
 
   return (
-    <div className="sauti pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen">
+    <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen">
       <div className="overline text-sauti mb-1.5">Sauti · sound on Sahrae</div>
       <div className="flex items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-3">

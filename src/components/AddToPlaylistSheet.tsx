@@ -1,28 +1,51 @@
 import { useState } from 'react';
 import { X, Plus, Check, ListMusic, Music2, Play, ListPlus } from 'lucide-react';
 import { useMusic } from '../hooks/useMusic';
+import { haptics } from '../services/haptics';
 
 export default function AddToPlaylistSheet() {
   const { addSheetTrack, closeAddSheet, playlists, createPlaylist, addToPlaylist, addToQueue, playNext } = useMusic();
   const [name, setName] = useState('');
   const [creating, setCreating] = useState(false);
+  const [saved, setSaved] = useState<string | null>(null);
 
   if (!addSheetTrack) return null;
   const track = addSheetTrack;
+
+  // Save with a clear, satisfying confirmation: a firm haptic + an "Added"
+  // banner, then auto-close — so it always feels like it persisted.
+  const confirmSave = (playlistName: string) => {
+    haptics.press();
+    setSaved(playlistName);
+    setTimeout(() => closeAddSheet(), 850);
+  };
 
   const handleCreate = () => {
     if (!name.trim()) return;
     const id = createPlaylist(name);
     addToPlaylist(id, track);
+    const nm = name.trim();
     setName('');
     setCreating(false);
-    closeAddSheet();
+    confirmSave(nm);
+  };
+
+  const addToExisting = (id: string, nm: string, has: boolean) => {
+    if (!has) addToPlaylist(id, track);
+    confirmSave(nm);
   };
 
   return (
     <div role="dialog" data-tv-layer className="dark fixed inset-0 z-[130] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200" onClick={(e) => { if (e.target === e.currentTarget) closeAddSheet(); }}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div className="relative w-full sm:max-w-md glass rounded-t-3xl sm:rounded-3xl border border-white/10 shadow-2xl max-h-[80vh] flex flex-col animate-in slide-in-from-bottom-4 duration-300">
+        {saved && (
+          <div className="absolute inset-0 z-20 rounded-t-3xl sm:rounded-3xl bg-black/70 backdrop-blur-md flex flex-col items-center justify-center gap-3 animate-in fade-in duration-200">
+            <span className="w-16 h-16 rounded-full bg-sauti flex items-center justify-center animate-in zoom-in duration-300"><Check className="w-8 h-8 text-amber-950" strokeWidth={3} /></span>
+            <p className="text-white font-bold text-lg">Saved</p>
+            <p className="text-zinc-300 text-sm">Added to <span className="text-sauti font-semibold">{saved}</span></p>
+          </div>
+        )}
         {/* Header */}
         <div className="flex items-center gap-3 p-4 border-b border-white/10">
           <div className="w-11 h-11 rounded-lg overflow-hidden bg-zinc-800 shrink-0">
@@ -65,7 +88,7 @@ export default function AddToPlaylistSheet() {
             playlists.map((p) => {
               const has = p.tracks.some((t) => t.id === track.id);
               return (
-                <button key={p.id} onClick={() => { if (!has) addToPlaylist(p.id, track); closeAddSheet(); }}
+                <button key={p.id} onClick={() => addToExisting(p.id, p.name, has)}
                   className="flex items-center gap-3 w-full p-2.5 rounded-xl hover:bg-white/5 text-left">
                   <span className="w-11 h-11 rounded-xl bg-zinc-800 flex items-center justify-center shrink-0"><ListMusic className="w-5 h-5 text-zinc-400" /></span>
                   <span className="min-w-0 flex-1">

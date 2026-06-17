@@ -19,7 +19,7 @@ export interface Track {
 export function dominantColor(id: string): string {
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return `hsl(${h % 360}, 42%, 26%)`;
+  return `hsl(${h % 360}, 58%, 40%)`;
 }
 export interface Artist { id: string; name: string; thumbnail?: string }
 export interface Album { id: string; name: string; thumbnail?: string; artist?: string }

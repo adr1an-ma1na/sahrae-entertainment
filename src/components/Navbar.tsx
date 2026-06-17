@@ -70,7 +70,7 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
 
   return (
     <>
-    <nav className={`fixed top-0 w-full z-40 transition-all duration-500 pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] ${isScrolled ? 'bg-[rgba(10,10,12,0.72)] backdrop-blur-2xl backdrop-saturate-150 border-b border-white/10 shadow-[0_8px_24px_rgba(0,0,0,0.28)]' : 'bg-gradient-to-b from-black/55 via-black/20 to-transparent backdrop-blur-sm'}`}>
+    <nav className={`fixed top-0 w-full z-40 transition-all duration-500 pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] ${isScrolled ? 'glass border-b border-white/15' : 'bg-gradient-to-b from-black/55 via-black/20 to-transparent backdrop-blur-sm'}`}>
       <div className="px-4 md:px-12 py-4 flex items-center justify-between">
         <div className="flex items-center gap-8 md:gap-12">
           <h1
@@ -98,7 +98,7 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
         <div className="flex items-center gap-6">
           <form 
             onSubmit={handleSearchSubmit}
-            className={`flex items-center transition-all duration-300 ${isSearchOpen ? 'bg-zinc-900/80 border border-zinc-700/50 rounded-full px-3 py-1.5' : ''}`}
+            className={`flex items-center transition-all duration-300 ${isSearchOpen ? 'glass rounded-full px-3 py-1.5' : ''}`}
           >
             <button 
               type="button"
@@ -131,7 +131,7 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
             </button>
             
             {isNotificationsOpen && (
-              <div className="absolute right-0 mt-4 w-80 md:w-96 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50">
+              <div className="absolute right-0 mt-4 w-80 md:w-96 glass rounded-xl shadow-2xl overflow-hidden z-50">
                 <div className="p-4 border-b border-white/10 flex items-center justify-between bg-zinc-950/50">
                   <h3 className="font-bold text-white">Notifications</h3>
                   <div className="flex gap-2">

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, Fragment } from 'react';
 import { Play, Pause, SkipForward, SkipBack, ChevronDown, Heart, Shuffle, Repeat, Repeat1, Music2, Plus, X, ListMusic, Mic2 } from 'lucide-react';
 import { useMusic } from '../hooks/useMusic';
 import { Track } from '../services/ytmusic';
+import { hdArtwork } from '../services/albumArt';
 import { CoverArt } from './ui/CoverArt';
 import { DynamicBackground } from './ui/DynamicBackground';
 
@@ -103,6 +104,18 @@ export default function MusicPlayer() {
   const [qTab, setQTab] = useState<'next' | 'recent'>('next');
   const [showLyrics, setShowLyrics] = useState(false);
 
+  // Resolve a true-HD cover (iTunes) for the big now-playing art.
+  const [hdArt, setHdArt] = useState<string | undefined>(undefined);
+  const curId = current?.id;
+  useEffect(() => {
+    setHdArt(undefined);
+    if (!current) return;
+    let cancelled = false;
+    hdArtwork(current.id, current.artist, current.title).then((u) => { if (!cancelled && u) setHdArt(u); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [curId]);
+
   if (!current || !active) return null;
   const pct = duration ? Math.min(100, (position / duration) * 100) : 0;
   const upNext = queue.slice(index + 1);
@@ -131,7 +144,7 @@ export default function MusicPlayer() {
               {showLyrics ? (
                 <div className="w-full h-full flex flex-col min-h-0"><LyricsPanel track={current} position={position} /></div>
               ) : current.artworkLarge || current.artwork ? (
-                <CoverArt imageUrl={current.artworkLarge || current.artwork} fallbackUrl={current.artwork} dominantColor={current.dominantColor} rounded="rounded-2xl"
+                <CoverArt imageUrl={hdArt || current.artworkLarge || current.artwork} fallbackUrl={current.artwork} dominantColor={current.dominantColor} rounded="rounded-2xl"
                   className="w-[80vw] max-w-[400px] aspect-square shadow-[0_28px_80px_rgba(0,0,0,0.6)]" />
               ) : (
                 <div className="w-[78vw] max-w-[360px] aspect-square rounded-2xl bg-zinc-800 flex items-center justify-center"><Music2 className="w-20 h-20 text-zinc-600" /></div>

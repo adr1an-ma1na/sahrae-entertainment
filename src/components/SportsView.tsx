@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Trophy, Play, X, Maximize, Loader2, Radio, Tv, Clapperboard, CalendarClock, Search } from 'lucide-react';
 import Hls from 'hls.js';
+import { haptics } from '../services/haptics';
 
 /**
  * Live Sports.
@@ -202,7 +203,13 @@ const HLSPlayer = ({ src, onUnplayable }: { src: string; onUnplayable?: () => vo
   return <video ref={videoRef} className="absolute inset-0 w-full h-full object-contain bg-black" controls autoPlay playsInline />;
 };
 
-interface Playing { title: string; sources: { label: string; url: string }[]; idx: number; resolving?: boolean; }
+// Cricfy-style: every server is listed up-front and stays put. A reliable
+// channel plays instantly while match servers resolve in the background; the
+// user can switch to any server at any time, and a dead source is marked (not
+// removed) so the list never collapses to nothing.
+type SrcStatus = 'ready' | 'idle' | 'loading' | 'failed';
+interface Source { id: string; label: string; kind: 'channel' | 'server'; embed?: string; url?: string; status: SrcStatus }
+interface Playing { title: string; tokens: string[]; sources: Source[]; idx: number }
 
 export default function SportsView() {
   const [tab, setTab] = useState<'events' | 'channels'>('events');
@@ -290,50 +297,67 @@ export default function SportsView() {
     return `${m[1].charAt(0).toUpperCase()}${m[1].slice(1)} ${m[2]}`;
   };
 
+  const patchSource = (id: string, patch: Partial<Source>) =>
+    setPlaying((p) => (p ? { ...p, sources: p.sources.map((s) => (s.id === id ? { ...s, ...patch } : s)) } : p));
+
+  // Resolve a server's embed → playable stream (on-device, so the token binds to
+  // this IP). `autoSwitch` upgrades from the channel to the FIRST matching server
+  // on its own, but never pulls the user off a server they picked.
+  const resolveServer = useCallback(async (id: string, embed: string, tokens: string[], autoSwitch: boolean) => {
+    patchSource(id, { status: 'loading' });
+    const m3u8 = await resolveEmbed(embed);
+    let url: string | null = null;
+    if (m3u8) {
+      const u = proxied(m3u8, 'https://embed.st/');
+      if (await validateStream(u)) url = u;
+    }
+    if (!url) { patchSource(id, { status: 'failed' }); return; }
+    const matched = m3u8 ? streamMatchesEvent(m3u8, tokens) : false;
+    setPlaying((p) => {
+      if (!p) return p;
+      const sources = p.sources.map((s) => (s.id === id ? { ...s, status: 'ready' as SrcStatus, url: url!, label: matched && !s.label.endsWith('✓') ? `${s.label} ✓` : s.label } : s));
+      const onChannel = p.sources[p.idx]?.kind === 'channel';
+      const idx = autoSwitch && onChannel && matched ? sources.findIndex((s) => s.id === id) : p.idx;
+      return { ...p, sources, idx };
+    });
+  }, []);
+
   const openEvent = (m: FeedEvent) => {
     const ch = channelForSport(m.category);
-    const channelSource = { label: `📺 ${ch.name}`, url: ch.url };
-    const embeds = (m.embeds || []).slice(0, 4);
     const tokens = eventTokens(m);
+    const servers: Source[] = (m.embeds || []).slice(0, 6).map((embed, i) => ({
+      id: `srv-${i}`, label: `Server ${i + 1}`, kind: 'server', embed, status: 'idle',
+    }));
+    const channel: Source = { id: 'ch', label: `📺 ${ch.name}`, kind: 'channel', url: ch.url, status: 'ready' };
+    const sources = [...servers, channel];
 
-    // Channel plays instantly. Meanwhile we resolve each source on-device,
-    // VERIFY it actually serves a live playlist, rank the ones whose stream
-    // looks like THIS match first, and auto-upgrade to the best — dead and
-    // clearly-wrong sources are filtered out so it "just works".
-    setPlaying({ title: matchTitle(m), sources: [channelSource], idx: 0, resolving: embeds.length > 0 });
-    if (!embeds.length) return;
-
-    const good: { label: string; url: string; matched: boolean }[] = [];
-    let done = 0;
-    embeds.forEach((embed) => {
-      resolveEmbed(embed).then(async (m3u8) => {
-        if (m3u8) {
-          const url = proxied(m3u8, 'https://embed.st/');
-          if (await validateStream(url)) {
-            good.push({ label: sourceLabel(embed), url, matched: streamMatchesEvent(m3u8, tokens) });
-          }
-        }
-        done += 1;
-        setPlaying((p) => {
-          if (!p) return p;
-          // Correct-looking sources first, then the rest; channel always last.
-          const ranked = [...good].sort((a, b) => (b.matched ? 1 : 0) - (a.matched ? 1 : 0));
-          const sources = [
-            ...ranked.map((s) => ({ label: s.matched ? s.label : `${s.label} ?`, url: s.url })),
-            channelSource,
-          ];
-          const onChannel = p.sources[p.idx]?.label.startsWith('📺') ?? true;
-          const idx = ranked.length > 0 && onChannel ? 0 : Math.min(p.idx, sources.length - 1);
-          return { ...p, sources, idx, resolving: done < embeds.length };
-        });
-      });
-    });
+    // The reliable channel plays the INSTANT you open — no spinner, no waiting.
+    // Servers are all listed immediately; we quietly resolve the first few so the
+    // exact match can take over on its own, and any server is one tap away.
+    setPlaying({ title: matchTitle(m), tokens, sources, idx: sources.length - 1 });
+    servers.slice(0, 3).forEach((s) => resolveServer(s.id, s.embed!, tokens, true));
   };
 
-  // A playing source went dead → automatically fall through to the next one
-  // (and ultimately the always-reliable channel), no manual switching needed.
-  const skipSource = useCallback(() => {
-    setPlaying((p) => (p && p.idx < p.sources.length - 1 ? { ...p, idx: p.idx + 1 } : p));
+  // Tap a server → switch to it; resolve on demand if it isn't ready yet (and
+  // retry a previously-failed one). The list itself never changes.
+  const selectSource = (i: number) => {
+    haptics.tap();
+    setPlaying((p) => (p ? { ...p, idx: i } : p));
+    const s = playing?.sources[i];
+    if (s && s.kind === 'server' && !s.url && (s.status === 'idle' || s.status === 'failed') && s.embed) {
+      resolveServer(s.id, s.embed, playing!.tokens, false);
+    }
+  };
+
+  // A playing source died → mark it failed (keep it in the list for retry) and
+  // fall back to the always-reliable channel. Never collapses to nothing.
+  const onUnplayable = useCallback(() => {
+    setPlaying((p) => {
+      if (!p) return p;
+      const sources = p.sources.map((s, i) => (i === p.idx ? { ...s, status: 'failed' as SrcStatus, url: undefined } : s));
+      const chIdx = sources.findIndex((s) => s.kind === 'channel');
+      return { ...p, sources, idx: chIdx >= 0 ? chIdx : p.idx };
+    });
   }, []);
 
   const events = feed?.events || [];
@@ -424,7 +448,8 @@ export default function SportsView() {
     );
   };
 
-  const activeUrl = playing ? playing.sources[playing.idx]?.url : undefined;
+  const activeSrc = playing ? playing.sources[playing.idx] : undefined;
+  const activeUrl = activeSrc?.url;
 
   return (
     <div className="pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-12 relative">
@@ -443,26 +468,45 @@ export default function SportsView() {
                   <button onClick={() => setPlaying(null)} tabIndex={0} data-tv-focusable data-tv-close className="w-10 h-10 rounded-full bg-red-500/80 hover:bg-red-500 text-white flex items-center justify-center"><X className="w-5 h-5" /></button>
                 </div>
               </div>
-              {activeUrl ? <HLSPlayer src={activeUrl} onUnplayable={skipSource} /> : null}
-              {playing.resolving && (
-                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-[6] flex items-center gap-2 bg-black/75 px-3 py-1.5 rounded-full border border-white/10 backdrop-blur-sm pointer-events-none">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-500" />
-                  <span className="text-[11px] text-white font-medium">Finding the live match feed…</span>
+              {activeUrl ? (
+                <HLSPlayer src={activeUrl} onUnplayable={onUnplayable} />
+              ) : (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center px-6">
+                  {activeSrc?.status === 'failed' ? (
+                    <>
+                      <Radio className="w-9 h-9 text-zinc-500" />
+                      <p className="text-white font-semibold">This server isn't responding</p>
+                      <p className="text-zinc-400 text-sm">Pick another server below — the 📺 channel always works.</p>
+                    </>
+                  ) : (
+                    <>
+                      <Loader2 className="w-9 h-9 animate-spin text-amber-500" />
+                      <p className="text-white font-medium">Loading {activeSrc?.label || 'stream'}…</p>
+                    </>
+                  )}
                 </div>
               )}
             </div>
-            {playing.sources.length > 1 && (
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mr-1">Sources:</span>
-                {playing.sources.map((s, i) => (
-                  <button key={`${s.label}-${i}`} onClick={() => setPlaying({ ...playing, idx: i })} tabIndex={0} data-tv-focusable
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${i === playing.idx ? 'bg-amber-500 text-amber-950 border-amber-500' : 'bg-zinc-800/80 text-zinc-300 border-white/10 hover:bg-zinc-700'}`}>
+            {/* Server picker — every source is always here; tap to switch. */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mr-1">Servers:</span>
+              {playing.sources.map((s, i) => {
+                const activeBtn = i === playing.idx;
+                return (
+                  <button key={s.id} onClick={() => selectSource(i)} tabIndex={0} data-tv-focusable
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors flex items-center gap-1.5 ${
+                      activeBtn ? 'bg-amber-500 text-amber-950 border-amber-500'
+                      : s.status === 'failed' ? 'bg-zinc-900/60 text-zinc-500 border-white/5 hover:bg-zinc-800'
+                      : 'bg-zinc-800/80 text-zinc-300 border-white/10 hover:bg-zinc-700'}`}>
+                    {s.status === 'loading' && <Loader2 className="w-3 h-3 animate-spin" />}
+                    {s.status === 'ready' && s.kind === 'server' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
                     {s.label}
+                    {s.status === 'failed' && <span className="opacity-70">↻</span>}
                   </button>
-                ))}
-              </div>
-            )}
-            <p className="text-[11px] text-zinc-500 flex items-center gap-2"><Radio className="w-3.5 h-3.5" /> Wrong match or won't load? Switch to another source above — the 📺 channel is the always-reliable fallback.</p>
+                );
+              })}
+            </div>
+            <p className="text-[11px] text-zinc-500 flex items-center gap-2"><Radio className="w-3.5 h-3.5" /> The 📺 channel plays instantly. Tap a server for the exact match feed — switch any time.</p>
           </div>
         </div>
       )}
