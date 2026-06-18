@@ -139,5 +139,24 @@ export const ytmusic = {
     const j = await pipedGet(`/streams/${videoId}`);
     return mapItems(j?.relatedStreams || []);
   },
+
+  // Best directly-playable AUDIO stream for a video (used for offline downloads).
+  // Prefers m4a/mp4 (broadest <audio> support) at a sane bitrate, then anything.
+  // Most Piped instances return proxied URLs that play/fetch from any IP.
+  audioStream: async (videoId: string): Promise<{ url: string; mime: string } | null> => {
+    const j = await pipedGet(`/streams/${videoId}`);
+    const streams: any[] = (j && Array.isArray(j.audioStreams)) ? j.audioStreams : [];
+    if (!streams.length) return null;
+    const score = (s: any) => {
+      const m = String(s.mimeType || '').toLowerCase();
+      const mp4 = m.includes('mp4') || m.includes('m4a') || m.includes('aac') ? 2 : 0; // prefer AAC
+      const br = Number(s.bitrate || s.quality || 0);
+      // cap around ~160kbps so files stay small & download fast
+      const fit = br > 0 ? -Math.abs(br - 160000) / 1000 : -1000;
+      return mp4 * 1000 + fit;
+    };
+    const best = [...streams].sort((a, b) => score(b) - score(a))[0];
+    return best && best.url ? { url: best.url, mime: String(best.mimeType || 'audio/mp4').split(';')[0] } : null;
+  },
 };
 /* eslint-enable @typescript-eslint/no-explicit-any */

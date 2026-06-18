@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useRef, useEffect, ReactNode } from 'react';
 import { Track, ytmusic } from '../services/ytmusic';
 import { haptics } from '../services/haptics';
+import { downloads } from '../services/downloads';
 
 type Repeat = 'off' | 'one' | 'all';
 
@@ -86,6 +87,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const pendingRef = useRef<string | null>(null);
   const loadedIdRef = useRef<string | null>(null);
   const extendingRef = useRef<string | null>(null);
+  // Offline playback: a downloaded track plays from this local <audio> element
+  // instead of the YouTube IFrame. Streaming is untouched when not local.
+  const audioElRef = useRef<HTMLAudioElement | null>(null);
+  const usingLocalRef = useRef(false);
   // Latest control fns + live position, for the OS MediaSession handlers (which
   // are registered once but must always act on current state).
   const ctrlRef = useRef<{ next: () => void; prev: () => void; stop: () => void; seek: (s: number) => void }>({ next: () => {}, prev: () => {}, stop: () => {}, seek: () => {} });
@@ -191,15 +196,44 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     return () => { cancelled = true; };
   }, []);
 
+  // ── the offline <audio> element (downloaded tracks play here) ──
+  useEffect(() => {
+    const a = new Audio();
+    a.preload = 'auto';
+    audioElRef.current = a;
+    const onPlay = () => { setIsPlaying(true); setBuffering(false); setActive(true); window.dispatchEvent(new CustomEvent('sahrae:audioclaim', { detail: 'music' })); };
+    const onPause = () => setIsPlaying(false);
+    const onWaiting = () => setBuffering(true);
+    const onEnded = () => endedRef.current();
+    const onTime = () => { if (usingLocalRef.current) { setPosition(a.currentTime || 0); if (a.duration && isFinite(a.duration)) setDuration(a.duration); } };
+    a.addEventListener('play', onPlay); a.addEventListener('playing', onPlay);
+    a.addEventListener('pause', onPause); a.addEventListener('waiting', onWaiting);
+    a.addEventListener('ended', onEnded); a.addEventListener('timeupdate', onTime);
+    return () => { try { a.pause(); a.removeAttribute('src'); } catch { /* ignore */ } };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── load the active track whenever it actually changes (guarded so that
   //    appending radio tracks to the queue never restarts the current song) ──
   useEffect(() => {
     const c = queue[index];
     if (!c || loadedIdRef.current === c.id) return;
     loadedIdRef.current = c.id;
-    setPosition(0);
-    if (readyRef.current && playerRef.current) playerRef.current.loadVideoById(c.id);
-    else pendingRef.current = c.id;
+    setPosition(0); setDuration(0);
+    const local = downloads.localSrc(c.id);
+    const a = audioElRef.current;
+    if (local && a) {
+      // Offline: play from the saved file, pause the streaming player.
+      usingLocalRef.current = true;
+      try { playerRef.current?.pauseVideo?.(); } catch { /* ignore */ }
+      a.src = local; a.play().catch(() => {});
+      setActive(true);
+    } else {
+      usingLocalRef.current = false;
+      try { if (a) { a.pause(); a.removeAttribute('src'); a.load(); } } catch { /* ignore */ }
+      if (readyRef.current && playerRef.current) playerRef.current.loadVideoById(c.id);
+      else pendingRef.current = c.id;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, queue]);
 
@@ -222,9 +256,11 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id, queue.length, autoplay]);
 
-  // ── poll position / duration from the player ──
+  // ── poll position / duration from the player (offline audio drives its own
+  //    position via timeupdate, so skip the IFrame poll when playing local) ──
   useEffect(() => {
     const iv = setInterval(() => {
+      if (usingLocalRef.current) return;
       const p = playerRef.current;
       if (p && typeof p.getCurrentTime === 'function') {
         try {
@@ -240,7 +276,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   // ── cross-pause: another source (radio) claimed the speaker ──
   useEffect(() => {
     const onClaim = (e: Event) => {
-      if ((e as CustomEvent).detail !== 'music') { setActive(false); playerRef.current?.pauseVideo?.(); }
+      if ((e as CustomEvent).detail !== 'music') { setActive(false); playerRef.current?.pauseVideo?.(); audioElRef.current?.pause(); }
     };
     window.addEventListener('sahrae:audioclaim', onClaim);
     return () => window.removeEventListener('sahrae:audioclaim', onClaim);
@@ -278,8 +314,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     const ms: any = (navigator as any).mediaSession;
     if (!ms || typeof ms.setActionHandler !== 'function') return;
     const set = (a: string, h: any) => { try { ms.setActionHandler(a, h); } catch { /* unsupported action */ } };
-    set('play', () => { playerRef.current?.playVideo?.(); setIsPlaying(true); setActive(true); });
-    set('pause', () => { playerRef.current?.pauseVideo?.(); setIsPlaying(false); });
+    set('play', () => { if (usingLocalRef.current) audioElRef.current?.play().catch(() => {}); else playerRef.current?.playVideo?.(); setIsPlaying(true); setActive(true); });
+    set('pause', () => { if (usingLocalRef.current) audioElRef.current?.pause(); else playerRef.current?.pauseVideo?.(); setIsPlaying(false); });
     set('previoustrack', () => ctrlRef.current.prev());
     set('nexttrack', () => ctrlRef.current.next());
     set('stop', () => ctrlRef.current.stop());
@@ -332,9 +368,15 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const jumpTo = (i: number) => { haptics.tap(); setIndex(i); };
 
   const toggle = () => {
-    const p = playerRef.current;
-    if (!p || !current) return;
+    if (!current) return;
     haptics.tap();
+    if (usingLocalRef.current) {
+      const a = audioElRef.current; if (!a) return;
+      if (a.paused) a.play().catch(() => {}); else a.pause();
+      return;
+    }
+    const p = playerRef.current;
+    if (!p) return;
     if (isPlaying) p.pauseVideo?.(); else p.playVideo?.();
   };
 
@@ -342,6 +384,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const stop = () => {
     haptics.tap();
     try { playerRef.current?.stopVideo?.(); } catch { /* ignore */ }
+    try { const a = audioElRef.current; if (a) { a.pause(); a.removeAttribute('src'); } } catch { /* ignore */ }
+    usingLocalRef.current = false;
     loadedIdRef.current = null;
     extendingRef.current = null;
     setIsPlaying(false); setActive(false); setExpanded(false);
@@ -349,8 +393,13 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   };
 
   const prev = () => {
-    const p = playerRef.current;
-    if (p && p.getCurrentTime && p.getCurrentTime() > 3) { p.seekTo?.(0, true); return; }
+    if (usingLocalRef.current) {
+      const a = audioElRef.current;
+      if (a && a.currentTime > 3) { a.currentTime = 0; return; }
+    } else {
+      const p = playerRef.current;
+      if (p && p.getCurrentTime && p.getCurrentTime() > 3) { p.seekTo?.(0, true); return; }
+    }
     if (!queue.length) return;
     haptics.tap();
     let ni = index - 1;
@@ -358,7 +407,11 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     setIndex(ni);
   };
 
-  const seek = (sec: number) => { playerRef.current?.seekTo?.(sec, true); setPosition(sec); };
+  const seek = (sec: number) => {
+    if (usingLocalRef.current) { const a = audioElRef.current; if (a) try { a.currentTime = sec; } catch { /* ignore */ } }
+    else playerRef.current?.seekTo?.(sec, true);
+    setPosition(sec);
+  };
   const toggleShuffle = () => { haptics.tap(); setShuffle((s) => !s); };
   const toggleAutoplay = () => { haptics.tap(); setAutoplay((s) => !s); };
   const cycleRepeat = () => { haptics.tap(); setRepeat((r) => (r === 'off' ? 'all' : r === 'all' ? 'one' : 'off')); };
@@ -380,8 +433,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   // Expose controls to the native background service so headset / earbud /
   // lock-screen media buttons (next, prev, play, pause) drive the player.
   (window as unknown as { __sauti?: unknown }).__sauti = {
-    play: () => { try { playerRef.current?.playVideo?.(); } catch { /* ignore */ } setIsPlaying(true); setActive(true); },
-    pause: () => { try { playerRef.current?.pauseVideo?.(); } catch { /* ignore */ } setIsPlaying(false); },
+    play: () => { try { if (usingLocalRef.current) audioElRef.current?.play(); else playerRef.current?.playVideo?.(); } catch { /* ignore */ } setIsPlaying(true); setActive(true); },
+    pause: () => { try { if (usingLocalRef.current) audioElRef.current?.pause(); else playerRef.current?.pauseVideo?.(); } catch { /* ignore */ } setIsPlaying(false); },
     toggle, next, prev, stop,
   };
 

@@ -234,7 +234,7 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
                       </button>
                       <button 
                         onClick={() => handleEnded()}
-                        className="px-6 py-3 bg-white/10 hover:bg-white/20 backdrop-blur-md text-white font-bold rounded-xl transition-all border border-white/10"
+                        className="btn-glass px-6 py-3 font-bold rounded-xl"
                       >
                         Skip Trailer
                       </button>
@@ -267,7 +267,7 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
         </div>
 
         {/* Channel Switcher */}
-        <div className="lg:col-span-1 bg-zinc-900/50 rounded-2xl border border-white/5 p-4 flex flex-col max-h-[80vh] overflow-hidden">
+        <div className="lg:col-span-1 glass rounded-2xl p-4 flex flex-col max-h-[80vh] overflow-hidden">
           <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest mb-4 px-2">Channel Guide</h3>
           <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
             {CHANNELS.map(channel => {

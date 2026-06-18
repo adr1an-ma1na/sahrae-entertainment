@@ -219,14 +219,17 @@ export default function MusicView() {
   }
 
   return (
-    <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen">
-      <div className="overline text-sauti mb-1.5">Sauti · sound on Sahrae</div>
-      <div className="flex items-center justify-between gap-3 mb-6">
+    <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
+      {/* premium aurora glow behind the header so the top never reads flat */}
+      <div aria-hidden className="pointer-events-none absolute -top-10 left-0 right-0 h-64 -z-0 opacity-70"
+        style={{ background: 'radial-gradient(60% 70% at 12% 0%, rgba(245,158,11,0.22), transparent 70%), radial-gradient(50% 60% at 80% 10%, rgba(251,191,36,0.12), transparent 72%)', filter: 'blur(8px)' }} />
+      <div className="relative overline text-sauti mb-1.5">Sauti · sound on Sahrae</div>
+      <div className="relative flex items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-500 flex items-center justify-center shadow-lg shadow-amber-500/20"><Music2 className="w-6 h-6 text-white" /></div>
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-300 via-amber-500 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/30"><Music2 className="w-6 h-6 text-white" /></div>
           <div><h2 className="text-3xl font-display font-bold text-white leading-tight tracking-tight">Sauti</h2><p className="text-sm text-zinc-400">Songs · artists · albums · radio</p></div>
         </div>
-        <div className="flex gap-1 bg-zinc-900/70 p-1 rounded-xl border border-white/5 self-start">
+        <div className="flex gap-1 glass p-1 rounded-xl self-start">
           {(['home', 'library'] as const).map((t) => (
             <button key={t} onClick={() => { setTab(t); setOpenId(null); }} tabIndex={0} data-tv-focusable className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2 ${tab === t ? 'bg-sauti text-amber-950' : 'text-zinc-400 hover:text-white'}`}>
               {t === 'home' ? <><Music2 className="w-4 h-4" /> Home</> : <><Library className="w-4 h-4" /> Library</>}

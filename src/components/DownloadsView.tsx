@@ -47,7 +47,7 @@ export default function DownloadsView() {
                     <p className={`text-sm font-semibold truncate ${active ? 'text-sauti' : 'text-white'}`}>{track.title}</p>
                     <p className="text-xs text-zinc-400 truncate">{track.artist}</p>
                   </div>
-                  <span className="text-[10px] font-bold text-sauti flex items-center gap-1 shrink-0"><Download className="w-3 h-3" /> Saved</span>
+                  <span className="text-[10px] font-bold text-sauti flex items-center gap-1 shrink-0"><Download className="w-3 h-3" /> Offline</span>
                   <button onClick={(e) => { e.stopPropagation(); downloads.remove(track.id); }} className="p-2 rounded-full text-zinc-500 hover:text-red-400" aria-label="Remove download"><Trash2 className="w-4 h-4" /></button>
                 </div>
               );
@@ -58,7 +58,7 @@ export default function DownloadsView() {
         <div className="glass rounded-2xl p-8 text-center flex flex-col items-center gap-3">
           <span className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center"><Download className="w-7 h-7 text-zinc-400" /></span>
           <p className="text-white font-bold text-lg">No downloads yet</p>
-          <p className="text-zinc-400 text-sm max-w-sm">In Sauti, open a song's <span className="text-white">···</span> menu and tap <span className="text-sauti font-semibold">Download</span> to save it here for quick offline access.</p>
+          <p className="text-zinc-400 text-sm max-w-sm">In Sauti, open a song's <span className="text-white">+</span> menu and tap <span className="text-sauti font-semibold">Download</span> — it's saved inside the app and plays with no internet.</p>
         </div>
       )}
 

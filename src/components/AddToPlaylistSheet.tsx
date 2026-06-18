@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Plus, Check, ListMusic, Music2, Play, ListPlus, Download } from 'lucide-react';
+import { X, Plus, Check, ListMusic, Music2, Play, ListPlus, Download, Loader2 } from 'lucide-react';
 import { useMusic } from '../hooks/useMusic';
 import { haptics } from '../services/haptics';
 import { downloads } from '../services/downloads';
@@ -9,6 +9,8 @@ export default function AddToPlaylistSheet() {
   const [name, setName] = useState('');
   const [creating, setCreating] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const [dlErr, setDlErr] = useState(false);
 
   if (!addSheetTrack) return null;
   const track = addSheetTrack;
@@ -34,6 +36,14 @@ export default function AddToPlaylistSheet() {
   const addToExisting = (id: string, nm: string, has: boolean) => {
     if (!has) addToPlaylist(id, track);
     confirmSave(nm);
+  };
+
+  const handleDownload = async () => {
+    if (downloads.has(track.id)) { downloads.remove(track.id); closeAddSheet(); return; }
+    haptics.press(); setDlErr(false); setDownloading(true);
+    const ok = await downloads.download(track);
+    setDownloading(false);
+    if (ok) confirmSave('Downloads'); else setDlErr(true);
   };
 
   return (
@@ -63,7 +73,10 @@ export default function AddToPlaylistSheet() {
         <div className="grid grid-cols-3 gap-2 p-4 border-b border-white/5">
           <button onClick={() => { playNext(track); closeAddSheet(); }} className="btn-glass flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl text-xs font-bold"><Play className="w-4 h-4 fill-current" /> Play next</button>
           <button onClick={() => { addToQueue(track); closeAddSheet(); }} className="btn-glass flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl text-xs font-bold"><ListPlus className="w-4 h-4" /> Queue</button>
-          <button onClick={() => { const added = downloads.toggle(track); haptics.press(); if (added) confirmSave('Downloads'); else closeAddSheet(); }} className={`flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl text-xs font-bold ${downloads.has(track.id) ? 'bg-sauti text-amber-950' : 'btn-glass'}`}><Download className="w-4 h-4" /> {downloads.has(track.id) ? 'Saved' : 'Download'}</button>
+          <button onClick={handleDownload} disabled={downloading} className={`flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl text-xs font-bold ${downloads.has(track.id) ? 'bg-sauti text-amber-950' : dlErr ? 'bg-red-500/20 text-red-300' : 'btn-glass'}`}>
+            {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            {downloading ? 'Saving…' : downloads.has(track.id) ? 'Downloaded' : dlErr ? 'Retry' : 'Download'}
+          </button>
         </div>
 
         {/* New playlist */}

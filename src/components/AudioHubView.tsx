@@ -76,7 +76,7 @@ export default function AudioHubView() {
               tabIndex={0}
               data-tv-focusable
               className={`px-5 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-colors focus:outline-none ${
-                radioCategory === category ? 'bg-sauti text-amber-950' : 'bg-zinc-800/50 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                radioCategory === category ? 'bg-sauti text-amber-950' : 'glass-liquid text-zinc-200 hover:text-white'
               }`}
             >
               {category}
