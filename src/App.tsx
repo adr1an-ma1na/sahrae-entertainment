@@ -21,6 +21,7 @@ import GlobalAudioPlayer from './components/GlobalAudioPlayer';
 import ProfileSelection from './components/ProfileSelection';
 import DiscoveryView from './components/DiscoveryView';
 import MusicView from './components/MusicView';
+import DownloadsView from './components/DownloadsView';
 import MusicPlayer from './components/MusicPlayer';
 import AddToPlaylistSheet from './components/AddToPlaylistSheet';
 import { ChevronDown, AlertCircle, RefreshCw } from 'lucide-react';
@@ -30,6 +31,8 @@ import { useWatchProgress } from './hooks/useWatchProgress';
 import { useTheme } from './hooks/useTheme';
 import { useAuth } from './hooks/useAuth';
 import { haptics } from './services/haptics';
+import SplashIntro from './components/SplashIntro';
+import { applyEq, loadEq } from './services/eq';
 
 export default function App() {
   const { user, activeProfile, loading: authLoading } = useAuth();
@@ -152,6 +155,9 @@ export default function App() {
   useEffect(() => {
     loadInitialData();
   }, []);
+
+  // Re-apply the saved equalizer to the native global audio effects on launch.
+  useEffect(() => { applyEq(loadEq()); }, []);
 
   // ── Global tactile layer ──────────────────────────────────────────────
   // One delegated listener gives the WHOLE app a native "tap" on every
@@ -425,7 +431,7 @@ export default function App() {
         return <ContinueWatchingView onPlay={handlePlay} />;
       case 'search':
         return (
-          <div className="pt-24 px-4 md:px-12 max-w-7xl mx-auto pb-12">
+          <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto pb-12">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
               <h2 className="text-2xl font-bold text-white">
                 {searchQuery ? `Search Results for "${searchQuery}"` : 'Discover'}
@@ -501,6 +507,8 @@ export default function App() {
         return <AudioHubView />;
       case 'music':
         return <MusicView />;
+      case 'downloads':
+        return <DownloadsView />;
       case 'tv':
         return <LiveTVView />;
       case 'sports':
@@ -525,6 +533,7 @@ export default function App() {
 
     return (
       <div className="aurora-bg isolate min-h-screen text-zinc-50 font-sans selection:bg-amber-500/30 transition-colors duration-300">
+        <SplashIntro />
         {/* Ambient cinematic glow field — viewport-fixed, above the base canvas
             but behind all content (root is `isolate` so -z stays contained). */}
         <div className="aurora-glow pointer-events-none fixed inset-0 -z-10" aria-hidden="true" />

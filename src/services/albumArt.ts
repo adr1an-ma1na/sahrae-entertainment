@@ -29,10 +29,11 @@ export async function hdArtwork(trackId: string, artist: string, title: string):
     try {
       const ctrl = new AbortController();
       const to = setTimeout(() => ctrl.abort(), 6000);
-      const r = await fetch(
-        `https://itunes.apple.com/search?media=music&entity=song&limit=1&term=${encodeURIComponent(term)}`,
-        { signal: ctrl.signal },
-      );
+      // iTunes sends NO CORS header, so a direct WebView fetch is silently
+      // blocked (this is why covers stayed blurry). Route it through the native
+      // passthrough, which fetches server-side and re-serves with ACAO:*.
+      const itunes = `https://itunes.apple.com/search?media=music&entity=song&limit=1&term=${encodeURIComponent(term)}`;
+      const r = await fetch(`https://localhost/__ddfetch?u=${encodeURIComponent(itunes)}`, { signal: ctrl.signal });
       clearTimeout(to);
       if (!r.ok) { cache.set(trackId, null); return null; }
       const j = await r.json();

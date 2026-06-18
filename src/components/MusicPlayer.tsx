@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
-import { Play, Pause, SkipForward, SkipBack, ChevronDown, Heart, Shuffle, Repeat, Repeat1, Music2, Plus, X, ListMusic, Mic2 } from 'lucide-react';
+import { Play, Pause, SkipForward, SkipBack, ChevronDown, Heart, Shuffle, Repeat, Repeat1, Music2, Plus, X, ListMusic, Mic2, SlidersHorizontal } from 'lucide-react';
 import { useMusic } from '../hooks/useMusic';
 import { Track } from '../services/ytmusic';
 import { hdArtwork } from '../services/albumArt';
 import { CoverArt } from './ui/CoverArt';
 import { DynamicBackground } from './ui/DynamicBackground';
+import EqualizerPanel from './EqualizerPanel';
 
 const fmt = (s: number) => {
   if (!s || !isFinite(s)) return '0:00';
@@ -103,6 +104,7 @@ export default function MusicPlayer() {
   const [showQueue, setShowQueue] = useState(false);
   const [qTab, setQTab] = useState<'next' | 'recent'>('next');
   const [showLyrics, setShowLyrics] = useState(false);
+  const [showEq, setShowEq] = useState(false);
 
   // Resolve a true-HD cover (iTunes) for the big now-playing art.
   const [hdArt, setHdArt] = useState<string | undefined>(undefined);
@@ -180,9 +182,10 @@ export default function MusicPlayer() {
               </button>
             </div>
 
-            {/* Lyrics / Queue */}
+            {/* Lyrics / Equalizer / Queue */}
             <div className="flex items-center justify-center gap-2 mt-5">
               <button onClick={() => setShowLyrics((v) => !v)} tabIndex={0} data-tv-focusable className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-colors ${showLyrics ? 'bg-sauti text-amber-950' : 'glass-liquid text-white'}`}><Mic2 className="w-4 h-4" /> Lyrics</button>
+              <button onClick={() => setShowEq(true)} tabIndex={0} data-tv-focusable className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold glass-liquid text-white" aria-label="Equalizer"><SlidersHorizontal className="w-4 h-4" /> EQ</button>
               <button onClick={() => { setQTab('next'); setShowQueue(true); }} tabIndex={0} data-tv-focusable className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold glass-liquid text-white"><ListMusic className="w-4 h-4" /> Queue</button>
             </div>
           </div>
@@ -244,6 +247,8 @@ export default function MusicPlayer() {
           </div>
         </div>
       )}
+
+      <EqualizerPanel open={showEq} onClose={() => setShowEq(false)} />
     </>
   );
 }

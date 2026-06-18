@@ -295,6 +295,17 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     try { ms.setPositionState({ duration, position: Math.min(position, duration), playbackRate: 1 }); } catch { /* ignore */ }
   }, [position, duration]);
 
+  // ── Native background-playback service: start/refresh it while a track is
+  //    active (keeps audio alive off-screen + drives the lock-screen/headset
+  //    media controls), stop it when playback ends. No-ops on web. ──
+  useEffect(() => {
+    const on = active && !!current;
+    const q = on
+      ? `on=1&playing=${isPlaying ? 1 : 0}&title=${encodeURIComponent(current!.title)}&artist=${encodeURIComponent(current!.artist)}`
+      : 'on=0';
+    fetch(`https://localhost/__bgaudio?${q}`).catch(() => {});
+  }, [current, isPlaying, active]);
+
   const playQueue = (tracks: Track[], startIndex = 0, source = '') => {
     if (!tracks.length) return;
     haptics.press();
@@ -365,6 +376,14 @@ export function MusicProvider({ children }: { children: ReactNode }) {
 
   // Keep the MediaSession handlers pointed at the latest control closures.
   ctrlRef.current = { next, prev, stop, seek };
+
+  // Expose controls to the native background service so headset / earbud /
+  // lock-screen media buttons (next, prev, play, pause) drive the player.
+  (window as unknown as { __sauti?: unknown }).__sauti = {
+    play: () => { try { playerRef.current?.playVideo?.(); } catch { /* ignore */ } setIsPlaying(true); setActive(true); },
+    pause: () => { try { playerRef.current?.pauseVideo?.(); } catch { /* ignore */ } setIsPlaying(false); },
+    toggle, next, prev, stop,
+  };
 
   return (
     <Ctx.Provider

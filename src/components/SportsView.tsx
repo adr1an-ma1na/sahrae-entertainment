@@ -452,7 +452,7 @@ export default function SportsView() {
   const activeUrl = activeSrc?.url;
 
   return (
-    <div className="pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-12 relative">
+    <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-12 relative">
       {/* Player */}
       {playing && (
         <div role="dialog" data-tv-layer className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center backdrop-blur-sm p-3 md:p-10">
@@ -520,7 +520,7 @@ export default function SportsView() {
             <p className="text-sm text-zinc-400">Full schedule · F1 · Football · Cricket · Tennis · NBA · UFC</p>
           </div>
         </div>
-        <div className="flex gap-1 bg-zinc-900/70 p-1 rounded-xl border border-white/5 self-start">
+        <div className="flex gap-1 glass p-1 rounded-xl self-start">
           {(['events', 'channels'] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)} tabIndex={0} data-tv-focusable
               className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2 ${tab === t ? 'bg-amber-500 text-amber-950' : 'text-zinc-400 hover:text-white'}`}>

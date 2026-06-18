@@ -75,7 +75,7 @@ export default function Hero({ item, onPlay }: HeroProps) {
             </button>
             <button
               onClick={() => onPlay(item.id, type, true, true)}
-              className="flex items-center justify-center gap-2 px-7 md:px-9 py-3 bg-white/10 text-white rounded-xl font-bold text-lg hover:bg-white/15 transition-colors backdrop-blur-md border border-white/15 shadow-lg"
+              className="btn-glass flex items-center justify-center gap-2 px-7 md:px-9 py-3 rounded-xl font-bold text-lg"
             >
               <Play className="w-6 h-6 fill-current" />
               Trailer

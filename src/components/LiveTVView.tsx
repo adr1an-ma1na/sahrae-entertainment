@@ -191,7 +191,7 @@ export default function LiveTVView() {
   );
 
   return (
-    <div className="pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-12">
+    <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-12">
       {/* Player */}
       {active && (
         <div role="dialog" data-tv-layer className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center backdrop-blur-sm p-3 md:p-10">
@@ -236,7 +236,7 @@ export default function LiveTVView() {
         </div>
         <div className="relative max-w-xs w-full">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search channels…" className="w-full bg-zinc-900/70 border border-white/10 rounded-full pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/60" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search channels…" className="w-full glass rounded-full pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none" />
         </div>
       </div>
 

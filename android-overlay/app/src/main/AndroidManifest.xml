@@ -38,6 +38,13 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- Keeps Sauti audio alive in the background + owns the media session
+             that the lock screen and headset/earbud buttons talk to. -->
+        <service
+            android:name="com.sahrae.entertainment.BackgroundAudioService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
     </application>
 
     <!-- Permissions -->
@@ -46,6 +53,12 @@
     <!-- Tactile feedback (@capacitor/haptics). Without this Android silently
          denies all vibration, so the app never "feels" anything. -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Background music playback (foreground media service) + media notification -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Global audio effects (equalizer / bass / spatial) -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
     <!-- Run on phones, tablets, laptops (Chromebook) AND Android TV.
          Declaring these as NOT required keeps the app installable everywhere. -->

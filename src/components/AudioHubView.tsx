@@ -53,7 +53,7 @@ export default function AudioHubView() {
   const filteredStations = (radioCategory === 'All' ? liveStations : liveStations.filter((s) => s.category === radioCategory));
 
   return (
-    <div className="pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-12">
+    <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-12">
       {/* Header — same premium pattern as every other Sahrae section */}
       <div className="overline mb-1.5">Sahrae · Radio</div>
       <div className="flex items-center gap-3 mb-6">

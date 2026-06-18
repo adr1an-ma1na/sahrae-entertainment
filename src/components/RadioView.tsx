@@ -52,7 +52,7 @@ export default function RadioView() {
     : STATIONS.filter(s => s.category === selectedCategory);
 
   return (
-    <div className="pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-12">
+    <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-12">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div className="flex items-center gap-3">
           <Radio className="w-8 h-8 text-amber-500" />

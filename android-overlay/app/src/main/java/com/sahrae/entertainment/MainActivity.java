@@ -93,6 +93,10 @@ import org.json.JSONObject;
  */
 public class MainActivity extends BridgeActivity {
 
+    /** The Capacitor WebView, exposed so the background media service can route
+     *  headset media-button presses back into the JS player (window.__sauti.*). */
+    static WebView sWebView;
+
     /** Hosts the top frame is allowed to navigate to. Everything else is refused. */
     private static final Set<String> TRUSTED_MAIN_FRAME_HOSTS = new HashSet<>(Arrays.asList(
         "localhost",                  // Capacitor's bundled app
@@ -1004,6 +1008,17 @@ public class MainActivity extends BridgeActivity {
 
         final Bridge bridge = this.bridge;
         final WebView webView = bridge.getWebView();
+        sWebView = webView;
+
+        // Ask for notification permission (Android 13+) so the background-playback
+        // media notification can show. Audio still survives without it.
+        if (Build.VERSION.SDK_INT >= 33) {
+            try {
+                if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    requestPermissions(new String[]{ android.Manifest.permission.POST_NOTIFICATIONS }, 9911);
+                }
+            } catch (Throwable ignore) {}
+        }
 
         // ── L1 + L1.5 + L2 — custom WebViewClient
         webView.setWebViewClient(new BridgeWebViewClient(bridge) {
@@ -1030,6 +1045,17 @@ public class MainActivity extends BridgeActivity {
                         } else if (path.startsWith("/__ddfetch")) {
                             WebResourceResponse r = passthroughFetch(request.getUrl());
                             if (r != null) return r;
+                        } else if (path.startsWith("/__eq")) {
+                            return AudioFx.apply(request.getUrl());
+                        } else if (path.startsWith("/__bgaudio")) {
+                            Uri u = request.getUrl();
+                            BackgroundAudioService.set(
+                                getApplicationContext(),
+                                "1".equals(u.getQueryParameter("on")),
+                                u.getQueryParameter("title"),
+                                u.getQueryParameter("artist"),
+                                "1".equals(u.getQueryParameter("playing")));
+                            return AudioFx.ok();
                         }
                     }
 

@@ -66,6 +66,7 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
     { id: 'sports', label: 'Live Sports' },
     { id: 'music', label: 'Sauti' },
     { id: 'audio', label: 'Audio Hub' },
+    { id: 'downloads', label: 'Downloads' },
   ];
 
   return (
