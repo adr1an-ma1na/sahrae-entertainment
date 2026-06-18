@@ -1010,6 +1010,17 @@ public class MainActivity extends BridgeActivity {
         final WebView webView = bridge.getWebView();
         sWebView = webView;
 
+        // Capture in-app file downloads (e.g. a movie from the download browser)
+        // into the app's OWN private storage + Downloads section, instead of the
+        // device's public Downloads / file manager.
+        webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
+            DownloadStore.enqueue(getApplicationContext(), url, userAgent, contentDisposition, mimetype);
+            try {
+                runOnUiThread(() -> android.widget.Toast.makeText(
+                    getApplicationContext(), "Saving to your in-app Downloads…", android.widget.Toast.LENGTH_SHORT).show());
+            } catch (Throwable ignore) {}
+        });
+
         // Ask for notification permission (Android 13+) so the background-playback
         // media notification can show. Audio still survives without it.
         if (Build.VERSION.SDK_INT >= 33) {
@@ -1056,6 +1067,14 @@ public class MainActivity extends BridgeActivity {
                                 u.getQueryParameter("artist"),
                                 "1".equals(u.getQueryParameter("playing")));
                             return AudioFx.ok();
+                        } else if (path.startsWith("/__dllist")) {
+                            return DownloadStore.json(DownloadStore.listJson(getApplicationContext()));
+                        } else if (path.startsWith("/__dlremove")) {
+                            try { DownloadStore.remove(getApplicationContext(), Long.parseLong(request.getUrl().getQueryParameter("id"))); } catch (Throwable ignore) {}
+                            return DownloadStore.json("{\"ok\":true}");
+                        } else if (path.startsWith("/__dltitle")) {
+                            DownloadStore.setPendingTitle(request.getUrl().getQueryParameter("t"));
+                            return DownloadStore.json("{\"ok\":true}");
                         }
                     }
 

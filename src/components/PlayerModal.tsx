@@ -4,6 +4,7 @@ import ReactPlayer from 'react-player';
 import { fetchMediaDetails, MediaDetails, getImageUrl, fetchSimilar, MediaItem, SeasonDetails, fetchSeasonDetails } from '../services/tmdb';
 import { useWatchProgress } from '../hooks/useWatchProgress';
 import { useMyList } from '../hooks/useMyList';
+import MovieDownloadModal from './MovieDownloadModal';
 
 interface PlayerModalProps {
   isOpen: boolean;
@@ -34,7 +35,8 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const [showControls, setShowControls] = useState(true);
   const [rating, setRating] = useState<'up' | 'down' | null>(null);
   const [offlineBlobUrl, setOfflineBlobUrl] = useState<string | null>(null);
-  
+  const [showDownload, setShowDownload] = useState(false);
+
   const [showXRay, setShowXRay] = useState(false);
 
   const hideControlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -405,16 +407,14 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                     <button onClick={() => setRating(rating === 'down' ? null : 'down')} className={`w-10 h-10 md:w-12 md:h-12 flex items-center justify-center border border-zinc-600/60 bg-zinc-900/90 rounded-full transition-colors shadow-lg shrink-0 ${rating === 'down' ? 'text-red-400 bg-zinc-800 border-red-500/50' : 'text-white hover:bg-white/10 hover:border-white'}`} title="Not for me">
                       <ThumbsDown className="w-4 h-4 md:w-5 md:h-5"/>
                     </button>
-                    <a 
-                      href={currentMediaType === 'movie' ? `https://vidvault.ru/movie/${currentMediaId}` : `https://vidvault.ru/tv/${currentMediaId}/${selectedSeason}/${selectedEpisode}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-6 md:px-8 py-2 md:py-3 font-bold flex items-center justify-center gap-2 border border-zinc-600/60 bg-zinc-900/90 text-white rounded hover:bg-zinc-800 transition-colors shadow-lg ml-2" 
-                      title="Download to Device"
+                    <button
+                      onClick={() => setShowDownload(true)}
+                      className="px-6 md:px-8 py-2 md:py-3 font-bold flex items-center justify-center gap-2 border border-zinc-600/60 bg-zinc-900/90 text-white rounded hover:bg-zinc-800 transition-colors shadow-lg ml-2"
+                      title="Download to app"
                     >
                       <Download className="w-5 h-5 group-hover:animate-bounce"/>
                       <span className="text-sm">Download</span>
-                    </a>
+                    </button>
                   </div>
                 </div>
               </>
@@ -575,6 +575,15 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
             </div>
           </div>
         </div>
+        {showDownload && currentMediaId != null && (
+          <MovieDownloadModal
+            url={currentMediaType === 'movie'
+              ? `https://vidvault.ru/movie/${currentMediaId}`
+              : `https://vidvault.ru/tv/${currentMediaId}/${selectedSeason}/${selectedEpisode}`}
+            title={(details?.title || details?.name || 'Download') + (currentMediaType === 'tv' ? ` S${selectedSeason}E${selectedEpisode}` : '')}
+            onClose={() => setShowDownload(false)}
+          />
+        )}
     </>
   );
 }
