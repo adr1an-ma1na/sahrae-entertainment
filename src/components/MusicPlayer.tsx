@@ -129,6 +129,14 @@ export default function MusicPlayer() {
         <div role="dialog" data-tv-layer className="dark sauti fixed inset-0 z-[120] overflow-hidden animate-in fade-in duration-300">
           <DynamicBackground color={current.dominantColor} />
 
+          {/* Art-derived colour bleed — the immersive Apple-Music backdrop. */}
+          {(hdArt || current.artworkLarge || current.artwork) && (
+            <div aria-hidden className="absolute inset-0 overflow-hidden pointer-events-none">
+              <img src={hdArt || current.artworkLarge || current.artwork} alt="" className="np-bleed w-full h-full object-cover" />
+              <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.30) 0%, rgba(0,0,0,0.55) 55%, #000 100%)' }} />
+            </div>
+          )}
+
           <div className="relative z-10 h-full flex flex-col px-5 md:px-8 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1.5rem)] max-w-xl mx-auto">
             {/* Top bar */}
             <div className="flex items-center justify-between">
@@ -146,8 +154,11 @@ export default function MusicPlayer() {
               {showLyrics ? (
                 <div className="w-full h-full flex flex-col min-h-0"><LyricsPanel track={current} position={position} /></div>
               ) : current.artworkLarge || current.artwork ? (
-                <CoverArt imageUrl={hdArt || current.artworkLarge || current.artwork} fallbackUrl={current.artwork} dominantColor={current.dominantColor} rounded="rounded-2xl"
-                  className="w-[80vw] max-w-[400px] aspect-square shadow-[0_28px_80px_rgba(0,0,0,0.6)]" />
+                <div className="relative w-[80vw] max-w-[380px]">
+                  <CoverArt imageUrl={hdArt || current.artworkLarge || current.artwork} fallbackUrl={current.artwork} dominantColor={current.dominantColor} rounded="rounded-3xl"
+                    className="np-art w-full aspect-square" />
+                  <img aria-hidden alt="" src={hdArt || current.artworkLarge || current.artwork} className="np-reflect absolute left-0 right-0 top-full mt-3 w-full h-1/3 object-cover object-top rounded-3xl pointer-events-none" />
+                </div>
               ) : (
                 <div className="w-[78vw] max-w-[360px] aspect-square rounded-2xl bg-zinc-800 flex items-center justify-center"><Music2 className="w-20 h-20 text-zinc-600" /></div>
               )}
@@ -156,17 +167,18 @@ export default function MusicPlayer() {
             {/* Title + quick actions */}
             <div className="flex items-center gap-3 mb-5 px-1">
               <div className="min-w-0 flex-1">
-                <h2 className="text-2xl font-display font-bold text-white truncate">{current.title}</h2>
-                <p className="text-zinc-300 truncate">{current.artist}</p>
+                <h2 className="np-title text-3xl font-display font-bold text-white truncate">{current.title}</h2>
+                <p className="text-zinc-300 truncate font-medium">{current.artist}</p>
               </div>
               <button onClick={() => openAddSheet(current)} tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full flex items-center justify-center text-zinc-300 hover:text-white shrink-0" aria-label="Add to playlist"><Plus className="w-5 h-5" /></button>
               <button onClick={() => toggleLike(current)} tabIndex={0} data-tv-focusable className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isLiked(current.id) ? 'text-sauti' : 'text-zinc-300 hover:text-white'}`} aria-label="Like"><Heart className={`w-6 h-6 ${isLiked(current.id) ? 'fill-current' : ''}`} /></button>
             </div>
 
-            {/* Scrubber */}
-            <div className="mb-5">
-              <input type="range" min={0} max={duration || 0} value={position} step={1} onChange={(e) => seek(Number(e.target.value))} style={{ accentColor: '#f59e0b' }} className="w-full h-1.5 cursor-pointer" aria-label="Seek" />
-              <div className="flex justify-between text-[11px] text-zinc-400 tabular mt-1"><span>{fmt(position)}</span><span>{fmt(duration)}</span></div>
+            {/* Control deck — scrubber + transport on frosted glass */}
+            <div className="control-deck p-4 md:p-5 mb-4">
+            <div className="mb-4">
+              <input type="range" min={0} max={duration || 0} value={position} step={1} onChange={(e) => seek(Number(e.target.value))} className="scrub w-full" aria-label="Seek" />
+              <div className="flex justify-between text-[11px] text-zinc-400 tabular mt-2"><span>{fmt(position)}</span><span>{fmt(duration)}</span></div>
             </div>
 
             {/* Transport */}
@@ -180,6 +192,7 @@ export default function MusicPlayer() {
               <button onClick={cycleRepeat} tabIndex={0} data-tv-focusable className={`w-11 h-11 flex items-center justify-center rounded-full ${repeat !== 'off' ? 'text-sauti' : 'text-zinc-400 hover:text-white'}`} aria-label="Repeat">
                 {repeat === 'one' ? <Repeat1 className="w-5 h-5" /> : <Repeat className="w-5 h-5" />}
               </button>
+            </div>
             </div>
 
             {/* Lyrics / Equalizer / Queue */}

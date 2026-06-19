@@ -495,3 +495,85 @@ html.tv-mode {
 @keyframes splash-line-in { 0% { width: 0; opacity: 0; } 100% { width: min(60vw, 320px); opacity: 1; } }
 @keyframes splash-breathe { 0% { opacity: 0.5; transform: scale(1); } 100% { opacity: 1; transform: scale(1.08); } }
 @keyframes splash-fade { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.06); visibility: hidden; } }
+
+/* ─────────────────────────────────────────────────────────────
+   SAUTI — NOW PLAYING premium kit. Apple-Music-grade depth: an
+   art-derived colour bleed behind a pedestalled cover, a frosted
+   control deck, and a tactile gold scrubber. All opt-in classes.
+   ───────────────────────────────────────────────────────────── */
+@layer utilities {
+  /* Big blurred copy of the cover painted behind everything for true colour
+     immersion. Paired with a dark scrim (in JSX) so text stays legible. */
+  .np-bleed {
+    transform: scale(1.5);
+    filter: blur(56px) saturate(150%);
+    opacity: 0.55;
+    animation: sahrae-kenburns 30s ease-in-out infinite alternate;
+  }
+
+  /* The pedestalled cover: gold hairline rim, deep cinematic drop, and a
+     specular top-left sheen drawn by ::after so it reads like glossy glass. */
+  .np-art {
+    position: relative;
+    border-radius: 1.5rem;
+    box-shadow:
+      0 2px 0 rgba(255,255,255,.10) inset,
+      0 30px 90px rgba(0,0,0,.66),
+      0 0 0 1px rgba(245,158,11,.28),
+      0 0 60px rgba(245,158,11,.12);
+  }
+  .np-art::after {
+    content: "";
+    position: absolute; inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(150deg, rgba(255,255,255,.30) 0%, rgba(255,255,255,.06) 26%, rgba(255,255,255,0) 52%);
+    mix-blend-mode: screen;
+  }
+
+  /* Soft mirrored reflection beneath the cover (the premium "floor"). */
+  .np-reflect {
+    transform: scaleY(-1);
+    -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,.45), transparent 62%);
+    mask-image: linear-gradient(to bottom, rgba(0,0,0,.45), transparent 62%);
+    filter: blur(1px);
+    opacity: .5;
+  }
+
+  /* Frosted control deck wrapping the scrubber + transport. */
+  .control-deck {
+    background: linear-gradient(180deg, rgba(255,255,255,.10) 0%, rgba(255,255,255,.03) 100%), rgba(10,10,14,.42);
+    backdrop-filter: blur(26px) saturate(180%);
+    -webkit-backdrop-filter: blur(26px) saturate(180%);
+    border: 1px solid rgba(255,255,255,.14);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 16px 44px rgba(0,0,0,.5);
+    border-radius: 1.5rem;
+  }
+
+  /* Tactile gold scrubber — taller track, gold fill via accent-color, and a
+     glowing thumb that grows on interaction. */
+  input[type="range"].scrub {
+    -webkit-appearance: none; appearance: none;
+    height: 6px; border-radius: 9999px;
+    background: rgba(255,255,255,.16);
+    accent-color: #f59e0b;
+    cursor: pointer;
+  }
+  input[type="range"].scrub::-webkit-slider-runnable-track { height: 6px; border-radius: 9999px; }
+  input[type="range"].scrub::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 16px; height: 16px; margin-top: -5px;
+    border-radius: 50%;
+    background: linear-gradient(180deg, #fde68a, #f59e0b);
+    box-shadow: 0 0 0 4px rgba(245,158,11,.22), 0 2px 8px rgba(0,0,0,.5);
+    transition: transform .15s var(--ease-premium), box-shadow .15s var(--ease-premium);
+  }
+  input[type="range"].scrub:hover::-webkit-slider-thumb,
+  input[type="range"].scrub:active::-webkit-slider-thumb {
+    transform: scale(1.25);
+    box-shadow: 0 0 0 7px rgba(245,158,11,.26), 0 3px 12px rgba(0,0,0,.6);
+  }
+
+  /* Marquee for long titles that would otherwise truncate. */
+  .np-title { letter-spacing: -0.03em; }
+}
