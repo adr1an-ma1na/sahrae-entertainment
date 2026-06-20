@@ -24,7 +24,6 @@ interface MusicCtx {
   expanded: boolean;
   buffering: boolean;
   active: boolean;
-  lastError: string;
   autoplay: boolean;
   toggleAutoplay: () => void;
   queueSource: string;
@@ -91,16 +90,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   // Offline playback: a downloaded track plays from this local <audio> element
   // instead of the YouTube IFrame. Streaming is untouched when not local.
   const audioElRef = useRef<HTMLAudioElement | null>(null);
-  // usingLocalRef === "the <audio> element is the active engine" (true for BOTH
-  // downloaded local files AND native-streamed tracks). The YouTube IFrame is
-  // only the engine when this is false.
   const usingLocalRef = useRef(false);
-  // Native streaming: the track id currently being streamed through <audio> via
-  // a direct (Piped) audio URL — so it keeps playing in the background and can
-  // be downloaded. If it can't resolve/play, we fall back to the YT IFrame.
-  const nativeStreamRef = useRef<string | null>(null);
-  const nativeStartedRef = useRef(false);
-  const nativeWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Latest control fns + live position, for the OS MediaSession handlers (which
   // are registered once but must always act on current state).
   const ctrlRef = useRef<{ next: () => void; prev: () => void; stop: () => void; seek: (s: number) => void }>({ next: () => {}, prev: () => {}, stop: () => {}, seek: () => {} });
@@ -110,7 +100,6 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const [index, setIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [buffering, setBuffering] = useState(false);
-  const [lastError, setLastError] = useState('');
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const [shuffle, setShuffle] = useState(false);
@@ -127,19 +116,6 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const [addSheetTrack, setAddSheetTrack] = useState<Track | null>(null);
 
   const current = queue[index] || null;
-
-  // Fall back from a failed native stream to the reliable YouTube IFrame for a
-  // given track id. Stable (refs only) so the mount-time <audio> listeners can
-  // call it. Clears any pending native watchdog and the <audio> source.
-  const playYt = (id: string) => {
-    nativeStreamRef.current = null;
-    usingLocalRef.current = false;
-    if (nativeWatchdogRef.current) { clearTimeout(nativeWatchdogRef.current); nativeWatchdogRef.current = null; }
-    const a = audioElRef.current;
-    try { if (a) { a.pause(); a.removeAttribute('src'); a.load(); } } catch { /* ignore */ }
-    if (readyRef.current && playerRef.current) playerRef.current.loadVideoById(id);
-    else pendingRef.current = id;
-  };
 
   // Track recently played (most recent first, de-duped, capped).
   useEffect(() => {
@@ -185,15 +161,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     setIndex(ni);
   };
   const handleEnded = () => {
-    if (repeat === 'one') {
-      if (usingLocalRef.current) {
-        const a = audioElRef.current;
-        if (a) { try { a.currentTime = 0; a.play().catch(() => {}); } catch { /* ignore */ } }
-      } else {
-        playerRef.current?.seekTo?.(0, true); playerRef.current?.playVideo?.();
-      }
-      return;
-    }
+    if (repeat === 'one') { playerRef.current?.seekTo?.(0, true); playerRef.current?.playVideo?.(); return; }
     next();
   };
   const endedRef = useRef(handleEnded); endedRef.current = handleEnded;
@@ -202,8 +170,6 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   // ── init the hidden YouTube player once ──
   useEffect(() => {
     let cancelled = false;
-    // Diagnostic: if the IFrame API / player never becomes ready, say so.
-    const initWatch = setTimeout(() => { if (!cancelled && !readyRef.current) setLastError('Player did not initialise (YT IFrame API blocked or not loaded)'); }, 12000);
     loadYT().then((YT) => {
       if (cancelled || playerRef.current) return;
       playerRef.current = new YT.Player('sahrae-yt-player', {
@@ -212,26 +178,22 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         events: {
           onReady: () => {
             readyRef.current = true;
-            clearTimeout(initWatch);
             if (pendingRef.current) { playerRef.current.loadVideoById(pendingRef.current); pendingRef.current = null; }
           },
           onStateChange: (e: any) => {
             // ENDED 0 · PLAYING 1 · PAUSED 2 · BUFFERING 3
             if (e.data === 1) {
-              setIsPlaying(true); setBuffering(false); setActive(true); setLastError('');
+              setIsPlaying(true); setBuffering(false); setActive(true);
               window.dispatchEvent(new CustomEvent('sahrae:audioclaim', { detail: 'music' }));
             } else if (e.data === 2) { setIsPlaying(false); }
             else if (e.data === 3) { setBuffering(true); }
             else if (e.data === 0) { endedRef.current(); }
           },
-          // Surface the YouTube error code instead of silently skipping, so we
-          // can see WHY a track won't play (2=bad id, 5=HTML5, 100=removed,
-          // 101/150=embedding disabled by the uploader).
-          onError: (e: any) => { setLastError('YouTube playback error ' + (e?.data ?? '?')); setBuffering(false); },
+          onError: () => { skipRef.current(); }, // embed disabled / unavailable → skip on
         },
       });
-    }).catch(() => { if (!cancelled) setLastError('YT IFrame API failed to load'); });
-    return () => { cancelled = true; clearTimeout(initWatch); };
+    });
+    return () => { cancelled = true; };
   }, []);
 
   // ── the offline <audio> element (downloaded tracks play here) ──
@@ -239,24 +201,14 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     const a = new Audio();
     a.preload = 'auto';
     audioElRef.current = a;
-    const onPlay = () => {
-      // A native stream that actually started → cancel its fallback watchdog.
-      nativeStartedRef.current = true;
-      if (nativeWatchdogRef.current) { clearTimeout(nativeWatchdogRef.current); nativeWatchdogRef.current = null; }
-      setIsPlaying(true); setBuffering(false); setActive(true);
-      window.dispatchEvent(new CustomEvent('sahrae:audioclaim', { detail: 'music' }));
-    };
+    const onPlay = () => { setIsPlaying(true); setBuffering(false); setActive(true); window.dispatchEvent(new CustomEvent('sahrae:audioclaim', { detail: 'music' })); };
     const onPause = () => setIsPlaying(false);
     const onWaiting = () => setBuffering(true);
     const onEnded = () => endedRef.current();
     const onTime = () => { if (usingLocalRef.current) { setPosition(a.currentTime || 0); if (a.duration && isFinite(a.duration)) setDuration(a.duration); } };
-    // A native stream URL that errors (404 / IP-locked 403 / codec) → fall back
-    // to the YouTube IFrame for that same track so playback never just dies.
-    const onError = () => { const id = nativeStreamRef.current; if (id) playYt(id); };
     a.addEventListener('play', onPlay); a.addEventListener('playing', onPlay);
     a.addEventListener('pause', onPause); a.addEventListener('waiting', onWaiting);
     a.addEventListener('ended', onEnded); a.addEventListener('timeupdate', onTime);
-    a.addEventListener('error', onError);
     return () => { try { a.pause(); a.removeAttribute('src'); } catch { /* ignore */ } };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -268,28 +220,20 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     if (!c || loadedIdRef.current === c.id) return;
     loadedIdRef.current = c.id;
     setPosition(0); setDuration(0);
-    if (nativeWatchdogRef.current) { clearTimeout(nativeWatchdogRef.current); nativeWatchdogRef.current = null; }
-    const a = audioElRef.current;
     const local = downloads.localSrc(c.id);
-
+    const a = audioElRef.current;
     if (local && a) {
       // Offline: play from the saved file, pause the streaming player.
       usingLocalRef.current = true;
-      nativeStreamRef.current = null;
       try { playerRef.current?.pauseVideo?.(); } catch { /* ignore */ }
       a.src = local; a.play().catch(() => {});
       setActive(true);
-      return;
+    } else {
+      usingLocalRef.current = false;
+      try { if (a) { a.pause(); a.removeAttribute('src'); a.load(); } } catch { /* ignore */ }
+      if (readyRef.current && playerRef.current) playerRef.current.loadVideoById(c.id);
+      else pendingRef.current = c.id;
     }
-
-    // Streaming plays through the reliable YouTube IFrame. (Native-audio
-    // background streaming was reverted after it regressed playback to silence;
-    // downloads still try the native /__ytaudio resolver via audioStream.)
-    usingLocalRef.current = false;
-    nativeStreamRef.current = null;
-    try { if (a) { a.pause(); a.removeAttribute('src'); a.load(); } } catch { /* ignore */ }
-    if (readyRef.current && playerRef.current) playerRef.current.loadVideoById(c.id);
-    else pendingRef.current = c.id;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, queue]);
 
@@ -403,7 +347,6 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     haptics.press();
     setActive(true);
     setBuffering(true);
-    setLastError('');
     setQueueSource(source);
     extendingRef.current = null;
     setQueue(tracks);
@@ -443,8 +386,6 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     try { playerRef.current?.stopVideo?.(); } catch { /* ignore */ }
     try { const a = audioElRef.current; if (a) { a.pause(); a.removeAttribute('src'); } } catch { /* ignore */ }
     usingLocalRef.current = false;
-    nativeStreamRef.current = null;
-    if (nativeWatchdogRef.current) { clearTimeout(nativeWatchdogRef.current); nativeWatchdogRef.current = null; }
     loadedIdRef.current = null;
     extendingRef.current = null;
     setIsPlaying(false); setActive(false); setExpanded(false);
@@ -501,7 +442,6 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider
       value={{
         queue, index, current, isPlaying, position, duration, shuffle, repeat, expanded, buffering, active,
-        lastError,
         autoplay, toggleAutoplay, queueSource,
         playQueue, addToQueue, playNext, removeFromQueue, jumpTo,
         toggle, stop, next, prev, seek, toggleShuffle, cycleRepeat, toggleLike, isLiked,

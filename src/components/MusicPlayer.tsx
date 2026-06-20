@@ -97,7 +97,7 @@ function QueueRow({ track, activeRow, onPlay, onRemove }: { track: Track; active
 
 export default function MusicPlayer() {
   const {
-    current, isPlaying, position, duration, shuffle, repeat, expanded, active, lastError,
+    current, isPlaying, position, duration, shuffle, repeat, expanded, active,
     queue, index, recentlyPlayed, queueSource, jumpTo, removeFromQueue, playQueue,
     toggle, stop, next, prev, seek, toggleShuffle, cycleRepeat, toggleLike, isLiked, setExpanded, openAddSheet,
   } = useMusic();
@@ -170,7 +170,6 @@ export default function MusicPlayer() {
               <div className="min-w-0 flex-1">
                 <h2 className="np-title text-3xl font-display font-bold text-white truncate">{current.title}</h2>
                 <p className="text-zinc-300 truncate font-medium">{current.artist}</p>
-                {lastError && <p className="text-red-300 text-xs mt-1 truncate" title={lastError}>⚠ {lastError}</p>}
               </div>
               <button onClick={() => openAddSheet(current)} tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full flex items-center justify-center text-zinc-300 hover:text-white shrink-0" aria-label="Add to playlist"><Plus className="w-5 h-5" /></button>
               <button onClick={() => toggleLike(current)} tabIndex={0} data-tv-focusable className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isLiked(current.id) ? 'text-sauti' : 'text-zinc-300 hover:text-white'}`} aria-label="Like"><Heart className={`w-6 h-6 ${isLiked(current.id) ? 'fill-current' : ''}`} /></button>

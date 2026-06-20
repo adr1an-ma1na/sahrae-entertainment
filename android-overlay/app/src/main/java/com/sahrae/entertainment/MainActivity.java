@@ -509,10 +509,6 @@ public class MainActivity extends BridgeActivity {
     private static final Map<String, String> EMBED_CACHE = new ConcurrentHashMap<>();
     private static final Map<String, Long> EMBED_EXPIRY = new ConcurrentHashMap<>();
 
-    // On-device YouTube audio resolver cache (see ytAudioResolve).
-    private static final Map<String, String> YTA_CACHE = new ConcurrentHashMap<>();
-    private static final Map<String, Long> YTA_EXPIRY = new ConcurrentHashMap<>();
-
     /** Kick playback in the throwaway WebView so the player requests its stream. */
     private static final String PLAY_KICK =
         "(function(){try{document.querySelectorAll('video').forEach(function(v){try{v.muted=true;var p=v.play();if(p&&p.catch)p.catch(function(){});}catch(e){}});" +
@@ -628,117 +624,6 @@ public class MainActivity extends BridgeActivity {
         });
 
         try { latch.await(14, TimeUnit.SECONDS); } catch (InterruptedException ignore) {}
-        runOnUiThread(() -> {
-            try {
-                if (holder[0] != null) {
-                    holder[0].stopLoading();
-                    holder[0].loadUrl("about:blank");
-                    ViewGroup parent = (ViewGroup) holder[0].getParent();
-                    if (parent != null) parent.removeView(holder[0]);
-                    holder[0].destroy();
-                }
-            } catch (Exception ignore) {}
-        });
-        return result[0];
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    //  On-device YouTube AUDIO resolver — powers Sauti background playback +
-    //  song downloads. Public Piped instances are unreliable, so we resolve the
-    //  direct audio stream HERE on the device: load the track's YouTube embed in
-    //  a hidden WebView, let its player run, and capture the googlevideo AUDIO
-    //  URL it fetches. The device's own (residential) IP did the handshake, so
-    //  that URL plays + downloads on this device.
-    //
-    //  URL form: https://localhost/__ytaudio?id={videoId}
-    //  Returns:  {"url":"<audio url>"}  (or {"url":null} → app falls back to Piped)
-    // ─────────────────────────────────────────────────────────────
-    private static boolean looksLikeYtAudio(String u) {
-        if (u == null) return false;
-        String l = u.toLowerCase();
-        if (!l.contains("googlevideo.com/videoplayback")) return false;
-        // Adaptive AUDIO itags (m4a 140/139, opus/webm 251/250/249) or audio mime.
-        return l.contains("mime=audio") || l.contains("itag=140") || l.contains("itag=139")
-            || l.contains("itag=251") || l.contains("itag=250") || l.contains("itag=249");
-    }
-
-    private WebResourceResponse ytAudioResolve(Uri uri) {
-        final String id = uri.getQueryParameter("id");
-        if (id == null || id.isEmpty()) return null;
-        Long exp = YTA_EXPIRY.get(id);
-        String url = (exp != null && exp > System.currentTimeMillis()) ? YTA_CACHE.get(id) : null;
-        if (url == null) {
-            url = runYtAudioResolver(id);
-            if (url != null) {
-                YTA_CACHE.put(id, url);
-                YTA_EXPIRY.put(id, System.currentTimeMillis() + 1800000); // 30 min
-            }
-        }
-        return jsonResponse(url != null ? "{\"url\":" + jsonStr(url) + "}" : "{\"url\":null}");
-    }
-
-    /** Load the track's YouTube embed in a hidden WebView and capture the first
-     *  audio stream URL its player requests. */
-    private String runYtAudioResolver(final String id) {
-        final String[] result = new String[1];
-        final WebView[] holder = new WebView[1];
-        final CountDownLatch latch = new CountDownLatch(1);
-
-        runOnUiThread(() -> {
-            try {
-                WebView wv = new WebView(MainActivity.this);
-                holder[0] = wv;
-                WebSettings s = wv.getSettings();
-                s.setJavaScriptEnabled(true);
-                s.setDomStorageEnabled(true);
-                s.setMediaPlaybackRequiresUserGesture(false);
-                s.setUserAgentString(PROXY_UA);
-                try { s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW); } catch (Exception ignore) {}
-                wv.setWebChromeClient(new WebChromeClient());
-                wv.setWebViewClient(new WebViewClient() {
-                    @Override
-                    public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest req) {
-                        try {
-                            if (req != null && req.getUrl() != null) {
-                                String us = req.getUrl().toString();
-                                if (isAdHost(req.getUrl().getHost())) return blockedResponse();
-                                if (result[0] == null && looksLikeYtAudio(us)) {
-                                    result[0] = us;
-                                    latch.countDown();
-                                    return blockedResponse(); // got it — don't waste bandwidth
-                                }
-                            }
-                        } catch (Exception ignore) {}
-                        return null;
-                    }
-                    @Override
-                    public void onPageFinished(WebView v, String url) {
-                        try {
-                            v.evaluateJavascript(PLAY_KICK, null);
-                            v.postDelayed(() -> { try { v.evaluateJavascript(PLAY_KICK, null); } catch (Exception e) {} }, 1200);
-                            v.postDelayed(() -> { try { v.evaluateJavascript(PLAY_KICK, null); } catch (Exception e) {} }, 3500);
-                        } catch (Exception ignore) {}
-                    }
-                });
-                try {
-                    ViewGroup root = findViewById(android.R.id.content);
-                    if (root != null) {
-                        wv.setLayoutParams(new ViewGroup.LayoutParams(1, 1));
-                        wv.setAlpha(0f);
-                        wv.setEnabled(false);
-                        root.addView(wv);
-                    }
-                } catch (Exception ignore) {}
-
-                Map<String, String> hdrs = new HashMap<>();
-                hdrs.put("Referer", "https://www.youtube.com/");
-                wv.loadUrl("https://www.youtube.com/embed/" + id + "?autoplay=1&playsinline=1", hdrs);
-            } catch (Exception e) {
-                latch.countDown();
-            }
-        });
-
-        try { latch.await(12, TimeUnit.SECONDS); } catch (InterruptedException ignore) {}
         runOnUiThread(() -> {
             try {
                 if (holder[0] != null) {
@@ -1165,9 +1050,6 @@ public class MainActivity extends BridgeActivity {
                         } else if (path.startsWith("/__embed2m3u8")) {
                             WebResourceResponse r = embedResolve(request.getUrl());
                             if (r != null) return r;
-                        } else if (path.startsWith("/__ytaudio")) {
-                            WebResourceResponse r = ytAudioResolve(request.getUrl());
-                            if (r != null) return r;
                         } else if (path.startsWith("/__ddresolve")) {
                             WebResourceResponse r = daddyResolve(request.getUrl());
                             if (r != null) return r;
@@ -1185,25 +1067,6 @@ public class MainActivity extends BridgeActivity {
                                 u.getQueryParameter("artist"),
                                 "1".equals(u.getQueryParameter("playing")));
                             return AudioFx.ok();
-                        } else if (path.startsWith("/__play")) {
-                            Uri u = request.getUrl();
-                            BackgroundAudioService.playUrl(getApplicationContext(),
-                                u.getQueryParameter("url"), u.getQueryParameter("title"), u.getQueryParameter("artist"));
-                            return AudioFx.ok();
-                        } else if (path.startsWith("/__presume")) {
-                            BackgroundAudioService.control(getApplicationContext(), "RESUME");
-                            return AudioFx.ok();
-                        } else if (path.startsWith("/__ppause")) {
-                            BackgroundAudioService.control(getApplicationContext(), "PAUSE_NATIVE");
-                            return AudioFx.ok();
-                        } else if (path.startsWith("/__pseek")) {
-                            try { BackgroundAudioService.seekTo(getApplicationContext(), Integer.parseInt(request.getUrl().getQueryParameter("ms"))); } catch (Throwable ignore) {}
-                            return AudioFx.ok();
-                        } else if (path.startsWith("/__pstop")) {
-                            BackgroundAudioService.control(getApplicationContext(), "STOP_PLAYBACK");
-                            return AudioFx.ok();
-                        } else if (path.startsWith("/__pstate")) {
-                            return jsonResponse(BackgroundAudioService.stateJson());
                         } else if (path.startsWith("/__dllist")) {
                             return DownloadStore.json(DownloadStore.listJson(getApplicationContext()));
                         } else if (path.startsWith("/__dlremove")) {

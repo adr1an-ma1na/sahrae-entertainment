@@ -165,22 +165,6 @@ export const ytmusic = {
   // Prefers m4a/mp4 (broadest <audio> support) at a sane bitrate, then anything.
   // Most Piped instances return proxied URLs that play/fetch from any IP.
   audioStream: async (videoId: string): Promise<{ url: string; mime: string } | null> => {
-    // 1) On-device native resolver (MainActivity /__ytaudio) — resolves the audio
-    //    URL through the phone's own connection, so it works where the public
-    //    Piped instances are down or IP-locked. This is what makes background
-    //    playback + downloads actually work in the APK.
-    try {
-      const ctrl = new AbortController();
-      const to = setTimeout(() => ctrl.abort(), 13000);
-      const r = await fetch(`https://localhost/__ytaudio?id=${encodeURIComponent(videoId)}`, { cache: 'no-store', signal: ctrl.signal });
-      clearTimeout(to);
-      if (r.ok) {
-        const nj = await r.json();
-        if (nj && typeof nj.url === 'string' && nj.url) return { url: nj.url, mime: 'audio/mp4' };
-      }
-    } catch { /* not running natively / failed → Piped fallback */ }
-
-    // 2) Piped fallback (web / when the native resolver yields nothing).
     const j = await pipedGet(`/streams/${videoId}`);
     const streams: any[] = (j && Array.isArray(j.audioStreams)) ? j.audioStreams : [];
     if (!streams.length) return null;
