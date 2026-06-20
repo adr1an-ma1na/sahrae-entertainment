@@ -127,14 +127,12 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
   const activeChannel = CHANNELS.find(c => c.id === activeChannelId);
 
   return (
-    <div className="pt-20 px-4 md:px-12 max-w-[1600px] mx-auto pb-12">
-      <div className="mb-8 flex items-center justify-between">
+    <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-[1600px] mx-auto pb-12">
+      <div className="mb-8 flex items-center gap-3">
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-rose-500 flex items-center justify-center shadow-lg shadow-amber-500/20 shrink-0"><Tv className="w-6 h-6 text-white" /></div>
         <div>
-          <h1 className="text-3xl font-bold text-white flex items-center gap-3 mb-2">
-            <Tv className="w-8 h-8 text-amber-500" />
-            Flow Channels
-          </h1>
-          <p className="text-zinc-400">Continuous 24/7 themed streams. Sit back and discover.</p>
+          <h2 className="text-3xl font-display font-bold text-white leading-tight tracking-tight">Flow Channels</h2>
+          <p className="text-sm text-zinc-400">Continuous 24/7 themed streams. Sit back and discover.</p>
         </div>
       </div>
 
