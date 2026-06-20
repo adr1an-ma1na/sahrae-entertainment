@@ -13,8 +13,9 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
  * VITE_SUPABASE_ANON_KEY) or by hardcoding the constants below.
  */
 const ENV = (import.meta as unknown as { env?: Record<string, string> }).env || {};
-const SUPABASE_URL = ENV.VITE_SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = ENV.VITE_SUPABASE_ANON_KEY || '';
+// URL + PUBLISHABLE (client-safe) key only. NEVER put the secret key here.
+const SUPABASE_URL = ENV.VITE_SUPABASE_URL || 'https://qkyrztpqdrpucdyabjsm.supabase.co';
+const SUPABASE_ANON_KEY = ENV.VITE_SUPABASE_ANON_KEY || 'sb_publishable_pd_yZhWPd2SE1ipMbijolQ_0jVCfcL0';
 
 export const supabase: SupabaseClient | null =
   SUPABASE_URL && SUPABASE_ANON_KEY
