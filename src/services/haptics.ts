@@ -29,29 +29,30 @@ const webVibrate = (ms: number) => {
 };
 
 /**
- * Guaranteed feedback. The predefined `Haptics.impact()` effect is imperceptible
- * — or a silent no-op — on a lot of Android hardware, which is why users felt
- * nothing. So we fire a REAL motor vibration (plugin first, then the WebView's
- * own vibrate API as a fallback) with durations tuned to actually be felt.
+ * Guaranteed feedback. The predefined `Haptics.impact()` is imperceptible — or a
+ * silent no-op — on a lot of Android hardware, and very short vibrations (<30ms)
+ * are ignored by many devices. So we fire the WebView's own vibrate API FIRST
+ * (most reliable, VIBRATE permission is in the manifest) with felt durations,
+ * and also kick the native plugin as a belt-and-braces.
+ *
+ * NOTE: if NOTHING is felt, check the phone's system setting for "Touch
+ * feedback / Haptic feedback / Vibrate on tap" — when that's off, the OS
+ * suppresses app vibration entirely.
  */
-const buzz = (ms: number) =>
-  run(async () => {
-    try {
-      await Haptics.vibrate({ duration: ms });
-    } catch {
-      webVibrate(ms);
-    }
-  });
+const buzz = (ms: number) => {
+  webVibrate(ms);
+  run(async () => { try { await Haptics.vibrate({ duration: ms }); } catch { /* ignore */ } });
+};
 
 export const haptics = {
   /** Selection / navigation / card open — the everyday tap. */
-  tap: () => buzz(22),
+  tap: () => buzz(40),
   /** Primary actions (play, confirm) — a firm thud. */
-  press: () => buzz(38),
+  press: () => buzz(60),
   /** Big moments (enter fullscreen, success). */
-  heavy: () => buzz(55),
+  heavy: () => buzz(85),
   /** Light tick — focus move / scroll. */
-  select: () => buzz(14),
+  select: () => buzz(28),
 };
 
 // ImpactStyle retained for API compatibility; no longer used directly.

@@ -274,36 +274,14 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (!a) { playYt(c.id); return; }
-
-    // Instant sound on the reliable IFrame, then UPGRADE to a native audio
-    // stream the moment one resolves — so the track starts immediately AND can
-    // play in the background (the IFrame can't) + be downloaded. If native never
-    // resolves we simply stay on the IFrame, so this never regresses.
-    nativeStreamRef.current = null;
-    nativeStartedRef.current = false;
+    // Streaming plays through the reliable YouTube IFrame. (Native-audio
+    // background streaming was reverted after it regressed playback to silence;
+    // downloads still try the native /__ytaudio resolver via audioStream.)
     usingLocalRef.current = false;
-    setBuffering(true);
-    playYt(c.id);
-    ytmusic.audioStream(c.id).then((info) => {
-      if (loadedIdRef.current !== c.id || !info || !info.url) return;
-      let pos = 0;
-      try { pos = playerRef.current?.getCurrentTime?.() || 0; } catch { /* ignore */ }
-      nativeStreamRef.current = c.id;
-      nativeStartedRef.current = false;
-      usingLocalRef.current = true;
-      const seekOnce = () => {
-        a.removeEventListener('loadedmetadata', seekOnce);
-        try { if (pos > 1) a.currentTime = pos; } catch { /* ignore */ }
-        try { playerRef.current?.pauseVideo?.(); } catch { /* ignore */ }
-        a.play().catch(() => playYt(c.id));
-      };
-      a.addEventListener('loadedmetadata', seekOnce);
-      a.src = info.url;
-      nativeWatchdogRef.current = setTimeout(() => {
-        if (nativeStreamRef.current === c.id && !nativeStartedRef.current) playYt(c.id);
-      }, 9000);
-    }).catch(() => { /* stay on the IFrame */ });
+    nativeStreamRef.current = null;
+    try { if (a) { a.pause(); a.removeAttribute('src'); a.load(); } } catch { /* ignore */ }
+    if (readyRef.current && playerRef.current) playerRef.current.loadVideoById(c.id);
+    else pendingRef.current = c.id;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, queue]);
 

@@ -22,21 +22,21 @@
 
 @layer base {
   :root {
-    /* "Parchment" — warm cream light theme (not stark white) with warm-dark ink
-       so titles + controls stay legible and the gold feels intentional. */
-    --zinc-950: #f6f1e7;
-    --zinc-900: #efe8da;
-    --zinc-800: #e2d8c5;
-    --zinc-700: #cabfa9;
-    --zinc-600: #a99e87;
-    --zinc-500: #847a66;
-    --zinc-400: #6b6253;
-    --zinc-300: #4d4538;
-    --zinc-200: #332e25;
-    --zinc-100: #211d17;
-    --zinc-50:  #15120d;
+    /* "Sand" — a clearly warm light theme (NOT white) with warm-dark ink so
+       titles + controls stay legible and the gold feels intentional. */
+    --zinc-950: #efe6d3;
+    --zinc-900: #e7dcc4;
+    --zinc-800: #d8cbb0;
+    --zinc-700: #bfb194;
+    --zinc-600: #9d9077;
+    --zinc-500: #7c7059;
+    --zinc-400: #635947;
+    --zinc-300: #463f31;
+    --zinc-200: #2f2a20;
+    --zinc-100: #1f1b14;
+    --zinc-50:  #14110b;
 
-    --white: #1c1810;
+    --white: #1a160e;
     --black: #ffffff;
   }
 
@@ -57,19 +57,19 @@
   }
 
   .midnight {
-    /* "Cosmic" — a deep violet/indigo night, clearly distinct from plain black,
-       with gold accents that pop against the purple. The creative third theme. */
-    --zinc-950: #0e0a1a;
-    --zinc-900: #181030;
-    --zinc-800: #241844;
-    --zinc-700: #3a2a63;
-    --zinc-600: #4f3d80;
-    --zinc-500: #6f5ba3;
-    --zinc-400: #9d8ac4;
-    --zinc-300: #c7bbe0;
-    --zinc-200: #e2dbf0;
-    --zinc-100: #f2eefb;
-    --zinc-50:  #faf8ff;
+    /* "Cosmic" — a clearly violet/indigo night (not near-black) so it's
+       obviously a different theme; gold accents pop against the purple. */
+    --zinc-950: #160c33;
+    --zinc-900: #221546;
+    --zinc-800: #2f1e60;
+    --zinc-700: #43317f;
+    --zinc-600: #58439c;
+    --zinc-500: #7359b8;
+    --zinc-400: #a08bd2;
+    --zinc-300: #c9bce6;
+    --zinc-200: #e4ddf2;
+    --zinc-100: #f3effb;
+    --zinc-50:  #fbf9ff;
 
     --white: #ffffff;
     --black: #000000;
