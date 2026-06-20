@@ -24,6 +24,7 @@ interface MusicCtx {
   expanded: boolean;
   buffering: boolean;
   active: boolean;
+  lastError: string;
   autoplay: boolean;
   toggleAutoplay: () => void;
   queueSource: string;
@@ -109,6 +110,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const [index, setIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [buffering, setBuffering] = useState(false);
+  const [lastError, setLastError] = useState('');
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const [shuffle, setShuffle] = useState(false);
@@ -200,6 +202,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   // ── init the hidden YouTube player once ──
   useEffect(() => {
     let cancelled = false;
+    // Diagnostic: if the IFrame API / player never becomes ready, say so.
+    const initWatch = setTimeout(() => { if (!cancelled && !readyRef.current) setLastError('Player did not initialise (YT IFrame API blocked or not loaded)'); }, 12000);
     loadYT().then((YT) => {
       if (cancelled || playerRef.current) return;
       playerRef.current = new YT.Player('sahrae-yt-player', {
@@ -208,22 +212,26 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         events: {
           onReady: () => {
             readyRef.current = true;
+            clearTimeout(initWatch);
             if (pendingRef.current) { playerRef.current.loadVideoById(pendingRef.current); pendingRef.current = null; }
           },
           onStateChange: (e: any) => {
             // ENDED 0 · PLAYING 1 · PAUSED 2 · BUFFERING 3
             if (e.data === 1) {
-              setIsPlaying(true); setBuffering(false); setActive(true);
+              setIsPlaying(true); setBuffering(false); setActive(true); setLastError('');
               window.dispatchEvent(new CustomEvent('sahrae:audioclaim', { detail: 'music' }));
             } else if (e.data === 2) { setIsPlaying(false); }
             else if (e.data === 3) { setBuffering(true); }
             else if (e.data === 0) { endedRef.current(); }
           },
-          onError: () => { skipRef.current(); }, // embed disabled / unavailable → skip on
+          // Surface the YouTube error code instead of silently skipping, so we
+          // can see WHY a track won't play (2=bad id, 5=HTML5, 100=removed,
+          // 101/150=embedding disabled by the uploader).
+          onError: (e: any) => { setLastError('YouTube playback error ' + (e?.data ?? '?')); setBuffering(false); },
         },
       });
-    });
-    return () => { cancelled = true; };
+    }).catch(() => { if (!cancelled) setLastError('YT IFrame API failed to load'); });
+    return () => { cancelled = true; clearTimeout(initWatch); };
   }, []);
 
   // ── the offline <audio> element (downloaded tracks play here) ──
@@ -395,6 +403,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     haptics.press();
     setActive(true);
     setBuffering(true);
+    setLastError('');
     setQueueSource(source);
     extendingRef.current = null;
     setQueue(tracks);
@@ -492,6 +501,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider
       value={{
         queue, index, current, isPlaying, position, duration, shuffle, repeat, expanded, buffering, active,
+        lastError,
         autoplay, toggleAutoplay, queueSource,
         playQueue, addToQueue, playNext, removeFromQueue, jumpTo,
         toggle, stop, next, prev, seek, toggleShuffle, cycleRepeat, toggleLike, isLiked,
