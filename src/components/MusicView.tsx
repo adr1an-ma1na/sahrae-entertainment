@@ -143,36 +143,64 @@ export default function MusicView() {
     let cancelled = false;
     const timer = setTimeout(() => {
       (async () => {
-        const seedPool = [...recentlyPlayed, ...likedTracks];
-        const known = new Set(seedPool.map((t) => t.id));
+        // Seeds: explicit taste (liked) first, then recent rotation. Unique.
+        const seedSeen = new Set<string>();
+        const seeds: Track[] = [];
+        for (const t of [...likedTracks, ...recentlyPlayed]) { if (!seedSeen.has(t.id)) { seedSeen.add(t.id); seeds.push(t); } }
+        const topSeeds = seeds.slice(0, 8);
+        const known = new Set(seeds.map((t) => t.id));
+
+        // YouTube's own "related" is its recommendation engine. Pull it per seed.
+        const related = await Promise.all(topSeeds.map((s) => ytmusic.related(s.id).catch(() => [] as Track[])));
+        if (cancelled) return;
+
+        // Score each candidate by HOW MANY of your seeds recommend it — cross-seed
+        // agreement is a far stronger signal than any single related list (this is
+        // the collaborative-filtering idea YT Music leans on).
+        const score = new Map<string, number>();
+        const cand = new Map<string, Track>();
+        related.forEach((list) => {
+          const inList = new Set<string>();
+          list.forEach((t) => {
+            if (inList.has(t.id)) return; inList.add(t.id);
+            score.set(t.id, (score.get(t.id) || 0) + 1);
+            if (!cand.has(t.id)) cand.set(t.id, t);
+          });
+        });
+        const ranked = [...cand.values()].sort((a, b) => (score.get(b.id) || 0) - (score.get(a.id) || 0));
+
         const out: { id: string; title: string; subtitle: string; tracks: Track[] }[] = [];
 
+        // On Repeat — your recent rotation.
         if (recentlyPlayed.length >= 4) {
           out.push({ id: 'repeat', title: 'On Repeat', subtitle: 'The songs you keep coming back to', tracks: recentlyPlayed.slice(0, 30) });
         }
 
-        const seeds = seedPool.slice(0, 6);
-        const relatedLists = await Promise.all(seeds.map((s) => ytmusic.related(s.id).catch(() => [] as Track[])));
-        if (cancelled) return;
-        for (let m = 0; m < 3; m++) {
-          const seed = seeds[m]; const rel = relatedLists[m] || [];
-          if (!seed || rel.length < 6) continue;
-          const tracks = [seed, ...rel.filter((t) => t.id !== seed.id)].slice(0, 30);
-          out.push({ id: `daily-${m}`, title: `Daily Mix ${m + 1}`, subtitle: `${seed.artist} and more`, tracks });
+        // Daily Mixes — one per distinct top artist, coherent (that artist + its
+        // related), so each mix has a clear identity like YT Music's mixes.
+        const byArtist = new Map<string, Track[]>();
+        for (const t of seeds) { const k = (t.artist || '').toLowerCase(); if (!k) continue; if (!byArtist.has(k)) byArtist.set(k, []); byArtist.get(k)!.push(t); }
+        let dm = 1;
+        for (const ak of [...byArtist.keys()].slice(0, 3)) {
+          const aSeeds = byArtist.get(ak)!;
+          const idx = topSeeds.findIndex((s) => (s.artist || '').toLowerCase() === ak);
+          const rel = idx >= 0 ? related[idx] : [];
+          const tracks = [...aSeeds, ...rel.filter((t) => !aSeeds.some((s) => s.id === t.id))].slice(0, 30);
+          if (tracks.length >= 6) { out.push({ id: `daily-${dm}`, title: `Daily Mix ${dm}`, subtitle: `${aSeeds[0].artist} & similar`, tracks }); dm++; }
         }
 
-        const discover: Track[] = []; const dseen = new Set(known);
-        for (const list of relatedLists) for (const t of list) if (!dseen.has(t.id)) { dseen.add(t.id); discover.push(t); }
-        for (let i = discover.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [discover[i], discover[j]] = [discover[j], discover[i]]; }
-        if (discover.length >= 8) out.push({ id: 'discover', title: 'Discover Weekly', subtitle: 'Fresh picks based on your taste', tracks: discover.slice(0, 30) });
+        // Discover Weekly — highest cross-seed-agreement songs you haven't heard.
+        const discover = ranked.filter((t) => !known.has(t.id)).slice(0, 30);
+        if (discover.length >= 8) out.push({ id: 'discover', title: 'Discover Weekly', subtitle: "Fresh picks your taste agrees on", tracks: discover });
 
         if (!cancelled) setMadeForYou(out);
 
-        const topArtists = Array.from(new Set(seedPool.map((t) => t.artist))).slice(0, 5);
-        const radarLists = await Promise.all(topArtists.map((a) => ytmusic.search(`${a} latest`).catch(() => [] as Track[])));
+        // Release Radar — newest from your top artists.
+        const artists = Array.from(new Set(seeds.map((t) => t.artist).filter(Boolean))).slice(0, 5);
+        const radarLists = await Promise.all(artists.map((a) => ytmusic.search(`${a} new song`).catch(() => [] as Track[])));
         if (cancelled) return;
         const radar: Track[] = []; const rseen = new Set<string>();
-        for (const list of radarLists) for (const t of list.slice(0, 4)) if (!rseen.has(t.id)) { rseen.add(t.id); radar.push(t); }
+        for (const list of radarLists) for (const t of list.slice(0, 3)) if (!rseen.has(t.id)) { rseen.add(t.id); radar.push(t); }
         if (radar.length >= 6 && !cancelled) setMadeForYou((prev) => [...prev, { id: 'radar', title: 'Release Radar', subtitle: 'New from artists you love', tracks: radar.slice(0, 30) }]);
       })();
     }, 3000);
