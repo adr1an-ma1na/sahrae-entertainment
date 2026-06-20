@@ -73,20 +73,20 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
     <>
     <nav className={`fixed top-0 w-full z-40 transition-all duration-500 pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] ${isScrolled ? 'glass border-b border-white/15' : 'bg-gradient-to-b from-black/55 via-black/20 to-transparent backdrop-blur-sm'}`}>
       <div className="px-4 md:px-12 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-8 md:gap-12">
+        <div className="flex items-center gap-8 md:gap-12 min-w-0 flex-1">
           <h1
-            className="text-2xl md:text-3xl font-black tracking-tighter cursor-pointer whitespace-nowrap"
+            className="text-2xl md:text-3xl font-black tracking-tighter cursor-pointer whitespace-nowrap shrink-0"
             onClick={() => setActiveTab('home')}
           >
             <span className="text-gold drop-shadow-[0_1px_8px_rgba(245,158,11,0.25)]">SAHRAE</span> <span className="text-white font-light text-xl md:text-2xl tracking-normal hidden sm:inline-block">ENTERTAINMENT</span>
           </h1>
 
-          <div className="nav-sections hidden md:flex items-center gap-6">
+          <div className="nav-sections hidden md:flex items-center gap-6 overflow-x-auto scrollbar-hide min-w-0">
             {tabs.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`relative text-sm font-medium transition-colors after:content-[''] after:absolute after:-bottom-1.5 after:left-0 after:h-[2px] after:rounded-full after:bg-amber-500 after:transition-all after:duration-300 ${
+                className={`relative text-sm font-medium transition-colors whitespace-nowrap shrink-0 after:content-[''] after:absolute after:-bottom-1.5 after:left-0 after:h-[2px] after:rounded-full after:bg-amber-500 after:transition-all after:duration-300 ${
                   activeTab === tab.id ? 'text-white after:w-full' : 'text-zinc-300 hover:text-white after:w-0'
                 }`}
               >

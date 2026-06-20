@@ -21,13 +21,22 @@ function run(make: () => Promise<unknown> | void) {
   }
 }
 
+const webVibrate = (ms: number) => {
+  try {
+    const nav = navigator as Navigator & { vibrate?: (p: number | number[]) => boolean };
+    if (typeof nav.vibrate === 'function') nav.vibrate(ms);
+  } catch { /* ignore */ }
+};
+
 const impact = (style: ImpactStyle, ms: number) =>
   run(async () => {
     try {
       await Haptics.impact({ style });
     } catch {
-      // Predefined impact unsupported → guarantee *something* is felt.
-      try { await Haptics.vibrate({ duration: ms }); } catch { /* ignore */ }
+      // Predefined impact unsupported → try the plugin's vibrate, then the
+      // WebView's own vibrate API (VIBRATE permission is in the manifest), so
+      // *something* is always felt on real hardware.
+      try { await Haptics.vibrate({ duration: ms }); } catch { webVibrate(ms); }
     }
   });
 

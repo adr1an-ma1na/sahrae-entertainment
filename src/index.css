@@ -595,4 +595,36 @@ html.tv-mode {
   .live-dot { box-shadow: 0 0 10px 2px rgba(239,68,68,.85); }
   /* Gold section-accent bar. */
   .sec-bar { background: linear-gradient(180deg, var(--gold-300), var(--gold-500)); }
+
+  /* ── LIGHT-MODE legibility (#7) ──
+     The glass controls are tuned for dark surfaces; on the light canvas their
+     white tints wash out so buttons look dull/invisible. In light theme darken
+     the tint + ink. Overlays/players that force .dark or .midnight keep the dark
+     look (the protective rules below win on specificity). */
+  html.light .chip { background: rgba(0,0,0,.05); border-color: rgba(0,0,0,.12); }
+  html.light .btn-glass {
+    background: linear-gradient(135deg, rgba(0,0,0,.07), rgba(0,0,0,.02));
+    border-color: rgba(0,0,0,.18); color: #1c2127;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 6px 16px rgba(0,0,0,.12);
+  }
+  html.light .btn-glass:hover { background: linear-gradient(135deg, rgba(0,0,0,.11), rgba(0,0,0,.04)); }
+  html.light .glass-liquid {
+    background: linear-gradient(135deg, rgba(0,0,0,.08), rgba(0,0,0,.02));
+    border-color: rgba(0,0,0,.16); color: #1c2127;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.65), 0 8px 22px rgba(0,0,0,.14);
+  }
+  html.light .glass-liquid::before { background: radial-gradient(130% 90% at 28% 6%, rgba(0,0,0,.05), transparent 60%); }
+
+  /* Protect dark overlays/players (they add .dark/.midnight) from the above. */
+  html.light .dark .chip, html.light .midnight .chip { background: rgba(255,255,255,.07); border-color: rgba(255,255,255,.08); }
+  html.light .dark .btn-glass, html.light .midnight .btn-glass {
+    background: linear-gradient(135deg, rgba(255,255,255,.32), rgba(255,255,255,.09));
+    border-color: rgba(255,255,255,.34); color: #fff;
+    box-shadow: inset 0 1.5px 0 rgba(255,255,255,.55), 0 8px 22px rgba(0,0,0,.38);
+  }
+  html.light .dark .glass-liquid, html.light .midnight .glass-liquid {
+    background: linear-gradient(135deg, rgba(255,255,255,.42) 0%, rgba(255,255,255,.14) 38%, rgba(255,255,255,.05) 68%, rgba(255,255,255,.12) 100%);
+    border-color: rgba(255,255,255,.45); color: #fff;
+    box-shadow: inset 0 2px 0 rgba(255,255,255,.75), inset 0 -12px 26px rgba(255,255,255,.12), 0 12px 34px rgba(0,0,0,.5);
+  }
 }

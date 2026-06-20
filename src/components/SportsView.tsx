@@ -131,6 +131,15 @@ const SPORT_LABELS: Record<string, string> = {
   golf: 'Golf', rugby: 'Rugby', darts: 'Darts', other: 'Other',
 };
 
+// Typical max runtime per sport, so a finished event leaves the list promptly
+// instead of lingering for hours. Live events get a +1h overrun grace.
+const HR = 3600_000;
+const SPORT_DURATION_MS: Record<string, number> = {
+  football: 2.5 * HR, 'american-football': 3.5 * HR, basketball: 2.75 * HR, baseball: 3.5 * HR,
+  hockey: 2.75 * HR, tennis: 3.5 * HR, cricket: 9 * HR, 'motor-sports': 3.5 * HR,
+  fight: 4 * HR, golf: 5 * HR, rugby: 2.25 * HR, darts: 4 * HR,
+};
+
 // ── Native HLS player ──
 // Reports `onUnplayable` when a source is dead (manifest 403/404/timeout, or it
 // never produces a frame) so the parent can auto-skip to the next source. Brief
@@ -365,8 +374,15 @@ export default function SportsView() {
   // clearly finished (not live and started more than ~3.5h ago).
   const activeEvents = useMemo(() => {
     const now = Date.now();
-    const MAX_AGE = 3.5 * 60 * 60 * 1000;
-    return events.filter((m) => m.live || !m.date || now - m.date <= MAX_AGE);
+    return events.filter((m) => {
+      if (!m.date) return true;          // no time → keep (always-on / unknown)
+      if (m.date > now) return true;     // upcoming
+      const dur = SPORT_DURATION_MS[m.category] ?? 3 * HR;
+      const elapsed = now - m.date;
+      // Live events may overrun → +1h grace; otherwise drop once past its runtime
+      // so finished matches don't keep showing as if they're still on.
+      return m.live ? elapsed <= dur + HR : elapsed <= dur;
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feed]);
 
