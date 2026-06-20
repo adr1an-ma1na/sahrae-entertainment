@@ -28,25 +28,31 @@ const webVibrate = (ms: number) => {
   } catch { /* ignore */ }
 };
 
-const impact = (style: ImpactStyle, ms: number) =>
+/**
+ * Guaranteed feedback. The predefined `Haptics.impact()` effect is imperceptible
+ * — or a silent no-op — on a lot of Android hardware, which is why users felt
+ * nothing. So we fire a REAL motor vibration (plugin first, then the WebView's
+ * own vibrate API as a fallback) with durations tuned to actually be felt.
+ */
+const buzz = (ms: number) =>
   run(async () => {
     try {
-      await Haptics.impact({ style });
+      await Haptics.vibrate({ duration: ms });
     } catch {
-      // Predefined impact unsupported → try the plugin's vibrate, then the
-      // WebView's own vibrate API (VIBRATE permission is in the manifest), so
-      // *something* is always felt on real hardware.
-      try { await Haptics.vibrate({ duration: ms }); } catch { webVibrate(ms); }
+      webVibrate(ms);
     }
   });
 
 export const haptics = {
-  /** Selection / navigation / card open — the everyday tap. Medium so it's felt. */
-  tap: () => impact(ImpactStyle.Medium, 18),
+  /** Selection / navigation / card open — the everyday tap. */
+  tap: () => buzz(22),
   /** Primary actions (play, confirm) — a firm thud. */
-  press: () => impact(ImpactStyle.Heavy, 28),
+  press: () => buzz(38),
   /** Big moments (enter fullscreen, success). */
-  heavy: () => impact(ImpactStyle.Heavy, 36),
-  /** Light tick — focus move / scroll. Subtle on purpose so it isn't fatiguing. */
-  select: () => impact(ImpactStyle.Light, 10),
+  heavy: () => buzz(55),
+  /** Light tick — focus move / scroll. */
+  select: () => buzz(14),
 };
+
+// ImpactStyle retained for API compatibility; no longer used directly.
+void ImpactStyle;

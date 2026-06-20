@@ -22,21 +22,22 @@
 
 @layer base {
   :root {
-    /* Premium Cool Silver Light Theme */
-    --zinc-950: #eef1f4; 
-    --zinc-900: #e5e8ec; 
-    --zinc-800: #d1d7de;
-    --zinc-700: #b5bec8;
-    --zinc-600: #93a0b0;
-    --zinc-500: #748293;
-    --zinc-400: #576372;
-    --zinc-300: #424b57;
-    --zinc-200: #2d333b;
-    --zinc-100: #1c2127;
-    --zinc-50:  #0d1116;
-    
-    --white: #171c22; 
-    --black: #ffffff; 
+    /* "Parchment" — warm cream light theme (not stark white) with warm-dark ink
+       so titles + controls stay legible and the gold feels intentional. */
+    --zinc-950: #f6f1e7;
+    --zinc-900: #efe8da;
+    --zinc-800: #e2d8c5;
+    --zinc-700: #cabfa9;
+    --zinc-600: #a99e87;
+    --zinc-500: #847a66;
+    --zinc-400: #6b6253;
+    --zinc-300: #4d4538;
+    --zinc-200: #332e25;
+    --zinc-100: #211d17;
+    --zinc-50:  #15120d;
+
+    --white: #1c1810;
+    --black: #ffffff;
   }
 
   .dark {
@@ -56,19 +57,19 @@
   }
 
   .midnight {
-    /* "Ember" — warm onyx that complements Sahrae's gold far better than cold
-       slate. Warm-tinted neutrals (stone family) so amber/gold accents glow. */
-    --zinc-950: #0c0a09;
-    --zinc-900: #1c1917;
-    --zinc-800: #292524;
-    --zinc-700: #44403c;
-    --zinc-600: #57534e;
-    --zinc-500: #78716c;
-    --zinc-400: #a8a29e;
-    --zinc-300: #d6d3d1;
-    --zinc-200: #e7e5e4;
-    --zinc-100: #f5f5f4;
-    --zinc-50:  #fafaf9;
+    /* "Cosmic" — a deep violet/indigo night, clearly distinct from plain black,
+       with gold accents that pop against the purple. The creative third theme. */
+    --zinc-950: #0e0a1a;
+    --zinc-900: #181030;
+    --zinc-800: #241844;
+    --zinc-700: #3a2a63;
+    --zinc-600: #4f3d80;
+    --zinc-500: #6f5ba3;
+    --zinc-400: #9d8ac4;
+    --zinc-300: #c7bbe0;
+    --zinc-200: #e2dbf0;
+    --zinc-100: #f2eefb;
+    --zinc-50:  #faf8ff;
 
     --white: #ffffff;
     --black: #000000;

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, Fragment } from 'react';
+import { useState, useEffect, useRef, Fragment, type CSSProperties } from 'react';
 import { Play, Pause, SkipForward, SkipBack, ChevronDown, Heart, Shuffle, Repeat, Repeat1, Music2, Plus, X, ListMusic, Mic2, SlidersHorizontal } from 'lucide-react';
 import { useMusic } from '../hooks/useMusic';
 import { Track } from '../services/ytmusic';
@@ -126,7 +126,8 @@ export default function MusicPlayer() {
     <>
       {/* ── Full-screen now-playing (album-art dominant) ── */}
       {expanded && (
-        <div role="dialog" data-tv-layer className="dark sauti fixed inset-0 z-[120] overflow-hidden animate-in fade-in duration-300">
+        <div role="dialog" data-tv-layer className="dark sauti fixed inset-0 z-[120] overflow-hidden animate-in fade-in duration-300"
+          style={{ '--white': '#ffffff', '--zinc-200': '#e4e4e7', '--zinc-300': '#d4d4d8', '--zinc-400': '#a1a1aa', '--zinc-500': '#71717a' } as unknown as CSSProperties}>
           <DynamicBackground color={current.dominantColor} />
 
           {/* Art-derived colour bleed — the immersive Apple-Music backdrop. */}
