@@ -146,38 +146,11 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
             </button>
           </form>
 
-          {mode !== 'reset' && (
-            <>
-              <div className="relative my-6">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-zinc-800"></div>
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="px-2 bg-zinc-900 text-zinc-500">Or</span>
-                </div>
-              </div>
-
-              <button
-                onClick={handleGoogleLogin}
-                type="button"
-                className="w-full bg-white/10 border border-white/10 text-white font-bold py-3 rounded-lg hover:bg-white/20 transition-colors flex items-center justify-center gap-2"
-              >
-                <UserCircle2 className="w-5 h-5" />
-                Continue as Guest
-              </button>
-            </>
-          )}
-
           <div className="mt-6 text-center text-sm text-zinc-400">
             {mode === 'signin' ? (
-              <>
-                <button onClick={() => setMode('reset')} className="text-amber-500 hover:underline mb-2 block w-full">Forgot password?</button>
-                Don't have an account? <button onClick={() => setMode('signup')} className="text-amber-500 hover:underline font-medium">Sign up</button>
-              </>
-            ) : mode === 'signup' ? (
-              <>Already have an account? <button onClick={() => setMode('signin')} className="text-amber-500 hover:underline font-medium">Sign in</button></>
+              <>Don't have an account? <button onClick={() => setMode('signup')} className="text-amber-500 hover:underline font-medium">Sign up</button></>
             ) : (
-              <button onClick={() => setMode('signin')} className="text-amber-500 hover:underline font-medium">Back to Sign in</button>
+              <>Already have an account? <button onClick={() => setMode('signin')} className="text-amber-500 hover:underline font-medium">Sign in</button></>
             )}
           </div>
         </div>

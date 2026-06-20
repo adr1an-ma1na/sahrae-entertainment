@@ -42,9 +42,14 @@ export const SECTIONS: { title: string; q: string }[] = [
 const INSTANCES = [
   'https://pipedapi.kavin.rocks',
   'https://pipedapi.adminforge.de',
-  'https://api.piped.private.coffee',
-  'https://pipedapi.leptons.xyz',
   'https://pipedapi.reallyaweso.me',
+  'https://pipedapi.leptons.xyz',
+  'https://api.piped.private.coffee',
+  'https://pipedapi.r4fo.com',
+  'https://pipedapi.nosebs.ru',
+  'https://pipedapi.ducks.party',
+  'https://pipedapi.smnz.de',
+  'https://piped-api.lunar.icu',
   'https://piped-api.codespace.cz',
   'https://pipedapi.darkness.services',
   'https://pipedapi.phoenix.fun',
@@ -52,16 +57,32 @@ const INSTANCES = [
 let working: string | null = null;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+// Fetch JSON, trying the request directly first, then through the native
+// passthrough (/__ddfetch) which bypasses CORS / WebView-origin blocks in the
+// APK — so an instance that's UP but CORS-restrictive still works.
+async function fetchJson(url: string, ms: number): Promise<any | null> {
+  try {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), ms);
+    const r = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(to);
+    if (r.ok) return await r.json();
+  } catch { /* try the native passthrough */ }
+  try {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), ms + 2000);
+    const r = await fetch(`https://localhost/__ddfetch?u=${encodeURIComponent(url)}`, { signal: ctrl.signal });
+    clearTimeout(to);
+    if (r.ok) return await r.json();
+  } catch { /* give up on this instance */ }
+  return null;
+}
+
 async function pipedGet(path: string): Promise<any | null> {
   const order = working ? [working, ...INSTANCES.filter((i) => i !== working)] : INSTANCES;
   for (const base of order) {
-    try {
-      const ctrl = new AbortController();
-      const to = setTimeout(() => ctrl.abort(), 8000);
-      const r = await fetch(base + path, { signal: ctrl.signal });
-      clearTimeout(to);
-      if (r.ok) { const j = await r.json(); working = base; return j; }
-    } catch { /* next instance */ }
+    const j = await fetchJson(base + path, 6000);
+    if (j) { working = base; return j; }
   }
   return null;
 }

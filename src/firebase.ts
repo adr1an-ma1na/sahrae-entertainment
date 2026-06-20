@@ -253,3 +253,32 @@ export async function logout() {
   }
   auth.setUser(null);
 }
+
+// ── Profiles (Netflix-style sub-profiles) ──
+// Stored in the Supabase user's metadata when cloud auth is active, so they
+// follow the account across reinstalls + devices. Falls back to localStorage
+// (per-uid) on the local shim.
+export interface StoredProfile { id: string; name: string; avatar: string }
+const profilesKey = (uid: string) => `sahrae_profiles_${uid}`;
+
+export async function getProfiles(): Promise<StoredProfile[]> {
+  if (supabase) {
+    try {
+      const { data } = await supabase.auth.getUser();
+      const m = (data.user?.user_metadata || {}) as Record<string, unknown>;
+      return Array.isArray(m.profiles) ? (m.profiles as StoredProfile[]) : [];
+    } catch { return []; }
+  }
+  const uid = auth.currentUser?.uid;
+  if (!uid) return [];
+  try { return JSON.parse(localStorage.getItem(profilesKey(uid)) || '[]'); } catch { return []; }
+}
+
+export async function saveProfiles(profiles: StoredProfile[]): Promise<void> {
+  if (supabase) {
+    try { await supabase.auth.updateUser({ data: { profiles } }); } catch { /* ignore */ }
+    return;
+  }
+  const uid = auth.currentUser?.uid;
+  if (uid) { try { localStorage.setItem(profilesKey(uid), JSON.stringify(profiles)); } catch { /* ignore */ } }
+}

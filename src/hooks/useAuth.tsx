@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, auth, onAuthStateChanged, loginWithGoogle, logout } from '../firebase';
+import { User, auth, onAuthStateChanged, loginWithGoogle, logout, getProfiles, saveProfiles } from '../firebase';
 
 export interface Profile {
   id: string;
@@ -37,19 +37,6 @@ const AuthContext = createContext<AuthContextType>({
 
 export const useAuth = () => useContext(AuthContext);
 
-const profilesKey = (uid: string) => `sahrae_profiles_${uid}`;
-
-function loadProfiles(uid: string): Profile[] {
-  try {
-    return JSON.parse(localStorage.getItem(profilesKey(uid)) || '[]');
-  } catch {
-    return [];
-  }
-}
-function persistProfiles(uid: string, profiles: Profile[]) {
-  localStorage.setItem(profilesKey(uid), JSON.stringify(profiles));
-}
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,7 +47,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       if (u) {
-        setProfiles(loadProfiles(u.uid));
+        getProfiles().then((ps) => setProfiles(ps as Profile[])).catch(() => setProfiles([]));
       } else {
         setProfiles([]);
         setActiveProfile(null);
@@ -75,14 +62,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (profiles.length >= 5) throw new Error('Maximum 5 profiles allowed');
     const id = `profile_${Date.now()}`;
     const next = [...profiles, { id, name, avatar }];
-    persistProfiles(user.uid, next);
+    await saveProfiles(next);
     setProfiles(next);
   };
 
   const updateProfileData = async (id: string, name: string, avatar: string) => {
     if (!user) return;
     const next = profiles.map((p) => (p.id === id ? { id, name, avatar } : p));
-    persistProfiles(user.uid, next);
+    await saveProfiles(next);
     setProfiles(next);
     if (activeProfile?.id === id) setActiveProfile({ id, name, avatar });
   };
@@ -90,7 +77,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const deleteProfile = async (id: string) => {
     if (!user) return;
     const next = profiles.filter((p) => p.id !== id);
-    persistProfiles(user.uid, next);
+    await saveProfiles(next);
     setProfiles(next);
     if (activeProfile?.id === id) setActiveProfile(null);
   };
