@@ -416,11 +416,11 @@ export default function SportsView() {
     const home = m.teams?.home, away = m.teams?.away;
     return (
       <div key={m.id} onClick={() => openEvent(m)} tabIndex={0} data-tv-focusable role="button" aria-label={m.title}
-        className="card-lift group relative bg-zinc-900/60 border border-white/10 rounded-2xl p-4 cursor-pointer focus:outline-none">
+        className="card-lift tier-card group relative rounded-2xl p-4 cursor-pointer focus:outline-none">
         <div className="flex items-center justify-between mb-2">
           <span className="px-2 py-0.5 bg-white/5 rounded text-[10px] font-bold uppercase tracking-wider text-amber-400">{SPORT_LABELS[m.category] || m.category}</span>
           {m.live ? (
-            <span className="flex items-center gap-1 text-[10px] font-bold text-red-500"><span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> LIVE</span>
+            <span className="live-badge flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"><span className="live-dot w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> LIVE</span>
           ) : (
             <span className="flex items-center gap-1 text-[11px] text-zinc-400 tabular"><CalendarClock className="w-3 h-3" /> {eventTime(m.date)}</span>
           )}
@@ -453,6 +453,9 @@ export default function SportsView() {
 
   return (
     <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-12 relative">
+      {/* Aurora glow behind the header */}
+      <div aria-hidden className="pointer-events-none absolute -top-10 left-0 right-0 h-64 -z-10 opacity-70"
+        style={{ background: 'radial-gradient(60% 70% at 12% 0%, rgba(245,158,11,0.20), transparent 70%), radial-gradient(50% 60% at 85% 8%, rgba(244,63,94,0.16), transparent 72%)', filter: 'blur(8px)' }} />
       {/* Player */}
       {playing && (
         <div role="dialog" data-tv-layer className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center backdrop-blur-sm p-3 md:p-10">
@@ -516,7 +519,7 @@ export default function SportsView() {
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 bg-gradient-to-tr from-amber-500 to-rose-500 rounded-2xl flex items-center justify-center shadow-lg shadow-amber-500/20"><Trophy className="w-6 h-6 text-white" /></div>
           <div>
-            <h2 className="text-3xl font-bold text-white leading-tight">Live Sports</h2>
+            <h2 className="text-3xl font-display font-bold text-white leading-tight tracking-tight">Live Sports</h2>
             <p className="text-sm text-zinc-400">Full schedule · F1 · Football · Cricket · Tennis · NBA · UFC</p>
           </div>
         </div>
@@ -534,7 +537,7 @@ export default function SportsView() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {CHANNELS.map((ch) => (
             <div key={ch.name} onClick={() => setPlaying({ title: ch.name, sources: [{ label: 'HD', url: ch.url }], idx: 0 })} tabIndex={0} data-tv-focusable role="button" aria-label={ch.name}
-              className="group relative bg-zinc-900/60 border border-white/5 rounded-3xl p-5 hover:bg-zinc-800 transition-all cursor-pointer flex flex-col focus:outline-none">
+              className="card-lift tier-card group relative rounded-3xl p-5 cursor-pointer flex flex-col focus:outline-none">
               <div className="flex items-center justify-between mb-4">
                 <div className="w-10 h-10 rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center group-hover:scale-110 transition-transform"><Tv className="w-5 h-5 text-zinc-400 group-hover:text-amber-500 transition-colors" /></div>
                 <div className="flex items-center gap-1.5 bg-red-500/10 text-red-500 px-2.5 py-1 rounded-full border border-red-500/20"><div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /><span className="text-[10px] font-bold uppercase tracking-wider">On Air</span></div>
@@ -580,7 +583,7 @@ export default function SportsView() {
               {eventGroups.map((g) => (
                 <section key={g.title}>
                   <div className="flex items-center gap-2 mb-3">
-                    {g.live && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
+                    {g.live && <span className="live-dot w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
                     <h3 className={`text-lg font-display font-bold tracking-tight ${g.live ? 'text-red-400' : 'text-white'}`}>{g.title}</h3>
                     <span className="text-xs text-zinc-500 tabular">{g.events.length}</span>
                   </div>
