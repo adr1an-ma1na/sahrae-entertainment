@@ -276,34 +276,34 @@ export function MusicProvider({ children }: { children: ReactNode }) {
 
     if (!a) { playYt(c.id); return; }
 
-    // ── NATIVE STREAM FIRST ──
-    // Resolve a direct audio URL and play it through <audio>, so the track keeps
-    // playing when the app is backgrounded (the YouTube IFrame can't) and shares
-    // the exact source the downloader saves. A watchdog + the <audio> 'error'
-    // handler fall back to the YouTube IFrame if it won't resolve or play, so
-    // this never regresses below today's behaviour.
-    nativeStreamRef.current = c.id;
+    // Instant sound on the reliable IFrame, then UPGRADE to a native audio
+    // stream the moment one resolves — so the track starts immediately AND can
+    // play in the background (the IFrame can't) + be downloaded. If native never
+    // resolves we simply stay on the IFrame, so this never regresses.
+    nativeStreamRef.current = null;
     nativeStartedRef.current = false;
-    usingLocalRef.current = true;
+    usingLocalRef.current = false;
     setBuffering(true);
-    try { playerRef.current?.pauseVideo?.(); } catch { /* ignore */ }
-    // Cap the native resolve so a slow/down Piped backend can't leave the user
-    // in silence — after 4.5s we just use the reliable IFrame.
-    let settled = false;
-    const capTimer = setTimeout(() => { if (!settled && loadedIdRef.current === c.id) { settled = true; playYt(c.id); } }, 4500);
+    playYt(c.id);
     ytmusic.audioStream(c.id).then((info) => {
-      if (settled || loadedIdRef.current !== c.id) { clearTimeout(capTimer); return; }
-      settled = true; clearTimeout(capTimer);
-      if (info && info.url) {
-        a.src = info.url;
+      if (loadedIdRef.current !== c.id || !info || !info.url) return;
+      let pos = 0;
+      try { pos = playerRef.current?.getCurrentTime?.() || 0; } catch { /* ignore */ }
+      nativeStreamRef.current = c.id;
+      nativeStartedRef.current = false;
+      usingLocalRef.current = true;
+      const seekOnce = () => {
+        a.removeEventListener('loadedmetadata', seekOnce);
+        try { if (pos > 1) a.currentTime = pos; } catch { /* ignore */ }
+        try { playerRef.current?.pauseVideo?.(); } catch { /* ignore */ }
         a.play().catch(() => playYt(c.id));
-        nativeWatchdogRef.current = setTimeout(() => {
-          if (nativeStreamRef.current === c.id && !nativeStartedRef.current) playYt(c.id);
-        }, 9000);
-      } else {
-        playYt(c.id); // no direct stream available → reliable IFrame
-      }
-    }).catch(() => { if (!settled && loadedIdRef.current === c.id) { settled = true; clearTimeout(capTimer); playYt(c.id); } });
+      };
+      a.addEventListener('loadedmetadata', seekOnce);
+      a.src = info.url;
+      nativeWatchdogRef.current = setTimeout(() => {
+        if (nativeStreamRef.current === c.id && !nativeStartedRef.current) playYt(c.id);
+      }, 9000);
+    }).catch(() => { /* stay on the IFrame */ });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, queue]);
 
