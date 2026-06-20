@@ -74,7 +74,7 @@ const SectionHead = ({ children, icon }: { children: ReactNode; icon?: ReactNode
 type Detail = { kind: 'artist' | 'album'; id: string; name: string; thumbnail?: string; subtitle?: string };
 
 export default function MusicView() {
-  const { playQueue, likedTracks, playlists, recentlyPlayed, createPlaylist, deletePlaylist, removeFromPlaylist } = useMusic();
+  const { playQueue, likedTracks, playlists, recentlyPlayed, createPlaylist, deletePlaylist, removeFromPlaylist, openAddSheet } = useMusic();
 
   const [tab, setTab] = useState<'home' | 'library'>('home');
   const [sections, setSections] = useState<{ title: string; tracks: Track[] }[]>([]);
@@ -177,6 +177,11 @@ export default function MusicView() {
 
   const openList = openId === 'liked' ? { name: 'Liked Songs', tracks: likedTracks, id: 'liked' } : playlists.find((p) => p.id === openId) || null;
 
+  // Featured spotlight for the Home hero — the freshest thing we have.
+  const featuredList = mix.length ? mix : (sections[0]?.tracks ?? []);
+  const featured = featuredList[0];
+  const featuredSource = mix.length ? 'Your Mix' : (sections[0]?.title ?? 'Sauti');
+
   // ── Detail page (artist / album) ──
   if (detail) {
     return (
@@ -265,6 +270,28 @@ export default function MusicView() {
             </section>
           ) : (
             <>
+              {/* ── Featured spotlight hero ── */}
+              {featured && (
+                <section className="relative mb-9 rounded-3xl overflow-hidden border border-white/10 elev-2">
+                  <img aria-hidden alt="" src={featured.artworkLarge || featured.artwork} className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-50" />
+                  <div className="absolute inset-0" style={{ background: 'linear-gradient(90deg, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.6) 45%, rgba(0,0,0,0.2) 100%)' }} />
+                  <div className="relative flex items-center gap-4 md:gap-7 p-5 md:p-7">
+                    <div className="relative w-24 h-24 md:w-40 md:h-40 shrink-0">
+                      <CoverArt imageUrl={featured.artworkLarge || featured.artwork} fallbackUrl={featured.artwork} dominantColor={featured.dominantColor} rounded="rounded-2xl" className="np-art w-full h-full" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="overline mb-1.5">Featured · {featuredSource}</div>
+                      <h3 className="np-title text-2xl md:text-4xl font-display font-bold text-white truncate">{featured.title}</h3>
+                      <p className="text-zinc-300 truncate mb-4 font-medium">{featured.artist}</p>
+                      <div className="flex gap-2">
+                        <button onClick={() => playQueue(featuredList, 0, featuredSource)} tabIndex={0} data-tv-focusable className="btn-sauti px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Play className="w-4 h-4 fill-current" /> Play</button>
+                        <button onClick={() => openAddSheet(featured)} tabIndex={0} data-tv-focusable className="btn-glass px-5 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Plus className="w-4 h-4" /> Add</button>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              )}
+
               <div className="flex overflow-x-auto gap-2 pb-2 mb-8 scrollbar-hide">
                 {GENRES.map((g) => <button key={g} onClick={() => setQuery(g)} tabIndex={0} data-tv-focusable className="chip px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap text-zinc-300 hover:text-white">{g}</button>)}
               </div>
