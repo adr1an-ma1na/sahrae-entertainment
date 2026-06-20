@@ -53,7 +53,10 @@ export default function AudioHubView() {
   const filteredStations = (radioCategory === 'All' ? liveStations : liveStations.filter((s) => s.category === radioCategory));
 
   return (
-    <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-12">
+    <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-12 relative">
+      {/* Aurora glow behind the header */}
+      <div aria-hidden className="pointer-events-none absolute -top-10 left-0 right-0 h-64 -z-10 opacity-70"
+        style={{ background: 'radial-gradient(60% 70% at 12% 0%, rgba(245,158,11,0.22), transparent 70%), radial-gradient(50% 60% at 80% 10%, rgba(251,191,36,0.12), transparent 72%)', filter: 'blur(8px)' }} />
       {/* Header — same premium pattern as every other Sahrae section */}
       <div className="overline mb-1.5">Sahrae · Radio</div>
       <div className="flex items-center gap-3 mb-6">
@@ -94,7 +97,7 @@ export default function AudioHubView() {
                 data-tv-focusable
                 role="button"
                 aria-pressed={active}
-                className="card-lift bg-zinc-900/60 border border-white/5 rounded-2xl p-4 group relative overflow-hidden flex flex-col cursor-pointer focus:outline-none"
+                className="card-lift tier-card rounded-2xl p-4 group relative overflow-hidden flex flex-col cursor-pointer focus:outline-none"
                 onClick={() => togglePlay(station.url, station.name)}
               >
                 <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />

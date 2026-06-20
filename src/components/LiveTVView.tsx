@@ -172,13 +172,13 @@ export default function LiveTVView() {
 
   const renderCard = (ch: Channel) => (
     <div key={ch.name} tabIndex={0} data-tv-focusable role="button" aria-label={ch.name} onClick={() => open(ch)}
-      className="card-lift group relative rounded-2xl overflow-hidden border border-white/10 bg-zinc-900/60 cursor-pointer focus:outline-none p-4 flex items-center gap-3">
+      className="card-lift tier-card group relative rounded-2xl overflow-hidden cursor-pointer focus:outline-none p-4 flex items-center gap-3">
       <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${CAT_STYLE[ch.category]} flex items-center justify-center shrink-0 shadow-lg`}>
         <span className="text-white font-display font-extrabold text-lg">{initials(ch.name)}</span>
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 mb-0.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+          <span className="live-dot w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
           <span className="text-[9px] font-bold uppercase tracking-wider text-red-400">Live</span>
         </div>
         <h3 className="text-sm font-bold text-white truncate group-hover:text-amber-400 transition-colors">{ch.name}</h3>
@@ -191,7 +191,10 @@ export default function LiveTVView() {
   );
 
   return (
-    <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-12">
+    <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-12 relative">
+      {/* Aurora glow behind the header */}
+      <div aria-hidden className="pointer-events-none absolute -top-10 left-0 right-0 h-64 -z-10 opacity-70"
+        style={{ background: 'radial-gradient(60% 70% at 12% 0%, rgba(245,158,11,0.20), transparent 70%), radial-gradient(50% 60% at 85% 8%, rgba(244,63,94,0.16), transparent 72%)', filter: 'blur(8px)' }} />
       {/* Player */}
       {active && (
         <div role="dialog" data-tv-layer className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center backdrop-blur-sm p-3 md:p-10">

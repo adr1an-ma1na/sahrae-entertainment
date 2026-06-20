@@ -45,7 +45,7 @@ export default function DiscoveryView({ type, genres, onPlay }: DiscoveryViewPro
   return (
     <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-12">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-        <h2 className="text-3xl font-bold text-white capitalize">{type === 'movie' ? 'Movies' : 'TV Series'}</h2>
+        <h2 className="text-3xl font-display font-bold text-white capitalize tracking-tight">{type === 'movie' ? 'Movies' : 'TV Series'}</h2>
         
         <div className="flex flex-wrap items-center gap-3 glass p-2.5 rounded-xl">
           <div className="flex items-center gap-2 px-3 border-r border-white/10">
