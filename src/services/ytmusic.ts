@@ -56,6 +56,25 @@ const INSTANCES = [
 ];
 let working: string | null = null;
 
+// ── Concurrency limiter ──
+// Catalog requests share the native request interceptor with YouTube playback,
+// so flooding it (e.g. many shelves resolving at once) can STARVE the player
+// (symptom: it never starts, 0:00). Cap how many catalog fetches run at once so
+// the player's lane is always free. This is the foundation that makes
+// catalog-heavy features (Made For You, Podcasts) safe.
+const MAX_CONCURRENT = 3;
+let activeReqs = 0;
+const reqQueue: (() => void)[] = [];
+function acquireSlot(): Promise<void> {
+  if (activeReqs < MAX_CONCURRENT) { activeReqs++; return Promise.resolve(); }
+  return new Promise<void>((resolve) => reqQueue.push(resolve));
+}
+function releaseSlot() {
+  const next = reqQueue.shift();
+  if (next) next();        // hand the slot straight to the next waiter
+  else activeReqs--;       // nobody waiting → free the slot
+}
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Fetch JSON, trying the request directly first, then through the native
 // passthrough (/__ddfetch) which bypasses CORS / WebView-origin blocks in the
@@ -79,12 +98,17 @@ async function fetchJson(url: string, ms: number): Promise<any | null> {
 }
 
 async function pipedGet(path: string): Promise<any | null> {
-  const order = working ? [working, ...INSTANCES.filter((i) => i !== working)] : INSTANCES;
-  for (const base of order) {
-    const j = await fetchJson(base + path, 6000);
-    if (j) { working = base; return j; }
+  await acquireSlot();
+  try {
+    const order = working ? [working, ...INSTANCES.filter((i) => i !== working)] : INSTANCES;
+    for (const base of order) {
+      const j = await fetchJson(base + path, 6000);
+      if (j) { working = base; return j; }
+    }
+    return null;
+  } finally {
+    releaseSlot();
   }
-  return null;
 }
 
 const vId = (u: string) => (u || '').match(/[?&]v=([^&]+)/)?.[1] || '';
