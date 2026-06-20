@@ -80,6 +80,7 @@ export default function MusicView() {
   const [sections, setSections] = useState<{ title: string; tracks: Track[] }[]>([]);
   const [loadingHome, setLoadingHome] = useState(true);
   const [mix, setMix] = useState<Track[]>([]);
+  const [madeForYou, setMadeForYou] = useState<{ id: string; title: string; subtitle: string; tracks: Track[] }[]>([]);
 
   const [query, setQuery] = useState('');
   const [searchTab, setSearchTab] = useState<'songs' | 'artists' | 'albums'>('songs');
@@ -130,6 +131,52 @@ export default function MusicView() {
       setMix(agg.slice(0, 30));
     })();
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── "Made For You" — Spotify-grade curated playlists from your listening
+  //    (On Repeat, Daily Mixes, Discover Weekly, Release Radar). DEFERRED ~3s so
+  //    the first track + home shelves get priority, and globally throttled (see
+  //    ytmusic pipedGet limiter) so it can never starve playback. ──
+  useEffect(() => {
+    if (recentlyPlayed.length === 0 && likedTracks.length === 0) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      (async () => {
+        const seedPool = [...recentlyPlayed, ...likedTracks];
+        const known = new Set(seedPool.map((t) => t.id));
+        const out: { id: string; title: string; subtitle: string; tracks: Track[] }[] = [];
+
+        if (recentlyPlayed.length >= 4) {
+          out.push({ id: 'repeat', title: 'On Repeat', subtitle: 'The songs you keep coming back to', tracks: recentlyPlayed.slice(0, 30) });
+        }
+
+        const seeds = seedPool.slice(0, 6);
+        const relatedLists = await Promise.all(seeds.map((s) => ytmusic.related(s.id).catch(() => [] as Track[])));
+        if (cancelled) return;
+        for (let m = 0; m < 3; m++) {
+          const seed = seeds[m]; const rel = relatedLists[m] || [];
+          if (!seed || rel.length < 6) continue;
+          const tracks = [seed, ...rel.filter((t) => t.id !== seed.id)].slice(0, 30);
+          out.push({ id: `daily-${m}`, title: `Daily Mix ${m + 1}`, subtitle: `${seed.artist} and more`, tracks });
+        }
+
+        const discover: Track[] = []; const dseen = new Set(known);
+        for (const list of relatedLists) for (const t of list) if (!dseen.has(t.id)) { dseen.add(t.id); discover.push(t); }
+        for (let i = discover.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [discover[i], discover[j]] = [discover[j], discover[i]]; }
+        if (discover.length >= 8) out.push({ id: 'discover', title: 'Discover Weekly', subtitle: 'Fresh picks based on your taste', tracks: discover.slice(0, 30) });
+
+        if (!cancelled) setMadeForYou(out);
+
+        const topArtists = Array.from(new Set(seedPool.map((t) => t.artist))).slice(0, 5);
+        const radarLists = await Promise.all(topArtists.map((a) => ytmusic.search(`${a} latest`).catch(() => [] as Track[])));
+        if (cancelled) return;
+        const radar: Track[] = []; const rseen = new Set<string>();
+        for (const list of radarLists) for (const t of list.slice(0, 4)) if (!rseen.has(t.id)) { rseen.add(t.id); radar.push(t); }
+        if (radar.length >= 6 && !cancelled) setMadeForYou((prev) => [...prev, { id: 'radar', title: 'Release Radar', subtitle: 'New from artists you love', tracks: radar.slice(0, 30) }]);
+      })();
+    }, 3000);
+    return () => { cancelled = true; clearTimeout(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -288,6 +335,29 @@ export default function MusicView() {
                         <button onClick={() => openAddSheet(featured)} tabIndex={0} data-tv-focusable className="btn-glass px-5 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Plus className="w-4 h-4" /> Add</button>
                       </div>
                     </div>
+                  </div>
+                </section>
+              )}
+
+              {madeForYou.length > 0 && (
+                <section className="mb-9">
+                  <SectionHead icon={<Sparkles className="w-5 h-5 text-sauti" />}>Made For You</SectionHead>
+                  <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">
+                    {madeForYou.map((m) => (
+                      <button key={m.id} onClick={() => playQueue(m.tracks, 0, m.title)} tabIndex={0} data-tv-focusable
+                        className="card-lift group flex-none w-[160px] text-left rounded-2xl overflow-hidden border border-white/10 bg-zinc-900 focus:outline-none">
+                        <div className="aspect-square relative bg-zinc-800">
+                          <CoverArt imageUrl={m.tracks[0]?.artworkLarge || m.tracks[0]?.artwork} dominantColor={m.tracks[0]?.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/25 to-transparent" />
+                          <div className="absolute bottom-2.5 left-2.5 right-2.5">
+                            <div className="overline text-[9px] mb-0.5">Made for you</div>
+                            <p className="text-white font-display font-bold text-base leading-tight line-clamp-2">{m.title}</p>
+                          </div>
+                          <span className="absolute top-2 right-2 btn-sauti w-9 h-9 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><Play className="w-4 h-4 fill-current ml-0.5" /></span>
+                        </div>
+                        <div className="p-2.5"><p className="text-xs text-zinc-400 line-clamp-2 leading-snug">{m.subtitle}</p></div>
+                      </button>
+                    ))}
                   </div>
                 </section>
               )}
