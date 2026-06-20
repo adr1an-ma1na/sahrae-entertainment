@@ -1185,6 +1185,25 @@ public class MainActivity extends BridgeActivity {
                                 u.getQueryParameter("artist"),
                                 "1".equals(u.getQueryParameter("playing")));
                             return AudioFx.ok();
+                        } else if (path.startsWith("/__play")) {
+                            Uri u = request.getUrl();
+                            BackgroundAudioService.playUrl(getApplicationContext(),
+                                u.getQueryParameter("url"), u.getQueryParameter("title"), u.getQueryParameter("artist"));
+                            return AudioFx.ok();
+                        } else if (path.startsWith("/__presume")) {
+                            BackgroundAudioService.control(getApplicationContext(), "RESUME");
+                            return AudioFx.ok();
+                        } else if (path.startsWith("/__ppause")) {
+                            BackgroundAudioService.control(getApplicationContext(), "PAUSE_NATIVE");
+                            return AudioFx.ok();
+                        } else if (path.startsWith("/__pseek")) {
+                            try { BackgroundAudioService.seekTo(getApplicationContext(), Integer.parseInt(request.getUrl().getQueryParameter("ms"))); } catch (Throwable ignore) {}
+                            return AudioFx.ok();
+                        } else if (path.startsWith("/__pstop")) {
+                            BackgroundAudioService.control(getApplicationContext(), "STOP_PLAYBACK");
+                            return AudioFx.ok();
+                        } else if (path.startsWith("/__pstate")) {
+                            return jsonResponse(BackgroundAudioService.stateJson());
                         } else if (path.startsWith("/__dllist")) {
                             return DownloadStore.json(DownloadStore.listJson(getApplicationContext()));
                         } else if (path.startsWith("/__dlremove")) {

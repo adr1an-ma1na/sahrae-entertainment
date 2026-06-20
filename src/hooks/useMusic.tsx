@@ -100,6 +100,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const nativeStreamRef = useRef<string | null>(null);
   const nativeStartedRef = useRef(false);
   const nativeWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Which engine is currently driving sound: the YouTube IFrame ('yt'), the
+  // native MediaPlayer in the foreground service ('native' — survives
+  // backgrounding + drives the lock screen), or the offline <audio> ('local').
+  const engineRef = useRef<'yt' | 'native' | 'local'>('yt');
   // Latest control fns + live position, for the OS MediaSession handlers (which
   // are registered once but must always act on current state).
   const ctrlRef = useRef<{ next: () => void; prev: () => void; stop: () => void; seek: (s: number) => void }>({ next: () => {}, prev: () => {}, stop: () => {}, seek: () => {} });
@@ -138,6 +142,13 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     if (readyRef.current && playerRef.current) playerRef.current.loadVideoById(id);
     else pendingRef.current = id;
   };
+
+  // Native foreground-service MediaPlayer controls (no-op on web).
+  const nativePlay = (url: string, t: Track) => { fetch(`https://localhost/__play?url=${encodeURIComponent(url)}&title=${encodeURIComponent(t.title)}&artist=${encodeURIComponent(t.artist)}`, { cache: 'no-store' }).catch(() => {}); };
+  const nativePause = () => { fetch('https://localhost/__ppause', { cache: 'no-store' }).catch(() => {}); };
+  const nativeResume = () => { fetch('https://localhost/__presume', { cache: 'no-store' }).catch(() => {}); };
+  const nativeSeekReq = (sec: number) => { fetch(`https://localhost/__pseek?ms=${Math.floor(sec * 1000)}`, { cache: 'no-store' }).catch(() => {}); };
+  const nativeStopReq = () => { fetch('https://localhost/__pstop', { cache: 'no-store' }).catch(() => {}); };
 
   // Track recently played (most recent first, de-duped, capped).
   useEffect(() => {
@@ -265,23 +276,34 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     const local = downloads.localSrc(c.id);
 
     if (local && a) {
-      // Offline: play from the saved file, pause the streaming player.
+      // Offline: play from the saved file, pause the streaming engines.
       usingLocalRef.current = true;
+      engineRef.current = 'local';
       nativeStreamRef.current = null;
+      nativeStopReq();
       try { playerRef.current?.pauseVideo?.(); } catch { /* ignore */ }
       a.src = local; a.play().catch(() => {});
       setActive(true);
       return;
     }
 
-    // Streaming plays through the reliable YouTube IFrame. (Native-audio
-    // background streaming was reverted after it regressed playback to silence;
-    // downloads still try the native /__ytaudio resolver via audioStream.)
+    // Instant sound on the reliable IFrame, then attempt the NATIVE player in
+    // parallel. The poll effect switches to native ONLY once it confirms it's
+    // actually playing — so playback never goes silent (no regression), and once
+    // switched it survives backgrounding + drives the lock screen.
     usingLocalRef.current = false;
+    engineRef.current = 'yt';
     nativeStreamRef.current = null;
+    nativePause(); // silence any previous native track (keep the service alive)
     try { if (a) { a.pause(); a.removeAttribute('src'); a.load(); } } catch { /* ignore */ }
     if (readyRef.current && playerRef.current) playerRef.current.loadVideoById(c.id);
     else pendingRef.current = c.id;
+    const attemptId = c.id;
+    ytmusic.audioStream(c.id).then((info) => {
+      if (loadedIdRef.current !== attemptId || !info || !info.url) return;
+      nativeStreamRef.current = attemptId;
+      nativePlay(info.url, c);
+    }).catch(() => { /* stay on the IFrame */ });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, queue]);
 
@@ -308,7 +330,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   //    position via timeupdate, so skip the IFrame poll when playing local) ──
   useEffect(() => {
     const iv = setInterval(() => {
-      if (usingLocalRef.current) return;
+      if (usingLocalRef.current || engineRef.current === 'native') return;
       const p = playerRef.current;
       if (p && typeof p.getCurrentTime === 'function') {
         try {
@@ -318,6 +340,52 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         } catch { /* player not ready */ }
       }
     }, 500);
+    return () => clearInterval(iv);
+  }, []);
+
+  // ── Native engine poll: while we're attempting or using the native player,
+  //    read its state. Switch IFrame→native ONLY when it confirms 'playing'
+  //    (then pause the IFrame); fall back to the IFrame on error; drive the UI
+  //    (position/duration/ended) while native is the engine. ──
+  useEffect(() => {
+    let busy = false;
+    const iv = setInterval(async () => {
+      if (busy) return;
+      if (usingLocalRef.current) return;
+      if (engineRef.current !== 'native' && !nativeStreamRef.current) return;
+      busy = true;
+      try {
+        const r = await fetch('https://localhost/__pstate', { cache: 'no-store' });
+        if (!r.ok) return;
+        const st = await r.json();
+        if (!st || typeof st.state !== 'string') return;
+
+        if (engineRef.current !== 'native') {
+          // Still attempting: only take over once it's truly playing this track.
+          if (st.state === 'playing' && nativeStreamRef.current === loadedIdRef.current) {
+            engineRef.current = 'native';
+            try { playerRef.current?.pauseVideo?.(); } catch { /* ignore */ }
+            setActive(true); setIsPlaying(true); setBuffering(false);
+          } else if (st.state === 'error') {
+            nativeStreamRef.current = null; // give up — stay on the IFrame
+          }
+          return;
+        }
+
+        // Native is the engine — drive the UI from it.
+        if (typeof st.position === 'number') setPosition(st.position);
+        if (st.duration) setDuration(st.duration);
+        if (st.state === 'playing') { setIsPlaying(true); setBuffering(false); }
+        else if (st.state === 'paused') setIsPlaying(false);
+        else if (st.state === 'ended') { engineRef.current = 'yt'; nativeStreamRef.current = null; endedRef.current(); }
+        else if (st.state === 'error') {
+          // Native died mid-track → resume on the IFrame so sound continues.
+          engineRef.current = 'yt'; nativeStreamRef.current = null;
+          const id = loadedIdRef.current;
+          if (id && readyRef.current && playerRef.current) { try { playerRef.current.loadVideoById(id); } catch { /* ignore */ } }
+        }
+      } catch { /* not native / offline */ } finally { busy = false; }
+    }, 600);
     return () => clearInterval(iv);
   }, []);
 
@@ -423,6 +491,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       if (a.paused) a.play().catch(() => {}); else a.pause();
       return;
     }
+    if (engineRef.current === 'native') {
+      if (isPlaying) { nativePause(); setIsPlaying(false); } else { nativeResume(); setIsPlaying(true); }
+      return;
+    }
     const p = playerRef.current;
     if (!p) return;
     if (isPlaying) p.pauseVideo?.(); else p.playVideo?.();
@@ -433,7 +505,9 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     haptics.tap();
     try { playerRef.current?.stopVideo?.(); } catch { /* ignore */ }
     try { const a = audioElRef.current; if (a) { a.pause(); a.removeAttribute('src'); } } catch { /* ignore */ }
+    nativeStopReq();
     usingLocalRef.current = false;
+    engineRef.current = 'yt';
     nativeStreamRef.current = null;
     if (nativeWatchdogRef.current) { clearTimeout(nativeWatchdogRef.current); nativeWatchdogRef.current = null; }
     loadedIdRef.current = null;
@@ -446,6 +520,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     if (usingLocalRef.current) {
       const a = audioElRef.current;
       if (a && a.currentTime > 3) { a.currentTime = 0; return; }
+    } else if (engineRef.current === 'native') {
+      if (position > 3) { nativeSeekReq(0); return; }
     } else {
       const p = playerRef.current;
       if (p && p.getCurrentTime && p.getCurrentTime() > 3) { p.seekTo?.(0, true); return; }
@@ -459,6 +535,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
 
   const seek = (sec: number) => {
     if (usingLocalRef.current) { const a = audioElRef.current; if (a) try { a.currentTime = sec; } catch { /* ignore */ } }
+    else if (engineRef.current === 'native') nativeSeekReq(sec);
     else playerRef.current?.seekTo?.(sec, true);
     setPosition(sec);
   };
@@ -483,8 +560,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   // Expose controls to the native background service so headset / earbud /
   // lock-screen media buttons (next, prev, play, pause) drive the player.
   (window as unknown as { __sauti?: unknown }).__sauti = {
-    play: () => { try { if (usingLocalRef.current) audioElRef.current?.play(); else playerRef.current?.playVideo?.(); } catch { /* ignore */ } setIsPlaying(true); setActive(true); },
-    pause: () => { try { if (usingLocalRef.current) audioElRef.current?.pause(); else playerRef.current?.pauseVideo?.(); } catch { /* ignore */ } setIsPlaying(false); },
+    play: () => { try { if (usingLocalRef.current) audioElRef.current?.play(); else if (engineRef.current === 'native') nativeResume(); else playerRef.current?.playVideo?.(); } catch { /* ignore */ } setIsPlaying(true); setActive(true); },
+    pause: () => { try { if (usingLocalRef.current) audioElRef.current?.pause(); else if (engineRef.current === 'native') nativePause(); else playerRef.current?.pauseVideo?.(); } catch { /* ignore */ } setIsPlaying(false); },
     toggle, next, prev, stop,
   };
 
