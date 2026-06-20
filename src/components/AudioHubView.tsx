@@ -64,7 +64,7 @@ export default function AudioHubView() {
           <Headphones className="w-6 h-6 text-white" />
         </div>
         <div>
-          <h2 className="text-3xl font-display font-bold text-white leading-tight tracking-tight">Audio Hub</h2>
+          <h2 className="text-3xl font-display font-bold text-white leading-tight tracking-tight">Radio</h2>
           <p className="text-sm text-zinc-400">Live radio · news · music stations</p>
         </div>
       </div>
