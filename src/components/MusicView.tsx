@@ -81,6 +81,7 @@ export default function MusicView() {
   const [loadingHome, setLoadingHome] = useState(true);
   const [mix, setMix] = useState<Track[]>([]);
   const [madeForYou, setMadeForYou] = useState<{ id: string; title: string; subtitle: string; tracks: Track[] }[]>([]);
+  const [viewMix, setViewMix] = useState<{ id: string; title: string; subtitle: string; tracks: Track[] } | null>(null);
 
   const [query, setQuery] = useState('');
   const [searchTab, setSearchTab] = useState<'songs' | 'artists' | 'albums'>('songs');
@@ -275,6 +276,33 @@ export default function MusicView() {
     </select>
   );
 
+  if (viewMix) {
+    const shown = sortTracks(viewMix.tracks);
+    const hc = viewMix.tracks[0]?.dominantColor || 'rgba(245,158,11,0.4)';
+    return (
+      <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
+        <div aria-hidden className="absolute inset-x-0 top-0 h-80 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${hc} 0%, transparent 100%)`, opacity: 0.5 }} />
+        <button onClick={() => setViewMix(null)} className="flex items-center gap-1 text-zinc-400 hover:text-white mb-5 text-sm"><ChevronLeft className="w-4 h-4" /> Back</button>
+        <div className="flex items-end gap-5 mb-8">
+          <div className="w-32 h-32 md:w-40 md:h-40 rounded-2xl overflow-hidden bg-zinc-800 border border-white/10 shrink-0 shadow-xl relative">
+            <CoverArt imageUrl={viewMix.tracks[0]?.artworkLarge || viewMix.tracks[0]?.artwork} dominantColor={viewMix.tracks[0]?.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
+          </div>
+          <div className="min-w-0">
+            <div className="overline mb-1">Made for you</div>
+            <h2 className="text-3xl md:text-5xl font-display font-bold text-white truncate">{viewMix.title}</h2>
+            <p className="text-sm text-zinc-400 mb-4">{viewMix.subtitle} · {viewMix.tracks.length} songs</p>
+            <div className="flex gap-2">
+              <button onClick={() => playQueue(shown, 0, viewMix.title)} className="btn-sauti px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Play className="w-4 h-4 fill-current" /> Play</button>
+              <button onClick={() => { const arr = [...viewMix.tracks].sort(() => Math.random() - 0.5); playQueue(arr, 0, viewMix.title); }} className="btn-glass px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Shuffle className="w-4 h-4" /> Shuffle</button>
+              {sortSelect}
+            </div>
+          </div>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-2">{shown.map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(shown, i, viewMix.title)} /></Fragment>)}</div>
+      </div>
+    );
+  }
+
   if (detail) {
     const shownTracks = sortTracks(detailTracks);
     const heroColor = detailTracks[0]?.dominantColor || 'rgba(245,158,11,0.4)';
@@ -395,8 +423,8 @@ export default function MusicView() {
                   <SectionHead icon={<Sparkles className="w-5 h-5 text-sauti" />}>Made For You</SectionHead>
                   <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">
                     {madeForYou.map((m) => (
-                      <button key={m.id} onClick={() => playQueue(m.tracks, 0, m.title)} tabIndex={0} data-tv-focusable
-                        className="card-lift group flex-none w-[160px] text-left rounded-2xl overflow-hidden border border-white/10 bg-zinc-900 focus:outline-none">
+                      <div key={m.id} role="button" onClick={() => setViewMix(m)} tabIndex={0} data-tv-focusable
+                        className="card-lift group flex-none w-[160px] text-left rounded-2xl overflow-hidden border border-white/10 bg-zinc-900 focus:outline-none cursor-pointer">
                         <div className="aspect-square relative bg-zinc-800">
                           <CoverArt imageUrl={m.tracks[0]?.artworkLarge || m.tracks[0]?.artwork} dominantColor={m.tracks[0]?.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/25 to-transparent" />
@@ -404,10 +432,10 @@ export default function MusicView() {
                             <div className="overline text-[9px] mb-0.5">Made for you</div>
                             <p className="text-white font-display font-bold text-base leading-tight line-clamp-2">{m.title}</p>
                           </div>
-                          <span className="absolute top-2 right-2 btn-sauti w-9 h-9 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><Play className="w-4 h-4 fill-current ml-0.5" /></span>
+                          <button onClick={(e) => { e.stopPropagation(); playQueue(m.tracks, 0, m.title); }} className="absolute top-2 right-2 btn-sauti w-9 h-9 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" aria-label="Play"><Play className="w-4 h-4 fill-current ml-0.5" /></button>
                         </div>
                         <div className="p-2.5"><p className="text-xs text-zinc-400 line-clamp-2 leading-snug">{m.subtitle}</p></div>
-                      </button>
+                      </div>
                     ))}
                   </div>
                 </section>

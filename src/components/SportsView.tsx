@@ -140,6 +140,16 @@ const SPORT_DURATION_MS: Record<string, number> = {
   fight: 4 * HR, golf: 5 * HR, rugby: 2.25 * HR, darts: 4 * HR,
 };
 
+/** An event counts as "live" from 10 min before its start time (feeds flip the
+ *  live flag late) until its typical runtime elapses — so the LIVE state shows
+ *  even when the provider hasn't marked it yet. */
+function eventIsLive(m: FeedEvent): boolean {
+  if (m.live) return true;
+  if (!m.date) return false;
+  const now = Date.now();
+  return now >= m.date - 10 * 60_000 && now <= m.date + (SPORT_DURATION_MS[m.category] ?? 3 * HR);
+}
+
 // ── Native HLS player ──
 // Reports `onUnplayable` when a source is dead (manifest 403/404/timeout, or it
 // never produces a frame) so the parent can auto-skip to the next source. Brief
@@ -397,22 +407,22 @@ export default function SportsView() {
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     return activeEvents
-      .filter((m) => (sport === 'live' ? m.live : sport === 'all' ? true : m.category === sport))
+      .filter((m) => (sport === 'live' ? eventIsLive(m) : sport === 'all' ? true : m.category === sport))
       .filter((m) => !q || matchTitle(m).toLowerCase().includes(q))
-      .sort((a, b) => (b.live ? 1 : 0) - (a.live ? 1 : 0) || ((b.embeds?.length || 0) ? 1 : 0) - ((a.embeds?.length || 0) ? 1 : 0) || a.date - b.date);
+      .sort((a, b) => (eventIsLive(b) ? 1 : 0) - (eventIsLive(a) ? 1 : 0) || ((b.embeds?.length || 0) ? 1 : 0) - ((a.embeds?.length || 0) ? 1 : 0) || a.date - b.date);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeEvents, sport, search]);
 
   // Organised into shelves: Live Now first, then grouped by sport.
   const eventGroups = useMemo(() => {
     const order = ['football', 'basketball', 'fight', 'motor-sports', 'tennis', 'cricket', 'american-football', 'baseball', 'hockey', 'golf', 'rugby'];
-    const live = visible.filter((m) => m.live);
+    const live = visible.filter((m) => eventIsLive(m));
     const groups: { title: string; live?: boolean; events: FeedEvent[] }[] = [];
     if (sport === 'all') {
       if (live.length) groups.push({ title: 'Live Now', live: true, events: live });
       const byCat = new Map<string, FeedEvent[]>();
       for (const m of visible) {
-        if (m.live) continue;
+        if (eventIsLive(m)) continue;
         if (!byCat.has(m.category)) byCat.set(m.category, []);
         byCat.get(m.category)!.push(m);
       }
@@ -422,7 +432,7 @@ export default function SportsView() {
       groups.push({ title: 'Live Now', live: true, events: visible });
     } else {
       if (live.length) groups.push({ title: 'Live Now', live: true, events: live });
-      const rest = visible.filter((m) => !m.live);
+      const rest = visible.filter((m) => !eventIsLive(m));
       if (rest.length) groups.push({ title: 'Upcoming', events: rest });
     }
     return groups;
@@ -435,7 +445,7 @@ export default function SportsView() {
         className="card-lift tier-card group relative rounded-2xl p-4 cursor-pointer focus:outline-none">
         <div className="flex items-center justify-between mb-2">
           <span className="px-2 py-0.5 bg-white/5 rounded text-[10px] font-bold uppercase tracking-wider text-amber-400">{SPORT_LABELS[m.category] || m.category}</span>
-          {m.live ? (
+          {eventIsLive(m) ? (
             <span className="live-badge flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"><span className="live-dot w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> LIVE</span>
           ) : (
             <span className="flex items-center gap-1 text-[11px] text-zinc-400 tabular"><CalendarClock className="w-3 h-3" /> {eventTime(m.date)}</span>

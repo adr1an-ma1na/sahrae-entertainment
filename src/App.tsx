@@ -488,17 +488,18 @@ export default function App() {
             <MediaGrid title="" items={filteredSearchResults} onPlay={handlePlay} />
             
             {searchResults.length > 0 && (
-              <div 
-                ref={lastElementRef}
-                className="mt-12 flex justify-center h-20 items-center"
-              >
-                {loading && hasMoreSearch && (
-                  <div className="flex items-center gap-3 text-zinc-400">
-                    <div className="w-5 h-5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-                    <span>Loading more...</span>
-                  </div>
-                )}
-                {!hasMoreSearch && searchResults.length > 0 && (
+              <div className="mt-12 flex justify-center">
+                {hasMoreSearch ? (
+                  <button
+                    onClick={loadMoreSearchResults}
+                    disabled={loading}
+                    className="bg-amber-500 hover:bg-amber-400 text-amber-950 px-8 py-3 rounded-full font-bold transition-all hover:scale-105 shadow-[0_0_15px_rgba(245,158,11,0.3)] disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-2"
+                  >
+                    {loading ? (
+                      <><div className="w-5 h-5 border-2 border-amber-950 border-t-transparent rounded-full animate-spin"></div> Loading…</>
+                    ) : 'Load More'}
+                  </button>
+                ) : (
                   <div className="text-zinc-500">No more results</div>
                 )}
               </div>

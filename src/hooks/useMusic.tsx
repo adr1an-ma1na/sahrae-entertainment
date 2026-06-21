@@ -182,15 +182,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
 
     playerRef.current = {
       loadVideoById: (id: string) => {
-        // Load the embed ONCE; after that switch tracks via postMessage so it's
-        // near-instant (no full iframe reload every song).
-        if (f.dataset.loaded === '1') {
-          cmd('loadVideoById', [id]);
-          cmd('playVideo');
-        } else {
-          f.dataset.loaded = '1';
-          f.src = `https://www.youtube.com/embed/${id}?enablejsapi=1&autoplay=1&playsinline=1&controls=0&rel=0&modestbranding=1&iv_load_policy=3`;
-        }
+        // Set the embed src per track — the proven-reliable path. (The
+        // postMessage loadVideoById switch was faster but didn't actually play
+        // on this WebView, so we keep the reliable reload.)
+        f.src = `https://www.youtube.com/embed/${id}?enablejsapi=1&autoplay=1&playsinline=1&controls=0&rel=0&modestbranding=1&iv_load_policy=3`;
       },
       playVideo: () => cmd('playVideo'),
       pauseVideo: () => cmd('pauseVideo'),
