@@ -97,15 +97,45 @@ async function fetchJson(url: string, ms: number): Promise<any | null> {
   return null;
 }
 
+// Direct-only fetch (no native passthrough) — used in the cold-start race so we
+// don't flood the native interceptor that playback shares.
+async function fetchDirect(url: string, ms: number): Promise<any | null> {
+  try {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), ms);
+    const r = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(to);
+    if (r.ok) return await r.json();
+  } catch { /* dead/blocked */ }
+  return null;
+}
+
 async function pipedGet(path: string): Promise<any | null> {
   await acquireSlot();
   try {
-    const order = working ? [working, ...INSTANCES.filter((i) => i !== working)] : INSTANCES;
-    for (const base of order) {
-      const j = await fetchJson(base + path, 6000);
-      if (j) { working = base; return j; }
+    // Warm path: a known-good instance answers in one fast request.
+    if (working) {
+      const j = await fetchJson(working + path, 5000);
+      if (j) return j;
+      working = null; // it died — fall through to re-race
     }
-    return null;
+    // Cold path: RACE every instance at once; the first that answers wins and is
+    // cached, so search/shelves resolve in ~1-2s instead of trying dead servers
+    // one-by-one (which took minutes).
+    const winner = await new Promise<{ base: string; j: any } | null>((resolve) => {
+      let pending = INSTANCES.length;
+      let done = false;
+      INSTANCES.forEach((base) => {
+        fetchDirect(base + path, 5000).then((j) => {
+          if (done) return;
+          if (j) { done = true; working = base; resolve({ base, j }); }
+          else { pending -= 1; if (pending === 0) resolve(null); }
+        });
+      });
+    });
+    if (winner) return winner.j;
+    // Last resort: native passthrough (handles CORS-only networks).
+    return await fetchJson(INSTANCES[0] + path, 7000);
   } finally {
     releaseSlot();
   }

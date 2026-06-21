@@ -226,8 +226,15 @@ export default function MusicView() {
   const openArtist = async (a: Artist) => {
     setDetail({ kind: 'artist', id: a.id, name: a.name, thumbnail: a.thumbnail, subtitle: 'Artist' });
     setDetailLoading(true); setDetailTracks([]); setDetailAlbums([]);
+    const name = a.name.toLowerCase();
+    const byArtist = (s?: string) => { const ar = (s || '').toLowerCase(); return !!ar && (ar.includes(name) || name.includes(ar)); };
     const [songs, albums] = await Promise.all([ytmusic.search(`${a.name} songs`), ytmusic.searchAlbums(a.name)]);
-    setDetailTracks(songs); setDetailAlbums(albums); setDetailLoading(false);
+    // Show only THIS artist's songs/albums (fall back to all if filtering is too aggressive).
+    const mineSongs = songs.filter((t) => byArtist(t.artist));
+    const mineAlbums = albums.filter((al) => byArtist(al.artist));
+    setDetailTracks(mineSongs.length >= 3 ? mineSongs : songs);
+    setDetailAlbums(mineAlbums.length ? mineAlbums : albums);
+    setDetailLoading(false);
   };
   const openAlbum = async (al: Album) => {
     setDetail({ kind: 'album', id: al.id, name: al.name, thumbnail: al.thumbnail, subtitle: al.artist || 'Album' });

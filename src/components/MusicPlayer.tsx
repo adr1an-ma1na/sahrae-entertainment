@@ -155,7 +155,7 @@ export default function MusicPlayer() {
               {showLyrics ? (
                 <div className="w-full h-full flex flex-col min-h-0"><LyricsPanel track={current} position={position} /></div>
               ) : current.artworkLarge || current.artwork ? (
-                <div className="relative w-[80vw] max-w-[380px]">
+                <div className="relative w-[min(80vw,42vh)] max-w-[380px]">
                   <CoverArt imageUrl={hdArt || current.artworkLarge || current.artwork} fallbackUrl={current.artwork} dominantColor={current.dominantColor} rounded="rounded-3xl"
                     className="np-art w-full aspect-square" />
                   <img aria-hidden alt="" src={hdArt || current.artworkLarge || current.artwork} className="np-reflect absolute left-0 right-0 top-full mt-3 w-full h-1/3 object-cover object-top rounded-3xl pointer-events-none" />
