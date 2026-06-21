@@ -174,7 +174,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       if (cancelled || playerRef.current) return;
       playerRef.current = new YT.Player('sahrae-yt-player', {
         height: '1', width: '1',
-        playerVars: { autoplay: 1, controls: 0, disablekb: 1, playsinline: 1, rel: 0, origin: window.location.origin },
+        // NOTE: no `origin` param — on the Capacitor https://localhost origin the
+        // IFrame API origin handshake fails (player loads but won't play → 0:00),
+        // while a plain embed plays fine. Omitting origin lets it play.
+        playerVars: { autoplay: 1, controls: 0, disablekb: 1, playsinline: 1, rel: 0 },
         events: {
           onReady: () => {
             readyRef.current = true;
@@ -231,8 +234,14 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     } else {
       usingLocalRef.current = false;
       try { if (a) { a.pause(); a.removeAttribute('src'); a.load(); } } catch { /* ignore */ }
-      if (readyRef.current && playerRef.current) playerRef.current.loadVideoById(c.id);
-      else pendingRef.current = c.id;
+      if (readyRef.current && playerRef.current) {
+        playerRef.current.loadVideoById(c.id);
+        // Nudge play in case autoplay doesn't kick in on the WebView.
+        const nid = c.id;
+        setTimeout(() => { try { if (loadedIdRef.current === nid && !usingLocalRef.current) playerRef.current?.playVideo?.(); } catch { /* ignore */ } }, 1200);
+      } else {
+        pendingRef.current = c.id;
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, queue]);
