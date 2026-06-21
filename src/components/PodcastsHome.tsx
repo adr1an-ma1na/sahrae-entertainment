@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Headphones, Video, X, Loader2, Heart, Play } from 'lucide-react';
+import { Search, Headphones, Video, X, Loader2, Heart, Play, ChevronLeft } from 'lucide-react';
 import { ytmusic, Track } from '../services/ytmusic';
 import { useMusic } from '../hooks/useMusic';
 import { CoverArt } from './ui/CoverArt';
@@ -19,6 +19,9 @@ export default function PodcastsHome() {
   const [follows, setFollows] = useState<Track[]>(() => getFollows());
   const [cont, setCont] = useState<PodProgress[]>(() => getContinue());
   const [watch, setWatch] = useState<Track | null>(null);
+  const [showView, setShowView] = useState<Track | null>(null);
+  const [showEpisodes, setShowEpisodes] = useState<Track[]>([]);
+  const [showLoading, setShowLoading] = useState(false);
   const tRef = useRef<number | undefined>(undefined);
 
   // Refresh "continue" whenever we return to this screen.
@@ -51,6 +54,17 @@ export default function PodcastsHome() {
     return () => window.clearTimeout(tRef.current);
   }, [query]);
 
+  // Show page — list a series' episodes (searched by show/channel name).
+  useEffect(() => {
+    if (!showView) return;
+    let cancelled = false; setShowLoading(true); setShowEpisodes([]);
+    (async () => {
+      const eps = await ytmusic.searchVideos(`${showView.artist} podcast`).catch(() => [] as Track[]);
+      if (!cancelled) { setShowEpisodes(eps); setShowLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [showView]);
+
   const onFollow = (t: Track) => setFollows(toggleFollow(t));
   const onWatch = (t: Track) => { stop(); setWatch(t); };
   const onListen = (t: Track) => playQueue([t], 0, 'Podcasts');
@@ -63,14 +77,71 @@ export default function PodcastsHome() {
         <button onClick={() => onWatch(t)} className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity" aria-label="Watch"><span className="btn-sauti px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1"><Video className="w-4 h-4" /> Watch</span></button>
         <button onClick={() => onFollow(t)} className={`absolute top-2 right-2 w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-sm ${isFollowed(t.id) ? 'bg-sauti text-amber-950' : 'bg-black/55 text-white'}`} aria-label="Follow"><Heart className={`w-4 h-4 ${isFollowed(t.id) ? 'fill-current' : ''}`} /></button>
       </div>
-      <h3 className="text-sm font-bold text-white line-clamp-2 mb-0.5">{t.title}</h3>
-      <p className="text-xs text-zinc-500 truncate mb-3">{t.artist}{t.duration ? ` · ${fmt(t.duration)}` : ''}</p>
+      <div onClick={() => setShowView(t)} className="cursor-pointer mb-3">
+        <h3 className="text-sm font-bold text-white line-clamp-2 mb-0.5 hover:text-sauti transition-colors">{t.title}</h3>
+        <p className="text-xs text-zinc-500 truncate">{t.artist}{t.duration ? ` · ${fmt(t.duration)}` : ''}</p>
+      </div>
       <div className="flex gap-2 mt-auto">
         <button onClick={() => onListen(t)} className="btn-sauti flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5"><Headphones className="w-4 h-4" /> Listen</button>
         <button onClick={() => onWatch(t)} className="btn-glass px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5"><Video className="w-4 h-4" /> Watch</button>
       </div>
     </div>
   );
+
+  const videoModal = watch && (
+    <div role="dialog" data-tv-layer className="dark fixed inset-0 z-[140] bg-black flex flex-col animate-in fade-in duration-200">
+      <div className="flex items-center gap-3 px-3 pt-[calc(env(safe-area-inset-top)+0.5rem)] pb-2.5 glass">
+        <p className="text-white font-bold text-sm truncate flex-1">{watch.title}</p>
+        <button onClick={() => setWatch(null)} data-tv-close tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full glass-liquid flex items-center justify-center text-white shrink-0" aria-label="Close"><X className="w-5 h-5" /></button>
+      </div>
+      <iframe src={`https://www.youtube.com/embed/${watch.id}?autoplay=1&playsinline=1`} title="Podcast" className="flex-1 w-full bg-black border-0" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />
+    </div>
+  );
+
+  // ── Show page: a series' episodes, organised (Spotify-style) ──
+  if (showView) {
+    const hc = showView.dominantColor || 'rgba(245,158,11,0.4)';
+    return (
+      <div className="relative animate-in fade-in duration-300">
+        <div aria-hidden className="absolute inset-x-0 -top-24 h-72 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${hc} 0%, transparent 100%)`, opacity: 0.5 }} />
+        <button onClick={() => setShowView(null)} className="flex items-center gap-1 text-zinc-400 hover:text-white mb-5 text-sm"><ChevronLeft className="w-4 h-4" /> Back</button>
+        <div className="flex items-end gap-4 md:gap-5 mb-7">
+          <div className="w-28 h-28 md:w-40 md:h-40 rounded-2xl overflow-hidden bg-zinc-800 shrink-0 shadow-xl relative">
+            <CoverArt imageUrl={showView.artworkLarge || showView.artwork} dominantColor={showView.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
+          </div>
+          <div className="min-w-0">
+            <div className="overline mb-1">Podcast</div>
+            <h2 className="text-2xl md:text-4xl font-display font-bold text-white line-clamp-2">{showView.artist}</h2>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => showEpisodes[0] && onListen(showEpisodes[0])} className="btn-sauti px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Play className="w-4 h-4 fill-current" /> Play</button>
+              <button onClick={() => onFollow(showView)} className="btn-glass px-5 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Heart className={`w-4 h-4 ${isFollowed(showView.id) ? 'fill-current' : ''}`} /> {isFollowed(showView.id) ? 'Following' : 'Follow'}</button>
+            </div>
+          </div>
+        </div>
+
+        {showLoading ? (
+          <div className="flex items-center gap-2 text-zinc-400 py-10"><Loader2 className="w-5 h-5 animate-spin text-amber-500" /> Loading episodes…</div>
+        ) : showEpisodes.length === 0 ? (
+          <p className="text-zinc-500 py-10 text-center">No episodes found for this show.</p>
+        ) : (
+          <div className="space-y-2 pb-6">
+            {showEpisodes.map((ep) => (
+              <div key={ep.id} className="tier-card card-lift rounded-xl p-3 flex items-center gap-3">
+                <div className="w-14 h-14 rounded-lg overflow-hidden bg-zinc-800 shrink-0 relative"><CoverArt imageUrl={ep.artwork} dominantColor={ep.dominantColor} rounded="" className="absolute inset-0 w-full h-full" /></div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-white line-clamp-2">{ep.title}</p>
+                  <p className="text-xs text-zinc-500 truncate">Episode{ep.duration ? ` · ${fmt(ep.duration)}` : ''}</p>
+                </div>
+                <button onClick={() => onListen(ep)} className="btn-sauti w-10 h-10 rounded-full flex items-center justify-center shrink-0" aria-label="Listen"><Play className="w-4 h-4 fill-current ml-0.5" /></button>
+                <button onClick={() => onWatch(ep)} className="btn-glass w-10 h-10 rounded-lg flex items-center justify-center shrink-0" aria-label="Watch"><Video className="w-4 h-4" /></button>
+              </div>
+            ))}
+          </div>
+        )}
+        {videoModal}
+      </div>
+    );
+  }
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -128,15 +199,7 @@ export default function PodcastsHome() {
       )}
 
       {/* Video player */}
-      {watch && (
-        <div role="dialog" data-tv-layer className="dark fixed inset-0 z-[140] bg-black flex flex-col animate-in fade-in duration-200">
-          <div className="flex items-center gap-3 px-3 pt-[calc(env(safe-area-inset-top)+0.5rem)] pb-2.5 glass">
-            <p className="text-white font-bold text-sm truncate flex-1">{watch.title}</p>
-            <button onClick={() => setWatch(null)} data-tv-close tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full glass-liquid flex items-center justify-center text-white shrink-0" aria-label="Close"><X className="w-5 h-5" /></button>
-          </div>
-          <iframe src={`https://www.youtube.com/embed/${watch.id}?autoplay=1&playsinline=1`} title="Podcast" className="flex-1 w-full bg-black border-0" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />
-        </div>
-      )}
+      {videoModal}
     </div>
   );
 }
