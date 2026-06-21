@@ -1,4 +1,7 @@
-import { Home, Search, Music2, Radio, Film, Tv2, Clapperboard, Trophy, Heart, Clock, Download, Library, type LucideIcon } from 'lucide-react';
+import { Home, Search, Music2, Radio, Film, Tv2, Clapperboard, Trophy, Heart, Clock, Download, Library } from 'lucide-react';
+
+/* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+type IconType = any;
 
 /**
  * Desktop left sidebar (Spotify-style). Visible on lg+; the BottomTabBar takes
@@ -25,7 +28,7 @@ const LIBRARY = [
   { id: 'downloads', label: 'Downloads', icon: Download },
 ];
 
-function NavItem({ id, label, Icon, active, onClick }: { id: string; label: string; Icon: LucideIcon; active: boolean; onClick: (id: string) => void }) {
+function NavItem({ id, label, Icon, active, onClick }: { id: string; label: string; Icon: IconType; active: boolean; onClick: (id: string) => void }) {
   return (
     <button onClick={() => onClick(id)} tabIndex={0} data-tv-focusable
       className={`w-full flex items-center gap-3.5 px-3 py-2 rounded-lg text-sm font-semibold transition-colors focus:outline-none ${
