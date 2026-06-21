@@ -37,6 +37,7 @@ interface MusicCtx {
   next: () => void;
   prev: () => void;
   seek: (sec: number) => void;
+  setRate: (n: number) => void;
   toggleShuffle: () => void;
   cycleRepeat: () => void;
   toggleLike: (t: Track) => void;
@@ -191,6 +192,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       pauseVideo: () => cmd('pauseVideo'),
       stopVideo: () => cmd('stopVideo'),
       seekTo: (s: number) => cmd('seekTo', [s, true]),
+      setPlaybackRate: (r: number) => cmd('setPlaybackRate', [r]),
       getCurrentTime: () => liveRef.current.position,
       getDuration: () => liveRef.current.duration,
     };
@@ -448,6 +450,11 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     else playerRef.current?.seekTo?.(sec, true);
     setPosition(sec);
   };
+  // Playback speed (podcasts). Applies to whichever engine is active.
+  const setRate = (n: number) => {
+    try { playerRef.current?.setPlaybackRate?.(n); } catch { /* ignore */ }
+    try { const a = audioElRef.current; if (a) a.playbackRate = n; } catch { /* ignore */ }
+  };
   const toggleShuffle = () => { haptics.tap(); setShuffle((s) => !s); };
   const toggleAutoplay = () => { haptics.tap(); setAutoplay((s) => !s); };
   const cycleRepeat = () => { haptics.tap(); setRepeat((r) => (r === 'off' ? 'all' : r === 'all' ? 'one' : 'off')); };
@@ -480,7 +487,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         queue, index, current, isPlaying, position, duration, shuffle, repeat, expanded, buffering, active,
         autoplay, toggleAutoplay, queueSource,
         playQueue, addToQueue, playNext, removeFromQueue, jumpTo,
-        toggle, stop, next, prev, seek, toggleShuffle, cycleRepeat, toggleLike, isLiked,
+        toggle, stop, next, prev, seek, setRate, toggleShuffle, cycleRepeat, toggleLike, isLiked,
         likedTracks, setExpanded,
         playlists, recentlyPlayed, createPlaylist, deletePlaylist, renamePlaylist, addToPlaylist, removeFromPlaylist,
         addSheetTrack, openAddSheet, closeAddSheet,

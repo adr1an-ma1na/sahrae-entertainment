@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, Fragment, type CSSProperties } from 'react';
-import { Play, Pause, SkipForward, SkipBack, ChevronDown, Heart, Shuffle, Repeat, Repeat1, Music2, Plus, X, ListMusic, Mic2, SlidersHorizontal } from 'lucide-react';
+import { Play, Pause, SkipForward, SkipBack, ChevronDown, Heart, Shuffle, Repeat, Repeat1, Music2, Plus, X, ListMusic, Mic2, SlidersHorizontal, RotateCcw, RotateCw, Gauge, Moon } from 'lucide-react';
 import { useMusic } from '../hooks/useMusic';
 import { Track } from '../services/ytmusic';
 import { hdArtwork } from '../services/albumArt';
@@ -99,12 +99,28 @@ export default function MusicPlayer() {
   const {
     current, isPlaying, position, duration, shuffle, repeat, expanded, active,
     queue, index, recentlyPlayed, queueSource, jumpTo, removeFromQueue, playQueue,
-    toggle, stop, next, prev, seek, toggleShuffle, cycleRepeat, toggleLike, isLiked, setExpanded, openAddSheet,
+    toggle, stop, next, prev, seek, setRate, toggleShuffle, cycleRepeat, toggleLike, isLiked, setExpanded, openAddSheet,
   } = useMusic();
   const [showQueue, setShowQueue] = useState(false);
   const [qTab, setQTab] = useState<'next' | 'recent'>('next');
   const [showLyrics, setShowLyrics] = useState(false);
   const [showEq, setShowEq] = useState(false);
+
+  // Podcast controls: playback speed + sleep timer.
+  const isPodcast = queueSource === 'Podcasts';
+  const SPEEDS = [1, 1.25, 1.5, 1.75, 2, 0.75];
+  const [speed, setSpeed] = useState(1);
+  const [sleepMin, setSleepMin] = useState(0);
+  const sleepRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cycleSpeed = () => { const n = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]; setSpeed(n); setRate(n); };
+  const cycleSleep = () => {
+    const opts = [0, 15, 30, 45, 60]; const n = opts[(opts.indexOf(sleepMin) + 1) % opts.length];
+    setSleepMin(n);
+    if (sleepRef.current) { clearTimeout(sleepRef.current); sleepRef.current = null; }
+    if (n > 0) sleepRef.current = setTimeout(() => { stop(); setSleepMin(0); }, n * 60_000);
+  };
+  // Re-apply chosen speed when the episode changes (the embed resets to 1x).
+  useEffect(() => { if (isPodcast && speed !== 1) { const t = setTimeout(() => setRate(speed), 2500); return () => clearTimeout(t); } }, [current?.id, isPodcast, speed, setRate]);
 
   // Resolve a true-HD cover (iTunes) for the big now-playing art.
   const [hdArt, setHdArt] = useState<string | undefined>(undefined);
@@ -182,23 +198,39 @@ export default function MusicPlayer() {
               <div className="flex justify-between text-[11px] text-zinc-400 tabular mt-2"><span>{fmt(position)}</span><span>{fmt(duration)}</span></div>
             </div>
 
-            {/* Transport */}
+            {/* Transport — podcasts get skip-back-15 / skip-forward-30 instead
+                of shuffle/repeat; music keeps shuffle/repeat. */}
             <div className="flex items-center justify-between">
-              <button onClick={toggleShuffle} tabIndex={0} data-tv-focusable className={`w-11 h-11 flex items-center justify-center rounded-full ${shuffle ? 'text-sauti' : 'text-zinc-400 hover:text-white'}`} aria-label="Shuffle"><Shuffle className="w-5 h-5" /></button>
+              {isPodcast ? (
+                <button onClick={() => seek(Math.max(0, position - 15))} tabIndex={0} data-tv-focusable className="relative w-11 h-11 flex items-center justify-center rounded-full text-zinc-300 hover:text-white" aria-label="Back 15s"><RotateCcw className="w-6 h-6" /><span className="absolute text-[8px] font-bold">15</span></button>
+              ) : (
+                <button onClick={toggleShuffle} tabIndex={0} data-tv-focusable className={`w-11 h-11 flex items-center justify-center rounded-full ${shuffle ? 'text-sauti' : 'text-zinc-400 hover:text-white'}`} aria-label="Shuffle"><Shuffle className="w-5 h-5" /></button>
+              )}
               <button onClick={prev} tabIndex={0} data-tv-focusable className="w-12 h-12 flex items-center justify-center text-white" aria-label="Previous"><SkipBack className="w-7 h-7 fill-current" /></button>
               <button onClick={toggle} tabIndex={0} data-tv-focusable className="btn-sauti w-16 h-16 rounded-full flex items-center justify-center" aria-label={isPlaying ? 'Pause' : 'Play'}>
                 {isPlaying ? <Pause className="w-7 h-7 fill-current" /> : <Play className="w-7 h-7 fill-current ml-1" />}
               </button>
               <button onClick={next} tabIndex={0} data-tv-focusable className="w-12 h-12 flex items-center justify-center text-white" aria-label="Next"><SkipForward className="w-7 h-7 fill-current" /></button>
-              <button onClick={cycleRepeat} tabIndex={0} data-tv-focusable className={`w-11 h-11 flex items-center justify-center rounded-full ${repeat !== 'off' ? 'text-sauti' : 'text-zinc-400 hover:text-white'}`} aria-label="Repeat">
-                {repeat === 'one' ? <Repeat1 className="w-5 h-5" /> : <Repeat className="w-5 h-5" />}
-              </button>
+              {isPodcast ? (
+                <button onClick={() => seek(Math.min(duration || position + 30, position + 30))} tabIndex={0} data-tv-focusable className="relative w-11 h-11 flex items-center justify-center rounded-full text-zinc-300 hover:text-white" aria-label="Forward 30s"><RotateCw className="w-6 h-6" /><span className="absolute text-[8px] font-bold">30</span></button>
+              ) : (
+                <button onClick={cycleRepeat} tabIndex={0} data-tv-focusable className={`w-11 h-11 flex items-center justify-center rounded-full ${repeat !== 'off' ? 'text-sauti' : 'text-zinc-400 hover:text-white'}`} aria-label="Repeat">
+                  {repeat === 'one' ? <Repeat1 className="w-5 h-5" /> : <Repeat className="w-5 h-5" />}
+                </button>
+              )}
             </div>
             </div>
 
-            {/* Lyrics / Equalizer / Queue */}
-            <div className="flex items-center justify-center gap-2 mt-5">
-              <button onClick={() => setShowLyrics((v) => !v)} tabIndex={0} data-tv-focusable className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-colors ${showLyrics ? 'bg-sauti text-amber-950' : 'glass-liquid text-white'}`}><Mic2 className="w-4 h-4" /> Lyrics</button>
+            {/* Secondary controls — podcasts: Speed + Sleep; music: Lyrics. EQ + Queue always. */}
+            <div className="flex items-center justify-center gap-2 mt-5 flex-wrap">
+              {isPodcast ? (
+                <>
+                  <button onClick={cycleSpeed} tabIndex={0} data-tv-focusable className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-colors ${speed !== 1 ? 'bg-sauti text-amber-950' : 'glass-liquid text-white'}`}><Gauge className="w-4 h-4" /> {speed}×</button>
+                  <button onClick={cycleSleep} tabIndex={0} data-tv-focusable className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-colors ${sleepMin > 0 ? 'bg-sauti text-amber-950' : 'glass-liquid text-white'}`}><Moon className="w-4 h-4" /> {sleepMin > 0 ? `${sleepMin}m` : 'Sleep'}</button>
+                </>
+              ) : (
+                <button onClick={() => setShowLyrics((v) => !v)} tabIndex={0} data-tv-focusable className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-colors ${showLyrics ? 'bg-sauti text-amber-950' : 'glass-liquid text-white'}`}><Mic2 className="w-4 h-4" /> Lyrics</button>
+              )}
               <button onClick={() => setShowEq(true)} tabIndex={0} data-tv-focusable className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold glass-liquid text-white" aria-label="Equalizer"><SlidersHorizontal className="w-4 h-4" /> EQ</button>
               <button onClick={() => { setQTab('next'); setShowQueue(true); }} tabIndex={0} data-tv-focusable className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold glass-liquid text-white"><ListMusic className="w-4 h-4" /> Queue</button>
             </div>

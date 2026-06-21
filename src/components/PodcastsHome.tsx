@@ -67,7 +67,18 @@ export default function PodcastsHome() {
       if (showView.channelId) {
         const r = await ytmusic.channelVideos(showView.channelId).catch(() => ({ items: [] as Track[], nextpage: null }));
         if (cancelled) return;
-        if (r.items.length) { setShowEpisodes(r.items); setShowNext(r.nextpage); setShowLoading(false); return; }
+        if (r.items.length) {
+          let acc = r.items; let next = r.nextpage; let guard = 0;
+          // Auto-load until we have at least ~50 episodes.
+          while (!cancelled && acc.length < 50 && next && guard < 5) {
+            const more = await ytmusic.channelMore(showView.channelId, next).catch(() => ({ items: [] as Track[], nextpage: null }));
+            const seen = new Set(acc.map((t) => t.id));
+            acc = [...acc, ...more.items.filter((t) => !seen.has(t.id))];
+            next = more.nextpage; guard += 1;
+          }
+          if (cancelled) return;
+          setShowEpisodes(acc); setShowNext(next); setShowLoading(false); return;
+        }
       }
       const eps = await ytmusic.searchVideos(`${showView.artist} podcast`).catch(() => [] as Track[]);
       if (!cancelled) { setShowEpisodes(eps); setShowLoading(false); }
