@@ -240,7 +240,7 @@ export default function MusicPlayer() {
 
       {/* ── Persistent mini-bar ── */}
       {!expanded && (
-        <div className="fixed bottom-0 left-0 right-0 z-[60] px-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] pointer-events-none">
+        <div className="fixed left-0 right-0 lg:left-64 z-[60] px-2 pointer-events-none bottom-[calc(4rem+env(safe-area-inset-bottom))] lg:bottom-3">
           <div className="pointer-events-auto max-w-3xl mx-auto dark glass rounded-2xl border border-white/10 shadow-[0_8px_30px_rgba(0,0,0,0.45)] overflow-hidden">
             {/* progress hairline */}
             <div className="h-0.5 bg-white/10"><div className="h-full bg-gradient-to-r from-amber-400 to-amber-500 transition-[width] duration-200" style={{ width: `${pct}%` }} /></div>

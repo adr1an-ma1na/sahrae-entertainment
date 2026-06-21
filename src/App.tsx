@@ -20,6 +20,8 @@ import FlowChannelsView from './components/FlowChannelsView';
 import GlobalAudioPlayer from './components/GlobalAudioPlayer';
 import ProfileSelection from './components/ProfileSelection';
 import DiscoveryView from './components/DiscoveryView';
+import Sidebar from './components/Sidebar';
+import BottomTabBar from './components/BottomTabBar';
 import MusicView from './components/MusicView';
 import DownloadsView from './components/DownloadsView';
 import MusicPlayer from './components/MusicPlayer';
@@ -518,6 +520,13 @@ export default function App() {
     }
   };
 
+  // Shared navigation handler for the sidebar, bottom tabs, and top bar.
+  const navigate = (tab: string) => {
+    haptics.tap();
+    setActiveTab(tab);
+    if (tab !== 'search') setSearchQuery('');
+  };
+
   const renderAppLayout = () => {
     if (authLoading) {
       return (
@@ -537,33 +546,37 @@ export default function App() {
         {/* Ambient cinematic glow field — viewport-fixed, above the base canvas
             but behind all content (root is `isolate` so -z stays contained). */}
         <div className="aurora-glow pointer-events-none fixed inset-0 -z-10" aria-hidden="true" />
-        <Navbar
-          activeTab={activeTab}
-          setActiveTab={(tab) => {
-            haptics.tap();
-            setActiveTab(tab);
-            if (tab !== 'search') setSearchQuery('');
-          }}
-          onSearch={handleSearch}
-          onPlay={handlePlay}
-        />
+        {/* ── Spotify-style shell: left sidebar (desktop) + bottom tabs (mobile) ── */}
+        <Sidebar activeTab={activeTab} setActiveTab={navigate} />
+        <BottomTabBar activeTab={activeTab} setActiveTab={navigate} />
 
-        <main>
-          {/* Cinematic crossfade between sections. Opacity-only on purpose:
-              a transform here would re-anchor fixed overlays (e.g. the Sports
-              fullscreen player) to this wrapper instead of the viewport. */}
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activeTab}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
-            >
-              {renderContent()}
-            </motion.div>
-          </AnimatePresence>
-        </main>
+        {/* Main column shifts right of the sidebar on desktop; pads for the
+            bottom tab bar + mini player on mobile. */}
+        <div className="lg:pl-64">
+          <Navbar
+            activeTab={activeTab}
+            setActiveTab={navigate}
+            onSearch={handleSearch}
+            onPlay={handlePlay}
+          />
+
+          <main className="pb-28 lg:pb-0">
+            {/* Cinematic crossfade between sections. Opacity-only on purpose:
+                a transform here would re-anchor fixed overlays (e.g. the Sports
+                fullscreen player) to this wrapper instead of the viewport. */}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+              >
+                {renderContent()}
+              </motion.div>
+            </AnimatePresence>
+          </main>
+        </div>
 
         <PlayerModal 
           isOpen={playerConfig.isOpen}

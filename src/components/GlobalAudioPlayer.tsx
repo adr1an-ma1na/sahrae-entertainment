@@ -7,7 +7,7 @@ export default function GlobalAudioPlayer() {
   if (!playingUrl) return null;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-[100] px-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] pointer-events-none">
+    <div className="fixed left-0 right-0 lg:left-64 z-[100] px-2 pointer-events-none bottom-[calc(4rem+env(safe-area-inset-bottom))] lg:bottom-3">
       <div className="pointer-events-auto max-w-3xl mx-auto dark glass rounded-2xl border border-white/10 shadow-[0_8px_30px_rgba(0,0,0,0.45)] overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
         <div className="flex items-center gap-3 p-2 pr-3">
           <div className="w-11 h-11 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0">

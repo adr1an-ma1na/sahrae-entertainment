@@ -71,29 +71,16 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
 
   return (
     <>
-    <nav className={`fixed top-0 w-full z-40 transition-all duration-500 pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] ${isScrolled ? 'glass border-b border-white/15' : 'bg-gradient-to-b from-black/55 via-black/20 to-transparent backdrop-blur-sm'}`}>
+    <nav className={`fixed top-0 left-0 right-0 lg:left-64 z-40 transition-all duration-500 pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] ${isScrolled ? 'glass border-b border-white/15' : 'bg-gradient-to-b from-black/55 via-black/20 to-transparent backdrop-blur-sm'}`}>
       <div className="px-4 md:px-12 py-4 flex items-center justify-between">
         <div className="flex items-center gap-8 md:gap-12 min-w-0 flex-1">
           <h1
-            className="text-2xl md:text-3xl font-black tracking-tighter cursor-pointer whitespace-nowrap shrink-0"
+            className="text-2xl md:text-3xl font-black tracking-tighter cursor-pointer whitespace-nowrap shrink-0 lg:hidden"
             onClick={() => setActiveTab('home')}
           >
             <span className="text-gold drop-shadow-[0_1px_8px_rgba(245,158,11,0.25)]">SAHRAE</span> <span className="text-white font-light text-xl md:text-2xl tracking-normal hidden sm:inline-block">ENTERTAINMENT</span>
           </h1>
-
-          <div className="nav-sections hidden md:flex items-center gap-6 overflow-x-auto scrollbar-hide min-w-0">
-            {tabs.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`relative text-sm font-medium transition-colors whitespace-nowrap shrink-0 after:content-[''] after:absolute after:-bottom-1.5 after:left-0 after:h-[2px] after:rounded-full after:bg-amber-500 after:transition-all after:duration-300 ${
-                  activeTab === tab.id ? 'text-white after:w-full' : 'text-zinc-300 hover:text-white after:w-0'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+          {/* Section nav now lives in the Sidebar (desktop) + BottomTabBar (mobile). */}
         </div>
 
         <div className="flex items-center gap-6">
@@ -233,20 +220,7 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
         </div>
       </div>
       
-      {/* Mobile Tabs */}
-      <div className="nav-sections-mobile md:hidden flex overflow-x-auto px-4 pb-3 gap-4 scrollbar-hide bg-zinc-950/95">
-        {tabs.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`text-sm font-medium whitespace-nowrap transition-colors ${
-              activeTab === tab.id ? 'text-white font-bold border-b-2 border-amber-500 pb-1' : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {/* Mobile section nav now lives in the BottomTabBar. */}
     </nav>
 
     {/* Modals live OUTSIDE <nav>: the nav's backdrop-blur creates a containing
