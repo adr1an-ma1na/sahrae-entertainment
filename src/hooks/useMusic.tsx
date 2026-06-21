@@ -181,7 +181,17 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     const cmd = (func: string, args: unknown[] = []) => post({ event: 'command', func, args });
 
     playerRef.current = {
-      loadVideoById: (id: string) => { f.src = `https://www.youtube.com/embed/${id}?enablejsapi=1&autoplay=1&playsinline=1&controls=0&rel=0&modestbranding=1&iv_load_policy=3`; },
+      loadVideoById: (id: string) => {
+        // Load the embed ONCE; after that switch tracks via postMessage so it's
+        // near-instant (no full iframe reload every song).
+        if (f.dataset.loaded === '1') {
+          cmd('loadVideoById', [id]);
+          cmd('playVideo');
+        } else {
+          f.dataset.loaded = '1';
+          f.src = `https://www.youtube.com/embed/${id}?enablejsapi=1&autoplay=1&playsinline=1&controls=0&rel=0&modestbranding=1&iv_load_policy=3`;
+        }
+      },
       playVideo: () => cmd('playVideo'),
       pauseVideo: () => cmd('pauseVideo'),
       stopVideo: () => cmd('stopVideo'),
