@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Headphones, Video, X, Loader2, Heart, Play, ChevronLeft } from 'lucide-react';
+import { Search, Headphones, Video, X, Loader2, Heart, Play, ChevronLeft, Check, Circle } from 'lucide-react';
 import { ytmusic, Track } from '../services/ytmusic';
 import { useMusic } from '../hooks/useMusic';
 import { CoverArt } from './ui/CoverArt';
-import { getFollows, isFollowed, toggleFollow, getContinue, PodProgress } from '../services/podcasts';
+import { getFollows, isFollowed, toggleFollow, listInProgress, getProgress, getMany, markPlayed, markUnplayed, EpisodeProgress } from '../services/podcasts';
 
 const CATEGORIES = ['Top', 'News', 'Comedy', 'Business', 'Technology', 'True Crime', 'Sports', 'Health', 'Education'];
 const catQuery = (c: string) => (c === 'Top' ? 'top podcasts 2026' : `${c} podcast`);
@@ -17,7 +17,8 @@ export default function PodcastsHome() {
   const [shelves, setShelves] = useState<{ title: string; items: Track[] }[]>([]);
   const [loadingHome, setLoadingHome] = useState(true);
   const [follows, setFollows] = useState<Track[]>(() => getFollows());
-  const [cont, setCont] = useState<PodProgress[]>(() => getContinue());
+  const [cont, setCont] = useState<EpisodeProgress[]>(() => listInProgress());
+  const [progV, setProgV] = useState(0); // bump to re-read progress badges
   const [watch, setWatch] = useState<Track | null>(null);
   const [showView, setShowView] = useState<Track | null>(null);
   const [showEpisodes, setShowEpisodes] = useState<Track[]>([]);
@@ -27,8 +28,8 @@ export default function PodcastsHome() {
   const [epSort, setEpSort] = useState<'new' | 'old'>('new');
   const tRef = useRef<number | undefined>(undefined);
 
-  // Refresh "continue" whenever we return to this screen.
-  useEffect(() => { setCont(getContinue()); }, []);
+  // Refresh "continue" whenever we return to this screen / progress changes.
+  useEffect(() => { setCont(listInProgress()); }, [progV]);
 
   // Curated category shelves — sequential (throttled), so it never starves playback.
   useEffect(() => {
@@ -85,8 +86,15 @@ export default function PodcastsHome() {
 
   const onFollow = (t: Track) => setFollows(toggleFollow(t));
   const onWatch = (t: Track) => { stop(); setWatch(t); };
-  const onListen = (t: Track) => playQueue([t], 0, 'Podcasts');
-  const resume = (p: PodProgress) => { playQueue([p.track], 0, 'Podcasts'); window.setTimeout(() => { try { seek(p.position); } catch { /* ignore */ } }, 2800); };
+  const onListen = (t: Track) => {
+    const pr = getProgress(t.id);
+    playQueue([t], 0, 'Podcasts');
+    if (pr && pr.state === 'in_progress' && pr.positionMs > 5000) {
+      window.setTimeout(() => { try { seek(pr.positionMs / 1000); } catch { /* ignore */ } }, 2800);
+    }
+  };
+  const resume = (p: EpisodeProgress) => { playQueue([p.track], 0, 'Podcasts'); window.setTimeout(() => { try { seek(p.positionMs / 1000); } catch { /* ignore */ } }, 2800); };
+  const togglePlayed = (t: Track) => { if (getProgress(t.id)?.completed) markUnplayed(t.id); else markPlayed(t); setProgV((v) => v + 1); };
 
   const card = (t: Track) => (
     <div key={t.id} className="card-lift tier-card rounded-2xl p-3 group flex flex-col w-[200px] shrink-0">
@@ -120,6 +128,7 @@ export default function PodcastsHome() {
   if (showView) {
     const hc = showView.dominantColor || 'rgba(245,158,11,0.4)';
     const sortedEps = [...showEpisodes].sort((a, b) => (epSort === 'new' ? (b.uploaded || 0) - (a.uploaded || 0) : (a.uploaded || 0) - (b.uploaded || 0)));
+    const prog = getMany(showEpisodes.map((e) => e.id)); void progV;
     return (
       <div className="relative animate-in fade-in duration-300">
         <div aria-hidden className="absolute -inset-x-4 md:-inset-x-12 top-0 h-72 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${hc} 0%, transparent 100%)`, opacity: 0.5 }} />
@@ -152,17 +161,26 @@ export default function PodcastsHome() {
                 ))}
               </div>
             </div>
-            {sortedEps.map((ep) => (
-              <div key={ep.id} className="tier-card card-lift rounded-xl p-3 flex items-center gap-3">
-                <div className="w-14 h-14 rounded-lg overflow-hidden bg-zinc-800 shrink-0 relative"><CoverArt imageUrl={ep.artwork} dominantColor={ep.dominantColor} rounded="" className="absolute inset-0 w-full h-full" /></div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-white line-clamp-2">{ep.title}</p>
-                  <p className="text-xs text-zinc-500 truncate">{ep.date || 'Episode'}{ep.duration ? ` · ${fmt(ep.duration)}` : ''}</p>
+            {sortedEps.map((ep) => {
+              const pr = prog[ep.id];
+              const played = pr?.state === 'played';
+              const inProg = pr?.state === 'in_progress';
+              return (
+                <div key={ep.id} className="tier-card card-lift rounded-xl p-3 flex items-center gap-3">
+                  <div className={`w-14 h-14 rounded-lg overflow-hidden bg-zinc-800 shrink-0 relative ${played ? 'opacity-60' : ''}`}><CoverArt imageUrl={ep.artwork} dominantColor={ep.dominantColor} rounded="" className="absolute inset-0 w-full h-full" /></div>
+                  <div className="min-w-0 flex-1">
+                    <p className={`text-sm font-bold line-clamp-2 ${played ? 'text-zinc-400' : 'text-white'}`}>{ep.title}</p>
+                    <p className="text-xs text-zinc-500 truncate">
+                      {played ? '✓ Played' : inProg ? `${fmt((pr.durationMs - pr.positionMs) / 1000)} left` : `${ep.date || 'Episode'}${ep.duration ? ` · ${fmt(ep.duration)}` : ''}`}
+                    </p>
+                    {inProg && <div className="h-1 rounded-full bg-white/10 overflow-hidden mt-1.5 max-w-[220px]"><div className="h-full bg-sauti" style={{ width: `${pr.durationMs ? Math.min(100, (pr.positionMs / pr.durationMs) * 100) : 0}%` }} /></div>}
+                  </div>
+                  <button onClick={() => togglePlayed(ep)} className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${played ? 'text-sauti' : 'text-zinc-500 hover:text-white'}`} aria-label={played ? 'Mark unplayed' : 'Mark played'}>{played ? <Check className="w-5 h-5" /> : <Circle className="w-5 h-5" />}</button>
+                  <button onClick={() => onListen(ep)} className="btn-sauti w-10 h-10 rounded-full flex items-center justify-center shrink-0" aria-label="Listen"><Play className="w-4 h-4 fill-current ml-0.5" /></button>
+                  <button onClick={() => onWatch(ep)} className="btn-glass w-10 h-10 rounded-lg flex items-center justify-center shrink-0" aria-label="Watch"><Video className="w-4 h-4" /></button>
                 </div>
-                <button onClick={() => onListen(ep)} className="btn-sauti w-10 h-10 rounded-full flex items-center justify-center shrink-0" aria-label="Listen"><Play className="w-4 h-4 fill-current ml-0.5" /></button>
-                <button onClick={() => onWatch(ep)} className="btn-glass w-10 h-10 rounded-lg flex items-center justify-center shrink-0" aria-label="Watch"><Video className="w-4 h-4" /></button>
-              </div>
-            ))}
+              );
+            })}
             {showNext && (
               <div className="flex justify-center pt-4">
                 <button onClick={loadMoreEpisodes} disabled={loadingMore} className="btn-glass px-6 py-2.5 rounded-full text-sm font-bold disabled:opacity-50">{loadingMore ? 'Loading…' : 'Load more episodes'}</button>
@@ -201,8 +219,8 @@ export default function PodcastsHome() {
                     <div className="w-14 h-14 rounded-lg overflow-hidden bg-zinc-800 shrink-0 relative"><CoverArt imageUrl={p.track.artwork} dominantColor={p.track.dominantColor} rounded="" className="absolute inset-0 w-full h-full" /></div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-white truncate">{p.track.title}</p>
-                      <p className="text-xs text-zinc-500 truncate mb-1.5">{p.track.artist}</p>
-                      <div className="h-1 rounded-full bg-white/10 overflow-hidden"><div className="h-full bg-sauti" style={{ width: `${p.duration ? Math.min(100, (p.position / p.duration) * 100) : 10}%` }} /></div>
+                      <p className="text-xs text-zinc-500 truncate mb-1.5">{p.track.artist}{p.durationMs ? ` · ${fmt((p.durationMs - p.positionMs) / 1000)} left` : ''}</p>
+                      <div className="h-1 rounded-full bg-white/10 overflow-hidden"><div className="h-full bg-sauti" style={{ width: `${p.durationMs ? Math.min(100, (p.positionMs / p.durationMs) * 100) : 10}%` }} /></div>
                     </div>
                     <span className="btn-sauti w-9 h-9 rounded-full flex items-center justify-center shrink-0"><Play className="w-4 h-4 fill-current ml-0.5" /></span>
                   </button>

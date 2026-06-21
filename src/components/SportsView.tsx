@@ -144,10 +144,15 @@ const SPORT_DURATION_MS: Record<string, number> = {
  *  live flag late) until its typical runtime elapses — so the LIVE state shows
  *  even when the provider hasn't marked it yet. */
 function eventIsLive(m: FeedEvent): boolean {
+  // Feed-confirmed live always shows (openEvent always adds a channel fallback,
+  // so there's always something to watch).
   if (m.live) return true;
   if (!m.date) return false;
   const now = Date.now();
-  return now >= m.date - 10 * 60_000 && now <= m.date + (SPORT_DURATION_MS[m.category] ?? 3 * HR);
+  const inWindow = now >= m.date - 10 * 60_000 && now <= m.date + (SPORT_DURATION_MS[m.category] ?? 3 * HR);
+  // Only show an UPCOMING event as live early if it actually has stream servers —
+  // never present a "live" event with nothing to watch.
+  return inWindow && !!(m.embeds && m.embeds.length > 0);
 }
 
 // ── Native HLS player ──
