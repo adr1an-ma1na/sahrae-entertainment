@@ -22,6 +22,8 @@ export default function PodcastsHome() {
   const [showView, setShowView] = useState<Track | null>(null);
   const [showEpisodes, setShowEpisodes] = useState<Track[]>([]);
   const [showLoading, setShowLoading] = useState(false);
+  const [showNext, setShowNext] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const tRef = useRef<number | undefined>(undefined);
 
   // Refresh "continue" whenever we return to this screen.
@@ -54,16 +56,31 @@ export default function PodcastsHome() {
     return () => window.clearTimeout(tRef.current);
   }, [query]);
 
-  // Show page — list a series' episodes (searched by show/channel name).
+  // Show page — the channel's full episode feed when we have a channel id,
+  // otherwise a name search as a fallback.
   useEffect(() => {
     if (!showView) return;
-    let cancelled = false; setShowLoading(true); setShowEpisodes([]);
+    let cancelled = false; setShowLoading(true); setShowEpisodes([]); setShowNext(null);
     (async () => {
+      if (showView.channelId) {
+        const r = await ytmusic.channelVideos(showView.channelId).catch(() => ({ items: [] as Track[], nextpage: null }));
+        if (cancelled) return;
+        if (r.items.length) { setShowEpisodes(r.items); setShowNext(r.nextpage); setShowLoading(false); return; }
+      }
       const eps = await ytmusic.searchVideos(`${showView.artist} podcast`).catch(() => [] as Track[]);
       if (!cancelled) { setShowEpisodes(eps); setShowLoading(false); }
     })();
     return () => { cancelled = true; };
   }, [showView]);
+
+  const loadMoreEpisodes = async () => {
+    if (!showView?.channelId || !showNext || loadingMore) return;
+    setLoadingMore(true);
+    const r = await ytmusic.channelMore(showView.channelId, showNext).catch(() => ({ items: [] as Track[], nextpage: null }));
+    setShowEpisodes((prev) => { const seen = new Set(prev.map((t) => t.id)); return [...prev, ...r.items.filter((t) => !seen.has(t.id))]; });
+    setShowNext(r.nextpage);
+    setLoadingMore(false);
+  };
 
   const onFollow = (t: Track) => setFollows(toggleFollow(t));
   const onWatch = (t: Track) => { stop(); setWatch(t); };
@@ -79,7 +96,7 @@ export default function PodcastsHome() {
       </div>
       <div onClick={() => setShowView(t)} className="cursor-pointer mb-3">
         <h3 className="text-sm font-bold text-white line-clamp-2 mb-0.5 hover:text-sauti transition-colors">{t.title}</h3>
-        <p className="text-xs text-zinc-500 truncate">{t.artist}{t.duration ? ` · ${fmt(t.duration)}` : ''}</p>
+        <p className="text-xs text-zinc-500 truncate">{t.artist}{t.date ? ` · ${t.date}` : ''}{t.duration ? ` · ${fmt(t.duration)}` : ''}</p>
       </div>
       <div className="flex gap-2 mt-auto">
         <button onClick={() => onListen(t)} className="btn-sauti flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5"><Headphones className="w-4 h-4" /> Listen</button>
@@ -130,12 +147,17 @@ export default function PodcastsHome() {
                 <div className="w-14 h-14 rounded-lg overflow-hidden bg-zinc-800 shrink-0 relative"><CoverArt imageUrl={ep.artwork} dominantColor={ep.dominantColor} rounded="" className="absolute inset-0 w-full h-full" /></div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-bold text-white line-clamp-2">{ep.title}</p>
-                  <p className="text-xs text-zinc-500 truncate">Episode{ep.duration ? ` · ${fmt(ep.duration)}` : ''}</p>
+                  <p className="text-xs text-zinc-500 truncate">{ep.date || 'Episode'}{ep.duration ? ` · ${fmt(ep.duration)}` : ''}</p>
                 </div>
                 <button onClick={() => onListen(ep)} className="btn-sauti w-10 h-10 rounded-full flex items-center justify-center shrink-0" aria-label="Listen"><Play className="w-4 h-4 fill-current ml-0.5" /></button>
                 <button onClick={() => onWatch(ep)} className="btn-glass w-10 h-10 rounded-lg flex items-center justify-center shrink-0" aria-label="Watch"><Video className="w-4 h-4" /></button>
               </div>
             ))}
+            {showNext && (
+              <div className="flex justify-center pt-4">
+                <button onClick={loadMoreEpisodes} disabled={loadingMore} className="btn-glass px-6 py-2.5 rounded-full text-sm font-bold disabled:opacity-50">{loadingMore ? 'Loading…' : 'Load more episodes'}</button>
+              </div>
+            )}
           </div>
         )}
         {videoModal}

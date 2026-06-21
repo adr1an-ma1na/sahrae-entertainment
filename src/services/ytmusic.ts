@@ -12,6 +12,8 @@ export interface Track {
   id: string; title: string; artist: string;
   artwork?: string; artworkLarge?: string; duration: number;
   dominantColor?: string;
+  channelId?: string; // YouTube channel/show id (for podcast show feeds)
+  date?: string;      // human-readable upload/release date
 }
 
 // Deterministic, pleasant "dominant colour" per track for CoverArt /
@@ -158,6 +160,12 @@ function hiRes(url: string | undefined, id: string): string {
   return url;
 }
 
+function fmtDate(it: any): string | undefined {
+  if (it.uploaded && it.uploaded > 0) {
+    try { return new Date(it.uploaded).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); } catch { /* ignore */ }
+  }
+  return it.uploadedDate || undefined;
+}
 function mapItem(it: any): Track | null {
   const id = vId(it.url || '');
   if (!id || !it.duration || it.duration <= 0) return null;
@@ -167,6 +175,8 @@ function mapItem(it: any): Track | null {
     artist: (it.uploaderName || '').replace(/\s*-\s*Topic$/i, '').trim() || 'Unknown Artist',
     artwork: it.thumbnail, artworkLarge: hiRes(it.thumbnail, id), duration: it.duration,
     dominantColor: dominantColor(id),
+    channelId: chanId(it.uploaderUrl || ''),
+    date: fmtDate(it),
   };
 }
 function mapItems(items: any[]): Track[] {
@@ -188,6 +198,17 @@ export const ytmusic = {
   // the same Track shape (id = videoId) so it plays through the music engine for
   // audio, or via a YouTube embed for video.
   searchVideos: (q: string): Promise<Track[]> => searchRaw(q, 'videos').then(mapItems),
+
+  // A podcast SHOW's full episode feed (the channel's uploads), newest first,
+  // with a nextpage token for "load more".
+  channelVideos: async (channelId: string): Promise<{ items: Track[]; nextpage: string | null }> => {
+    const j = await pipedGet(`/channel/${channelId}`);
+    return { items: mapItems(j?.relatedStreams || []), nextpage: (j && j.nextpage) || null };
+  },
+  channelMore: async (channelId: string, nextpage: string): Promise<{ items: Track[]; nextpage: string | null }> => {
+    const j = await pipedGet(`/nextpage/channel/${channelId}?nextpage=${encodeURIComponent(nextpage)}`);
+    return { items: mapItems(j?.relatedStreams || []), nextpage: (j && j.nextpage) || null };
+  },
 
   searchArtists: async (q: string): Promise<Artist[]> => {
     const items = await searchRaw(q, 'music_artists');
