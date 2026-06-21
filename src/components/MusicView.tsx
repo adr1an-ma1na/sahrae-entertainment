@@ -95,6 +95,7 @@ export default function MusicView() {
   const [detailTracks, setDetailTracks] = useState<Track[]>([]);
   const [detailAlbums, setDetailAlbums] = useState<Album[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [trackSort, setTrackSort] = useState<'default' | 'title' | 'artist' | 'duration'>('default');
 
   // Library local state
   const [openId, setOpenId] = useState<string | null>(null);
@@ -258,9 +259,28 @@ export default function MusicView() {
   const featuredSource = mix.length ? 'Your Mix' : (sections[0]?.title ?? 'Sauti');
 
   // ── Detail page (artist / album) ──
+  const sortTracks = (list: Track[]): Track[] => {
+    if (trackSort === 'title') return [...list].sort((a, b) => a.title.localeCompare(b.title));
+    if (trackSort === 'artist') return [...list].sort((a, b) => a.artist.localeCompare(b.artist));
+    if (trackSort === 'duration') return [...list].sort((a, b) => (a.duration || 0) - (b.duration || 0));
+    return list;
+  };
+  const sortSelect = (
+    <select value={trackSort} onChange={(e) => setTrackSort(e.target.value as typeof trackSort)}
+      className="bg-zinc-900/70 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-zinc-300 focus:outline-none focus:border-amber-500/60 shrink-0">
+      <option value="default">Sort: Default</option>
+      <option value="title">Title</option>
+      <option value="artist">Artist</option>
+      <option value="duration">Duration</option>
+    </select>
+  );
+
   if (detail) {
+    const shownTracks = sortTracks(detailTracks);
+    const heroColor = detailTracks[0]?.dominantColor || 'rgba(245,158,11,0.4)';
     return (
-      <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen">
+      <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
+        <div aria-hidden className="absolute inset-x-0 top-0 h-80 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${heroColor} 0%, transparent 100%)`, opacity: 0.5 }} />
         <button onClick={() => setDetail(null)} className="flex items-center gap-1 text-zinc-400 hover:text-white mb-5 text-sm"><ChevronLeft className="w-4 h-4" /> Back</button>
         <div className="flex items-end gap-5 mb-8">
           <div className={`w-32 h-32 md:w-40 md:h-40 ${detail.kind === 'artist' ? 'rounded-full' : 'rounded-2xl'} overflow-hidden bg-zinc-800 border border-white/10 shrink-0 shadow-xl`}>
@@ -284,8 +304,11 @@ export default function MusicView() {
           <>
             {detailTracks.length > 0 && (
               <section className="mb-10">
-                <SectionHead>{detail.kind === 'artist' ? 'Popular' : 'Songs'}</SectionHead>
-                <div className="grid sm:grid-cols-2 gap-2">{detailTracks.map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(detailTracks, i)} /></Fragment>)}</div>
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <SectionHead>{detail.kind === 'artist' ? 'Popular' : 'Songs'}</SectionHead>
+                  {sortSelect}
+                </div>
+                <div className="grid sm:grid-cols-2 gap-2">{shownTracks.map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(shownTracks, i)} /></Fragment>)}</div>
               </section>
             )}
             {detail.kind === 'artist' && detailAlbums.length > 0 && (
@@ -413,7 +436,8 @@ export default function MusicView() {
           )}
         </>
       ) : openList ? (
-        <section>
+        <section className="relative">
+          <div aria-hidden className="absolute inset-x-0 -top-24 h-72 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${openList.tracks[0]?.dominantColor || 'rgba(245,158,11,0.4)'} 0%, transparent 100%)`, opacity: 0.5 }} />
           <button onClick={() => setOpenId(null)} className="flex items-center gap-1 text-zinc-400 hover:text-white mb-4 text-sm"><ChevronLeft className="w-4 h-4" /> Library</button>
           <div className="flex items-end gap-4 mb-6">
             <div className="w-28 h-28 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-500 flex items-center justify-center shadow-xl shrink-0">{openList.id === 'liked' ? <Heart className="w-12 h-12 text-white fill-current" /> : <ListMusic className="w-12 h-12 text-white" />}</div>
@@ -428,7 +452,10 @@ export default function MusicView() {
             </div>
           </div>
           {openList.tracks.length === 0 ? <p className="text-zinc-500 py-8">No songs yet. Tap the + on any song to add it here.</p> : (
-            <div className="grid sm:grid-cols-2 gap-2">{openList.tracks.map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(openList.tracks, i)} onRemove={openList.id !== 'liked' ? () => removeFromPlaylist(openList.id, t.id) : undefined} /></Fragment>)}</div>
+            <>
+              <div className="flex justify-end mb-3">{sortSelect}</div>
+              <div className="grid sm:grid-cols-2 gap-2">{sortTracks(openList.tracks).map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(sortTracks(openList.tracks), i)} onRemove={openList.id !== 'liked' ? () => removeFromPlaylist(openList.id, t.id) : undefined} /></Fragment>)}</div>
+            </>
           )}
         </section>
       ) : (
