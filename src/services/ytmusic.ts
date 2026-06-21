@@ -14,6 +14,7 @@ export interface Track {
   dominantColor?: string;
   channelId?: string; // YouTube channel/show id (for podcast show feeds)
   date?: string;      // human-readable upload/release date
+  uploaded?: number;  // raw upload timestamp (ms) for sorting
 }
 
 // Deterministic, pleasant "dominant colour" per track for CoverArt /
@@ -177,6 +178,7 @@ function mapItem(it: any): Track | null {
     dominantColor: dominantColor(id),
     channelId: chanId(it.uploaderUrl || ''),
     date: fmtDate(it),
+    uploaded: typeof it.uploaded === 'number' ? it.uploaded : 0,
   };
 }
 function mapItems(items: any[]): Track[] {

@@ -24,6 +24,7 @@ export default function PodcastsHome() {
   const [showLoading, setShowLoading] = useState(false);
   const [showNext, setShowNext] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [epSort, setEpSort] = useState<'new' | 'old'>('new');
   const tRef = useRef<number | undefined>(undefined);
 
   // Refresh "continue" whenever we return to this screen.
@@ -118,9 +119,10 @@ export default function PodcastsHome() {
   // ── Show page: a series' episodes, organised (Spotify-style) ──
   if (showView) {
     const hc = showView.dominantColor || 'rgba(245,158,11,0.4)';
+    const sortedEps = [...showEpisodes].sort((a, b) => (epSort === 'new' ? (b.uploaded || 0) - (a.uploaded || 0) : (a.uploaded || 0) - (b.uploaded || 0)));
     return (
       <div className="relative animate-in fade-in duration-300">
-        <div aria-hidden className="absolute inset-x-0 -top-24 h-72 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${hc} 0%, transparent 100%)`, opacity: 0.5 }} />
+        <div aria-hidden className="absolute -inset-x-4 md:-inset-x-12 top-0 h-72 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${hc} 0%, transparent 100%)`, opacity: 0.5 }} />
         <button onClick={() => setShowView(null)} className="flex items-center gap-1 text-zinc-400 hover:text-white mb-5 text-sm"><ChevronLeft className="w-4 h-4" /> Back</button>
         <div className="flex items-end gap-4 md:gap-5 mb-7">
           <div className="w-28 h-28 md:w-40 md:h-40 rounded-2xl overflow-hidden bg-zinc-800 shrink-0 shadow-xl relative">
@@ -142,7 +144,15 @@ export default function PodcastsHome() {
           <p className="text-zinc-500 py-10 text-center">No episodes found for this show.</p>
         ) : (
           <div className="space-y-2 pb-6">
-            {showEpisodes.map((ep) => (
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-zinc-500 tabular">{showEpisodes.length} episodes</span>
+              <div className="flex gap-1 glass p-1 rounded-lg">
+                {(['new', 'old'] as const).map((s) => (
+                  <button key={s} onClick={() => setEpSort(s)} className={`px-3 py-1 rounded-md text-xs font-bold transition-colors ${epSort === s ? 'bg-sauti text-amber-950' : 'text-zinc-400 hover:text-white'}`}>{s === 'new' ? 'Newest' : 'Oldest'}</button>
+                ))}
+              </div>
+            </div>
+            {sortedEps.map((ep) => (
               <div key={ep.id} className="tier-card card-lift rounded-xl p-3 flex items-center gap-3">
                 <div className="w-14 h-14 rounded-lg overflow-hidden bg-zinc-800 shrink-0 relative"><CoverArt imageUrl={ep.artwork} dominantColor={ep.dominantColor} rounded="" className="absolute inset-0 w-full h-full" /></div>
                 <div className="min-w-0 flex-1">
