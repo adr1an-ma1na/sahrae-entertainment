@@ -22,6 +22,7 @@ import ProfileSelection from './components/ProfileSelection';
 import DiscoveryView from './components/DiscoveryView';
 import Sidebar from './components/Sidebar';
 import BottomTabBar from './components/BottomTabBar';
+import PodcastProgressTracker from './components/PodcastProgressTracker';
 import MusicView from './components/MusicView';
 import DownloadsView from './components/DownloadsView';
 import MusicPlayer from './components/MusicPlayer';
@@ -592,6 +593,7 @@ export default function App() {
         
         <GlobalAudioPlayer />
         <MusicPlayer />
+        <PodcastProgressTracker />
         <AddToPlaylistSheet />
       </div>
     );
