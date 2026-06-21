@@ -167,36 +167,58 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const endedRef = useRef(handleEnded); endedRef.current = handleEnded;
   const skipRef = useRef(next); skipRef.current = next;
 
-  // ── init the hidden YouTube player once ──
+  // ── Hidden YouTube player via a PLAIN EMBED + postMessage ──
+  // The IFrame API (YT.Player) loads but refuses to play on the Capacitor
+  // https://localhost origin (0:00). A plain /embed/ iframe plays reliably (it's
+  // what the podcast "Watch" uses), so we drive that directly with postMessage.
+  // `playerRef.current` is a SHIM exposing the same methods the rest of the code
+  // already calls (loadVideoById / playVideo / pauseVideo / seekTo / getCurrentTime
+  // / getDuration), so no other call site changes.
   useEffect(() => {
-    let cancelled = false;
-    loadYT().then((YT) => {
-      if (cancelled || playerRef.current) return;
-      playerRef.current = new YT.Player('sahrae-yt-player', {
-        height: '1', width: '1',
-        // NOTE: no `origin` param — on the Capacitor https://localhost origin the
-        // IFrame API origin handshake fails (player loads but won't play → 0:00),
-        // while a plain embed plays fine. Omitting origin lets it play.
-        playerVars: { autoplay: 1, controls: 0, disablekb: 1, playsinline: 1, rel: 0 },
-        events: {
-          onReady: () => {
-            readyRef.current = true;
-            if (pendingRef.current) { playerRef.current.loadVideoById(pendingRef.current); pendingRef.current = null; }
-          },
-          onStateChange: (e: any) => {
-            // ENDED 0 · PLAYING 1 · PAUSED 2 · BUFFERING 3
-            if (e.data === 1) {
-              setIsPlaying(true); setBuffering(false); setActive(true);
-              window.dispatchEvent(new CustomEvent('sahrae:audioclaim', { detail: 'music' }));
-            } else if (e.data === 2) { setIsPlaying(false); }
-            else if (e.data === 3) { setBuffering(true); }
-            else if (e.data === 0) { endedRef.current(); }
-          },
-          onError: () => { skipRef.current(); }, // embed disabled / unavailable → skip on
-        },
-      });
-    });
-    return () => { cancelled = true; };
+    const f = document.getElementById('sahrae-yt') as HTMLIFrameElement | null;
+    if (!f) return;
+    const post = (msg: unknown) => { try { f.contentWindow?.postMessage(JSON.stringify(msg), '*'); } catch { /* ignore */ } };
+    const cmd = (func: string, args: unknown[] = []) => post({ event: 'command', func, args });
+
+    playerRef.current = {
+      loadVideoById: (id: string) => { f.src = `https://www.youtube.com/embed/${id}?enablejsapi=1&autoplay=1&playsinline=1&controls=0&rel=0&modestbranding=1&iv_load_policy=3`; },
+      playVideo: () => cmd('playVideo'),
+      pauseVideo: () => cmd('pauseVideo'),
+      stopVideo: () => cmd('stopVideo'),
+      seekTo: (s: number) => cmd('seekTo', [s, true]),
+      getCurrentTime: () => liveRef.current.position,
+      getDuration: () => liveRef.current.duration,
+    };
+    readyRef.current = true;
+
+    // The embed starts posting state once it receives a 'listening' message.
+    const onFrameLoad = () => post({ event: 'listening', id: 1, channel: 'widget' });
+    f.addEventListener('load', onFrameLoad);
+
+    const onMsg = (e: MessageEvent) => {
+      if (typeof e.data !== 'string' || e.origin.indexOf('youtube') < 0) return;
+      let d: { event?: string; info?: { currentTime?: number; duration?: number; playerState?: number } };
+      try { d = JSON.parse(e.data); } catch { return; }
+      if (!d || !d.event) return;
+      if (d.event === 'onError') { skipRef.current(); return; }
+      if ((d.event === 'infoDelivery' || d.event === 'onStateChange') && d.info) {
+        const info = d.info;
+        if (typeof info.currentTime === 'number') { liveRef.current.position = info.currentTime; setPosition(info.currentTime); }
+        if (typeof info.duration === 'number' && info.duration > 0) { liveRef.current.duration = info.duration; setDuration(info.duration); }
+        if (typeof info.playerState === 'number') {
+          const s = info.playerState; // -1 unstarted · 0 ended · 1 playing · 2 paused · 3 buffering · 5 cued
+          if (s === 1) { setIsPlaying(true); setBuffering(false); setActive(true); window.dispatchEvent(new CustomEvent('sahrae:audioclaim', { detail: 'music' })); }
+          else if (s === 2) { setIsPlaying(false); }
+          else if (s === 3) { setBuffering(true); }
+          else if (s === 0) { endedRef.current(); }
+        }
+      }
+    };
+    window.addEventListener('message', onMsg);
+
+    if (pendingRef.current) { playerRef.current.loadVideoById(pendingRef.current); pendingRef.current = null; }
+
+    return () => { window.removeEventListener('message', onMsg); f.removeEventListener('load', onFrameLoad); };
   }, []);
 
   // ── the offline <audio> element (downloaded tracks play here) ──
@@ -462,7 +484,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       {children}
       {/* Hidden YouTube player — 1x1, present in the viewport so it isn't throttled. */}
       <div aria-hidden style={{ position: 'fixed', right: 0, bottom: 0, width: 1, height: 1, opacity: 0, pointerEvents: 'none', zIndex: -1 }}>
-        <div id="sahrae-yt-player" />
+        <iframe id="sahrae-yt" title="Sauti audio" allow="autoplay; encrypted-media" style={{ border: 0, width: '1px', height: '1px' }} />
       </div>
     </Ctx.Provider>
   );
