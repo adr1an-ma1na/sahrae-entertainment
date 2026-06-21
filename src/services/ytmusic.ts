@@ -154,6 +154,11 @@ async function searchRaw(q: string, filter: string): Promise<any[]> {
 export const ytmusic = {
   search: (q: string): Promise<Track[]> => searchRaw(q, 'music_songs').then(mapItems),
 
+  // Video search — used for Podcasts (which live as videos on YouTube). Returns
+  // the same Track shape (id = videoId) so it plays through the music engine for
+  // audio, or via a YouTube embed for video.
+  searchVideos: (q: string): Promise<Track[]> => searchRaw(q, 'videos').then(mapItems),
+
   searchArtists: async (q: string): Promise<Artist[]> => {
     const items = await searchRaw(q, 'music_artists');
     const out: Artist[] = []; const seen = new Set<string>();

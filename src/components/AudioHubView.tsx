@@ -1,6 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Play, Pause, Radio, Headphones } from 'lucide-react';
+import { Play, Pause, Radio, Headphones, Video, X, Loader2, Mic2 } from 'lucide-react';
 import { useRadio } from '../hooks/useRadio';
+import { useMusic } from '../hooks/useMusic';
+import { ytmusic, Track } from '../services/ytmusic';
+import { CoverArt } from './ui/CoverArt';
 import { probeAudio, probeAll } from '../services/streamHealth';
 
 type Health = 'checking' | 'ok' | 'dead';
@@ -33,6 +36,32 @@ const STATIONS = [
 export default function AudioHubView() {
   const [radioCategory, setRadioCategory] = useState<string>('All');
   const { playingUrl, togglePlay } = useRadio();
+  const { playQueue, stop } = useMusic();
+
+  // Podcasts (from YouTube via Piped). Lazy-loaded only when the Podcasts tab is
+  // opened, fetched sequentially through the throttle so it can't starve playback.
+  const [media, setMedia] = useState<'stations' | 'podcasts'>('stations');
+  const [podcasts, setPodcasts] = useState<Track[]>([]);
+  const [podLoading, setPodLoading] = useState(false);
+  const [watch, setWatch] = useState<Track | null>(null);
+
+  useEffect(() => {
+    if (media !== 'podcasts' || podcasts.length) return;
+    let cancelled = false; setPodLoading(true);
+    (async () => {
+      const topics = ['The Diary Of A CEO', 'Joe Rogan Experience', 'African podcast', 'technology podcast', 'business motivation podcast', 'comedy podcast'];
+      const out: Track[] = []; const seen = new Set<string>();
+      for (const q of topics) {
+        const r = await ytmusic.searchVideos(q).catch(() => [] as Track[]);
+        if (cancelled) return;
+        for (const t of r.slice(0, 6)) if (!seen.has(t.id)) { seen.add(t.id); out.push(t); }
+        if (!cancelled) setPodcasts([...out]);
+      }
+      if (!cancelled) setPodLoading(false);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [media]);
 
   // On-device health: probe every station on the user's real network and hide
   // any that won't play. Dead ones hide only once ≥1 station has verified, so a
@@ -65,10 +94,21 @@ export default function AudioHubView() {
         </div>
         <div>
           <h2 className="text-3xl font-display font-bold text-white leading-tight tracking-tight">Radio</h2>
-          <p className="text-sm text-zinc-400">Live radio · news · music stations</p>
+          <p className="text-sm text-zinc-400">Live stations · podcasts · news · music</p>
         </div>
       </div>
 
+      {/* Media type tabs */}
+      <div className="flex gap-1 glass p-1 rounded-xl w-fit mb-6">
+        {(['stations', 'podcasts'] as const).map((t) => (
+          <button key={t} onClick={() => setMedia(t)} tabIndex={0} data-tv-focusable
+            className={`px-5 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2 ${media === t ? 'bg-sauti text-amber-950' : 'text-zinc-400 hover:text-white'}`}>
+            {t === 'stations' ? <><Radio className="w-4 h-4" /> Stations</> : <><Mic2 className="w-4 h-4" /> Podcasts</>}
+          </button>
+        ))}
+      </div>
+
+      {media === 'stations' ? (
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
         {/* Category pills — gold active state, matching the Sauti tabs */}
         <div className="flex overflow-x-auto gap-2 pb-4 scrollbar-hide mb-6 border-b border-white/5">
@@ -131,6 +171,42 @@ export default function AudioHubView() {
           })}
         </div>
       </div>
+      ) : (
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+          {podcasts.length === 0 && podLoading ? (
+            <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3 text-zinc-400"><Loader2 className="w-9 h-9 animate-spin text-amber-500" /><span>Loading podcasts…</span></div>
+          ) : podcasts.length === 0 ? (
+            <p className="text-zinc-500 py-10 text-center">Couldn't load podcasts right now. Try again shortly.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {podcasts.map((p) => (
+                <div key={p.id} className="card-lift tier-card rounded-2xl p-3 group flex flex-col">
+                  <div className="aspect-video rounded-xl overflow-hidden mb-3 relative bg-zinc-800">
+                    <CoverArt imageUrl={p.artwork} dominantColor={p.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
+                    <button onClick={() => { stop(); setWatch(p); }} className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity" aria-label="Watch"><span className="btn-sauti px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1"><Video className="w-4 h-4" /> Watch</span></button>
+                  </div>
+                  <h3 className="text-sm font-bold text-white line-clamp-2 mb-1">{p.title}</h3>
+                  <p className="text-xs text-zinc-500 truncate mb-3">{p.artist}</p>
+                  <div className="flex gap-2 mt-auto">
+                    <button onClick={() => playQueue([p], 0, 'Podcasts')} tabIndex={0} data-tv-focusable className="btn-sauti flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5"><Headphones className="w-4 h-4" /> Listen</button>
+                    <button onClick={() => { stop(); setWatch(p); }} tabIndex={0} data-tv-focusable className="btn-glass px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5"><Video className="w-4 h-4" /> Watch</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {watch && (
+        <div role="dialog" data-tv-layer className="dark fixed inset-0 z-[140] bg-black flex flex-col animate-in fade-in duration-200">
+          <div className="flex items-center gap-3 px-3 pt-[calc(env(safe-area-inset-top)+0.5rem)] pb-2.5 glass">
+            <p className="text-white font-bold text-sm truncate flex-1">{watch.title}</p>
+            <button onClick={() => setWatch(null)} data-tv-close tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full glass-liquid flex items-center justify-center text-white shrink-0" aria-label="Close"><X className="w-5 h-5" /></button>
+          </div>
+          <iframe src={`https://www.youtube.com/embed/${watch.id}?autoplay=1&playsinline=1`} title="Podcast" className="flex-1 w-full bg-black border-0" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />
+        </div>
+      )}
     </div>
   );
 }
