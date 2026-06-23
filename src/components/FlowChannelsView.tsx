@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import ReactPlayer from 'react-player';
-import { Play, Info, Flame, Ghost, Heart, Rocket, Compass, Layers, Tv, Volume2, VolumeX, AlertCircle } from 'lucide-react';
+import { Play, Flame, Ghost, Heart, Rocket, Compass, Layers, Tv, Volume2, VolumeX, AlertCircle } from 'lucide-react';
 import { fetchDiscover, fetchMediaDetails, getImageUrl, MediaDetails } from '../services/tmdb';
 
 const CHANNELS = [
@@ -23,7 +22,7 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
   
   const [playlist, setPlaylist] = useState<MediaDetails[]>([]);
   const playlistIndexRef = useRef(0);
-  const playerRef = useRef<any>(null);
+  const ytFrameRef = useRef<HTMLIFrameElement>(null);
   const [showOverlay, setShowOverlay] = useState(true);
   const overlayTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   // Real movie poster per channel for the guide tiles (instead of a flat icon).
@@ -136,13 +135,44 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
     playlistIndexRef.current += 1;
     playNext();
   };
+  // Keep a live ref so the (mount-only) postMessage listener always advances the
+  // CURRENT playlist, not a stale closure.
+  const handleEndedRef = useRef(handleEnded);
+  handleEndedRef.current = handleEnded;
 
-  const handleError = () => {
-    console.log("Video error, skipping...");
-    handleEnded();
+  // Drive the plain YouTube /embed/ iframe (the path that actually plays in this
+  // WebView — the IFrame-API/ReactPlayer path renders 0:00 on https://localhost).
+  const post = (func: string, args: unknown[] = []) => {
+    try { ytFrameRef.current?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func, args }), '*'); } catch { /* ignore */ }
   };
+  const toggleMute = () => { const n = !muted; setMuted(n); post(n ? 'mute' : 'unMute'); };
+
+  // Listen for the embed's state changes (handshake sent on iframe load).
+  useEffect(() => {
+    const onMsg = (e: MessageEvent) => {
+      if (typeof e.data !== 'string') return;
+      let d: any; try { d = JSON.parse(e.data); } catch { return; }
+      const st = d?.event === 'onStateChange' ? d.info
+        : d?.event === 'infoDelivery' && d.info && typeof d.info.playerState === 'number' ? d.info.playerState
+        : undefined;
+      if (st === undefined) return;
+      if (st === 1) setIsActuallyPlaying(true);
+      else if (st === 2) setIsActuallyPlaying(false);
+      else if (st === 0) handleEndedRef.current(); // ended → next in channel
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+
+  // If a trailer never starts within 15s, skip to the next so a channel never stalls.
+  useEffect(() => {
+    if (!videoUrl || isActuallyPlaying) return;
+    const t = setTimeout(() => handleEndedRef.current(), 15000);
+    return () => clearTimeout(t);
+  }, [videoUrl, isActuallyPlaying]);
 
   const activeChannel = CHANNELS.find(c => c.id === activeChannelId);
+  const ytId = videoUrl ? (videoUrl.match(/[?&]v=([^&]+)/)?.[1] || '') : '';
 
   return (
     <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-[1600px] mx-auto pb-12">
@@ -180,31 +210,17 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
               </div>
             )}
 
-            {videoUrl && (
-              <div className="absolute inset-0 z-0">
-                <ReactPlayer
-                  ref={playerRef}
-                  url={videoUrl}
-                  width="100%"
-                  height="100%"
-                  playing={true}
-                  muted={muted}
-                  controls={false}
-                  onPlay={() => setIsActuallyPlaying(true)}
-                  onPause={() => setIsActuallyPlaying(false)}
-                  onEnded={handleEnded}
-                  onError={handleError}
-                  config={{ 
-                    youtube: { 
-                      playerVars: { 
-                        showinfo: 0, 
-                        modestbranding: 1, 
-                        rel: 0,
-                        disablekb: 1
-                      } 
-                    } 
-                  }}
-                  style={{ pointerEvents: 'none' }} // Prevent clicking the youtube iframe directly
+            {ytId && (
+              <div className="absolute inset-0 z-0 pointer-events-none">
+                <iframe
+                  key={ytId}
+                  ref={ytFrameRef}
+                  src={`https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&controls=0&playsinline=1&enablejsapi=1&rel=0&modestbranding=1&iv_load_policy=3&disablekb=1&fs=0`}
+                  title="Flow Channel"
+                  className="w-full h-full border-none bg-black"
+                  allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
+                  // Handshake so the embed emits state events; honour the unmuted state.
+                  onLoad={() => { try { ytFrameRef.current?.contentWindow?.postMessage(JSON.stringify({ event: 'listening' }), '*'); } catch { /* ignore */ } if (!muted) post('unMute'); }}
                 />
               </div>
             )}
@@ -214,9 +230,9 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
               
               <div className="absolute top-6 right-6 flex items-center gap-3">
                 {isActuallyPlaying && (
-                  <button 
-                    onClick={() => setMuted(!muted)}
-                    className="p-3 bg-black/50 hover:bg-black/80 backdrop-blur-md rounded-full text-white transition-colors"
+                  <button
+                    onClick={toggleMute}
+                    className="p-3 bg-black/50 hover:bg-black/80 backdrop-blur-md rounded-full text-white transition-colors pointer-events-auto"
                   >
                     {muted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
                   </button>

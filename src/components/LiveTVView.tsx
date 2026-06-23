@@ -67,18 +67,25 @@ function HLSPlayer({ src, onOffline }: { src: string; onOffline: () => void }) {
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    let usingProxy = false;
-    let started = false;
     let hls: Hls | null = null;
+    let started = false;
+    let attempt = 0;
+    // Proxy FIRST — the native HLS proxy binds the CDN token to this device and
+    // sidesteps CORS/mixed-content (exactly how Sports streams play). Only if the
+    // proxy fails do we try the URL direct, then report offline. (Was direct-first
+    // with a 13s wait, which made working channels look broken on https://localhost.)
+    const urls = [proxied(src), src];
+    let watchdog: ReturnType<typeof setTimeout>;
 
-    const startWatchdog = () => setTimeout(() => { if (!started) attempt(true); }, 13000);
-    let watchdog = startWatchdog();
+    const fail = () => {
+      attempt += 1;
+      if (attempt >= urls.length) { cleanup(); offRef.current(); return; }
+      load(urls[attempt]);
+    };
 
-    const attempt = (escalate: boolean) => {
-      if (escalate && usingProxy) { cleanup(); offRef.current(); return; }
-      if (escalate) usingProxy = true;
+    const load = (url: string) => {
       clearTimeout(watchdog);
-      const url = usingProxy ? proxied(src) : src;
+      started = false;
       if (hls) { hls.destroy(); hls = null; }
       if (Hls.isSupported()) {
         hls = new Hls({
@@ -97,19 +104,19 @@ function HLSPlayer({ src, onOffline }: { src: string; onOffline: () => void }) {
         hls.on(Hls.Events.FRAG_BUFFERED, () => { started = true; });
         hls.on(Hls.Events.ERROR, (_e, data) => {
           if (!data.fatal) return;
-          const dead = String(data.details || '').includes('manifestLoad');
-          if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls?.recoverMediaError();
-          else if (dead) attempt(true);
-          else hls?.startLoad();
+          if (data.type === Hls.ErrorTypes.MEDIA_ERROR) { hls?.recoverMediaError(); return; }
+          const transientNet = data.type === Hls.ErrorTypes.NETWORK_ERROR && !String(data.details || '').includes('manifestLoad');
+          if (transientNet) hls?.startLoad(); else fail();
         });
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         video.src = url;
         video.play().catch(() => {});
+        video.onerror = () => fail();
       }
-      watchdog = startWatchdog();
+      watchdog = setTimeout(() => { if (!started) fail(); }, 12000);
     };
     const cleanup = () => { clearTimeout(watchdog); if (hls) hls.destroy(); };
-    attempt(false);
+    load(urls[0]);
     return cleanup;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src]);

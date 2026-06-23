@@ -166,13 +166,19 @@ const SPORT_DURATION_MS: Record<string, number> = {
 /** An event counts as "live" from 10 min before its start time (feeds flip the
  *  live flag late) until its typical runtime elapses — so the LIVE state shows
  *  even when the provider hasn't marked it yet. */
+const LIVE_OVERRUN_MS = 0.5 * HR; // 30-min grace past expected end for overruns
+
 function eventIsLive(m: FeedEvent): boolean {
+  if (!m.date) return !!m.live;
+  const now = Date.now();
+  const dur = SPORT_DURATION_MS[m.category] ?? 3 * HR;
+  // Past its runtime + grace → it's OVER. Ignore a stale feed `live` flag so a
+  // finished match never lingers with a LIVE badge.
+  if (now > m.date + dur + LIVE_OVERRUN_MS) return false;
   // Feed-confirmed live always shows (openEvent always adds a channel fallback,
   // so there's always something to watch).
   if (m.live) return true;
-  if (!m.date) return false;
-  const now = Date.now();
-  const inWindow = now >= m.date - 10 * 60_000 && now <= m.date + (SPORT_DURATION_MS[m.category] ?? 3 * HR);
+  const inWindow = now >= m.date - 10 * 60_000 && now <= m.date + dur;
   // Only show an UPCOMING event as live early if it actually has stream servers —
   // never present a "live" event with nothing to watch.
   return inWindow && !!(m.embeds && m.embeds.length > 0);
@@ -331,7 +337,16 @@ export default function SportsView() {
 
   const base = feed?.base || 'https://streamed.pk';
   const badge = (b?: string) => (b ? `${base}/api/images/badge/${b}.webp` : '');
-  const eventTime = (d: number) => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  // Date + time so users know WHEN, not just the clock — "Today · 14:30",
+  // "Tomorrow · 09:00", or "Sat 28 Jun · 18:00" for later days.
+  const eventTime = (d: number) => {
+    const dt = new Date(d);
+    const t = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const midnight = (x: Date) => { const c = new Date(x); c.setHours(0, 0, 0, 0); return c.getTime(); };
+    const diff = Math.round((midnight(dt) - midnight(new Date())) / 86_400_000);
+    const day = diff === 0 ? 'Today' : diff === 1 ? 'Tomorrow' : dt.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+    return `${day} · ${t}`;
+  };
   const matchTitle = (m: FeedEvent) =>
     m.teams?.home?.name && m.teams?.away?.name ? `${m.teams.home.name} vs ${m.teams.away.name}` : m.title;
 
@@ -423,9 +438,9 @@ export default function SportsView() {
       if (m.date > now) return true;     // upcoming
       const dur = SPORT_DURATION_MS[m.category] ?? 3 * HR;
       const elapsed = now - m.date;
-      // Live events may overrun → +1h grace; otherwise drop once past its runtime
-      // so finished matches don't keep showing as if they're still on.
-      return m.live ? elapsed <= dur + HR : elapsed <= dur;
+      // Drop once past its runtime (+30-min overrun grace, even for feed-"live"
+      // events) so finished matches leave the list instead of lingering for hours.
+      return elapsed <= dur + LIVE_OVERRUN_MS;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feed]);
