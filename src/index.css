@@ -629,3 +629,11 @@ html.tv-mode {
     box-shadow: inset 0 2px 0 rgba(255,255,255,.75), inset 0 -12px 26px rgba(255,255,255,.12), 0 12px 34px rgba(0,0,0,.5);
   }
 }
+
+/* When the desktop/TV sidebar is hidden, reclaim its width: zero the shell
+   offsets (main padding + the fixed navbar / mini-player left inset). Only the
+   shell uses these exact utilities, so this is safe and targeted. */
+@media (min-width: 1024px) {
+  html.nav-collapsed .lg\:pl-64 { padding-left: 0 !important; }
+  html.nav-collapsed .lg\:left-64 { left: 0 !important; }
+}

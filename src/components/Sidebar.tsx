@@ -1,4 +1,4 @@
-import { Home, Search, Music2, Radio, Film, Tv2, Clapperboard, Trophy, Heart, Clock, Download, Library } from 'lucide-react';
+import { Home, Search, Music2, Radio, Film, Tv2, Clapperboard, Trophy, Heart, Clock, Download, Library, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
 /**
  * Desktop left sidebar (Spotify-style). Visible on lg+; the BottomTabBar takes
@@ -25,7 +25,7 @@ const LIBRARY = [
   { id: 'downloads', label: 'Downloads', icon: Download },
 ];
 
-export default function Sidebar({ activeTab, setActiveTab }: { activeTab: string; setActiveTab: (t: string) => void }) {
+export default function Sidebar({ activeTab, setActiveTab, collapsed = false, onToggle }: { activeTab: string; setActiveTab: (t: string) => void; collapsed?: boolean; onToggle?: () => void }) {
   const renderNav = (items: { id: string; label: string; icon: typeof Home }[]) =>
     items.map((t) => {
       const Icon = t.icon;
@@ -42,21 +42,35 @@ export default function Sidebar({ activeTab, setActiveTab }: { activeTab: string
     });
 
   return (
-    <aside className="hidden lg:flex flex-col fixed left-0 top-0 bottom-0 w-64 z-40 glass border-r border-white/10 pt-[env(safe-area-inset-top)]">
-      <div className="px-5 pt-5 pb-4">
-        <h1 className="text-2xl font-black tracking-tighter cursor-pointer whitespace-nowrap" onClick={() => setActiveTab('home')}>
-          <span className="text-gold">SAHRAE</span>
-        </h1>
-      </div>
+    <>
+      {/* Reveal button — only on lg+ and only while the sidebar is hidden. */}
+      {collapsed && (
+        <button onClick={onToggle} tabIndex={0} data-tv-focusable aria-label="Show sidebar"
+          className="hidden lg:flex fixed top-[calc(env(safe-area-inset-top)+0.6rem)] left-3 z-50 w-10 h-10 items-center justify-center rounded-full glass border border-white/10 text-white hover:text-sauti shadow-lg">
+          <PanelLeftOpen className="w-5 h-5" />
+        </button>
+      )}
 
-      <nav className="px-3 space-y-1">{renderNav(PRIMARY)}</nav>
+      <aside className={`hidden lg:flex flex-col fixed left-0 top-0 bottom-0 w-64 z-40 glass border-r border-white/10 pt-[env(safe-area-inset-top)] transition-transform duration-300 ${collapsed ? '-translate-x-full' : 'translate-x-0'}`}>
+        <div className="px-5 pt-5 pb-4 flex items-center justify-between">
+          <h1 className="text-2xl font-black tracking-tighter cursor-pointer whitespace-nowrap" onClick={() => setActiveTab('home')}>
+            <span className="text-gold">SAHRAE</span>
+          </h1>
+          <button onClick={onToggle} tabIndex={0} data-tv-focusable aria-label="Hide sidebar"
+            className="w-9 h-9 flex items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-white/10 transition-colors">
+            <PanelLeftClose className="w-5 h-5" />
+          </button>
+        </div>
 
-      <div className="mt-6 px-3 flex-1 overflow-y-auto custom-scrollbar pb-4">
-        <div className="overline px-3 mb-1.5">Browse</div>
-        <nav className="space-y-1 mb-5">{renderNav(BROWSE)}</nav>
-        <div className="overline px-3 mb-1.5 flex items-center gap-2"><Library className="w-3.5 h-3.5" /> Your Library</div>
-        <nav className="space-y-1">{renderNav(LIBRARY)}</nav>
-      </div>
-    </aside>
+        <nav className="px-3 space-y-1">{renderNav(PRIMARY)}</nav>
+
+        <div className="mt-6 px-3 flex-1 overflow-y-auto custom-scrollbar pb-4">
+          <div className="overline px-3 mb-1.5">Browse</div>
+          <nav className="space-y-1 mb-5">{renderNav(BROWSE)}</nav>
+          <div className="overline px-3 mb-1.5 flex items-center gap-2"><Library className="w-3.5 h-3.5" /> Your Library</div>
+          <nav className="space-y-1">{renderNav(LIBRARY)}</nav>
+        </div>
+      </aside>
+    </>
   );
 }

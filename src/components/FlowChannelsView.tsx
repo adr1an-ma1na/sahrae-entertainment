@@ -26,10 +26,28 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
   const playerRef = useRef<any>(null);
   const [showOverlay, setShowOverlay] = useState(true);
   const overlayTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Real movie poster per channel for the guide tiles (instead of a flat icon).
+  const [channelArt, setChannelArt] = useState<Record<string, string>>({});
 
   useEffect(() => {
     loadChannel(activeChannelId);
   }, [activeChannelId]);
+
+  // Fetch a representative poster for each themed channel once, for the guide.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(CHANNELS.map(async (c) => {
+        try {
+          const res = await fetchDiscover('movie', 1, c.genreId);
+          const withArt = res.find((m) => m.poster_path || m.backdrop_path);
+          return [c.id, withArt ? getImageUrl(withArt.poster_path || withArt.backdrop_path, 'w300') : ''] as const;
+        } catch { return [c.id, ''] as const; }
+      }));
+      if (!cancelled) setChannelArt(Object.fromEntries(entries.filter(([, u]) => u)));
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     // Auto-hide overlay after 5 seconds of no mouse movement
@@ -282,8 +300,12 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
                       : 'bg-zinc-950/50 border-transparent hover:bg-zinc-800/80 hover:border-white/10'
                   }`}
                 >
-                  <div className={`w-12 h-12 rounded-lg flex items-center justify-center bg-gradient-to-br ${channel.color} shrink-0 shadow-inner`}>
-                    <Icon className="w-6 h-6 text-white" />
+                  <div className={`w-12 h-12 rounded-lg overflow-hidden relative flex items-center justify-center bg-gradient-to-br ${channel.color} shrink-0 shadow-inner`}>
+                    {channelArt[channel.id] ? (
+                      <img src={channelArt[channel.id]} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+                    ) : (
+                      <Icon className="w-6 h-6 text-white" />
+                    )}
                   </div>
                   <div className="text-left flex-1">
                     <h4 className={`font-bold ${isActive ? 'text-white' : 'text-zinc-300'}`}>{channel.name}</h4>

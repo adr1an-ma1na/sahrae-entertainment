@@ -14,6 +14,8 @@ const CHANNELS: Channel[] = [
   // News
   { name: 'Al Jazeera English', country: 'Qatar', category: 'News', url: 'https://live-hls-web-aje.getaj.net/AJE/01.m3u8' },
   { name: 'Al Jazeera Arabic', country: 'Qatar', category: 'News', url: 'https://live-hls-web-aja.getaj.net/AJA/01.m3u8' },
+  { name: 'Sky News', country: 'UK', category: 'News', url: 'https://skynews2-plutolive-vo.akamaized.net/cdhlsskynewsamericas/1013/latest.m3u8' },
+  { name: 'Bloomberg TV', country: 'USA', category: 'News', url: 'https://bloomberg-bloomberg-1-gb.samsung.wurl.tv/playlist.m3u8' },
   { name: 'DW English', country: 'Germany', category: 'News', url: 'https://dwamdstream102.akamaized.net/hls/live/2015525/dwstream102/index.m3u8' },
   { name: 'France 24', country: 'France', category: 'News', url: 'https://static.france24.com/live/F24_EN_HI_HLS/live_web.m3u8' },
   { name: 'TRT World', country: 'Turkey', category: 'News', url: 'https://tv-trtworld.live.trt.com.tr/master_720.m3u8' },

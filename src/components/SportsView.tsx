@@ -111,6 +111,29 @@ function channelForSport(sport: string): Channel {
   else if (sport === 'motor-sports') cat = 'Motorsport';
   return CHANNELS.find((c) => c.category === cat) || CHANNELS[0];
 }
+/** Guaranteed-reliable fallback channels so an event ALWAYS has something to
+ *  watch: the sport's own channel first, then universal always-on HD feeds. A
+ *  dead one cascades to the next (see onUnplayable). */
+function fallbackChannels(sport: string): Channel[] {
+  const primary = channelForSport(sport);
+  const universal = ['Red Bull TV', 'Fubo Sports', 'Stadium', 'FIFA+']
+    .map((n) => CHANNELS.find((c) => c.name === n))
+    .filter((c): c is Channel => !!c && c.name !== primary.name);
+  return [primary, ...universal];
+}
+
+const initials = (n: string) => n.replace(/[^A-Za-z0-9 ]/g, '').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+const SPORT_EMOJI: Record<string, string> = {
+  football: '⚽', 'american-football': '🏈', basketball: '🏀', baseball: '⚾', hockey: '🏒',
+  'motor-sports': '🏎️', fight: '🥊', tennis: '🎾', cricket: '🏏', golf: '⛳', rugby: '🏉', darts: '🎯', other: '🏆',
+};
+/** Team crest with a graceful fallback: shows the badge image, but if it's
+ *  missing or 404s, draws the team's initials so every event has a logo. */
+function TeamLogo({ name, src }: { name: string; src?: string }) {
+  const [err, setErr] = useState(false);
+  if (src && !err) return <img src={src} alt="" onError={() => setErr(true)} className="w-10 h-10 object-contain" loading="lazy" />;
+  return <div className="w-10 h-10 rounded-full bg-gradient-to-br from-zinc-700 to-zinc-800 border border-white/10 flex items-center justify-center text-[11px] font-extrabold text-white">{initials(name) || '?'}</div>;
+}
 
 interface FeedEvent {
   id: string;
@@ -347,18 +370,21 @@ export default function SportsView() {
   }, []);
 
   const openEvent = (m: FeedEvent) => {
-    const ch = channelForSport(m.category);
     const tokens = eventTokens(m);
     const servers: Source[] = (m.embeds || []).slice(0, 6).map((embed, i) => ({
       id: `srv-${i}`, label: `Server ${i + 1}`, kind: 'server', embed, status: 'idle',
     }));
-    const channel: Source = { id: 'ch', label: `📺 ${ch.name}`, kind: 'channel', url: ch.url, status: 'ready' };
-    const sources = [...servers, channel];
+    // MULTIPLE guaranteed channels so a live event NEVER opens with nothing to
+    // watch — and if one channel is down it cascades to the next.
+    const channels: Source[] = fallbackChannels(m.category).map((ch, i) => ({
+      id: `ch-${i}`, label: `📺 ${ch.name}`, kind: 'channel', url: ch.url, status: 'ready',
+    }));
+    const sources = [...servers, ...channels];
 
-    // The reliable channel plays the INSTANT you open — no spinner, no waiting.
-    // Servers are all listed immediately; we quietly resolve the first few so the
-    // exact match can take over on its own, and any server is one tap away.
-    setPlaying({ title: matchTitle(m), tokens, sources, idx: sources.length - 1 });
+    // The first reliable channel plays the INSTANT you open — no spinner, no
+    // waiting. Servers are all listed immediately; we quietly resolve the first
+    // few so the exact match can take over on its own, any server one tap away.
+    setPlaying({ title: matchTitle(m), tokens, sources, idx: servers.length });
     servers.slice(0, 3).forEach((s) => resolveServer(s.id, s.embed!, tokens, true));
   };
 
@@ -379,8 +405,11 @@ export default function SportsView() {
     setPlaying((p) => {
       if (!p) return p;
       const sources = p.sources.map((s, i) => (i === p.idx ? { ...s, status: 'failed' as SrcStatus, url: undefined } : s));
-      const chIdx = sources.findIndex((s) => s.kind === 'channel');
-      return { ...p, sources, idx: chIdx >= 0 ? chIdx : p.idx };
+      // Cascade to the next working channel after the current one (or the first
+      // working channel) so we never strand the viewer on a dead source.
+      const chans = sources.map((s, i) => ({ s, i })).filter((x) => x.s.kind === 'channel' && x.s.status !== 'failed');
+      const next = chans.find((x) => x.i > p.idx) || chans[0];
+      return { ...p, sources, idx: next ? next.i : p.idx };
     });
   }, []);
 
@@ -459,17 +488,20 @@ export default function SportsView() {
         {home?.name && away?.name ? (
           <div className="flex items-center justify-center gap-3 py-1">
             <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
-              {home.badge ? <img src={badge(home.badge)} alt="" className="w-10 h-10 object-contain" loading="lazy" /> : <div className="w-10 h-10 rounded-full bg-zinc-800" />}
+              <TeamLogo name={home.name} src={home.badge ? badge(home.badge) : undefined} />
               <span className="text-xs font-semibold text-white text-center line-clamp-2">{home.name}</span>
             </div>
             <span className="text-zinc-500 text-xs font-bold">vs</span>
             <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
-              {away.badge ? <img src={badge(away.badge)} alt="" className="w-10 h-10 object-contain" loading="lazy" /> : <div className="w-10 h-10 rounded-full bg-zinc-800" />}
+              <TeamLogo name={away.name} src={away.badge ? badge(away.badge) : undefined} />
               <span className="text-xs font-semibold text-white text-center line-clamp-2">{away.name}</span>
             </div>
           </div>
         ) : (
-          <h3 className="text-sm font-bold text-white leading-snug line-clamp-2 min-h-[40px] group-hover:text-amber-400 transition-colors">{m.title}</h3>
+          <div className="flex items-center gap-3 py-1 min-h-[40px]">
+            <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-xl shrink-0">{SPORT_EMOJI[m.category] || '🏆'}</div>
+            <h3 className="text-sm font-bold text-white leading-snug line-clamp-2 group-hover:text-amber-400 transition-colors">{m.title}</h3>
+          </div>
         )}
         <button className="mt-3 w-full py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm font-bold bg-white/10 text-white group-hover:bg-amber-500 group-hover:text-amber-950 transition-all pointer-events-none">
           <Play className="w-4 h-4 fill-current" /> Watch

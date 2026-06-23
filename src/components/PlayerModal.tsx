@@ -120,14 +120,17 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     };
   }, [isOpen, isPlaying]);
 
+  // Server priority per user: VidLink → VidZee → VidRock, then the most reliable
+  // high-quality embeds. Dropped VidLink-API (returns JSON, not a player) and the
+  // flaky AutoEmbed; added VidSrc.cc + VidFast (4K/HD, multi-audio).
   const SERVERS = [
-    { id: 'vidrock', name: 'Server 1 (VidRock)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidrock.ru/embed/movie/${id}` : `https://vidrock.ru/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
+    { id: 'vidlink', name: 'Server 1 (VidLink)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidlink.pro/movie/${id}?primaryColor=f59e0b&autoplay=true` : `https://vidlink.pro/tv/${id}/${s}/${e}?primaryColor=f59e0b&autoplay=true&nextbutton=false`, type: 'iframe' },
     { id: 'vidzee', name: 'Server 2 (VidZee)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://player.vidzee.wtf/embed/movie/${id}` : `https://player.vidzee.wtf/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
-    { id: 'vidlink', name: 'Server 3 (VidLink)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidlink.pro/movie/${id}?primaryColor=f59e0b&autoplay=false` : `https://vidlink.pro/tv/${id}/${s}/${e}?primaryColor=f59e0b&autoplay=true&nextbutton=false`, type: 'iframe' },
-    { id: 'vidlinkapi', name: 'Server 4 (VidLink API)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidlink.pro/api/movie/${id}` : `https://vidlink.pro/api/tv/${id}/${s}/${e}`, type: 'iframe' },
-    { id: 'vidsrcto', name: 'Server 5 (VidSrc To)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.to/embed/movie/${id}` : `https://vidsrc.to/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
-    { id: 'vidsrcpm', name: 'Server 6 (VidSrc PM)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.pm/embed/movie?tmdb=${id}` : `https://vidsrc.pm/embed/tv?tmdb=${id}&season=${s}&episode=${e}`, type: 'iframe' },
-    { id: 'autoembedco', name: 'Server 7 (AutoEmbed Co)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://autoembed.co/movie/tmdb/${id}` : `https://autoembed.co/tv/tmdb/${id}-${s}-${e}`, type: 'iframe' },
+    { id: 'vidrock', name: 'Server 3 (VidRock)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidrock.ru/embed/movie/${id}` : `https://vidrock.ru/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
+    { id: 'vidsrccc', name: 'Server 4 (VidSrc CC)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.cc/v2/embed/movie/${id}?autoPlay=true` : `https://vidsrc.cc/v2/embed/tv/${id}/${s}/${e}?autoPlay=true`, type: 'iframe' },
+    { id: 'vidfast', name: 'Server 5 (VidFast)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidfast.pro/movie/${id}?theme=f59e0b&autoPlay=true` : `https://vidfast.pro/tv/${id}/${s}/${e}?theme=f59e0b&autoPlay=true`, type: 'iframe' },
+    { id: 'vidsrcto', name: 'Server 6 (VidSrc To)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.to/embed/movie/${id}` : `https://vidsrc.to/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
+    { id: 'vidsrcpm', name: 'Server 7 (VidSrc PM)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.pm/embed/movie?tmdb=${id}` : `https://vidsrc.pm/embed/tv?tmdb=${id}&season=${s}&episode=${e}`, type: 'iframe' },
     { id: 'vidsrcicu', name: 'Server 8 (VidSrc ICU)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.icu/embed/movie/${id}` : `https://vidsrc.icu/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
   ];
 
@@ -313,6 +316,14 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
               </div>
             ) : isPlaying ? (
               <div ref={playerContainerRef} className="absolute inset-0 z-10 bg-black group" onMouseMove={handleMouseMove} onMouseLeave={() => setShowControls(false)}>
+                {/* Always-visible Back — reverses an accidental Play / lets you bail
+                    out anytime. Drops out of fullscreen and returns to details. */}
+                <button onClick={() => { setIsPlaying(false); const d = document as any; if (d.fullscreenElement || d.webkitFullscreenElement) { try { (d.exitFullscreen || d.webkitExitFullscreen)?.call(document); } catch { /* noop */ } } }}
+                  data-tv-focusable tabIndex={0}
+                  className="absolute top-4 left-4 z-40 flex items-center gap-1.5 px-3.5 py-2 bg-black/60 hover:bg-black/85 backdrop-blur rounded-full text-white text-sm font-semibold border border-white/20 shadow-lg transition-colors active:scale-95"
+                  title="Back to details">
+                  <ArrowLeft className="w-4 h-4" /> Back
+                </button>
                 {['m3u8', 'youtube'].includes(currentServerObj?.type || '') ? (
                   <div className="w-full h-full absolute inset-0">
                     {(() => {
@@ -339,7 +350,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                     title="Video Player"
                   />
                 )}
-                {isSandboxed && (['vidlink', 'vidlinkapi', 'vidsrcto', 'vidsrcpm', 'autoembedco', 'vidrock', 'vidsrcicu', 'vidzee'].includes(currentServerObj.id)) && (
+                {isSandboxed && (['vidlink', 'vidsrccc', 'vidfast', 'vidsrcto', 'vidsrcpm', 'vidrock', 'vidsrcicu', 'vidzee'].includes(currentServerObj.id)) && (
                   <div className="absolute top-0 left-0 w-full z-40 bg-[#e50914]/95 text-white text-xs md:text-sm font-bold px-4 py-3 flex flex-col md:flex-row items-center justify-center gap-3 md:gap-4 text-center backdrop-blur shadow-2xl border-b border-white/20 animate-in slide-in-from-top-2">
                     <AlertCircle className="w-5 h-5 shrink-0" />
                     <span>Google AI Studio's preview window secretly blocks this server. <b>Sahrae works perfectly on its own tab!</b></span>
@@ -352,7 +363,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                 {/* Floating "Next Episode" button overlay at 90% completion (for APIs that emit progress) or on hover for TV shows */}
                 {currentMediaType === 'tv' && hasNextEpisode() && currentServerObj.type !== 'youtube' && (
                   <div className={`absolute bottom-24 right-4 z-50 transition-all duration-500 ${
-                    (currentServerObj.id === 'vidlink' || currentServerObj.id === 'vidlinkapi')
+                    (currentServerObj.id === 'vidlink' || currentServerObj.id === 'vidsrccc')
                       ? (showNextEpisodeOverlay ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-4 pointer-events-none')
                       : 'opacity-50 hover:opacity-100 translate-y-0 pointer-events-auto'
                   }`}>

@@ -46,6 +46,13 @@ export default function App() {
   });
   const [activeTab, setActiveTab] = useState('home');
   const [searchQuery, setSearchQuery] = useState('');
+  // Desktop/TV sidebar can be hidden to reclaim the full width; the CSS class
+  // `nav-collapsed` (index.css) zeroes the lg:pl-64 / lg:left-64 shell offsets.
+  const [navCollapsed, setNavCollapsed] = useState<boolean>(() => { try { return localStorage.getItem('sahrae.navCollapsed') === '1'; } catch { return false; } });
+  useEffect(() => {
+    try { localStorage.setItem('sahrae.navCollapsed', navCollapsed ? '1' : '0'); } catch { /* ignore */ }
+    document.documentElement.classList.toggle('nav-collapsed', navCollapsed);
+  }, [navCollapsed]);
   
   // Data states
   const [trending, setTrending] = useState<MediaItem[]>([]);
@@ -549,7 +556,7 @@ export default function App() {
             but behind all content (root is `isolate` so -z stays contained). */}
         <div className="aurora-glow pointer-events-none fixed inset-0 -z-10" aria-hidden="true" />
         {/* ── Spotify-style shell: left sidebar (desktop) + bottom tabs (mobile) ── */}
-        <Sidebar activeTab={activeTab} setActiveTab={navigate} />
+        <Sidebar activeTab={activeTab} setActiveTab={navigate} collapsed={navCollapsed} onToggle={() => setNavCollapsed((v) => !v)} />
         <BottomTabBar activeTab={activeTab} setActiveTab={navigate} />
 
         {/* Main column shifts right of the sidebar on desktop; pads for the
