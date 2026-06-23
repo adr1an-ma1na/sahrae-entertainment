@@ -446,6 +446,38 @@ html.tv-mode {
   }
 }
 
+/* Always-visible page scrollbar on laptop & TV (≥1024px). Android WebView's
+   default overlay scrollbar auto-hides, so long pages like the Home shelves
+   don't look scrollable — this gives a persistent, draggable bar so users can
+   see how far down they are and scroll easily. Phones keep the clean overlay. */
+@media (min-width: 1024px) {
+  html {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.05);
+  }
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar {
+    width: 14px;
+  }
+  html::-webkit-scrollbar-track,
+  body::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.04);
+  }
+  html::-webkit-scrollbar-thumb,
+  body::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.28);
+    border-radius: 8px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+    min-height: 48px;
+  }
+  html::-webkit-scrollbar-thumb:hover,
+  body::-webkit-scrollbar-thumb:hover {
+    background: rgba(245, 158, 11, 0.6);
+    background-clip: content-box;
+  }
+}
+
 /* ─────────────────────────────────────────────────────────────
    SAHRAE launch intro — cinematic, slow reveal (see SplashIntro.tsx).
    ───────────────────────────────────────────────────────────── */

@@ -11,20 +11,22 @@ type Category = 'News' | 'Sports' | 'Documentary' | 'Science' | 'Music' | 'Kids'
 // Verified, working free HLS broadcasts (probed live). Broadcaster-official feeds
 // (Al Jazeera, DW, France 24, NASA, NHK, TRT, CGTN, Red Bull) are the most stable.
 const CHANNELS: Channel[] = [
-  // News
-  { name: 'Al Jazeera English', country: 'Qatar', category: 'News', url: 'https://live-hls-web-aje.getaj.net/AJE/01.m3u8' },
-  { name: 'Al Jazeera Arabic', country: 'Qatar', category: 'News', url: 'https://live-hls-web-aja.getaj.net/AJA/01.m3u8' },
+  // News (English-language)
+  { name: 'Al Jazeera English', country: 'Qatar', category: 'News', url: 'https://live-hls-web-aje.getaj.net/AJE/index.m3u8' },
   { name: 'Sky News', country: 'UK', category: 'News', url: 'https://skynews2-plutolive-vo.akamaized.net/cdhlsskynewsamericas/1013/latest.m3u8' },
-  { name: 'Bloomberg TV', country: 'USA', category: 'News', url: 'https://bloomberg-bloomberg-1-gb.samsung.wurl.tv/playlist.m3u8' },
   { name: 'DW English', country: 'Germany', category: 'News', url: 'https://dwamdstream102.akamaized.net/hls/live/2015525/dwstream102/index.m3u8' },
-  { name: 'France 24', country: 'France', category: 'News', url: 'https://static.france24.com/live/F24_EN_HI_HLS/live_web.m3u8' },
+  { name: 'France 24 English', country: 'France', category: 'News', url: 'https://static.france24.com/live/F24_EN_HI_HLS/live_web.m3u8' },
   { name: 'TRT World', country: 'Turkey', category: 'News', url: 'https://tv-trtworld.live.trt.com.tr/master_720.m3u8' },
-  { name: 'CGTN', country: 'China', category: 'News', url: 'https://news.cgtn.com/resource/live/english/cgtn-news.m3u8' },
+  { name: 'CGTN', country: 'China', category: 'News', url: 'https://live.cgtn.com/1000/prog_index.m3u8' },
   { name: 'CNA', country: 'Singapore', category: 'News', url: 'https://d2e1asnsl7br7b.cloudfront.net/7782e205e72f43aeb4a48ec97f66ebbe/index.m3u8' },
   { name: 'WION', country: 'India', category: 'News', url: 'https://d7x8z4yuq42qn.cloudfront.net/index_7.m3u8' },
-  { name: 'Euronews', country: 'Europe', category: 'News', url: 'https://euronews-euronews-world-1-gb.samsung.wurl.tv/playlist.m3u8' },
+  { name: 'GB News', country: 'UK', category: 'News', url: 'https://gbnews.simplestreamcdn.com/gbnews/gbnews/playlist.m3u8' },
+  { name: 'NBC News NOW', country: 'USA', category: 'News', url: 'https://nbcnews2.akamaized.net/hls/live/723426/NBCNewsPlaymaker24x7/master_hd.m3u8' },
+  { name: 'ABC News Live', country: 'USA', category: 'News', url: 'https://content.uplynk.com/channel/3324f2467c414329b3b0cc5cd987b6be.m3u8' },
+  { name: 'Bloomberg TV', country: 'USA', category: 'News', url: 'https://bloomberg-bloomberg-1-gb.samsung.wurl.tv/playlist.m3u8' },
+  { name: 'Euronews English', country: 'Europe', category: 'News', url: 'https://euronews-euronews-world-1-gb.samsung.wurl.tv/playlist.m3u8' },
   { name: 'CBS News', country: 'USA', category: 'News', url: 'https://cbsn-us-cbsnstream.cbsnstream.cbsnews.com/out/v1/55a8648e840f4fa9b0d5b85d6c8f9f9a/master.m3u8' },
-  { name: 'ABC News', country: 'Australia', category: 'News', url: 'https://abc-iview-coombe.akamaized.net/hls/live/2038312/2038312_3132/index.m3u8' },
+  { name: 'ABC News (Australia)', country: 'Australia', category: 'News', url: 'https://abc-iview-coombe.akamaized.net/hls/live/2038312/2038312_3132/index.m3u8' },
   { name: 'NHK World', country: 'Japan', category: 'News', url: 'https://nhkwlive-ojp.akamaized.net/hls/live/2003459/nhkwlive-ojp-en/index.m3u8' },
   // Sports
   { name: 'Red Bull TV', country: 'Global', category: 'Sports', url: 'https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master.m3u8' },
@@ -140,7 +142,7 @@ export default function LiveTVView() {
   const [health, setHealth] = useState<Record<string, Health>>(() => Object.fromEntries(CHANNELS.map((c) => [c.url, 'checking' as Health])));
   useEffect(() => {
     let cancelled = false;
-    probeAll(CHANNELS, (c) => c.url, (c) => probeHls(proxied(c.url)), (url, ok) => {
+    probeAll(CHANNELS, (c) => c.url, (c) => probeHls(proxied(c.url), 13000), (url, ok) => {
       if (!cancelled) setHealth((h) => ({ ...h, [url]: ok ? 'ok' : 'dead' }));
     }, 5);
     return () => { cancelled = true; };
