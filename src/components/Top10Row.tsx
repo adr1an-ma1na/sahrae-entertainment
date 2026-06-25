@@ -65,9 +65,9 @@ export default function Top10Row({ items, onPlay, title = "Top 10 Trending Today
           </button>
         )}
 
-        <div 
+        <div
           ref={rowRef}
-          className="flex overflow-x-auto gap-4 pb-4 scrollbar-hide snap-x scroll-smooth pl-8"
+          className="flex overflow-x-auto gap-4 pb-4 scrollbar-hide snap-x scroll-smooth pl-10 md:pl-12 pr-12 md:pr-20"
         >
           {top10Items.map((item, index) => {
             const type = item.media_type || 'movie';
@@ -125,6 +125,9 @@ export default function Top10Row({ items, onPlay, title = "Top 10 Trending Today
               </div>
             );
           })}
+          {/* Trailing spacer guarantees rank 9 & 10 scroll fully into view even
+              where WebView ignores padding-right on a flex scroll container. */}
+          <div aria-hidden className="flex-none w-4 md:w-8" />
         </div>
 
         {!isScrolledEnd && (
