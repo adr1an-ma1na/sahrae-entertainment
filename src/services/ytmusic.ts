@@ -241,9 +241,20 @@ export const ytmusic = {
   },
 
   // Related songs ("up next" radio) for a video — powers autoplay + mixes.
+  // NEVER returns empty: if the source has no relatedStreams, backfill from the
+  // track's own artist, then a popular fallback (so "Related" is always full).
   related: async (videoId: string): Promise<Track[]> => {
     const j = await pipedGet(`/streams/${videoId}`);
-    return mapItems(j?.relatedStreams || []);
+    const out = mapItems(j?.relatedStreams || []);
+    if (out.length >= 5) return out;
+    const seen = new Set<string>([videoId, ...out.map((t) => t.id)]);
+    const push = (list: Track[]) => { for (const t of list) if (!seen.has(t.id)) { seen.add(t.id); out.push(t); } };
+    const artist = String(j?.uploader || '').replace(/\s*-\s*topic$/i, '').trim();
+    const title = String(j?.title || '').replace(/\([^)]*\)|\[[^\]]*\]/g, '').replace(/\s+/g, ' ').trim();
+    const seed = artist || title;
+    if (seed) push(await ytmusic.search(`${seed} songs`).catch(() => [] as Track[]));
+    if (out.length < 5) push(await ytmusic.search('top hits 2026').catch(() => [] as Track[]));
+    return out;
   },
 
   // Best directly-playable AUDIO stream for a video (used for offline downloads).

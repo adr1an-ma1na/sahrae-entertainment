@@ -1,6 +1,7 @@
-import { Play, ChevronLeft, ChevronRight, Star } from 'lucide-react';
-import { MediaItem, getImageUrl } from '../services/tmdb';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { MediaItem } from '../services/tmdb';
 import { useRef, useState, useEffect } from 'react';
+import PosterCard from './PosterCard';
 
 interface MediaRowProps {
   title: string;
@@ -58,11 +59,11 @@ export default function MediaRow({ title, items, onPlay, defaultType = 'movie', 
           <span className="w-1 h-5 md:h-6 rounded-full bg-gradient-to-b from-amber-300 to-amber-600" />
           <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">{title}</h2>
         </div>
-        <div className="flex overflow-x-hidden gap-4 pb-4">
-          {[...Array(6)].map((_, i) => (
+        <div className="flex overflow-x-hidden gap-2.5 md:gap-3 lg:gap-3.5 xl:gap-4 pb-4">
+          {[...Array(8)].map((_, i) => (
             <div
               key={i}
-              className="skeleton flex-none w-[140px] md:w-[168px] lg:w-[200px] xl:w-[220px] aspect-[2/3] rounded-2xl border border-white/5"
+              className="skeleton flex-none w-[120px] md:w-[140px] lg:w-[160px] xl:w-[180px] aspect-[2/3] rounded-lg border border-white/5"
             />
           ))}
         </div>
@@ -89,51 +90,14 @@ export default function MediaRow({ title, items, onPlay, defaultType = 'movie', 
           </button>
         )}
 
-        <div 
+        <div
           ref={rowRef}
-          className="flex overflow-x-auto gap-4 pt-3 pb-6 scrollbar-hide snap-x scroll-smooth"
+          className="flex overflow-x-auto gap-2.5 md:gap-3 lg:gap-3.5 xl:gap-4 pt-1 pb-6 scrollbar-hide snap-x scroll-smooth"
         >
           {items.map((item) => {
             const type = item.media_type || defaultType;
             return (
-              <div
-                key={`${type}-${item.id}`}
-                tabIndex={0}
-                data-tv-focusable
-                role="button"
-                aria-label={item.title || item.name}
-                className="card-lift relative flex-none w-[140px] md:w-[168px] lg:w-[200px] xl:w-[220px] aspect-[2/3] rounded-2xl overflow-hidden group cursor-pointer snap-start bg-zinc-900 border border-white/10 hover:z-10 focus:outline-none"
-                onClick={() => onPlay(item.id, type, true)}
-              >
-                <img
-                  src={getImageUrl(item.poster_path)}
-                  alt={item.title || item.name}
-                  className="w-full h-full object-cover transition-transform duration-[600ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-110"
-                  loading="lazy"
-                />
-
-                {/* Rating Badge */}
-                {item.vote_average ? (
-                  <div className="absolute top-2 right-2 bg-black/55 backdrop-blur-md px-2 py-0.5 rounded-full text-[10px] font-bold text-amber-400 border border-white/10 shadow-lg z-20 flex items-center gap-1 opacity-90 group-hover:opacity-100 transition-opacity">
-                    <Star className="w-2.5 h-2.5 fill-current" />
-                    <span>{item.vote_average.toFixed(1)}</span>
-                  </div>
-                ) : null}
-
-                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/45 to-transparent opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-3 md:p-4">
-                  <h3 className="text-white font-display font-semibold text-xs md:text-sm line-clamp-2 mb-2 drop-shadow-md">
-                    {item.title || item.name}
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    <button className="btn-gold w-7 h-7 md:w-9 md:h-9 rounded-full flex items-center justify-center hover:scale-110">
-                      <Play className="w-3 h-3 md:w-4 md:h-4 fill-current ml-0.5" />
-                    </button>
-                    <span className="text-[10px] md:text-xs text-zinc-300 font-medium drop-shadow-md">
-                      {item.release_date?.slice(0, 4) || item.first_air_date?.slice(0, 4)}
-                    </span>
-                  </div>
-                </div>
-              </div>
+              <PosterCard key={`${type}-${item.id}`} item={item} type={type} onPlay={() => onPlay(item.id, type, true)} />
             );
           })}
         </div>

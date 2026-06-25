@@ -1,5 +1,5 @@
-import { Play, Star, Trash2 } from 'lucide-react';
-import { MediaItem, getImageUrl, Genre } from '../services/tmdb';
+import { MediaItem, Genre } from '../services/tmdb';
+import PosterCard from './PosterCard';
 
 interface MediaGridProps {
   title: string;
@@ -55,60 +55,17 @@ export default function MediaGrid({ title, items, onPlay, defaultType = 'movie',
         </div>
       )}
 
-      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3 md:gap-5">
+      <div className="flex flex-wrap gap-2.5 md:gap-3 lg:gap-3.5 xl:gap-4">
         {items.map((item) => {
           const type = item.media_type || defaultType;
           return (
-            <div
+            <PosterCard
               key={`${type}-${item.id}`}
-              tabIndex={0}
-              data-tv-focusable
-              role="button"
-              aria-label={item.title || item.name}
-              className="card-lift relative aspect-[2/3] rounded-2xl overflow-hidden group cursor-pointer bg-zinc-900 border border-white/10 hover:z-10 focus:outline-none"
-              onClick={() => onPlay(item.id, type, true)}
-            >
-              <img
-                src={getImageUrl(item.poster_path)}
-                alt={item.title || item.name}
-                className="w-full h-full object-cover transition-transform duration-[600ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-110"
-                loading="lazy"
-              />
-
-              {/* Remove button (e.g. My List) — always visible so it works on touch */}
-              {onRemove && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); onRemove(item); }}
-                  className="absolute top-2 left-2 z-30 p-1.5 bg-black/70 hover:bg-red-500 text-white rounded-full transition-colors shadow-lg backdrop-blur-sm border border-white/10"
-                  title="Remove from My List"
-                  aria-label="Remove"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              )}
-
-              {/* Rating Badge */}
-              {item.vote_average ? (
-                <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md px-1.5 py-0.5 rounded text-[10px] font-bold text-amber-500 border border-white/10 shadow-lg z-20 flex items-center gap-1 opacity-90 group-hover:opacity-100 transition-opacity">
-                  <Star className="w-2.5 h-2.5 fill-current" />
-                  <span>{item.vote_average.toFixed(1)}</span>
-                </div>
-              ) : null}
-
-              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/45 to-transparent opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-3 md:p-4">
-                <h3 className="text-white font-display font-semibold text-xs md:text-sm line-clamp-2 mb-2 drop-shadow-md">
-                  {item.title || item.name}
-                </h3>
-                <div className="flex items-center gap-2">
-                  <button className="btn-gold w-7 h-7 md:w-9 md:h-9 rounded-full flex items-center justify-center hover:scale-110">
-                    <Play className="w-3 h-3 md:w-4 md:h-4 fill-current ml-0.5" />
-                  </button>
-                  <span className="text-[10px] md:text-xs text-zinc-300 font-medium drop-shadow-md">
-                    {item.release_date?.slice(0, 4) || item.first_air_date?.slice(0, 4)}
-                  </span>
-                </div>
-              </div>
-            </div>
+              item={item}
+              type={type}
+              onPlay={() => onPlay(item.id, type, true)}
+              onRemove={onRemove ? () => onRemove(item) : undefined}
+            />
           );
         })}
       </div>

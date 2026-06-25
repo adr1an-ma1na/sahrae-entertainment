@@ -17,6 +17,26 @@ function mulberry32(seed: number) { return () => { seed |= 0; seed = (seed + 0x6
 function seededShuffle<T>(arr: T[], seed: number): T[] { const a = [...arr]; const rng = mulberry32(seed); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 const dayKey = () => Number(new Date().toISOString().slice(0, 10).replace(/-/g, ''));
 
+// Spotify-style mood cards — each scannable at a glance with its own colour.
+// `grad` classes are literal so Tailwind keeps them; `tint` colours the mood page.
+const MOODS: { name: string; grad: string; tint: string }[] = [
+  { name: 'Chill', grad: 'from-teal-500 to-teal-700', tint: 'rgba(20,184,166,0.5)' },
+  { name: 'Workout', grad: 'from-orange-500 to-orange-700', tint: 'rgba(249,115,22,0.5)' },
+  { name: 'Party', grad: 'from-fuchsia-500 to-pink-700', tint: 'rgba(217,70,239,0.5)' },
+  { name: 'Focus', grad: 'from-blue-700 to-blue-900', tint: 'rgba(29,78,216,0.5)' },
+  { name: 'Sad', grad: 'from-indigo-500 to-indigo-800', tint: 'rgba(99,102,241,0.5)' },
+  { name: 'Happy', grad: 'from-yellow-400 to-amber-500', tint: 'rgba(250,204,21,0.5)' },
+  { name: 'Romance', grad: 'from-pink-500 to-rose-600', tint: 'rgba(236,72,153,0.5)' },
+  { name: 'Afro Vibes', grad: 'from-green-500 to-emerald-700', tint: 'rgba(34,197,94,0.5)' },
+  { name: 'Gospel', grad: 'from-amber-400 to-yellow-600', tint: 'rgba(245,158,11,0.5)' },
+  { name: 'Road Trip', grad: 'from-sky-400 to-sky-600', tint: 'rgba(56,189,248,0.5)' },
+  { name: 'Sleep', grad: 'from-slate-700 to-slate-900', tint: 'rgba(51,65,85,0.6)' },
+  { name: 'Throwback', grad: 'from-purple-500 to-purple-800', tint: 'rgba(168,85,247,0.5)' },
+  { name: 'Motivation', grad: 'from-red-500 to-red-700', tint: 'rgba(239,68,68,0.5)' },
+  { name: 'Lounge', grad: 'from-stone-500 to-stone-700', tint: 'rgba(120,113,108,0.5)' },
+  { name: 'Dance', grad: 'from-rose-400 to-orange-500', tint: 'rgba(251,113,133,0.5)' },
+];
+
 function Equalizer() {
   return (
     <div className="flex items-end gap-0.5 h-4" aria-hidden>
@@ -116,8 +136,10 @@ export default function MusicView() {
 
   // Mood / genre page (YouTube-Music-style) — a chip opens a dedicated page.
   const [genre, setGenre] = useState<string | null>(null);
+  const [genreTint, setGenreTint] = useState<string | null>(null);
   const [genreTracks, setGenreTracks] = useState<Track[]>([]);
   const [genreLoading, setGenreLoading] = useState(false);
+  const openMood = (name: string, tint?: string) => { setGenreTint(tint || null); setGenre(name); };
 
   const [query, setQuery] = useState('');
   const [searchTab, setSearchTab] = useState<'songs' | 'artists' | 'albums'>('songs');
@@ -344,7 +366,7 @@ export default function MusicView() {
 
   if (genre) {
     const shown = sortTracks(genreTracks);
-    const hc = genreTracks[0]?.dominantColor || 'rgba(245,158,11,0.4)';
+    const hc = genreTint || genreTracks[0]?.dominantColor || 'rgba(245,158,11,0.4)';
     return (
       <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
         <div aria-hidden className="absolute inset-x-0 top-0 h-80 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${hc} 0%, transparent 100%)`, opacity: 0.5 }} />
@@ -489,7 +511,21 @@ export default function MusicView() {
             </section>
           ) : (
             <>
-              {/* Mood & genre chips at the very top (YouTube Music pattern) — open a page */}
+              {/* Mood cards — colourful, scannable at a glance (Spotify pattern) */}
+              <section className="mb-6">
+                <SectionHead>Moods &amp; genres</SectionHead>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {MOODS.map((m) => (
+                    <button key={m.name} onClick={() => openMood(m.name, m.tint)} tabIndex={0} data-tv-focusable
+                      className={`card-lift relative overflow-hidden rounded-xl h-[100px] md:h-[120px] p-3 flex items-start text-left bg-gradient-to-br ${m.grad} focus:outline-none`}>
+                      <span className="text-white font-display font-bold text-lg leading-tight drop-shadow-md">{m.name}</span>
+                      <div className="absolute -bottom-3 -right-3 w-16 h-16 rounded-lg bg-black/25 rotate-[18deg] shadow-lg" />
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              {/* Quick genre chips */}
               <div className="flex overflow-x-auto gap-2 pb-2 mb-6 scrollbar-hide">
                 {GENRES.map((g) => <button key={g} onClick={() => setGenre(g)} tabIndex={0} data-tv-focusable className="chip px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap text-zinc-300 hover:text-white">{g}</button>)}
               </div>
