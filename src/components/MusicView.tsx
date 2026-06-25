@@ -1,7 +1,15 @@
 import { useState, useEffect, useRef, Fragment, ReactNode } from 'react';
 import { Search, Play, Pause, Heart, Loader2, Music2, Plus, X, ListMusic, Shuffle, Trash2, ChevronLeft, Library, Sparkles, Disc3, User } from 'lucide-react';
 import { ytmusic, Track, Artist, Album, GENRES, SECTIONS, TRENDING_PLAYLISTS, TrendingPlaylist } from '../services/ytmusic';
-import { itunes } from '../services/itunesMusic';
+import { audius, Track as AudiusTrack, Playlist as AudiusPlaylist } from '../services/audius';
+
+// Audius track -> player Track with audioUrl (FULL-length, plays via <audio> →
+// backgrounds + downloads). Legal, key-less; indie/electronic-leaning catalog.
+const aTrack = (a: AudiusTrack): Track => ({
+  id: `audius:${a.id}`, title: a.title, artist: a.artist,
+  artwork: a.artwork, artworkLarge: a.artworkLarge, duration: a.duration,
+  audioUrl: a.streamUrl,
+});
 import { useMusic } from '../hooks/useMusic';
 import { CoverArt } from './ui/CoverArt';
 
@@ -185,22 +193,37 @@ export default function MusicView() {
     return () => { cancelled = true; };
   }, []);
 
-  // iTunes shelves — mainstream songs (30s previews) that play in the BACKGROUND
-  // and download (direct preview URLs), unlike the YouTube shelves.
+  // Audius shelves — FULL-length songs that play in the background + download.
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const top = await itunes.searchSongs('top hits 2026', 25).catch(() => [] as Track[]);
+      const trending = await audius.trending().catch(() => [] as AudiusTrack[]);
       if (cancelled) return;
-      if (top.length) setBgShelves((p) => [...p, { title: 'Top songs · plays in background', tracks: top }]);
-      for (const g of ['Afrobeats', 'Amapiano', 'Hip-Hop', 'Pop', 'R&B', 'Gospel']) {
-        const tr = await itunes.searchSongs(`${g} hits 2026`, 25).catch(() => [] as Track[]);
+      if (trending.length) setBgShelves((p) => [...p, { title: 'Trending · full songs, play in background', tracks: trending.map(aTrack).slice(0, 25) }]);
+      const under = await audius.underground().catch(() => [] as AudiusTrack[]);
+      if (cancelled) return;
+      if (under.length) setBgShelves((p) => [...p, { title: 'Underground', tracks: under.map(aTrack).slice(0, 25) }]);
+      for (const g of ['Hip-Hop/Rap', 'Electronic', 'Lo-Fi', 'House', 'R&B/Soul', 'Pop']) {
+        const tr = await audius.trending(g).catch(() => [] as AudiusTrack[]);
         if (cancelled) return;
-        if (tr.length) setBgShelves((p) => [...p, { title: g, tracks: tr }]);
+        if (tr.length) setBgShelves((p) => [...p, { title: g, tracks: tr.map(aTrack).slice(0, 25) }]);
       }
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // Audius playlists (curated, full songs) — opens into the track list view.
+  const [audiusPlaylists, setAudiusPlaylists] = useState<AudiusPlaylist[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    audius.trendingPlaylists().then((p) => { if (!cancelled) setAudiusPlaylists(p.slice(0, 16)); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  const openAudiusPlaylist = async (p: AudiusPlaylist) => {
+    setViewMix({ id: `apl:${p.id}`, title: p.name, subtitle: p.owner || 'Playlist', tracks: [] });
+    const tr = await audius.playlistTracks(p.id).catch(() => [] as AudiusTrack[]);
+    setViewMix({ id: `apl:${p.id}`, title: p.name, subtitle: p.owner || 'Playlist', tracks: tr.map(aTrack) });
+  };
 
   // Your Mix from listening (built on entry)
   useEffect(() => {
@@ -301,7 +324,7 @@ export default function MusicView() {
     if (!q) { setSearching(false); setRSongs([]); setRArtists([]); setRAlbums([]); return; }
     setSearching(true);
     tRef.current = window.setTimeout(async () => {
-      const [s, a, al] = await Promise.all([itunes.searchSongs(q), ytmusic.searchArtists(q), ytmusic.searchAlbums(q)]);
+      const [s, a, al] = await Promise.all([audius.searchTracks(q).then((x) => x.map(aTrack)), ytmusic.searchArtists(q), ytmusic.searchAlbums(q)]);
       setRSongs(s); setRArtists(a); setRAlbums(al); setSearching(false);
     }, 400);
     return () => window.clearTimeout(tRef.current);
@@ -642,13 +665,28 @@ export default function MusicView() {
                 </section>
               )}
 
-              {/* Audius — backgroundable + downloadable music (direct files) */}
+              {/* Audius — backgroundable + downloadable FULL songs (direct files) */}
               {bgShelves.map((sh) => (
                 <section key={`bg-${sh.title}`} className="mb-9">
                   <SectionHead icon={<Sparkles className="w-5 h-5 text-sauti" />}>{sh.title}</SectionHead>
                   <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{sh.tracks.map((t, i) => <Fragment key={t.id}><TrackCard track={t} onPlay={() => playQueue(sh.tracks, i, sh.title)} /></Fragment>)}</div>
                 </section>
               ))}
+
+              {/* Curated playlists (full songs) — open into the track list */}
+              {audiusPlaylists.length > 0 && (
+                <section className="mb-9">
+                  <SectionHead icon={<ListMusic className="w-5 h-5 text-sauti" />}>Playlists</SectionHead>
+                  <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">
+                    {audiusPlaylists.map((p) => (
+                      <button key={p.id} onClick={() => openAudiusPlaylist(p)} tabIndex={0} data-tv-focusable className="card-lift flex-none w-[150px] text-left rounded-2xl overflow-hidden border border-white/10 bg-zinc-900 focus:outline-none">
+                        <div className="aspect-square bg-zinc-800 relative">{p.artwork ? <img src={p.artwork} alt="" className="w-full h-full object-cover" loading="lazy" /> : <ListMusic className="w-8 h-8 text-zinc-600 absolute inset-0 m-auto" />}</div>
+                        <div className="p-2.5"><p className="text-sm font-semibold text-white truncate">{p.name}</p><p className="text-xs text-zinc-500 truncate">{p.owner || 'Playlist'}{p.trackCount ? ` · ${p.trackCount}` : ''}</p></div>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
 
               {/* Trending playlists by country — tappable cards */}
               <section className="mb-9">
