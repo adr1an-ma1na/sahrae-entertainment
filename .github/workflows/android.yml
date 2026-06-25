@@ -9,6 +9,8 @@ jobs:
   build:
     name: Build debug APK
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed to publish APKs to a GitHub Release
 
     steps:
       - name: Checkout
@@ -115,6 +117,7 @@ jobs:
           echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Upload debug APK
+        continue-on-error: true   # non-fatal: artifact storage quota can be hit; the Release step is the primary delivery
         uses: actions/upload-artifact@v4
         with:
           name: sahrae-entertainment-debug-apk
@@ -175,9 +178,37 @@ jobs:
 
       - name: Upload release APK
         if: steps.have_release_secrets.outputs.present == 'true'
+        continue-on-error: true   # non-fatal: artifact storage quota can be hit; the Release step is the primary delivery
         uses: actions/upload-artifact@v4
         with:
           name: sahrae-entertainment-release-apk
           path: ${{ steps.locate_release.outputs.apk_path }}
           if-no-files-found: error
           retention-days: 90
+
+      # ------------------------------------------------------------------
+      # Primary delivery: publish the APK(s) to a rolling "preview" GitHub
+      # Release. Release assets are stored separately from Actions artifacts,
+      # so they're unaffected by the artifact-storage quota.
+      # ------------------------------------------------------------------
+      - name: Publish APKs to the "preview" Release
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          FILES=()
+          if [ -f "${{ steps.locate_debug.outputs.apk_path }}" ]; then
+            cp "${{ steps.locate_debug.outputs.apk_path }}" Sahrae-debug.apk
+            FILES+=(Sahrae-debug.apk)
+          fi
+          if [ -f "${{ steps.locate_release.outputs.apk_path }}" ]; then
+            cp "${{ steps.locate_release.outputs.apk_path }}" Sahrae-release.apk
+            FILES+=(Sahrae-release.apk)
+          fi
+          if [ ${#FILES[@]} -eq 0 ]; then echo "No APKs to publish"; exit 1; fi
+          # Refresh the rolling tag so the release always points at this build.
+          gh release delete preview --yes --cleanup-tag 2>/dev/null || true
+          gh release create preview "${FILES[@]}" \
+            --title "Sahrae preview build" \
+            --notes "Auto-built from ${{ github.sha }} on ${{ github.ref_name }}" \
+            --target "${{ github.sha }}"
