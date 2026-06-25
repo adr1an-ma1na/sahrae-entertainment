@@ -17,6 +17,7 @@ export interface Track {
   uploaded?: number;  // raw upload timestamp (ms) for sorting
   audioUrl?: string;  // direct audio file URL (podcast RSS / owned catalog) → plays via <audio>, backgrounds
   feedUrl?: string;   // podcast show RSS feed (for opening a show's episodes)
+  scStream?: string;  // SoundCloud progressive transcoding URL → resolved to audioUrl on play
 }
 
 // Deterministic, pleasant "dominant colour" per track for CoverArt /
