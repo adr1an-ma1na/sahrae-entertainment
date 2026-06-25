@@ -35,6 +35,9 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
+// File-system-safe name (track ids can contain ':' etc. — invalid in paths).
+function safeName(id: string): string { return id.replace(/[^a-zA-Z0-9._-]/g, '_'); }
+
 async function fetchBytes(url: string): Promise<Blob | null> {
   try { const r = await fetch(url); if (r.ok) return await r.blob(); } catch { /* try proxy */ }
   // CORS / IP fallback: pull it through the native passthrough.
@@ -60,15 +63,19 @@ export const downloads = {
     if (read().some((e) => e.track.id === track.id)) return true;
     states.set(track.id, { status: 'downloading', progress: 0 }); emit();
     try {
-      const a = await ytmusic.audioStream(track.id);
-      if (!a) throw new Error('no audio stream');
-      const blob = await fetchBytes(a.url);
+      // Direct-file tracks (Audius / podcasts) carry audioUrl; YouTube tracks
+      // resolve a stream URL. Direct URLs are why these actually download.
+      let url: string;
+      let mime = 'audio/mpeg';
+      if (track.audioUrl) { url = track.audioUrl; }
+      else { const a = await ytmusic.audioStream(track.id); if (!a) throw new Error('no audio stream'); url = a.url; mime = a.mime; }
+      const blob = await fetchBytes(url);
       if (!blob || blob.size < 10000) throw new Error('audio fetch failed');
       const base64 = await blobToBase64(blob);
-      const path = `downloads/${track.id}.dat`;
+      const path = `downloads/${safeName(track.id)}.dat`;
       await Filesystem.writeFile({ path, data: base64, directory: Directory.Data, recursive: true });
       const { uri } = await Filesystem.getUri({ path, directory: Directory.Data });
-      write([{ track, uri, mime: a.mime, ts: Date.now(), size: blob.size }, ...read().filter((e) => e.track.id !== track.id)]);
+      write([{ track, uri, mime, ts: Date.now(), size: blob.size }, ...read().filter((e) => e.track.id !== track.id)]);
       states.set(track.id, { status: 'done', progress: 1 }); emit();
       return true;
     } catch {
@@ -81,7 +88,7 @@ export const downloads = {
   async remove(id: string): Promise<void> {
     write(read().filter((x) => x.track.id !== id));
     states.delete(id);
-    try { await Filesystem.deleteFile({ path: `downloads/${id}.dat`, directory: Directory.Data }); } catch { /* ignore */ }
+    try { await Filesystem.deleteFile({ path: `downloads/${safeName(id)}.dat`, directory: Directory.Data }); } catch { /* ignore */ }
   },
 
   subscribe: (fn: Listener) => { listeners.add(fn); return () => { listeners.delete(fn); }; },

@@ -1,6 +1,15 @@
 import { useState, useEffect, useRef, Fragment, ReactNode } from 'react';
 import { Search, Play, Pause, Heart, Loader2, Music2, Plus, X, ListMusic, Shuffle, Trash2, ChevronLeft, Library, Sparkles, Disc3, User } from 'lucide-react';
 import { ytmusic, Track, Artist, Album, GENRES, SECTIONS, TRENDING_PLAYLISTS, TrendingPlaylist } from '../services/ytmusic';
+import { audius, Track as AudiusTrack } from '../services/audius';
+
+// Audius track -> player Track, with audioUrl set so it plays via <audio>
+// (backgrounds + downloads). Real, legal, full-length, indie/electronic-leaning.
+const aTrack = (a: AudiusTrack): Track => ({
+  id: `audius:${a.id}`, title: a.title, artist: a.artist,
+  artwork: a.artwork, artworkLarge: a.artworkLarge, duration: a.duration,
+  audioUrl: a.streamUrl,
+});
 import { useMusic } from '../hooks/useMusic';
 import { CoverArt } from './ui/CoverArt';
 
@@ -131,6 +140,8 @@ export default function MusicView() {
   const [tab, setTab] = useState<'home' | 'library'>('home');
   const [sections, setSections] = useState<{ title: string; tracks: Track[] }[]>([]);
   const [loadingHome, setLoadingHome] = useState(true);
+  // Audius — the backgroundable + downloadable music catalog (direct audio URLs).
+  const [bgShelves, setBgShelves] = useState<{ title: string; tracks: Track[] }[]>([]);
   const [mix, setMix] = useState<Track[]>([]);
   const [madeForYou, setMadeForYou] = useState<{ id: string; title: string; subtitle: string; tracks: Track[] }[]>([]);
   const [viewMix, setViewMix] = useState<{ id: string; title: string; subtitle: string; tracks: Track[] } | null>(null);
@@ -177,6 +188,23 @@ export default function MusicView() {
         if (cancelled) return;
         if (tracks.length) setSections((prev) => [...prev, { title: s.title, tracks }]);
         setLoadingHome(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Audius shelves — trending + a few genres. These play in the BACKGROUND and
+  // can be downloaded (direct audio URLs), unlike the YouTube shelves.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const trending = await audius.trending().catch(() => [] as AudiusTrack[]);
+      if (cancelled) return;
+      if (trending.length) setBgShelves((p) => [...p, { title: 'Plays anywhere · background & offline', tracks: trending.map(aTrack).slice(0, 20) }]);
+      for (const g of ['Lo-Fi', 'House', 'Hip-Hop/Rap', 'Electronic']) {
+        const tr = await audius.trending(g).catch(() => [] as AudiusTrack[]);
+        if (cancelled) return;
+        if (tr.length) setBgShelves((p) => [...p, { title: g, tracks: tr.map(aTrack).slice(0, 20) }]);
       }
     })();
     return () => { cancelled = true; };
@@ -621,6 +649,14 @@ export default function MusicView() {
                   </div>
                 </section>
               )}
+
+              {/* Audius — backgroundable + downloadable music (direct files) */}
+              {bgShelves.map((sh) => (
+                <section key={`bg-${sh.title}`} className="mb-9">
+                  <SectionHead icon={<Sparkles className="w-5 h-5 text-sauti" />}>{sh.title}</SectionHead>
+                  <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{sh.tracks.map((t, i) => <Fragment key={t.id}><TrackCard track={t} onPlay={() => playQueue(sh.tracks, i, sh.title)} /></Fragment>)}</div>
+                </section>
+              ))}
 
               {/* Trending playlists by country — tappable cards */}
               <section className="mb-9">
