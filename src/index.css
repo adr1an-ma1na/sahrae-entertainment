@@ -451,13 +451,16 @@ html.tv-mode {
    don't look scrollable — this gives a persistent, draggable bar so users can
    see how far down they are and scroll easily. Phones keep the clean overlay. */
 @media (min-width: 1024px) {
-  html {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.05);
-  }
+  /* Always reserve the gutter so the bar is present even before overflow.
+     NOTE: do NOT set the standard `scrollbar-width`/`scrollbar-color` here —
+     in Chromium/WebView those DISABLE the ::-webkit-scrollbar styling below,
+     which is exactly why the first attempt showed nothing. */
+  html { overflow-y: scroll; }
   html::-webkit-scrollbar,
   body::-webkit-scrollbar {
     width: 14px;
+    -webkit-appearance: none;
+    appearance: none;
   }
   html::-webkit-scrollbar-track,
   body::-webkit-scrollbar-track {
