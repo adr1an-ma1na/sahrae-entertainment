@@ -650,7 +650,11 @@ public class MainActivity extends BridgeActivity {
     private static boolean looksLikeYtAudio(String u) {
         if (u == null) return false;
         String l = u.toLowerCase();
-        return l.contains("googlevideo.com/videoplayback") && l.contains("mime=audio");
+        if (!l.contains("googlevideo.com/videoplayback")) return false;
+        // Adaptive audio-only (mime=audio: itags 139/140/251) OR a combined
+        // progressive stream (itag 18/22) which still carries the audio track —
+        // both play in an <audio> element and download fine. Avoid video-only DASH.
+        return l.contains("mime=audio") || l.contains("itag=18&") || l.contains("itag=22&");
     }
 
     private WebResourceResponse ytAudioResolve(Uri uri) {
@@ -710,9 +714,11 @@ public class MainActivity extends BridgeActivity {
                 try {
                     ViewGroup root = findViewById(android.R.id.content);
                     if (root != null) {
-                        wv.setLayoutParams(new ViewGroup.LayoutParams(1, 1));
-                        wv.setAlpha(0f);
-                        wv.setEnabled(false);
+                        // YouTube's player won't start at 1x1, so give it a real
+                        // surface but keep it off-screen + near-transparent.
+                        wv.setLayoutParams(new ViewGroup.LayoutParams(320, 180));
+                        wv.setTranslationX(-10000f);
+                        wv.setAlpha(0.01f);
                         root.addView(wv);
                     }
                 } catch (Exception ignore) {}
