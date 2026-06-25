@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { MediaItem, Genre } from '../services/tmdb';
 import PosterCard from './PosterCard';
 
@@ -59,13 +60,14 @@ export default function MediaGrid({ title, items, onPlay, defaultType = 'movie',
         {items.map((item) => {
           const type = item.media_type || defaultType;
           return (
-            <PosterCard
-              key={`${type}-${item.id}`}
-              item={item}
-              type={type}
-              onPlay={() => onPlay(item.id, type, true)}
-              onRemove={onRemove ? () => onRemove(item) : undefined}
-            />
+            <Fragment key={`${type}-${item.id}`}>
+              <PosterCard
+                item={item}
+                type={type}
+                onPlay={() => onPlay(item.id, type, true)}
+                onRemove={onRemove ? () => onRemove(item) : undefined}
+              />
+            </Fragment>
           );
         })}
       </div>

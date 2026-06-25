@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { MediaItem } from '../services/tmdb';
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, Fragment } from 'react';
 import PosterCard from './PosterCard';
 
 interface MediaRowProps {
@@ -97,7 +97,9 @@ export default function MediaRow({ title, items, onPlay, defaultType = 'movie', 
           {items.map((item) => {
             const type = item.media_type || defaultType;
             return (
-              <PosterCard key={`${type}-${item.id}`} item={item} type={type} onPlay={() => onPlay(item.id, type, true)} />
+              <Fragment key={`${type}-${item.id}`}>
+                <PosterCard item={item} type={type} onPlay={() => onPlay(item.id, type, true)} />
+              </Fragment>
             );
           })}
         </div>
