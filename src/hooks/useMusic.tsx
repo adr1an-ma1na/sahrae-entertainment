@@ -404,6 +404,40 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     fetch(`https://localhost/__bgaudio?${q}`).catch(() => {});
   }, [current, isPlaying, active]);
 
+  // ── Background handoff: the in-page <audio> element is suspended when the app
+  //    backgrounds, so when an <audio>-lane track (direct URL) is playing and we
+  //    go to the background, hand it to the NATIVE player (keeps going); on
+  //    return, stop native and resume the <audio> at that position. ──
+  const bgHandoffRef = useRef(false);
+  const bgStateRef = useRef<{ url?: string; playing: boolean; local: boolean }>({ playing: false, local: false });
+  bgStateRef.current = { url: current?.audioUrl, playing: isPlaying, local: usingLocalRef.current };
+  useEffect(() => {
+    const onVis = () => {
+      const s = bgStateRef.current;
+      if (document.hidden) {
+        if (s.local && s.url && s.playing) {
+          const pos = Math.floor((liveRef.current.position || 0) * 1000);
+          fetch(`https://localhost/__bgplay?url=${encodeURIComponent(s.url)}&pos=${pos}`).catch(() => {});
+          try { audioElRef.current?.pause(); } catch { /* ignore */ }
+          bgHandoffRef.current = true;
+        }
+      } else if (bgHandoffRef.current) {
+        bgHandoffRef.current = false;
+        fetch('https://localhost/__bgstop', { cache: 'no-store' })
+          .then((r) => r.json())
+          .then((j) => {
+            const sec = (j && j.pos ? j.pos : 0) / 1000;
+            const a = audioElRef.current;
+            if (a && usingLocalRef.current) { try { if (sec > 0) a.currentTime = sec; a.play().catch(() => {}); } catch { /* ignore */ } }
+          })
+          .catch(() => { try { audioElRef.current?.play().catch(() => {}); } catch { /* ignore */ } });
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const playQueue = (tracks: Track[], startIndex = 0, source = '') => {
     if (!tracks.length) return;
     haptics.press();

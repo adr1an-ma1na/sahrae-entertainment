@@ -58,7 +58,8 @@ public class BackgroundAudioService extends Service {
 
             if ("NEXT".equals(action)) forward("next");
             else if ("PREV".equals(action)) forward("prev");
-            else if ("PLAY".equals(action) || "PAUSE".equals(action)) forward("toggle");
+            else if ("PLAY".equals(action)) { if (MainActivity.bgActive()) MainActivity.bgResume(); forward("play"); }
+            else if ("PAUSE".equals(action)) { if (MainActivity.bgActive()) MainActivity.bgPause(); forward("pause"); }
 
             String title = intent != null ? intent.getStringExtra("title") : "Sauti";
             String artist = intent != null ? intent.getStringExtra("artist") : "";
@@ -76,8 +77,8 @@ public class BackgroundAudioService extends Service {
         session = new MediaSession(this, "Sauti");
         session.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS | MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
         session.setCallback(new MediaSession.Callback() {
-            @Override public void onPlay() { forward("play"); }
-            @Override public void onPause() { forward("pause"); }
+            @Override public void onPlay() { if (MainActivity.bgActive()) MainActivity.bgResume(); forward("play"); }
+            @Override public void onPause() { if (MainActivity.bgActive()) MainActivity.bgPause(); forward("pause"); }
             @Override public void onSkipToNext() { forward("next"); }
             @Override public void onSkipToPrevious() { forward("prev"); }
             @Override public void onStop() { forward("stop"); }
@@ -88,10 +89,10 @@ public class BackgroundAudioService extends Service {
                         switch (ke.getKeyCode()) {
                             case KeyEvent.KEYCODE_MEDIA_NEXT: forward("next"); return true;
                             case KeyEvent.KEYCODE_MEDIA_PREVIOUS: forward("prev"); return true;
-                            case KeyEvent.KEYCODE_MEDIA_PLAY: forward("play"); return true;
-                            case KeyEvent.KEYCODE_MEDIA_PAUSE: forward("pause"); return true;
+                            case KeyEvent.KEYCODE_MEDIA_PLAY: if (MainActivity.bgActive()) MainActivity.bgResume(); forward("play"); return true;
+                            case KeyEvent.KEYCODE_MEDIA_PAUSE: if (MainActivity.bgActive()) MainActivity.bgPause(); forward("pause"); return true;
                             case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
-                            case KeyEvent.KEYCODE_HEADSETHOOK: forward("toggle"); return true;
+                            case KeyEvent.KEYCODE_HEADSETHOOK: if (MainActivity.bgActive()) MainActivity.bgToggle(); forward("toggle"); return true;
                         }
                     }
                 } catch (Throwable ignore) {}

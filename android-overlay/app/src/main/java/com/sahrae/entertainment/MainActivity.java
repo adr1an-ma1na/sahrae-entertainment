@@ -97,6 +97,37 @@ public class MainActivity extends BridgeActivity {
      *  headset media-button presses back into the JS player (window.__sauti.*). */
     static WebView sWebView;
 
+    // ── Background audio: a native MediaPlayer that plays a direct stream URL
+    //    independent of the WebView, so <audio>-lane tracks (SoundCloud / podcasts
+    //    / owned files) keep playing when the app is backgrounded. JS hands off on
+    //    visibilitychange (see /__bgplay, /__bgstop) and the foreground service +
+    //    notification controls drive it. ──
+    static android.media.MediaPlayer bgPlayer;
+    static synchronized void bgPlay(String url, int posMs) {
+        bgStop();
+        try {
+            android.media.MediaPlayer mp = new android.media.MediaPlayer();
+            mp.setAudioAttributes(new android.media.AudioAttributes.Builder()
+                .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC).build());
+            mp.setDataSource(url);
+            mp.setOnPreparedListener(m -> { try { if (posMs > 0) m.seekTo(posMs); m.start(); } catch (Throwable ignore) {} });
+            mp.prepareAsync();
+            bgPlayer = mp;
+        } catch (Throwable ignore) { bgPlayer = null; }
+    }
+    static synchronized void bgPause() { try { if (bgPlayer != null && bgPlayer.isPlaying()) bgPlayer.pause(); } catch (Throwable ignore) {} }
+    static synchronized void bgResume() { try { if (bgPlayer != null) bgPlayer.start(); } catch (Throwable ignore) {} }
+    static synchronized void bgToggle() { try { if (bgPlayer != null) { if (bgPlayer.isPlaying()) bgPlayer.pause(); else bgPlayer.start(); } } catch (Throwable ignore) {} }
+    static synchronized boolean bgActive() { return bgPlayer != null; }
+    /** Stop the native player and return its last position (ms) so JS can resume. */
+    static synchronized int bgStop() {
+        int pos = 0;
+        try { if (bgPlayer != null) { pos = bgPlayer.getCurrentPosition(); bgPlayer.stop(); bgPlayer.release(); } } catch (Throwable ignore) {}
+        bgPlayer = null;
+        return pos;
+    }
+
     /** Hosts the top frame is allowed to navigate to. Everything else is refused. */
     private static final Set<String> TRUSTED_MAIN_FRAME_HOSTS = new HashSet<>(Arrays.asList(
         "localhost",                  // Capacitor's bundled app
@@ -1173,6 +1204,20 @@ public class MainActivity extends BridgeActivity {
                                 u.getQueryParameter("artist"),
                                 "1".equals(u.getQueryParameter("playing")));
                             return AudioFx.ok();
+                        } else if (path.startsWith("/__bgplay")) {
+                            // Hand a direct stream URL to the native player (app backgrounded).
+                            Uri u = request.getUrl();
+                            String mu = u.getQueryParameter("url");
+                            int pos = 0; try { pos = Integer.parseInt(u.getQueryParameter("pos")); } catch (Exception ignore) {}
+                            if (mu != null && !mu.isEmpty()) bgPlay(mu, pos);
+                            return AudioFx.ok();
+                        } else if (path.startsWith("/__bgresume")) {
+                            bgResume(); return AudioFx.ok();
+                        } else if (path.startsWith("/__bgpause")) {
+                            bgPause(); return AudioFx.ok();
+                        } else if (path.startsWith("/__bgstop")) {
+                            // Stop native playback, hand the position back so JS can resume.
+                            return jsonResponse("{\"pos\":" + bgStop() + "}");
                         } else if (path.startsWith("/__dllist")) {
                             return DownloadStore.json(DownloadStore.listJson(getApplicationContext()));
                         } else if (path.startsWith("/__dlremove")) {
