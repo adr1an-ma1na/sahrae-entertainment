@@ -252,10 +252,13 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     if (!c || loadedIdRef.current === c.id) return;
     loadedIdRef.current = c.id;
     setPosition(0); setDuration(0);
-    const local = downloads.localSrc(c.id);
+    // Real-file lane: a downloaded file, OR a direct audio URL (podcast RSS /
+    // owned catalog). Both play through the <audio> element, which keeps playing
+    // in the BACKGROUND (the YouTube iframe can't). YouTube tracks have no
+    // audioUrl → fall through to the unchanged iframe path.
+    const local = downloads.localSrc(c.id) || c.audioUrl || null;
     const a = audioElRef.current;
     if (local && a) {
-      // Offline: play from the saved file, pause the streaming player.
       usingLocalRef.current = true;
       try { playerRef.current?.pauseVideo?.(); } catch { /* ignore */ }
       a.src = local; a.play().catch(() => {});
@@ -284,6 +287,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const c = queue[index];
     if (!c || !autoplay) return;
+    if (c.audioUrl) return; // podcasts / owned tracks: no YouTube radio extension
     if (index < queue.length - 2) return; // only when ≤2 tracks remain
     if (extendingRef.current === c.id) return;
     extendingRef.current = c.id;

@@ -1,16 +1,20 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Headphones, Video, X, Loader2, Heart, Play, ChevronLeft, Check, Circle } from 'lucide-react';
-import { ytmusic, Track } from '../services/ytmusic';
+import { Search, Loader2, Heart, Play, ChevronLeft, Check, Circle } from 'lucide-react';
+import { Track } from '../services/ytmusic';
+import { searchPodcastShows, getPodcastEpisodes, PodShow } from '../services/podcastRss';
 import { useMusic } from '../hooks/useMusic';
 import { CoverArt } from './ui/CoverArt';
 import { getFollows, isFollowed, toggleFollow, listInProgress, getProgress, getMany, markPlayed, markUnplayed, EpisodeProgress } from '../services/podcasts';
 
 const CATEGORIES = ['Top', 'News', 'Comedy', 'Business', 'Technology', 'True Crime', 'Sports', 'Health', 'Education'];
-const catQuery = (c: string) => (c === 'Top' ? 'top podcasts 2026' : `${c} podcast`);
+const catQuery = (c: string) => (c === 'Top' ? 'podcasts' : c);
 const fmt = (s: number) => { if (!s || !isFinite(s)) return ''; const m = Math.floor(s / 60); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m} min`; };
 
+// A podcast SHOW is carried as a Track (so it reuses follows/cards), with feedUrl set.
+const showToTrack = (s: PodShow): Track => ({ id: s.id, title: s.title, artist: s.author, artwork: s.artwork, artworkLarge: s.artwork, duration: 0, feedUrl: s.feedUrl });
+
 export default function PodcastsHome() {
-  const { playQueue, stop, seek } = useMusic();
+  const { playQueue, seek } = useMusic();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Track[]>([]);
   const [searching, setSearching] = useState(false);
@@ -19,119 +23,81 @@ export default function PodcastsHome() {
   const [follows, setFollows] = useState<Track[]>(() => getFollows());
   const [cont, setCont] = useState<EpisodeProgress[]>(() => listInProgress());
   const [progV, setProgV] = useState(0); // bump to re-read progress badges
-  const [watch, setWatch] = useState<Track | null>(null);
   const [showView, setShowView] = useState<Track | null>(null);
   const [showEpisodes, setShowEpisodes] = useState<Track[]>([]);
   const [showLoading, setShowLoading] = useState(false);
-  const [showNext, setShowNext] = useState<string | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [epSort, setEpSort] = useState<'new' | 'old'>('new');
   const tRef = useRef<number | undefined>(undefined);
 
   // Refresh "continue" whenever we return to this screen / progress changes.
   useEffect(() => { setCont(listInProgress()); }, [progV]);
 
-  // Curated category shelves — sequential (throttled), so it never starves playback.
+  // Curated category shelves — sequential so it never floods the network.
   useEffect(() => {
     let cancelled = false; setLoadingHome(true);
     (async () => {
       for (const c of CATEGORIES) {
-        const items = await ytmusic.searchVideos(catQuery(c)).catch(() => [] as Track[]);
+        const shows = await searchPodcastShows(catQuery(c), 12).catch(() => [] as PodShow[]);
         if (cancelled) return;
-        if (items.length) setShelves((prev) => [...prev, { title: c, items: items.slice(0, 12) }]);
+        if (shows.length) setShelves((prev) => [...prev, { title: c, items: shows.map(showToTrack) }]);
         setLoadingHome(false);
       }
     })();
     return () => { cancelled = true; };
   }, []);
 
-  // Debounced search.
+  // Debounced search (shows).
   useEffect(() => {
     const q = query.trim();
     window.clearTimeout(tRef.current);
     if (!q) { setSearching(false); setResults([]); return; }
     setSearching(true);
     tRef.current = window.setTimeout(async () => {
-      const r = await ytmusic.searchVideos(`${q} podcast`).catch(() => [] as Track[]);
-      setResults(r); setSearching(false);
+      const shows = await searchPodcastShows(q).catch(() => [] as PodShow[]);
+      setResults(shows.map(showToTrack)); setSearching(false);
     }, 400);
     return () => window.clearTimeout(tRef.current);
   }, [query]);
 
-  // Show page — the channel's full episode feed when we have a channel id,
-  // otherwise a name search as a fallback.
+  // Show page — load the feed's episodes (real MP3s). Old follows without a feed
+  // are looked up by name first.
   useEffect(() => {
     if (!showView) return;
-    let cancelled = false; setShowLoading(true); setShowEpisodes([]); setShowNext(null);
+    let cancelled = false; setShowLoading(true); setShowEpisodes([]);
     (async () => {
-      if (showView.channelId) {
-        const r = await ytmusic.channelVideos(showView.channelId).catch(() => ({ items: [] as Track[], nextpage: null }));
-        if (cancelled) return;
-        if (r.items.length) {
-          let acc = r.items; let next = r.nextpage; let guard = 0;
-          // Auto-load until we have at least ~50 episodes.
-          while (!cancelled && acc.length < 50 && next && guard < 5) {
-            const more = await ytmusic.channelMore(showView.channelId, next).catch(() => ({ items: [] as Track[], nextpage: null }));
-            const seen = new Set(acc.map((t) => t.id));
-            acc = [...acc, ...more.items.filter((t) => !seen.has(t.id))];
-            next = more.nextpage; guard += 1;
-          }
-          if (cancelled) return;
-          setShowEpisodes(acc); setShowNext(next); setShowLoading(false); return;
-        }
+      let feed = showView.feedUrl;
+      if (!feed) {
+        const found = await searchPodcastShows(showView.title || showView.artist, 1).catch(() => [] as PodShow[]);
+        feed = found[0]?.feedUrl;
       }
-      const eps = await ytmusic.searchVideos(`${showView.artist} podcast`).catch(() => [] as Track[]);
+      if (!feed) { if (!cancelled) { setShowEpisodes([]); setShowLoading(false); } return; }
+      const eps = await getPodcastEpisodes(feed, { title: showView.title, artwork: showView.artwork }).catch(() => [] as Track[]);
       if (!cancelled) { setShowEpisodes(eps); setShowLoading(false); }
     })();
     return () => { cancelled = true; };
   }, [showView]);
 
-  const loadMoreEpisodes = async () => {
-    if (!showView?.channelId || !showNext || loadingMore) return;
-    setLoadingMore(true);
-    const r = await ytmusic.channelMore(showView.channelId, showNext).catch(() => ({ items: [] as Track[], nextpage: null }));
-    setShowEpisodes((prev) => { const seen = new Set(prev.map((t) => t.id)); return [...prev, ...r.items.filter((t) => !seen.has(t.id))]; });
-    setShowNext(r.nextpage);
-    setLoadingMore(false);
-  };
-
   const onFollow = (t: Track) => setFollows(toggleFollow(t));
-  const onWatch = (t: Track) => { stop(); setWatch(t); };
   const onListen = (t: Track) => {
     const pr = getProgress(t.id);
     playQueue([t], 0, 'Podcasts');
     if (pr && pr.state === 'in_progress' && pr.positionMs > 5000) {
-      window.setTimeout(() => { try { seek(pr.positionMs / 1000); } catch { /* ignore */ } }, 2800);
+      window.setTimeout(() => { try { seek(pr.positionMs / 1000); } catch { /* ignore */ } }, 1200);
     }
   };
-  const resume = (p: EpisodeProgress) => { playQueue([p.track], 0, 'Podcasts'); window.setTimeout(() => { try { seek(p.positionMs / 1000); } catch { /* ignore */ } }, 2800); };
+  const resume = (p: EpisodeProgress) => { playQueue([p.track], 0, 'Podcasts'); window.setTimeout(() => { try { seek(p.positionMs / 1000); } catch { /* ignore */ } }, 1200); };
   const togglePlayed = (t: Track) => { if (getProgress(t.id)?.completed) markUnplayed(t.id); else markPlayed(t); setProgV((v) => v + 1); };
 
+  // Show card (tap to open the show; heart to follow).
   const card = (t: Track) => (
-    <div key={t.id} className="card-lift tier-card rounded-2xl p-3 group flex flex-col w-[200px] shrink-0">
+    <div key={t.id} onClick={() => setShowView(t)} tabIndex={0} data-tv-focusable role="button"
+      className="card-lift tier-card rounded-2xl p-3 group flex flex-col w-[170px] shrink-0 cursor-pointer focus:outline-none">
       <div className="aspect-square rounded-xl overflow-hidden mb-3 relative bg-zinc-800">
         <CoverArt imageUrl={t.artworkLarge || t.artwork} dominantColor={t.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
-        <button onClick={() => onWatch(t)} className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity" aria-label="Watch"><span className="btn-sauti px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1"><Video className="w-4 h-4" /> Watch</span></button>
-        <button onClick={() => onFollow(t)} className={`absolute top-2 right-2 w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-sm ${isFollowed(t.id) ? 'bg-sauti text-amber-950' : 'bg-black/55 text-white'}`} aria-label="Follow"><Heart className={`w-4 h-4 ${isFollowed(t.id) ? 'fill-current' : ''}`} /></button>
+        <button onClick={(e) => { e.stopPropagation(); onFollow(t); }} className={`absolute top-2 right-2 w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-sm ${isFollowed(t.id) ? 'bg-sauti text-amber-950' : 'bg-black/55 text-white'}`} aria-label="Follow"><Heart className={`w-4 h-4 ${isFollowed(t.id) ? 'fill-current' : ''}`} /></button>
       </div>
-      <div onClick={() => setShowView(t)} className="cursor-pointer mb-3">
-        <h3 className="text-sm font-bold text-white line-clamp-2 mb-0.5 hover:text-sauti transition-colors">{t.title}</h3>
-        <p className="text-xs text-zinc-500 truncate">{t.artist}{t.date ? ` · ${t.date}` : ''}{t.duration ? ` · ${fmt(t.duration)}` : ''}</p>
-      </div>
-      <div className="flex gap-2 mt-auto">
-        <button onClick={() => onListen(t)} className="btn-sauti flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5"><Headphones className="w-4 h-4" /> Listen</button>
-        <button onClick={() => onWatch(t)} className="btn-glass px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5"><Video className="w-4 h-4" /> Watch</button>
-      </div>
-    </div>
-  );
-
-  const videoModal = watch && (
-    <div role="dialog" data-tv-layer className="dark fixed inset-0 z-[140] bg-black flex flex-col animate-in fade-in duration-200">
-      <div className="flex items-center gap-3 px-3 pt-[calc(env(safe-area-inset-top)+0.5rem)] pb-2.5 glass">
-        <p className="text-white font-bold text-sm truncate flex-1">{watch.title}</p>
-        <button onClick={() => setWatch(null)} data-tv-close tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full glass-liquid flex items-center justify-center text-white shrink-0" aria-label="Close"><X className="w-5 h-5" /></button>
-      </div>
-      <iframe src={`https://www.youtube.com/embed/${watch.id}?autoplay=1&playsinline=1`} title="Podcast" className="flex-1 w-full bg-black border-0" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />
+      <h3 className="text-sm font-bold text-white line-clamp-2 mb-0.5 group-hover:text-sauti transition-colors">{t.title}</h3>
+      <p className="text-xs text-zinc-500 truncate">{t.artist}</p>
     </div>
   );
 
@@ -150,9 +116,10 @@ export default function PodcastsHome() {
           </div>
           <div className="min-w-0">
             <div className="overline mb-1">Podcast</div>
-            <h2 className="text-2xl md:text-4xl font-display font-bold text-white line-clamp-2">{showView.artist}</h2>
+            <h2 className="text-2xl md:text-4xl font-display font-bold text-white line-clamp-2">{showView.title || showView.artist}</h2>
+            {showView.artist && showView.artist !== showView.title && <p className="text-sm text-zinc-400 mt-1 truncate">{showView.artist}</p>}
             <div className="flex gap-2 mt-4">
-              <button onClick={() => showEpisodes[0] && onListen(showEpisodes[0])} className="btn-sauti px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Play className="w-4 h-4 fill-current" /> Play</button>
+              <button onClick={() => sortedEps[0] && onListen(sortedEps[0])} className="btn-sauti px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Play className="w-4 h-4 fill-current" /> Play</button>
               <button onClick={() => onFollow(showView)} className="btn-glass px-5 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Heart className={`w-4 h-4 ${isFollowed(showView.id) ? 'fill-current' : ''}`} /> {isFollowed(showView.id) ? 'Following' : 'Follow'}</button>
             </div>
           </div>
@@ -188,18 +155,11 @@ export default function PodcastsHome() {
                   </div>
                   <button onClick={() => togglePlayed(ep)} className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${played ? 'text-sauti' : 'text-zinc-500 hover:text-white'}`} aria-label={played ? 'Mark unplayed' : 'Mark played'}>{played ? <Check className="w-5 h-5" /> : <Circle className="w-5 h-5" />}</button>
                   <button onClick={() => onListen(ep)} className="btn-sauti w-10 h-10 rounded-full flex items-center justify-center shrink-0" aria-label="Listen"><Play className="w-4 h-4 fill-current ml-0.5" /></button>
-                  <button onClick={() => onWatch(ep)} className="btn-glass w-10 h-10 rounded-lg flex items-center justify-center shrink-0" aria-label="Watch"><Video className="w-4 h-4" /></button>
                 </div>
               );
             })}
-            {showNext && (
-              <div className="flex justify-center pt-4">
-                <button onClick={loadMoreEpisodes} disabled={loadingMore} className="btn-glass px-6 py-2.5 rounded-full text-sm font-bold disabled:opacity-50">{loadingMore ? 'Loading…' : 'Load more episodes'}</button>
-              </div>
-            )}
           </div>
         )}
-        {videoModal}
       </div>
     );
   }
@@ -209,14 +169,14 @@ export default function PodcastsHome() {
       {/* Search */}
       <div className="relative mb-6 max-w-lg">
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search podcasts & episodes…" className="w-full bg-zinc-900/70 border border-white/10 rounded-full pl-10 pr-4 py-3 text-sm text-white focus:outline-none focus:border-amber-500/60" />
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search podcasts…" className="w-full bg-zinc-900/70 border border-white/10 rounded-full pl-10 pr-4 py-3 text-sm text-white focus:outline-none focus:border-amber-500/60" />
       </div>
 
       {query.trim() ? (
         searching ? (
           <div className="flex items-center gap-2 text-zinc-400 py-10"><Loader2 className="w-5 h-5 animate-spin text-amber-500" /> Searching…</div>
         ) : results.length ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">{results.map(card)}</div>
+          <div className="flex flex-wrap gap-4">{results.map(card)}</div>
         ) : <p className="text-zinc-500 py-10 text-center">No podcasts found.</p>
       ) : (
         <>
@@ -258,9 +218,6 @@ export default function PodcastsHome() {
           {loadingHome && shelves.length === 0 && <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3 text-zinc-400"><Loader2 className="w-9 h-9 animate-spin text-amber-500" /><span>Loading podcasts…</span></div>}
         </>
       )}
-
-      {/* Video player */}
-      {videoModal}
     </div>
   );
 }
