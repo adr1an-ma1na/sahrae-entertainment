@@ -107,6 +107,11 @@ export default function MusicView() {
   const [madeForYou, setMadeForYou] = useState<{ id: string; title: string; subtitle: string; tracks: Track[] }[]>([]);
   const [viewMix, setViewMix] = useState<{ id: string; title: string; subtitle: string; tracks: Track[] } | null>(null);
 
+  // Mood / genre page (YouTube-Music-style) — a chip opens a dedicated page.
+  const [genre, setGenre] = useState<string | null>(null);
+  const [genreTracks, setGenreTracks] = useState<Track[]>([]);
+  const [genreLoading, setGenreLoading] = useState(false);
+
   const [query, setQuery] = useState('');
   const [searchTab, setSearchTab] = useState<'songs' | 'artists' | 'albums'>('songs');
   const [searching, setSearching] = useState(false);
@@ -247,6 +252,16 @@ export default function MusicView() {
     return () => window.clearTimeout(tRef.current);
   }, [query]);
 
+  // Load a mood/genre page's tracks on open.
+  useEffect(() => {
+    if (!genre) return;
+    let cancelled = false; setGenreLoading(true); setGenreTracks([]);
+    ytmusic.search(genre)
+      .then((t) => { if (!cancelled) { setGenreTracks(t); setGenreLoading(false); } })
+      .catch(() => { if (!cancelled) setGenreLoading(false); });
+    return () => { cancelled = true; };
+  }, [genre]);
+
   const openArtist = async (a: Artist) => {
     setDetail({ kind: 'artist', id: a.id, name: a.name, thumbnail: a.thumbnail, subtitle: 'Artist' });
     setDetailLoading(true); setDetailTracks([]); setDetailAlbums([]);
@@ -311,6 +326,33 @@ export default function MusicView() {
       <option value="duration">Duration</option>
     </select>
   );
+
+  if (genre) {
+    const shown = sortTracks(genreTracks);
+    const hc = genreTracks[0]?.dominantColor || 'rgba(245,158,11,0.4)';
+    return (
+      <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
+        <div aria-hidden className="absolute inset-x-0 top-0 h-80 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${hc} 0%, transparent 100%)`, opacity: 0.5 }} />
+        <button onClick={() => setGenre(null)} className="flex items-center gap-1 text-zinc-400 hover:text-white mb-5 text-sm"><ChevronLeft className="w-4 h-4" /> Back</button>
+        <div className="overline mb-1">Mood &amp; genre</div>
+        <h2 className="text-3xl md:text-5xl font-display font-bold text-white mb-4">{genre}</h2>
+        {genreTracks.length > 0 && (
+          <div className="flex gap-2 mb-8">
+            <button onClick={() => playQueue(shown, 0, genre)} className="btn-sauti px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Play className="w-4 h-4 fill-current" /> Play</button>
+            <button onClick={() => { const arr = [...genreTracks].sort(() => Math.random() - 0.5); playQueue(arr, 0, genre); }} className="btn-glass px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Shuffle className="w-4 h-4" /> Shuffle</button>
+            {sortSelect}
+          </div>
+        )}
+        {genreLoading ? (
+          <div className="flex items-center gap-2 text-zinc-400 py-10"><Loader2 className="w-6 h-6 animate-spin text-amber-500" /> Loading {genre}…</div>
+        ) : genreTracks.length === 0 ? (
+          <p className="text-zinc-500 py-8">Nothing found for {genre}.</p>
+        ) : (
+          <div className="grid sm:grid-cols-2 gap-2">{shown.map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(shown, i, genre)} /></Fragment>)}</div>
+        )}
+      </div>
+    );
+  }
 
   if (viewMix) {
     const shown = sortTracks(viewMix.tracks);
@@ -432,9 +474,9 @@ export default function MusicView() {
             </section>
           ) : (
             <>
-              {/* Mood & genre chips at the very top (YouTube Music pattern) */}
+              {/* Mood & genre chips at the very top (YouTube Music pattern) — open a page */}
               <div className="flex overflow-x-auto gap-2 pb-2 mb-6 scrollbar-hide">
-                {GENRES.map((g) => <button key={g} onClick={() => setQuery(g)} tabIndex={0} data-tv-focusable className="chip px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap text-zinc-300 hover:text-white">{g}</button>)}
+                {GENRES.map((g) => <button key={g} onClick={() => setGenre(g)} tabIndex={0} data-tv-focusable className="chip px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap text-zinc-300 hover:text-white">{g}</button>)}
               </div>
 
               {/* ── Featured spotlight hero ── */}

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, Fragment, type CSSProperties } from 'react';
 import { Play, Pause, SkipForward, SkipBack, ChevronDown, Heart, Shuffle, Repeat, Repeat1, Music2, Plus, X, ListMusic, Mic2, SlidersHorizontal, RotateCcw, RotateCw, Gauge, Moon } from 'lucide-react';
 import { useMusic } from '../hooks/useMusic';
-import { Track } from '../services/ytmusic';
+import { Track, ytmusic } from '../services/ytmusic';
 import { hdArtwork } from '../services/albumArt';
 import { CoverArt } from './ui/CoverArt';
 import { DynamicBackground } from './ui/DynamicBackground';
@@ -98,13 +98,16 @@ function QueueRow({ track, activeRow, onPlay, onRemove }: { track: Track; active
 export default function MusicPlayer() {
   const {
     current, isPlaying, position, duration, shuffle, repeat, expanded, active,
-    queue, index, recentlyPlayed, queueSource, jumpTo, removeFromQueue, playQueue,
+    queue, index, queueSource, jumpTo, removeFromQueue, playQueue,
     toggle, stop, next, prev, seek, setRate, toggleShuffle, cycleRepeat, toggleLike, isLiked, setExpanded, openAddSheet,
   } = useMusic();
   const [showQueue, setShowQueue] = useState(false);
-  const [qTab, setQTab] = useState<'next' | 'recent'>('next');
-  const [showLyrics, setShowLyrics] = useState(false);
+  const [qTab, setQTab] = useState<'next' | 'lyrics' | 'related'>('next');
   const [showEq, setShowEq] = useState(false);
+  // "Related" tab (YouTube-Music-style) — songs related to what's playing.
+  const [related, setRelated] = useState<Track[]>([]);
+  const [relLoading, setRelLoading] = useState(false);
+  const relForId = useRef<string | null>(null);
 
   // Podcast controls: playback speed + sleep timer.
   const isPodcast = queueSource === 'Podcasts';
@@ -121,6 +124,19 @@ export default function MusicPlayer() {
   };
   // Re-apply chosen speed when the episode changes (the embed resets to 1x).
   useEffect(() => { if (isPodcast && speed !== 1) { const t = setTimeout(() => setRate(speed), 2500); return () => clearTimeout(t); } }, [current?.id, isPodcast, speed, setRate]);
+
+  // Load "Related" when its tab is opened for the current track (cached per id).
+  useEffect(() => {
+    if (!showQueue || qTab !== 'related' || !current) return;
+    if (relForId.current === current.id) return;
+    relForId.current = current.id;
+    setRelLoading(true); setRelated([]);
+    let cancelled = false;
+    ytmusic.related(current.id)
+      .then((r) => { if (!cancelled) { setRelated(r); setRelLoading(false); } })
+      .catch(() => { if (!cancelled) setRelLoading(false); });
+    return () => { cancelled = true; };
+  }, [showQueue, qTab, current]);
 
   // Resolve a true-HD cover (iTunes) for the big now-playing art.
   const [hdArt, setHdArt] = useState<string | undefined>(undefined);
@@ -166,11 +182,9 @@ export default function MusicPlayer() {
               </button>
             </div>
 
-            {/* Album art OR lyrics */}
+            {/* Album art (lyrics live in the Up next / Lyrics / Related panel) */}
             <div className="flex-1 flex items-center justify-center py-6 min-h-0">
-              {showLyrics ? (
-                <div className="w-full h-full flex flex-col min-h-0"><LyricsPanel track={current} position={position} /></div>
-              ) : current.artworkLarge || current.artwork ? (
+              {current.artworkLarge || current.artwork ? (
                 <div className="relative w-[min(80vw,42vh)] max-w-[380px]">
                   <CoverArt imageUrl={hdArt || current.artworkLarge || current.artwork} fallbackUrl={current.artwork} dominantColor={current.dominantColor} rounded="rounded-3xl"
                     className="np-art w-full aspect-square" />
@@ -229,44 +243,52 @@ export default function MusicPlayer() {
                   <button onClick={cycleSleep} tabIndex={0} data-tv-focusable className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-colors ${sleepMin > 0 ? 'bg-sauti text-amber-950' : 'glass-liquid text-white'}`}><Moon className="w-4 h-4" /> {sleepMin > 0 ? `${sleepMin}m` : 'Sleep'}</button>
                 </>
               ) : (
-                <button onClick={() => setShowLyrics((v) => !v)} tabIndex={0} data-tv-focusable className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-colors ${showLyrics ? 'bg-sauti text-amber-950' : 'glass-liquid text-white'}`}><Mic2 className="w-4 h-4" /> Lyrics</button>
+                <button onClick={() => { setQTab('lyrics'); setShowQueue(true); }} tabIndex={0} data-tv-focusable className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold glass-liquid text-white"><Mic2 className="w-4 h-4" /> Lyrics</button>
               )}
               <button onClick={() => setShowEq(true)} tabIndex={0} data-tv-focusable className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold glass-liquid text-white" aria-label="Equalizer"><SlidersHorizontal className="w-4 h-4" /> EQ</button>
-              <button onClick={() => { setQTab('next'); setShowQueue(true); }} tabIndex={0} data-tv-focusable className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold glass-liquid text-white"><ListMusic className="w-4 h-4" /> Queue</button>
+              <button onClick={() => { setQTab('next'); setShowQueue(true); }} tabIndex={0} data-tv-focusable className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold glass-liquid text-white"><ListMusic className="w-4 h-4" /> Up next</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Queue / Recently played ── */}
+      {/* ── Up next / Lyrics / Related (YouTube-Music-style player tabs) ── */}
       {showQueue && (
         <div role="dialog" data-tv-layer className="dark sauti fixed inset-0 z-[125] flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-300">
           <div className="flex items-center gap-3 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 border-b border-white/10">
             <button onClick={() => setShowQueue(false)} data-tv-close tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full glass-liquid flex items-center justify-center text-white" aria-label="Back"><ChevronDown className="w-6 h-6" /></button>
             <div className="flex gap-5">
-              {(['next', 'recent'] as const).map((t) => (
-                <button key={t} onClick={() => setQTab(t)} tabIndex={0} data-tv-focusable className={`text-sm font-bold pb-1.5 border-b-2 transition-colors ${qTab === t ? 'text-white border-amber-500' : 'text-zinc-500 border-transparent hover:text-zinc-300'}`}>{t === 'next' ? 'Queue' : 'Recently played'}</button>
+              {(['next', 'lyrics', 'related'] as const).map((t) => (
+                <button key={t} onClick={() => setQTab(t)} tabIndex={0} data-tv-focusable className={`text-sm font-bold pb-1.5 border-b-2 transition-colors capitalize ${qTab === t ? 'text-white border-amber-500' : 'text-zinc-500 border-transparent hover:text-zinc-300'}`}>{t === 'next' ? 'Up next' : t}</button>
               ))}
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto custom-scrollbar px-3 py-4 pb-32 max-w-2xl mx-auto w-full">
-            {qTab === 'next' ? (
-              <>
-                <p className="overline mb-2 px-1">Now playing</p>
-                <QueueRow track={current} activeRow />
-                <p className="overline mt-6 mb-2 px-1">{queueSource ? `Next from: ${queueSource}` : 'Next up'}</p>
-                {upNext.length === 0 ? (
-                  <p className="text-zinc-500 text-sm px-1">Autoplay keeps it going with related songs.</p>
-                ) : (
-                  upNext.map((t, i) => <Fragment key={`${t.id}-${i}`}><QueueRow track={t} onPlay={() => jumpTo(index + 1 + i)} onRemove={() => removeFromQueue(index + 1 + i)} /></Fragment>)
-                )}
-              </>
-            ) : recentlyPlayed.length === 0 ? (
-              <p className="text-zinc-500 text-sm px-1">Nothing played yet.</p>
-            ) : (
-              recentlyPlayed.map((t, i) => <Fragment key={`r-${t.id}-${i}`}><QueueRow track={t} onPlay={() => playQueue(recentlyPlayed, i, 'Recently played')} /></Fragment>)
-            )}
-          </div>
+          {qTab === 'lyrics' ? (
+            <div className="flex-1 min-h-0 flex flex-col max-w-2xl mx-auto w-full px-3 py-4">
+              <LyricsPanel track={current} position={position} />
+            </div>
+          ) : (
+            <div className="flex-1 overflow-y-auto custom-scrollbar px-3 py-4 pb-32 max-w-2xl mx-auto w-full">
+              {qTab === 'next' ? (
+                <>
+                  <p className="overline mb-2 px-1">Now playing</p>
+                  <QueueRow track={current} activeRow />
+                  <p className="overline mt-6 mb-2 px-1">{queueSource ? `Next from: ${queueSource}` : 'Next up'}</p>
+                  {upNext.length === 0 ? (
+                    <p className="text-zinc-500 text-sm px-1">Autoplay keeps it going with related songs.</p>
+                  ) : (
+                    upNext.map((t, i) => <Fragment key={`${t.id}-${i}`}><QueueRow track={t} onPlay={() => jumpTo(index + 1 + i)} onRemove={() => removeFromQueue(index + 1 + i)} /></Fragment>)
+                  )}
+                </>
+              ) : relLoading ? (
+                <p className="text-zinc-500 text-sm px-1">Finding related songs…</p>
+              ) : related.length === 0 ? (
+                <p className="text-zinc-500 text-sm px-1">No related songs found.</p>
+              ) : (
+                related.map((t, i) => <Fragment key={`rel-${t.id}-${i}`}><QueueRow track={t} onPlay={() => playQueue(related, i, 'Related')} /></Fragment>)
+              )}
+            </div>
+          )}
         </div>
       )}
 
