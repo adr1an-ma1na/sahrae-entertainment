@@ -29,12 +29,6 @@ const CHANNELS: Channel[] = [
   { name: 'ABC News (Australia)', country: 'Australia', category: 'News', url: 'https://abc-iview-coombe.akamaized.net/hls/live/2038312/2038312_3132/index.m3u8' },
   { name: 'NHK World', country: 'Japan', category: 'News', url: 'https://nhkwlive-ojp.akamaized.net/hls/live/2003459/nhkwlive-ojp-en/index.m3u8' },
   { name: 'Arirang TV', country: 'Korea', category: 'News', url: 'https://amdlive-ch01-ctnd-com.akamaized.net/arirang_1ch/smil:arirang_1ch.smil/playlist.m3u8' },
-  // African regional — official 24/7 YouTube live channels (verified channel IDs).
-  { name: 'Citizen TV', country: 'Kenya', category: 'Regional', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UChBQgieUidXV1CmDxSdRm3g&autoplay=1' },
-  { name: 'KTN News', country: 'Kenya', category: 'Regional', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCKVsdeoHExltrWMuK0hOWmg&autoplay=1' },
-  { name: 'NTV Kenya', country: 'Kenya', category: 'Regional', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCqBJ47FjJcl61fmSbcadAVg&autoplay=1' },
-  { name: 'Channels TV', country: 'Nigeria', category: 'Regional', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCEXGDNclvmg6RW0vipJYsTQ&autoplay=1' },
-  { name: 'TVC News', country: 'Nigeria', category: 'Regional', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCgp4A6I8LCWrhUzn-5SbKvA&autoplay=1' },
   // Sports
   { name: 'Red Bull TV', country: 'Global', category: 'Sports', url: 'https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master.m3u8' },
   { name: 'beIN Sports XTRA', country: 'Global', category: 'Sports', url: 'https://bein-xtra-bein.amagi.tv/playlist.m3u8' },
