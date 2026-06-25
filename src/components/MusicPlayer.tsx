@@ -81,7 +81,7 @@ function LyricsPanel({ track, position, onSeek }: { track: Track; position: numb
       <div className="relative h-full overflow-y-auto custom-scrollbar px-6 py-[42vh] text-center">
       {synced.map((l, i) => (
         <button key={i} ref={i === activeIdx ? activeRef : undefined} onClick={() => onSeek?.(l.t)}
-          className={`block w-full leading-snug py-2 transition-all duration-300 origin-center ${i === activeIdx ? 'text-white text-2xl md:text-[28px] font-semibold scale-[1.05]' : i < activeIdx ? 'text-white/40 text-lg font-medium' : 'text-white/50 text-lg font-medium'}`}>
+          className={`block w-full leading-snug py-2.5 px-2 font-sans tracking-tight transition-colors duration-300 ${i === activeIdx ? 'text-white text-[26px] md:text-3xl font-extrabold' : 'text-white/45 text-xl md:text-2xl font-bold'}`}>
           {l.text || '♪'}
         </button>
       ))}
