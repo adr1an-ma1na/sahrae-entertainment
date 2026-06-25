@@ -1,15 +1,7 @@
 import { useState, useEffect, useRef, Fragment, ReactNode } from 'react';
 import { Search, Play, Pause, Heart, Loader2, Music2, Plus, X, ListMusic, Shuffle, Trash2, ChevronLeft, Library, Sparkles, Disc3, User } from 'lucide-react';
 import { ytmusic, Track, Artist, Album, GENRES, SECTIONS, TRENDING_PLAYLISTS, TrendingPlaylist } from '../services/ytmusic';
-import { audius, Track as AudiusTrack } from '../services/audius';
-
-// Audius track -> player Track, with audioUrl set so it plays via <audio>
-// (backgrounds + downloads). Real, legal, full-length, indie/electronic-leaning.
-const aTrack = (a: AudiusTrack): Track => ({
-  id: `audius:${a.id}`, title: a.title, artist: a.artist,
-  artwork: a.artwork, artworkLarge: a.artworkLarge, duration: a.duration,
-  audioUrl: a.streamUrl,
-});
+import { itunes } from '../services/itunesMusic';
 import { useMusic } from '../hooks/useMusic';
 import { CoverArt } from './ui/CoverArt';
 
@@ -193,18 +185,18 @@ export default function MusicView() {
     return () => { cancelled = true; };
   }, []);
 
-  // Audius shelves — trending + a few genres. These play in the BACKGROUND and
-  // can be downloaded (direct audio URLs), unlike the YouTube shelves.
+  // iTunes shelves — mainstream songs (30s previews) that play in the BACKGROUND
+  // and download (direct preview URLs), unlike the YouTube shelves.
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const trending = await audius.trending().catch(() => [] as AudiusTrack[]);
+      const top = await itunes.searchSongs('top hits 2026', 25).catch(() => [] as Track[]);
       if (cancelled) return;
-      if (trending.length) setBgShelves((p) => [...p, { title: 'Plays anywhere · background & offline', tracks: trending.map(aTrack).slice(0, 20) }]);
-      for (const g of ['Lo-Fi', 'House', 'Hip-Hop/Rap', 'Electronic']) {
-        const tr = await audius.trending(g).catch(() => [] as AudiusTrack[]);
+      if (top.length) setBgShelves((p) => [...p, { title: 'Top songs · plays in background', tracks: top }]);
+      for (const g of ['Afrobeats', 'Amapiano', 'Hip-Hop', 'Pop', 'R&B', 'Gospel']) {
+        const tr = await itunes.searchSongs(`${g} hits 2026`, 25).catch(() => [] as Track[]);
         if (cancelled) return;
-        if (tr.length) setBgShelves((p) => [...p, { title: g, tracks: tr.map(aTrack).slice(0, 20) }]);
+        if (tr.length) setBgShelves((p) => [...p, { title: g, tracks: tr }]);
       }
     })();
     return () => { cancelled = true; };
@@ -309,7 +301,7 @@ export default function MusicView() {
     if (!q) { setSearching(false); setRSongs([]); setRArtists([]); setRAlbums([]); return; }
     setSearching(true);
     tRef.current = window.setTimeout(async () => {
-      const [s, a, al] = await Promise.all([ytmusic.search(q), ytmusic.searchArtists(q), ytmusic.searchAlbums(q)]);
+      const [s, a, al] = await Promise.all([itunes.searchSongs(q), ytmusic.searchArtists(q), ytmusic.searchAlbums(q)]);
       setRSongs(s); setRArtists(a); setRAlbums(al); setSearching(false);
     }, 400);
     return () => window.clearTimeout(tRef.current);
