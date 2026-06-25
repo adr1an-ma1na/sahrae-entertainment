@@ -74,9 +74,9 @@ function LyricsPanel({ track, position, onSeek }: { track: Track; position: numb
   );
   return (
     <div className="relative h-full">
-      <div aria-hidden className="absolute inset-0 overflow-hidden pointer-events-none">
-        {(track.artworkLarge || track.artwork) && <img src={track.artworkLarge || track.artwork} alt="" className="w-full h-full object-cover blur-[40px] scale-125 opacity-30" />}
-        <div className="absolute inset-0 bg-black/55" />
+      <div aria-hidden className="absolute inset-0 overflow-hidden pointer-events-none"
+        style={{ background: `linear-gradient(180deg, ${track.dominantColor || '#27272a'} 0%, rgba(9,9,11,0.92) 78%)` }}>
+        {(track.artworkLarge || track.artwork) && <img src={track.artworkLarge || track.artwork} alt="" className="w-full h-full object-cover blur-[70px] scale-150 opacity-20 mix-blend-soft-light" />}
       </div>
       <div className="relative h-full overflow-y-auto custom-scrollbar px-6 py-[42vh] text-center">
       {synced.map((l, i) => (
@@ -281,8 +281,19 @@ export default function MusicPlayer() {
             </div>
           </div>
           {qTab === 'lyrics' ? (
-            <div className="flex-1 min-h-0 relative">
-              <LyricsPanel track={current} position={position} onSeek={seek} />
+            <div className="flex-1 min-h-0 flex flex-col">
+              <div className="flex-1 min-h-0 relative"><LyricsPanel track={current} position={position} onSeek={seek} /></div>
+              {/* Mini track player below the lyrics (Spotify-style) */}
+              <div className="shrink-0 border-t border-white/10 bg-black/45 backdrop-blur px-4 py-3 flex items-center gap-3">
+                <CoverArt imageUrl={current.artwork} dominantColor={current.dominantColor} className="w-11 h-11 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-white truncate">{current.title}</p>
+                  <p className="text-xs text-zinc-400 truncate">{current.artist}</p>
+                </div>
+                <button onClick={() => seek(Math.max(0, position - 10))} tabIndex={0} data-tv-focusable className="w-9 h-9 rounded-full flex items-center justify-center text-zinc-300 hover:text-white shrink-0" aria-label="Back 10s"><RotateCcw className="w-5 h-5" /></button>
+                <button onClick={toggle} tabIndex={0} data-tv-focusable className="btn-sauti w-11 h-11 rounded-full flex items-center justify-center shrink-0" aria-label={isPlaying ? 'Pause' : 'Play'}>{isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}</button>
+                <button onClick={next} tabIndex={0} data-tv-focusable className="w-9 h-9 rounded-full flex items-center justify-center text-zinc-300 hover:text-white shrink-0" aria-label="Next"><SkipForward className="w-5 h-5 fill-current" /></button>
+              </div>
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto custom-scrollbar px-3 py-4 pb-32 max-w-2xl mx-auto w-full">

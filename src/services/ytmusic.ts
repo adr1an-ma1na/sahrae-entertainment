@@ -47,20 +47,25 @@ export const SECTIONS: { title: string; q: string }[] = [
 
 // Trending playlists by country/region — rendered as tappable cards. Each opens
 // a 50-track page built from its region-appropriate queries (refreshed daily).
-export type TrendingPlaylist = { id: string; title: string; short: string; subtitle: string; grad: string; queries: string[] };
+export type TrendingPlaylist = { id: string; title: string; short: string; subtitle: string; flag: string; grad: string; count: number; weekly?: boolean; queries: string[] };
 export const TRENDING_PLAYLISTS: TrendingPlaylist[] = [
-  { id: 'us', title: 'Top 50 — United States', short: 'USA', subtitle: 'Updated daily · Trending in US', grad: 'from-blue-600 to-red-600', queries: ['top hits usa 2026', 'billboard hot 100 2026', 'us trending songs 2026'] },
-  { id: 'gb', title: 'Top 50 — United Kingdom', short: 'UK', subtitle: 'Updated daily · Trending in GB', grad: 'from-blue-700 to-rose-600', queries: ['uk top 40 2026', 'uk trending songs 2026', 'british hits 2026'] },
-  { id: 'ke', title: 'Top 50 — Kenya', short: 'Kenya', subtitle: 'Updated daily · Trending in KE', grad: 'from-red-600 to-green-700', queries: ['kenya trending songs 2026', 'gengetone hits 2026', 'kenyan music 2026'] },
-  { id: 'ug', title: 'Top 50 — Uganda', short: 'Uganda', subtitle: 'Updated daily · Trending in UG', grad: 'from-yellow-500 to-red-600', queries: ['uganda trending songs 2026', 'ugandan music 2026 hits'] },
-  { id: 'tz', title: 'Top 50 — Tanzania', short: 'Tanzania', subtitle: 'Updated daily · Trending in TZ', grad: 'from-green-600 to-yellow-500', queries: ['bongo flava 2026 hits', 'tanzania trending songs 2026'] },
-  { id: 'ng', title: 'Top 50 — Nigeria', short: 'Nigeria', subtitle: 'Updated daily · Trending in NG', grad: 'from-green-600 to-emerald-800', queries: ['naija afrobeats 2026 hits', 'nigeria trending songs 2026'] },
-  { id: 'gh', title: 'Top 50 — Ghana', short: 'Ghana', subtitle: 'Updated daily · Trending in GH', grad: 'from-red-600 to-yellow-500', queries: ['ghana trending songs 2026', 'ghanaian afrobeats 2026'] },
-  { id: 'za', title: 'Top 50 — South Africa', short: 'S. Africa', subtitle: 'Updated daily · Trending in ZA', grad: 'from-green-600 to-amber-600', queries: ['amapiano 2026 hits', 'south africa trending songs 2026'] },
-  { id: 'fresh', title: 'Fresh Finds — Global', short: 'Fresh Finds', subtitle: 'New discoveries, refreshed daily', grad: 'from-fuchsia-600 to-indigo-700', queries: ['fresh finds 2026 new artists', 'new music discovery 2026'] },
-  { id: 'viral', title: 'Viral Hits — Global', short: 'Viral Hits', subtitle: 'Blowing up right now', grad: 'from-pink-600 to-orange-500', queries: ['viral songs 2026', 'trending viral hits 2026'] },
-  { id: 'nmf-af', title: 'New Music Friday — Africa', short: 'NMF Africa', subtitle: 'Freshest African drops', grad: 'from-amber-500 to-emerald-700', queries: ['new african music this week 2026', 'new afrobeats friday 2026'] },
-  { id: 'nmf-global', title: 'New Music Friday — Global', short: 'NMF Global', subtitle: 'Freshest worldwide', grad: 'from-sky-500 to-violet-700', queries: ['new music friday 2026', 'new songs this week 2026'] },
+  // Regional - 100 songs, well-curated, refreshed daily.
+  { id: 'americas', title: 'Top 100 - Americas', short: 'Americas', flag: '\u{1F30E}', subtitle: 'US, Latin, Canada & Brazil', grad: 'from-blue-600 to-red-600', count: 100, queries: ['billboard hot 100 2026', 'top songs usa this week 2026', 'latin hits 2026', 'reggaeton 2026 hits', 'canada top hits 2026', 'brazil top hits 2026', 'top 100 songs america 2026'] },
+  { id: 'africa', title: 'Top 100 - Africa', short: 'Africa', flag: '\u{1F30D}', subtitle: 'Afrobeats, Amapiano, Bongo & more', grad: 'from-amber-500 to-emerald-700', count: 100, queries: ['afrobeats top 100 2026', 'amapiano hits 2026', 'bongo flava 2026', 'gengetone hits 2026', 'naija top songs 2026', 'south africa top hits 2026', 'african hits this week 2026'] },
+  { id: 'southamerica', title: 'Top 100 - South America', short: 'S. America', flag: '\u{1F30E}', subtitle: 'Reggaeton, Sertanejo & Latin pop', grad: 'from-yellow-500 to-green-600', count: 100, queries: ['reggaeton hits 2026', 'brazil funk sertanejo 2026', 'latin top 100 2026', 'argentina top songs 2026', 'colombia top hits 2026', 'musica latina 2026 exitos', 'peru chile top hits 2026'] },
+  { id: 'uk', title: 'Top 100 - United Kingdom', short: 'UK', flag: '\u{1F1EC}\u{1F1E7}', subtitle: 'Official Chart, Pop & Drill', grad: 'from-blue-700 to-rose-600', count: 100, queries: ['uk official chart top 40 2026', 'uk top 100 songs 2026', 'uk drill grime 2026', 'british pop hits 2026', 'uk dance 2026', 'uk rnb 2026', 'uk hits this week 2026'] },
+  { id: 'europe', title: 'Top 100 - Europe', short: 'Europe', flag: '\u{1F1EA}\u{1F1FA}', subtitle: 'Pan-European hits', grad: 'from-indigo-600 to-sky-600', count: 100, queries: ['europe top hits 2026', 'german top charts 2026', 'french hits 2026', 'spanish hits 2026', 'italian top songs 2026', 'dutch top 40 2026', 'europe top 100 2026'] },
+  // Country - Top 50.
+  { id: 'us', title: 'Top 50 - United States', short: 'USA', flag: '\u{1F1FA}\u{1F1F8}', subtitle: 'Trending in the US', grad: 'from-blue-600 to-red-600', count: 50, queries: ['billboard hot 100 2026', 'top songs usa this week 2026', 'us trending songs 2026'] },
+  { id: 'ke', title: 'Top 50 - Kenya', short: 'Kenya', flag: '\u{1F1F0}\u{1F1EA}', subtitle: 'Trending in Kenya', grad: 'from-red-600 to-green-700', count: 50, queries: ['kenya trending songs 2026', 'gengetone hits 2026', 'kenyan music 2026 hits'] },
+  { id: 'ug', title: 'Top 50 - Uganda', short: 'Uganda', flag: '\u{1F1FA}\u{1F1EC}', subtitle: 'Trending in Uganda', grad: 'from-yellow-500 to-red-600', count: 50, queries: ['uganda trending songs 2026', 'ugandan music 2026 hits'] },
+  { id: 'tz', title: 'Top 50 - Tanzania', short: 'Tanzania', flag: '\u{1F1F9}\u{1F1FF}', subtitle: 'Trending in Tanzania', grad: 'from-green-600 to-yellow-500', count: 50, queries: ['bongo flava 2026 hits', 'tanzania trending songs 2026'] },
+  { id: 'ng', title: 'Top 50 - Nigeria', short: 'Nigeria', flag: '\u{1F1F3}\u{1F1EC}', subtitle: 'Trending in Nigeria', grad: 'from-green-600 to-emerald-800', count: 50, queries: ['naija afrobeats 2026 hits', 'nigeria trending songs 2026'] },
+  { id: 'gh', title: 'Top 50 - Ghana', short: 'Ghana', flag: '\u{1F1EC}\u{1F1ED}', subtitle: 'Trending in Ghana', grad: 'from-red-600 to-yellow-500', count: 50, queries: ['ghana trending songs 2026', 'ghanaian afrobeats 2026'] },
+  { id: 'za', title: 'Top 50 - South Africa', short: 'S. Africa', flag: '\u{1F1FF}\u{1F1E6}', subtitle: 'Trending in South Africa', grad: 'from-green-600 to-amber-600', count: 50, queries: ['amapiano 2026 hits', 'south africa trending songs 2026'] },
+  // Weekly New Music Friday (reshuffles each week).
+  { id: 'nmf-af', title: 'New Music Friday - Africa', short: 'NMF Africa', flag: '\u{1F30D}', subtitle: 'Fresh African drops, weekly', grad: 'from-amber-500 to-emerald-700', count: 50, weekly: true, queries: ['new african music this week 2026', 'new afrobeats friday 2026', 'new amapiano this week 2026', 'new bongo flava 2026'] },
+  { id: 'nmf-global', title: 'New Music Friday - Global', short: 'NMF Global', flag: '\u{1F310}', subtitle: 'Fresh worldwide, weekly', grad: 'from-sky-500 to-violet-700', count: 50, weekly: true, queries: ['new music friday 2026', 'new songs this week 2026', 'new pop releases 2026', 'new hip hop this week 2026'] },
 ];
 
 const INSTANCES = [

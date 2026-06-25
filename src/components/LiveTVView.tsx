@@ -5,7 +5,7 @@ import { probeHls, probeAll } from '../services/streamHealth';
 
 type Health = 'checking' | 'ok' | 'dead';
 
-interface Channel { name: string; country: string; category: Category; url: string }
+interface Channel { name: string; country: string; category: Category; url: string; kind?: 'hls' | 'yt' }
 type Category = 'News' | 'Sports' | 'Documentary' | 'Science' | 'Music' | 'Kids' | 'Lifestyle';
 
 // Verified, working free HLS broadcasts (probed live). Broadcaster-official feeds
@@ -28,6 +28,7 @@ const CHANNELS: Channel[] = [
   { name: 'CBS News', country: 'USA', category: 'News', url: 'https://cbsn-us-cbsnstream.cbsnstream.cbsnews.com/out/v1/55a8648e840f4fa9b0d5b85d6c8f9f9a/master.m3u8' },
   { name: 'ABC News (Australia)', country: 'Australia', category: 'News', url: 'https://abc-iview-coombe.akamaized.net/hls/live/2038312/2038312_3132/index.m3u8' },
   { name: 'NHK World', country: 'Japan', category: 'News', url: 'https://nhkwlive-ojp.akamaized.net/hls/live/2003459/nhkwlive-ojp-en/index.m3u8' },
+  { name: 'Arirang TV', country: 'Korea', category: 'News', url: 'https://amdlive-ch01-ctnd-com.akamaized.net/arirang_1ch/smil:arirang_1ch.smil/playlist.m3u8' },
   // Sports
   { name: 'Red Bull TV', country: 'Global', category: 'Sports', url: 'https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master.m3u8' },
   { name: 'beIN Sports XTRA', country: 'Global', category: 'Sports', url: 'https://bein-xtra-bein.amagi.tv/playlist.m3u8' },
@@ -39,6 +40,7 @@ const CHANNELS: Channel[] = [
   { name: 'NASA TV', country: 'USA', category: 'Science', url: 'https://ntv1.akamaized.net/hls/live/2014075/NASA-NTV1-HLS/master.m3u8' },
   // Music
   { name: 'Trace Urban', country: 'France', category: 'Music', url: 'https://laso3-tracetv.amagi.tv/hls/amagi_hls_data_traceTV-traceurban/CDN/master.m3u8' },
+  { name: 'Lofi Girl Radio', country: 'Global', category: 'Music', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCSJ4gkVC6NrvII8umztf0Ow&autoplay=1' },
   { name: 'Vevo Dance', country: 'Global', category: 'Music', url: 'https://amg00549-vevo-amg00549c4-samsung-it-2521.playouts.now.amagi.tv/playlist.m3u8' },
   { name: 'Stingray Classica', country: 'Canada', category: 'Music', url: 'https://stingray-classica-1-de.samsung.wurl.tv/playlist.m3u8' },
   // Lifestyle / Kids
@@ -142,7 +144,7 @@ export default function LiveTVView() {
   const [health, setHealth] = useState<Record<string, Health>>(() => Object.fromEntries(CHANNELS.map((c) => [c.url, 'checking' as Health])));
   useEffect(() => {
     let cancelled = false;
-    probeAll(CHANNELS, (c) => c.url, (c) => probeHls(proxied(c.url), 13000), (url, ok) => {
+    probeAll(CHANNELS, (c) => c.url, (c) => (c.kind === 'yt' ? Promise.resolve(true) : probeHls(proxied(c.url), 13000)), (url, ok) => {
       if (!cancelled) setHealth((h) => ({ ...h, [url]: ok ? 'ok' : 'dead' }));
     }, 5);
     return () => { cancelled = true; };
@@ -228,6 +230,14 @@ export default function LiveTVView() {
                   <p className="text-zinc-500 text-sm max-w-xs">This broadcaster's stream isn't live at the moment. Try another channel.</p>
                   <button onClick={() => setActive(null)} className="btn-gold px-5 py-2 rounded-full text-sm font-bold mt-2">Back to channels</button>
                 </div>
+              ) : active.kind === 'yt' ? (
+                <iframe
+                  src={active.url}
+                  title={active.name}
+                  className="absolute inset-0 w-full h-full border-none bg-black"
+                  allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                  allowFullScreen
+                />
               ) : (
                 <>
                   <div className="absolute inset-0 flex items-center justify-center text-zinc-600 -z-0"><Loader2 className="w-8 h-8 animate-spin" /></div>

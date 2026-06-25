@@ -16,6 +16,7 @@ function hashStr(s: string): number { let h = 2166136261; for (let i = 0; i < s.
 function mulberry32(seed: number) { return () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 function seededShuffle<T>(arr: T[], seed: number): T[] { const a = [...arr]; const rng = mulberry32(seed); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 const dayKey = () => Number(new Date().toISOString().slice(0, 10).replace(/-/g, ''));
+const weekKey = () => { const d = new Date(); const oneJan = new Date(d.getFullYear(), 0, 1); const week = Math.ceil((((d.getTime() - oneJan.getTime()) / 86400000) + oneJan.getDay() + 1) / 7); return d.getFullYear() * 100 + week; };
 
 // Spotify-style mood cards — each scannable at a glance with its own colour.
 // `grad` classes are literal so Tailwind keeps them; `tint` colours the mood page.
@@ -314,7 +315,9 @@ export default function MusicView() {
       if (cancelled) return;
       const seen = new Set<string>(); const pool: Track[] = [];
       for (const l of lists) for (const t of l) if (!seen.has(t.id)) { seen.add(t.id); pool.push(t); }
-      const rotated = seededShuffle(pool, dayKey() ^ hashStr(playlistView.id)).slice(0, 50);
+      // NMF lists reshuffle weekly; the rest daily.
+      const seed = (playlistView.weekly ? weekKey() : dayKey()) ^ hashStr(playlistView.id);
+      const rotated = seededShuffle(pool, seed).slice(0, playlistView.count);
       if (!cancelled) { setPlTracks(rotated); setPlLoading(false); }
     })();
     return () => { cancelled = true; };
@@ -391,7 +394,8 @@ export default function MusicView() {
       <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
         <button onClick={() => setPlaylistView(null)} className="flex items-center gap-1 text-zinc-400 hover:text-white mb-5 text-sm"><ChevronLeft className="w-4 h-4" /> Back</button>
         <div className="flex flex-col sm:flex-row sm:items-end gap-5 mb-8">
-          <div className={`w-36 h-36 md:w-44 md:h-44 rounded-2xl bg-gradient-to-br ${playlistView.grad} shrink-0 shadow-xl flex items-end p-4`}>
+          <div className={`relative w-36 h-36 md:w-44 md:h-44 rounded-2xl bg-gradient-to-br ${playlistView.grad} shrink-0 shadow-xl flex items-end p-4 overflow-hidden`}>
+            <span className="absolute top-3 left-3 text-5xl drop-shadow-lg">{playlistView.flag}</span>
             <span className="text-white font-display font-black text-2xl leading-tight drop-shadow">{playlistView.short}</span>
           </div>
           <div className="min-w-0">
@@ -625,6 +629,7 @@ export default function MusicView() {
                   {TRENDING_PLAYLISTS.map((pl) => (
                     <button key={pl.id} onClick={() => setPlaylistView(pl)} tabIndex={0} data-tv-focusable className="card-lift flex-none w-[150px] md:w-auto text-left focus:outline-none">
                       <div className={`aspect-square rounded-2xl bg-gradient-to-br ${pl.grad} relative overflow-hidden mb-2 flex items-end p-3 shadow-lg`}>
+                        <span className="absolute top-2 left-2.5 text-3xl drop-shadow-lg">{pl.flag}</span>
                         <span className="text-white font-display font-black text-lg leading-tight drop-shadow">{pl.short}</span>
                         <div className="absolute -top-3 -right-3 w-16 h-16 rounded-full bg-white/15 blur-md" />
                       </div>
