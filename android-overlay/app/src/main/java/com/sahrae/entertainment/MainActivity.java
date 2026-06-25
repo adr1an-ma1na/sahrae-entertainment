@@ -638,6 +638,104 @@ public class MainActivity extends BridgeActivity {
         return result[0];
     }
 
+    //  On-device YouTube AUDIO resolver (powers background playback + downloads).
+    //  Piped audio URLs are flaky/CORS-locked on-device, so we load the YouTube
+    //  embed in a hidden WebView (residential IP), autoplay it muted, and capture
+    //  the first audio-only googlevideo stream it fetches: a real, IP-bound URL
+    //  that plays in an <audio> element and downloads via /__ddfetch.
+    //  URL form: https://localhost/__ytaudio?v={videoId}  ->  {"url":"..."} | {"url":null}
+    private static final Map<String, String> YT_AUDIO_CACHE = new ConcurrentHashMap<>();
+    private static final Map<String, Long> YT_AUDIO_EXPIRY = new ConcurrentHashMap<>();
+
+    private static boolean looksLikeYtAudio(String u) {
+        if (u == null) return false;
+        String l = u.toLowerCase();
+        return l.contains("googlevideo.com/videoplayback") && l.contains("mime=audio");
+    }
+
+    private WebResourceResponse ytAudioResolve(Uri uri) {
+        final String vid = uri.getQueryParameter("v");
+        if (vid == null || vid.isEmpty()) return jsonResponse("{\"url\":null}");
+        Long exp = YT_AUDIO_EXPIRY.get(vid);
+        String url = (exp != null && exp > System.currentTimeMillis()) ? YT_AUDIO_CACHE.get(vid) : null;
+        if (url == null) {
+            url = runYtAudioResolver(vid);
+            if (url != null) {
+                YT_AUDIO_CACHE.put(vid, url);
+                YT_AUDIO_EXPIRY.put(vid, System.currentTimeMillis() + 90 * 60 * 1000L); // ~90 min
+            }
+        }
+        return jsonResponse(url != null ? "{\"url\":" + jsonStr(url) + "}" : "{\"url\":null}");
+    }
+
+    private String runYtAudioResolver(final String vid) {
+        final String[] result = new String[1];
+        final WebView[] holder = new WebView[1];
+        final CountDownLatch latch = new CountDownLatch(1);
+        runOnUiThread(() -> {
+            try {
+                WebView wv = new WebView(MainActivity.this);
+                holder[0] = wv;
+                WebSettings s = wv.getSettings();
+                s.setJavaScriptEnabled(true);
+                s.setDomStorageEnabled(true);
+                s.setMediaPlaybackRequiresUserGesture(false);
+                s.setUserAgentString(PROXY_UA);
+                try { s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW); } catch (Exception ignore) {}
+                wv.setWebChromeClient(new WebChromeClient());
+                wv.setWebViewClient(new WebViewClient() {
+                    @Override
+                    public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest req) {
+                        try {
+                            if (req != null && req.getUrl() != null) {
+                                String us = req.getUrl().toString();
+                                if (result[0] == null && looksLikeYtAudio(us)) {
+                                    result[0] = us;
+                                    latch.countDown();
+                                    return blockedResponse(); // capture only; don't pull the whole stream
+                                }
+                            }
+                        } catch (Exception ignore) {}
+                        return null;
+                    }
+                    @Override
+                    public void onPageFinished(WebView v, String url) {
+                        try {
+                            v.evaluateJavascript(PLAY_KICK, null);
+                            v.postDelayed(() -> { try { v.evaluateJavascript(PLAY_KICK, null); } catch (Exception e) {} }, 1500);
+                            v.postDelayed(() -> { try { v.evaluateJavascript(PLAY_KICK, null); } catch (Exception e) {} }, 4000);
+                        } catch (Exception ignore) {}
+                    }
+                });
+                try {
+                    ViewGroup root = findViewById(android.R.id.content);
+                    if (root != null) {
+                        wv.setLayoutParams(new ViewGroup.LayoutParams(1, 1));
+                        wv.setAlpha(0f);
+                        wv.setEnabled(false);
+                        root.addView(wv);
+                    }
+                } catch (Exception ignore) {}
+                wv.loadUrl("https://www.youtube.com/embed/" + vid + "?autoplay=1&mute=1&playsinline=1");
+            } catch (Exception e) {
+                latch.countDown();
+            }
+        });
+        try { latch.await(15, TimeUnit.SECONDS); } catch (InterruptedException ignore) {}
+        runOnUiThread(() -> {
+            try {
+                if (holder[0] != null) {
+                    holder[0].stopLoading();
+                    holder[0].loadUrl("about:blank");
+                    ViewGroup parent = (ViewGroup) holder[0].getParent();
+                    if (parent != null) parent.removeView(holder[0]);
+                    holder[0].destroy();
+                }
+            } catch (Exception ignore) {}
+        });
+        return result[0];
+    }
+
     // ─────────────────────────────────────────────────────────────
     //  On-device DaddyLive resolver.
     //  DaddyLive's stream domains block datacenter/CI IPs, so resolution runs
@@ -1050,6 +1148,8 @@ public class MainActivity extends BridgeActivity {
                         } else if (path.startsWith("/__embed2m3u8")) {
                             WebResourceResponse r = embedResolve(request.getUrl());
                             if (r != null) return r;
+                        } else if (path.startsWith("/__ytaudio")) {
+                            return ytAudioResolve(request.getUrl());
                         } else if (path.startsWith("/__ddresolve")) {
                             WebResourceResponse r = daddyResolve(request.getUrl());
                             if (r != null) return r;
