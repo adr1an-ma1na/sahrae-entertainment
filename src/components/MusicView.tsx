@@ -10,6 +10,13 @@ const fmt = (s: number) => {
   return `${m}:${r < 10 ? '0' : ''}${r}`;
 };
 
+// Deterministic PRNG + string hash, so a mood/genre page shuffles the SAME way
+// all day (stable within a day) but reshuffles each new day.
+function hashStr(s: string): number { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function mulberry32(seed: number) { return () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function seededShuffle<T>(arr: T[], seed: number): T[] { const a = [...arr]; const rng = mulberry32(seed); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+const dayKey = () => Number(new Date().toISOString().slice(0, 10).replace(/-/g, ''));
+
 function Equalizer() {
   return (
     <div className="flex items-end gap-0.5 h-4" aria-hidden>
@@ -252,13 +259,21 @@ export default function MusicView() {
     return () => window.clearTimeout(tRef.current);
   }, [query]);
 
-  // Load a mood/genre page's tracks on open.
+  // Load a mood/genre page's tracks on open — build a deep pool (≥50) from
+  // several queries, then shuffle deterministically by today's date so the page
+  // is fresh each day but stable within the day.
   useEffect(() => {
     if (!genre) return;
     let cancelled = false; setGenreLoading(true); setGenreTracks([]);
-    ytmusic.search(genre)
-      .then((t) => { if (!cancelled) { setGenreTracks(t); setGenreLoading(false); } })
-      .catch(() => { if (!cancelled) setGenreLoading(false); });
+    (async () => {
+      const queries = [`${genre} mix`, `${genre} hits 2026`, `best ${genre} songs`, `${genre} playlist`, `top ${genre}`];
+      const lists = await Promise.all(queries.map((q) => ytmusic.search(q).catch(() => [] as Track[])));
+      if (cancelled) return;
+      const seen = new Set<string>(); const pool: Track[] = [];
+      for (const l of lists) for (const t of l) if (!seen.has(t.id)) { seen.add(t.id); pool.push(t); }
+      const rotated = seededShuffle(pool, dayKey() ^ hashStr(genre)).slice(0, 60);
+      if (!cancelled) { setGenreTracks(rotated); setGenreLoading(false); }
+    })();
     return () => { cancelled = true; };
   }, [genre]);
 
@@ -522,6 +537,8 @@ export default function MusicView() {
                         className="card-lift group flex-none w-[160px] text-left rounded-2xl overflow-hidden border border-white/10 bg-zinc-900 focus:outline-none cursor-pointer">
                         <div className="aspect-square relative bg-zinc-800">
                           <CoverArt imageUrl={m.tracks[0]?.artworkLarge || m.tracks[0]?.artwork} dominantColor={m.tracks[0]?.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
+                          {/* Colourful tint from the mix's dominant colour (YT Music mix-card look) */}
+                          <div className="absolute inset-0" style={{ background: `linear-gradient(150deg, ${m.tracks[0]?.dominantColor || 'rgba(245,158,11,0.6)'} 0%, transparent 60%)`, opacity: 0.55, mixBlendMode: 'soft-light' }} />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/25 to-transparent" />
                           <div className="absolute bottom-2.5 left-2.5 right-2.5">
                             <div className="overline text-[9px] mb-0.5">Made for you</div>

@@ -34,6 +34,9 @@ export const GENRES = [
 export const SECTIONS: { title: string; q: string }[] = [
   { title: 'New Music Friday', q: 'new music friday 2026 latest songs' },
   { title: 'Top Hits', q: 'top hits this week' },
+  { title: 'Trending Now', q: 'trending songs right now 2026' },
+  { title: 'Viral Hits', q: 'viral hits 2026 tiktok songs' },
+  { title: 'Fresh Finds', q: 'new releases 2026 this week songs' },
   { title: 'Afrobeats', q: 'afrobeats 2026 hits' },
   { title: 'Amapiano', q: 'amapiano 2026 mix songs' },
   { title: 'Bongo Flava', q: 'bongo flava 2026 hits' },

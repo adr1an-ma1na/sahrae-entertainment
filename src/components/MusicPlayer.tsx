@@ -132,9 +132,19 @@ export default function MusicPlayer() {
     relForId.current = current.id;
     setRelLoading(true); setRelated([]);
     let cancelled = false;
-    ytmusic.related(current.id)
-      .then((r) => { if (!cancelled) { setRelated(r); setRelLoading(false); } })
-      .catch(() => { if (!cancelled) setRelLoading(false); });
+    (async () => {
+      const seedId = current.id;
+      const base = await ytmusic.related(seedId).catch(() => [] as Track[]);
+      const seen = new Set<string>([seedId, ...base.map((t) => t.id)]);
+      const list = [...base];
+      // Deepen so the list doesn't run dry — pull related off the top picks too.
+      for (const s of base.slice(0, 3)) {
+        if (cancelled || list.length >= 50) break;
+        const more = await ytmusic.related(s.id).catch(() => [] as Track[]);
+        for (const t of more) if (!seen.has(t.id)) { seen.add(t.id); list.push(t); }
+      }
+      if (!cancelled) { setRelated(list); setRelLoading(false); }
+    })();
     return () => { cancelled = true; };
   }, [showQueue, qTab, current]);
 

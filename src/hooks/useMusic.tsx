@@ -276,21 +276,41 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   }, [index, queue]);
 
   // ── Autoplay radio: as the queue nears its end, extend it with songs related
-  //    to what's playing (YouTube-Music-style "Up Next") so music never stops. ──
+  //    to what's playing (YouTube-Music-style "Up Next") so music NEVER stops. ──
+  //    Related to the current track alone dries up (its picks are soon all in the
+  //    queue), so we cascade seeds — current → recent queued tracks → an artist
+  //    radio search — until we find fresh songs. This is the endless-radio that
+  //    Spotify / YT Music do. ──
   useEffect(() => {
     const c = queue[index];
     if (!c || !autoplay) return;
     if (index < queue.length - 2) return; // only when ≤2 tracks remain
     if (extendingRef.current === c.id) return;
     extendingRef.current = c.id;
-    ytmusic.related(c.id).then((rel) => {
-      if (!rel.length) return;
+    (async () => {
+      const have = new Set(queue.map((t) => t.id));
+      const fresh: Track[] = [];
+      const take = (list: Track[]) => { for (const t of list) if (t && !have.has(t.id)) { have.add(t.id); fresh.push(t); } };
+      // 1) related to what's playing
+      take(await ytmusic.related(c.id).catch(() => [] as Track[]));
+      // 2) thin? seed off the freshest queued tracks (different roots = new picks)
+      if (fresh.length < 8) {
+        for (const s of [...queue].slice(-3).reverse()) {
+          if (fresh.length >= 12) break;
+          take(await ytmusic.related(s.id).catch(() => [] as Track[]));
+        }
+      }
+      // 3) last resort so it can never dead-end: the current artist's radio
+      if (fresh.length < 5 && c.artist) {
+        take(await ytmusic.search(`${c.artist} mix`).catch(() => [] as Track[]));
+      }
+      if (!fresh.length) return;
       setQueue((prev) => {
-        const have = new Set(prev.map((t) => t.id));
-        const add = rel.filter((t) => !have.has(t.id)).slice(0, 20);
+        const ph = new Set(prev.map((t) => t.id));
+        const add = fresh.filter((t) => !ph.has(t.id)).slice(0, 25);
         return add.length ? [...prev, ...add] : prev;
       });
-    });
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id, queue.length, autoplay]);
 
