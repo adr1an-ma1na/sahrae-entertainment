@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Fragment, ReactNode } from 'react';
 import { Search, Play, Pause, Heart, Loader2, Music2, Plus, X, ListMusic, Shuffle, Trash2, ChevronLeft, Library, Sparkles, Disc3, User } from 'lucide-react';
-import { ytmusic, Track, Artist, Album, GENRES, SECTIONS } from '../services/ytmusic';
+import { ytmusic, Track, Artist, Album, GENRES, SECTIONS, TRENDING_PLAYLISTS, TrendingPlaylist } from '../services/ytmusic';
 import { useMusic } from '../hooks/useMusic';
 import { CoverArt } from './ui/CoverArt';
 
@@ -140,6 +140,11 @@ export default function MusicView() {
   const [genreTracks, setGenreTracks] = useState<Track[]>([]);
   const [genreLoading, setGenreLoading] = useState(false);
   const openMood = (name: string, tint?: string) => { setGenreTint(tint || null); setGenre(name); };
+
+  // Trending playlists (per-country) detail view.
+  const [playlistView, setPlaylistView] = useState<TrendingPlaylist | null>(null);
+  const [plTracks, setPlTracks] = useState<Track[]>([]);
+  const [plLoading, setPlLoading] = useState(false);
 
   const [query, setQuery] = useState('');
   const [searchTab, setSearchTab] = useState<'songs' | 'artists' | 'albums'>('songs');
@@ -299,6 +304,22 @@ export default function MusicView() {
     return () => { cancelled = true; };
   }, [genre]);
 
+  // Load a trending playlist's tracks — pooled from its region queries, deduped,
+  // shuffled by today's date so each list is ~50 songs and refreshes daily.
+  useEffect(() => {
+    if (!playlistView) return;
+    let cancelled = false; setPlLoading(true); setPlTracks([]);
+    (async () => {
+      const lists = await Promise.all(playlistView.queries.map((q) => ytmusic.search(q).catch(() => [] as Track[])));
+      if (cancelled) return;
+      const seen = new Set<string>(); const pool: Track[] = [];
+      for (const l of lists) for (const t of l) if (!seen.has(t.id)) { seen.add(t.id); pool.push(t); }
+      const rotated = seededShuffle(pool, dayKey() ^ hashStr(playlistView.id)).slice(0, 50);
+      if (!cancelled) { setPlTracks(rotated); setPlLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [playlistView]);
+
   const openArtist = async (a: Artist) => {
     setDetail({ kind: 'artist', id: a.id, name: a.name, thumbnail: a.thumbnail, subtitle: 'Artist' });
     setDetailLoading(true); setDetailTracks([]); setDetailAlbums([]);
@@ -363,6 +384,39 @@ export default function MusicView() {
       <option value="duration">Duration</option>
     </select>
   );
+
+  if (playlistView) {
+    const shown = sortTracks(plTracks);
+    return (
+      <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
+        <button onClick={() => setPlaylistView(null)} className="flex items-center gap-1 text-zinc-400 hover:text-white mb-5 text-sm"><ChevronLeft className="w-4 h-4" /> Back</button>
+        <div className="flex flex-col sm:flex-row sm:items-end gap-5 mb-8">
+          <div className={`w-36 h-36 md:w-44 md:h-44 rounded-2xl bg-gradient-to-br ${playlistView.grad} shrink-0 shadow-xl flex items-end p-4`}>
+            <span className="text-white font-display font-black text-2xl leading-tight drop-shadow">{playlistView.short}</span>
+          </div>
+          <div className="min-w-0">
+            <div className="overline mb-1">Playlist</div>
+            <h2 className="text-3xl md:text-5xl font-display font-bold text-white">{playlistView.title}</h2>
+            <p className="text-sm text-zinc-400 mb-4">{playlistView.subtitle} · {plTracks.length} songs</p>
+            {plTracks.length > 0 && (
+              <div className="flex gap-2 flex-wrap">
+                <button onClick={() => playQueue(shown, 0, playlistView.title)} className="btn-sauti px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Play className="w-4 h-4 fill-current" /> Play</button>
+                <button onClick={() => { const arr = [...plTracks].sort(() => Math.random() - 0.5); playQueue(arr, 0, playlistView.title); }} className="btn-glass px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Shuffle className="w-4 h-4" /> Shuffle</button>
+                {sortSelect}
+              </div>
+            )}
+          </div>
+        </div>
+        {plLoading ? (
+          <div className="flex items-center gap-2 text-zinc-400 py-10"><Loader2 className="w-6 h-6 animate-spin text-amber-500" /> Loading…</div>
+        ) : plTracks.length === 0 ? (
+          <p className="text-zinc-500 py-8">Couldn't load this playlist right now. Try again shortly.</p>
+        ) : (
+          <div className="grid sm:grid-cols-2 gap-2">{shown.map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(shown, i, playlistView.title)} /></Fragment>)}</div>
+        )}
+      </div>
+    );
+  }
 
   if (genre) {
     const shown = sortTracks(genreTracks);
@@ -563,6 +617,23 @@ export default function MusicView() {
                   </div>
                 </section>
               )}
+
+              {/* Trending playlists by country — tappable cards */}
+              <section className="mb-9">
+                <SectionHead>Trending Playlists</SectionHead>
+                <div className="flex overflow-x-auto gap-3 pt-1 pb-4 scrollbar-hide md:grid md:grid-cols-4 md:overflow-visible">
+                  {TRENDING_PLAYLISTS.map((pl) => (
+                    <button key={pl.id} onClick={() => setPlaylistView(pl)} tabIndex={0} data-tv-focusable className="card-lift flex-none w-[150px] md:w-auto text-left focus:outline-none">
+                      <div className={`aspect-square rounded-2xl bg-gradient-to-br ${pl.grad} relative overflow-hidden mb-2 flex items-end p-3 shadow-lg`}>
+                        <span className="text-white font-display font-black text-lg leading-tight drop-shadow">{pl.short}</span>
+                        <div className="absolute -top-3 -right-3 w-16 h-16 rounded-full bg-white/15 blur-md" />
+                      </div>
+                      <p className="text-sm font-semibold text-white truncate">{pl.title}</p>
+                      <p className="text-xs text-zinc-500 truncate">{pl.subtitle}</p>
+                    </button>
+                  ))}
+                </div>
+              </section>
 
               {madeForYou.length > 0 && (
                 <section className="mb-9">

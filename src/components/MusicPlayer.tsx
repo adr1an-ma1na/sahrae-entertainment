@@ -33,11 +33,11 @@ function parseLRC(lrc: string): LyricLine[] {
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-function LyricsPanel({ track, position }: { track: Track; position: number }) {
+function LyricsPanel({ track, position, onSeek }: { track: Track; position: number; onSeek?: (t: number) => void }) {
   const [state, setState] = useState<'loading' | 'synced' | 'plain' | 'none'>('loading');
   const [synced, setSynced] = useState<LyricLine[]>([]);
   const [plain, setPlain] = useState('');
-  const activeRef = useRef<HTMLParagraphElement>(null);
+  const activeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -68,17 +68,24 @@ function LyricsPanel({ track, position }: { track: Track; position: number }) {
   if (state === 'none') return <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm px-8 text-center">No lyrics found for this track.</div>;
   if (state === 'plain') return (
     <div className="flex-1 overflow-y-auto custom-scrollbar px-2 text-center py-8">
+      <p className="text-[11px] uppercase tracking-[0.2em] text-amber-400/80 mb-6">Timed lyrics unavailable</p>
       {plain.split('\n').map((l, i) => <p key={i} className="text-lg font-semibold text-white/80 leading-relaxed py-0.5">{l || ' '}</p>)}
     </div>
   );
   return (
-    <div className="flex-1 overflow-y-auto custom-scrollbar px-2 text-center py-12">
+    <div className="relative h-full">
+      <div aria-hidden className="absolute inset-0 overflow-hidden pointer-events-none">
+        {(track.artworkLarge || track.artwork) && <img src={track.artworkLarge || track.artwork} alt="" className="w-full h-full object-cover blur-[40px] scale-125 opacity-30" />}
+        <div className="absolute inset-0 bg-black/55" />
+      </div>
+      <div className="relative h-full overflow-y-auto custom-scrollbar px-6 py-[42vh] text-center">
       {synced.map((l, i) => (
-        <p key={i} ref={i === activeIdx ? activeRef : undefined}
-          className={`text-2xl font-bold leading-snug py-2 transition-all duration-300 ${i === activeIdx ? 'text-white scale-[1.02]' : i < activeIdx ? 'text-white/30' : 'text-white/55'}`}>
+        <button key={i} ref={i === activeIdx ? activeRef : undefined} onClick={() => onSeek?.(l.t)}
+          className={`block w-full leading-snug py-2 transition-all duration-300 origin-center ${i === activeIdx ? 'text-white text-2xl md:text-[28px] font-semibold scale-[1.05]' : i < activeIdx ? 'text-white/40 text-lg font-medium' : 'text-white/50 text-lg font-medium'}`}>
           {l.text || '♪'}
-        </p>
+        </button>
       ))}
+      </div>
     </div>
   );
 }
@@ -274,8 +281,8 @@ export default function MusicPlayer() {
             </div>
           </div>
           {qTab === 'lyrics' ? (
-            <div className="flex-1 min-h-0 flex flex-col max-w-2xl mx-auto w-full px-3 py-4">
-              <LyricsPanel track={current} position={position} />
+            <div className="flex-1 min-h-0 relative">
+              <LyricsPanel track={current} position={position} onSeek={seek} />
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto custom-scrollbar px-3 py-4 pb-32 max-w-2xl mx-auto w-full">

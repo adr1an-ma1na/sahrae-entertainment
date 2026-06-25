@@ -45,6 +45,24 @@ export const SECTIONS: { title: string; q: string }[] = [
   { title: 'Gospel', q: 'gospel hits 2026' },
 ];
 
+// Trending playlists by country/region — rendered as tappable cards. Each opens
+// a 50-track page built from its region-appropriate queries (refreshed daily).
+export type TrendingPlaylist = { id: string; title: string; short: string; subtitle: string; grad: string; queries: string[] };
+export const TRENDING_PLAYLISTS: TrendingPlaylist[] = [
+  { id: 'us', title: 'Top 50 — United States', short: 'USA', subtitle: 'Updated daily · Trending in US', grad: 'from-blue-600 to-red-600', queries: ['top hits usa 2026', 'billboard hot 100 2026', 'us trending songs 2026'] },
+  { id: 'gb', title: 'Top 50 — United Kingdom', short: 'UK', subtitle: 'Updated daily · Trending in GB', grad: 'from-blue-700 to-rose-600', queries: ['uk top 40 2026', 'uk trending songs 2026', 'british hits 2026'] },
+  { id: 'ke', title: 'Top 50 — Kenya', short: 'Kenya', subtitle: 'Updated daily · Trending in KE', grad: 'from-red-600 to-green-700', queries: ['kenya trending songs 2026', 'gengetone hits 2026', 'kenyan music 2026'] },
+  { id: 'ug', title: 'Top 50 — Uganda', short: 'Uganda', subtitle: 'Updated daily · Trending in UG', grad: 'from-yellow-500 to-red-600', queries: ['uganda trending songs 2026', 'ugandan music 2026 hits'] },
+  { id: 'tz', title: 'Top 50 — Tanzania', short: 'Tanzania', subtitle: 'Updated daily · Trending in TZ', grad: 'from-green-600 to-yellow-500', queries: ['bongo flava 2026 hits', 'tanzania trending songs 2026'] },
+  { id: 'ng', title: 'Top 50 — Nigeria', short: 'Nigeria', subtitle: 'Updated daily · Trending in NG', grad: 'from-green-600 to-emerald-800', queries: ['naija afrobeats 2026 hits', 'nigeria trending songs 2026'] },
+  { id: 'gh', title: 'Top 50 — Ghana', short: 'Ghana', subtitle: 'Updated daily · Trending in GH', grad: 'from-red-600 to-yellow-500', queries: ['ghana trending songs 2026', 'ghanaian afrobeats 2026'] },
+  { id: 'za', title: 'Top 50 — South Africa', short: 'S. Africa', subtitle: 'Updated daily · Trending in ZA', grad: 'from-green-600 to-amber-600', queries: ['amapiano 2026 hits', 'south africa trending songs 2026'] },
+  { id: 'fresh', title: 'Fresh Finds — Global', short: 'Fresh Finds', subtitle: 'New discoveries, refreshed daily', grad: 'from-fuchsia-600 to-indigo-700', queries: ['fresh finds 2026 new artists', 'new music discovery 2026'] },
+  { id: 'viral', title: 'Viral Hits — Global', short: 'Viral Hits', subtitle: 'Blowing up right now', grad: 'from-pink-600 to-orange-500', queries: ['viral songs 2026', 'trending viral hits 2026'] },
+  { id: 'nmf-af', title: 'New Music Friday — Africa', short: 'NMF Africa', subtitle: 'Freshest African drops', grad: 'from-amber-500 to-emerald-700', queries: ['new african music this week 2026', 'new afrobeats friday 2026'] },
+  { id: 'nmf-global', title: 'New Music Friday — Global', short: 'NMF Global', subtitle: 'Freshest worldwide', grad: 'from-sky-500 to-violet-700', queries: ['new music friday 2026', 'new songs this week 2026'] },
+];
+
 const INSTANCES = [
   'https://pipedapi.kavin.rocks',
   'https://pipedapi.adminforge.de',
