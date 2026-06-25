@@ -64,6 +64,30 @@ function TrackCard({ track, onPlay }: { track: Track; onPlay: () => void }) {
   );
 }
 
+// Compact, borderless row for the YouTube-Music-style "Quick picks" grid.
+function QuickRow({ track, onPlay }: { track: Track; onPlay: () => void }) {
+  const { current, isPlaying, toggle, openAddSheet } = useMusic();
+  const active = current?.id === track.id;
+  return (
+    <div tabIndex={0} data-tv-focusable role="button" onClick={() => (active ? toggle() : onPlay())}
+      className="group flex items-center gap-3 p-1.5 rounded-lg hover:bg-white/5 focus:bg-white/5 cursor-pointer focus:outline-none">
+      <div className="relative w-12 h-12 rounded-md overflow-hidden bg-zinc-800 shrink-0">
+        <CoverArt imageUrl={track.artwork} dominantColor={track.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
+        {!track.artwork && <Music2 className="w-5 h-5 text-zinc-600 absolute inset-0 m-auto" />}
+        <div className={`absolute inset-0 bg-black/45 flex items-center justify-center transition-opacity ${active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+          {active && isPlaying ? <Pause className="w-4 h-4 text-white fill-current" /> : <Play className="w-4 h-4 text-white fill-current ml-0.5" />}
+        </div>
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className={`text-sm font-semibold truncate ${active ? 'text-sauti' : 'text-white'}`}>{track.title}</p>
+        <p className="text-xs text-zinc-400 truncate">{track.artist}</p>
+      </div>
+      {active && isPlaying && <Equalizer />}
+      <button onClick={(e) => { e.stopPropagation(); openAddSheet(track); }} className="p-2 rounded-full text-zinc-500 hover:text-white opacity-0 group-hover:opacity-100 shrink-0" aria-label="Add to playlist"><Plus className="w-4 h-4" /></button>
+    </div>
+  );
+}
+
 const SectionHead = ({ children, icon }: { children: ReactNode; icon?: ReactNode }) => (
   <div className="flex items-center gap-3 mb-4">
     {icon ?? <span className="w-1 h-6 rounded-full bg-gradient-to-b from-amber-400 to-amber-500" />}
@@ -266,6 +290,11 @@ export default function MusicView() {
   const featured = featuredList[0];
   const featuredSource = mix.length ? 'Your Mix' : (sections[0]?.title ?? 'Sauti');
 
+  // "Quick picks" (YouTube-Music-style 4-row tap-to-play grid): personalised mix
+  // if we have one, else the freshest catalog shelf, deduped.
+  const quickSource = mix.length ? mix : (sections.find((s) => s.tracks.length)?.tracks ?? []);
+  const quickPicks = quickSource.slice(0, 20);
+
   // ── Detail page (artist / album) ──
   const sortTracks = (list: Track[]): Track[] => {
     if (trackSort === 'title') return [...list].sort((a, b) => a.title.localeCompare(b.title));
@@ -403,6 +432,11 @@ export default function MusicView() {
             </section>
           ) : (
             <>
+              {/* Mood & genre chips at the very top (YouTube Music pattern) */}
+              <div className="flex overflow-x-auto gap-2 pb-2 mb-6 scrollbar-hide">
+                {GENRES.map((g) => <button key={g} onClick={() => setQuery(g)} tabIndex={0} data-tv-focusable className="chip px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap text-zinc-300 hover:text-white">{g}</button>)}
+              </div>
+
               {/* ── Featured spotlight hero ── */}
               {featured && (
                 <section className="relative mb-9 rounded-3xl overflow-hidden border border-white/10 elev-2">
@@ -425,9 +459,21 @@ export default function MusicView() {
                 </section>
               )}
 
+              {/* ── Quick picks — YouTube-Music's signature 4-row tap-to-play grid ── */}
+              {quickPicks.length > 0 && (
+                <section className="mb-9">
+                  <SectionHead icon={<Sparkles className="w-5 h-5 text-sauti" />}>Quick picks</SectionHead>
+                  <div className="overflow-x-auto scrollbar-hide pb-3 -mx-1 px-1">
+                    <div className="grid grid-rows-4 grid-flow-col auto-cols-[86%] sm:auto-cols-[minmax(320px,360px)] gap-x-5 gap-y-0.5">
+                      {quickPicks.map((t, i) => <Fragment key={t.id}><QuickRow track={t} onPlay={() => playQueue(quickPicks, i, 'Quick picks')} /></Fragment>)}
+                    </div>
+                  </div>
+                </section>
+              )}
+
               {madeForYou.length > 0 && (
                 <section className="mb-9">
-                  <SectionHead icon={<Sparkles className="w-5 h-5 text-sauti" />}>Made For You</SectionHead>
+                  <SectionHead icon={<Sparkles className="w-5 h-5 text-sauti" />}>Mixed for you</SectionHead>
                   <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">
                     {madeForYou.map((m) => (
                       <div key={m.id} role="button" onClick={() => setViewMix(m)} tabIndex={0} data-tv-focusable
@@ -448,13 +494,9 @@ export default function MusicView() {
                 </section>
               )}
 
-              <div className="flex overflow-x-auto gap-2 pb-2 mb-8 scrollbar-hide">
-                {GENRES.map((g) => <button key={g} onClick={() => setQuery(g)} tabIndex={0} data-tv-focusable className="chip px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap text-zinc-300 hover:text-white">{g}</button>)}
-              </div>
-
               {mix.length > 0 && (
                 <section className="mb-10">
-                  <SectionHead icon={<Sparkles className="w-5 h-5 text-sauti" />}>Your Mix · made from your listening</SectionHead>
+                  <SectionHead icon={<Sparkles className="w-5 h-5 text-sauti" />}>Listen again</SectionHead>
                   <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{mix.map((t, i) => <Fragment key={t.id}><TrackCard track={t} onPlay={() => playQueue(mix, i, 'Your Mix')} /></Fragment>)}</div>
                 </section>
               )}
