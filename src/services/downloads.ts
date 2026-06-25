@@ -14,7 +14,7 @@ import { Track, ytmusic } from './ytmusic';
  * Reactive via a tiny pub/sub; isolated from the streaming player so a failed
  * download can never affect normal playback.
  */
-interface Entry { track: Track; uri: string; mime: string; ts: number }
+interface Entry { track: Track; uri: string; mime: string; ts: number; size?: number }
 type DState = { status: 'downloading' | 'done' | 'error'; progress: number };
 type Listener = () => void;
 
@@ -45,6 +45,8 @@ async function fetchBytes(url: string): Promise<Blob | null> {
 export const downloads = {
   list: (): Track[] => read().map((e) => e.track),
   has: (id: string) => read().some((e) => e.track.id === id),
+  /** Total bytes used by downloaded music. */
+  bytesUsed: (): number => read().reduce((s, e) => s + (e.size || 0), 0),
   state: (id: string): DState | undefined => states.get(id),
 
   /** A locally-playable src for a downloaded track, else null. */
@@ -66,7 +68,7 @@ export const downloads = {
       const path = `downloads/${track.id}.dat`;
       await Filesystem.writeFile({ path, data: base64, directory: Directory.Data, recursive: true });
       const { uri } = await Filesystem.getUri({ path, directory: Directory.Data });
-      write([{ track, uri, mime: a.mime, ts: Date.now() }, ...read().filter((e) => e.track.id !== track.id)]);
+      write([{ track, uri, mime: a.mime, ts: Date.now(), size: blob.size }, ...read().filter((e) => e.track.id !== track.id)]);
       states.set(track.id, { status: 'done', progress: 1 }); emit();
       return true;
     } catch {

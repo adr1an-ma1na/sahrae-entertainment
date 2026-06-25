@@ -12,6 +12,9 @@ export default function DownloadsView() {
   const [videos, setVideos] = useState<VideoDownload[]>([]);
   const [playing, setPlaying] = useState<VideoDownload | null>(null);
 
+  const usedBytes = downloads.bytesUsed();
+  const fmtSize = (b: number) => (b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : b >= 1e6 ? `${Math.round(b / 1e6)} MB` : `${Math.round(b / 1e3)} KB`);
+
   useEffect(() => {
     let on = true;
     const tick = async () => { const v = await listVideoDownloads(); if (on) setVideos(v); };
@@ -29,7 +32,7 @@ export default function DownloadsView() {
         </div>
         <div>
           <h2 className="text-3xl font-display font-bold text-white leading-tight tracking-tight">Downloads</h2>
-          <p className="text-sm text-zinc-400">{tracks.length} {tracks.length === 1 ? 'song' : 'songs'} · {videos.length} {videos.length === 1 ? 'title' : 'titles'} · plays offline, in-app</p>
+          <p className="text-sm text-zinc-400">{tracks.length} {tracks.length === 1 ? 'song' : 'songs'} · {videos.length} {videos.length === 1 ? 'title' : 'titles'}{usedBytes > 0 ? ` · ${fmtSize(usedBytes)} used` : ''} · plays offline, in-app</p>
         </div>
       </div>
 
