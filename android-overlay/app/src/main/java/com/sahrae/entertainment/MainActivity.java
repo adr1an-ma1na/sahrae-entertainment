@@ -103,6 +103,12 @@ public class MainActivity extends BridgeActivity {
     //    visibilitychange (see /__bgplay, /__bgstop) and the foreground service +
     //    notification controls drive it. ──
     static android.media.MediaPlayer bgPlayer;
+    // Latest playing direct-URL track, pushed from JS (sendBeacon /__bgsync), so
+    // native can take over on its OWN lifecycle (onStop) without depending on a
+    // JS event firing at background time.
+    static volatile String bgUrl = "";
+    static volatile int bgPosMs = 0;
+    static volatile boolean bgPlaying = false;
     static synchronized void bgPlay(String url, int posMs) {
         bgStop();
         try {
@@ -126,6 +132,28 @@ public class MainActivity extends BridgeActivity {
         try { if (bgPlayer != null) { pos = bgPlayer.getCurrentPosition(); bgPlayer.stop(); bgPlayer.release(); } } catch (Throwable ignore) {}
         bgPlayer = null;
         return pos;
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        // App no longer visible → take over the current direct-URL track natively
+        // so audio keeps playing in the background (the WebView <audio> is suspended).
+        try { if (bgPlaying && bgUrl != null && !bgUrl.isEmpty() && !bgActive()) bgPlay(bgUrl, bgPosMs); } catch (Throwable ignore) {}
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        // Back in the foreground → stop native and hand the position to the WebView
+        // so the in-page <audio> resumes from where native got to.
+        try {
+            if (bgActive()) {
+                final int pos = bgStop();
+                final WebView wv = sWebView;
+                if (wv != null) wv.post(() -> { try { wv.evaluateJavascript("window.__sauti&&window.__sauti.bgResume&&window.__sauti.bgResume(" + pos + ")", null); } catch (Throwable ignore) {} });
+            }
+        } catch (Throwable ignore) {}
     }
 
     /** Hosts the top frame is allowed to navigate to. Everything else is refused. */
@@ -1204,20 +1232,14 @@ public class MainActivity extends BridgeActivity {
                                 u.getQueryParameter("artist"),
                                 "1".equals(u.getQueryParameter("playing")));
                             return AudioFx.ok();
-                        } else if (path.startsWith("/__bgplay")) {
-                            // Hand a direct stream URL to the native player (app backgrounded).
+                        } else if (path.startsWith("/__bgsync")) {
+                            // JS pushes the current direct-URL track so native can take
+                            // over by itself when the app stops (see onStop).
                             Uri u = request.getUrl();
-                            String mu = u.getQueryParameter("url");
-                            int pos = 0; try { pos = Integer.parseInt(u.getQueryParameter("pos")); } catch (Exception ignore) {}
-                            if (mu != null && !mu.isEmpty()) bgPlay(mu, pos);
+                            bgUrl = u.getQueryParameter("url") != null ? u.getQueryParameter("url") : "";
+                            try { bgPosMs = Integer.parseInt(u.getQueryParameter("pos")); } catch (Exception ignore) {}
+                            bgPlaying = "1".equals(u.getQueryParameter("playing"));
                             return AudioFx.ok();
-                        } else if (path.startsWith("/__bgresume")) {
-                            bgResume(); return AudioFx.ok();
-                        } else if (path.startsWith("/__bgpause")) {
-                            bgPause(); return AudioFx.ok();
-                        } else if (path.startsWith("/__bgstop")) {
-                            // Stop native playback, hand the position back so JS can resume.
-                            return jsonResponse("{\"pos\":" + bgStop() + "}");
                         } else if (path.startsWith("/__dllist")) {
                             return DownloadStore.json(DownloadStore.listJson(getApplicationContext()));
                         } else if (path.startsWith("/__dlremove")) {

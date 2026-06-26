@@ -404,39 +404,22 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     fetch(`https://localhost/__bgaudio?${q}`).catch(() => {});
   }, [current, isPlaying, active]);
 
-  // ── Background handoff: the in-page <audio> element is suspended when the app
-  //    backgrounds, so when an <audio>-lane track (direct URL) is playing and we
-  //    go to the background, hand it to the NATIVE player (keeps going); on
-  //    return, stop native and resume the <audio> at that position. ──
-  const bgHandoffRef = useRef(false);
-  const bgStateRef = useRef<{ url?: string; playing: boolean; local: boolean }>({ playing: false, local: false });
-  bgStateRef.current = { url: current?.audioUrl, playing: isPlaying, local: usingLocalRef.current };
+  // ── Background audio: continuously push the current direct-URL track to native
+  //    (sendBeacon, reliable as the app backgrounds) so the native player can take
+  //    over BY ITSELF in MainActivity.onStop() — independent of any JS event that
+  //    might not fire in time. The in-page <audio> is suspended on background;
+  //    native keeps it going, and onStart() hands the position back via
+  //    window.__sauti.bgResume(). ──
   useEffect(() => {
-    const onVis = () => {
-      const s = bgStateRef.current;
-      if (document.hidden) {
-        if (s.local && s.url && s.playing) {
-          const pos = Math.floor((liveRef.current.position || 0) * 1000);
-          fetch(`https://localhost/__bgplay?url=${encodeURIComponent(s.url)}&pos=${pos}`).catch(() => {});
-          try { audioElRef.current?.pause(); } catch { /* ignore */ }
-          bgHandoffRef.current = true;
-        }
-      } else if (bgHandoffRef.current) {
-        bgHandoffRef.current = false;
-        fetch('https://localhost/__bgstop', { cache: 'no-store' })
-          .then((r) => r.json())
-          .then((j) => {
-            const sec = (j && j.pos ? j.pos : 0) / 1000;
-            const a = audioElRef.current;
-            if (a && usingLocalRef.current) { try { if (sec > 0) a.currentTime = sec; a.play().catch(() => {}); } catch { /* ignore */ } }
-          })
-          .catch(() => { try { audioElRef.current?.play().catch(() => {}); } catch { /* ignore */ } });
-      }
+    const sync = () => {
+      const url = (usingLocalRef.current && current?.audioUrl) ? current.audioUrl : '';
+      const pos = Math.floor((liveRef.current.position || 0) * 1000);
+      try { navigator.sendBeacon(`https://localhost/__bgsync?url=${encodeURIComponent(url)}&pos=${pos}&playing=${isPlaying ? 1 : 0}`); } catch { /* ignore */ }
     };
-    document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    sync();
+    const iv = setInterval(sync, 2000);
+    return () => clearInterval(iv);
+  }, [current, isPlaying]);
 
   const playQueue = (tracks: Track[], startIndex = 0, source = '') => {
     if (!tracks.length) return;
@@ -536,6 +519,15 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   (window as unknown as { __sauti?: unknown }).__sauti = {
     play: () => { try { if (usingLocalRef.current) audioElRef.current?.play(); else playerRef.current?.playVideo?.(); } catch { /* ignore */ } setIsPlaying(true); setActive(true); },
     pause: () => { try { if (usingLocalRef.current) audioElRef.current?.pause(); else playerRef.current?.pauseVideo?.(); } catch { /* ignore */ } setIsPlaying(false); },
+    // Called natively (onStart) after native background playback — resume the
+    // in-page <audio> from where native got to.
+    bgResume: (posMs: number) => {
+      const a = audioElRef.current;
+      if (a && usingLocalRef.current) {
+        try { const sec = (posMs || 0) / 1000; if (sec > 0) a.currentTime = sec; a.play().catch(() => {}); } catch { /* ignore */ }
+        setIsPlaying(true); setActive(true);
+      }
+    },
     toggle, next, prev, stop,
   };
 
