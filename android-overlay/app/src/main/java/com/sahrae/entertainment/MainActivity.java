@@ -135,7 +135,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    protected void onStop() {
+    public void onStop() {
         super.onStop();
         // App no longer visible → take over the current direct-URL track natively
         // so audio keeps playing in the background (the WebView <audio> is suspended).
@@ -143,7 +143,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    protected void onStart() {
+    public void onStart() {
         super.onStart();
         // Back in the foreground → stop native and hand the position to the WebView
         // so the in-page <audio> resumes from where native got to.
