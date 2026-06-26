@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, Fragment, ReactNode } from 'react';
 import { Search, Play, Pause, Heart, Loader2, Music2, Plus, X, ListMusic, Shuffle, Trash2, ChevronLeft, Library, Sparkles, Disc3, User } from 'lucide-react';
 import { ytmusic, Track, Artist, Album, GENRES, SECTIONS, TRENDING_PLAYLISTS, TrendingPlaylist } from '../services/ytmusic';
-import { itunes } from '../services/itunesMusic';
+import { soundcloud } from '../services/soundcloud';
 import { useMusic } from '../hooks/useMusic';
 import { CoverArt } from './ui/CoverArt';
 
@@ -127,7 +127,7 @@ const SectionHead = ({ children, icon }: { children: ReactNode; icon?: ReactNode
 type Detail = { kind: 'artist' | 'album'; id: string; name: string; thumbnail?: string; subtitle?: string };
 
 export default function MusicView() {
-  const { playQueue, likedTracks, playlists, recentlyPlayed, createPlaylist, deletePlaylist, removeFromPlaylist, openAddSheet } = useMusic();
+  const { playQueue, addToQueue, likedTracks, playlists, recentlyPlayed, createPlaylist, deletePlaylist, removeFromPlaylist, openAddSheet } = useMusic();
 
   const [tab, setTab] = useState<'home' | 'library'>('home');
   const [sections, setSections] = useState<{ title: string; tracks: Track[] }[]>([]);
@@ -185,23 +185,40 @@ export default function MusicView() {
     return () => { cancelled = true; };
   }, []);
 
-  // iTunes shelves — mainstream songs with direct preview URLs: clean files that
-  // background reliably through the same path podcasts use. (Apple only exposes
-  // 30s previews for songs, so these are clips — the trade-off for reliability.)
+  // SoundCloud shelves — FULL songs. Stream URLs resolve on play (see playSC),
+  // so these tracks carry scStream, not audioUrl yet.
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const top = await itunes.searchSongs('top hits 2026', 25).catch(() => [] as Track[]);
+      const trending = await soundcloud.trending('all-music').catch(() => [] as Track[]);
       if (cancelled) return;
-      if (top.length) setBgShelves((p) => [...p, { title: 'Top songs · plays in background', tracks: top }]);
-      for (const g of ['Afrobeats', 'Amapiano', 'Hip-Hop', 'Pop', 'R&B', 'Gospel', 'Bongo Flava', 'Gengetone']) {
-        const tr = await itunes.searchSongs(`${g} 2026`, 25).catch(() => [] as Track[]);
+      if (trending.length) setBgShelves((p) => [...p, { title: 'Trending · full songs, play in background', tracks: trending }]);
+      const genres: [string, string][] = [['Hip-Hop', 'hiphoprap'], ['Pop', 'pop'], ['R&B & Soul', 'rbsoul'], ['Dance / EDM', 'danceedm'], ['House', 'house'], ['Reggaeton', 'reggaeton']];
+      for (const [label, key] of genres) {
+        const tr = await soundcloud.trending(key).catch(() => [] as Track[]);
         if (cancelled) return;
-        if (tr.length) setBgShelves((p) => [...p, { title: g, tracks: tr }]);
+        if (tr.length) setBgShelves((p) => [...p, { title: label, tracks: tr }]);
       }
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // Resolve a SoundCloud track's full stream on tap, play it, then background-fill
+  // the rest of the list into the queue so next / shuffle work.
+  const playSC = async (tracks: Track[], i: number, source: string) => {
+    const first = tracks[i];
+    if (!first) return;
+    const url = first.scStream ? await soundcloud.resolveStream(first.scStream) : first.audioUrl;
+    if (!url) return;
+    playQueue([{ ...first, audioUrl: url }], 0, source);
+    (async () => {
+      for (const t of tracks.slice(i + 1)) {
+        if (!t.scStream) continue;
+        const u = await soundcloud.resolveStream(t.scStream).catch(() => null);
+        if (u) addToQueue({ ...t, audioUrl: u });
+      }
+    })();
+  };
 
   // Your Mix from listening (built on entry)
   useEffect(() => {
@@ -302,7 +319,7 @@ export default function MusicView() {
     if (!q) { setSearching(false); setRSongs([]); setRArtists([]); setRAlbums([]); return; }
     setSearching(true);
     tRef.current = window.setTimeout(async () => {
-      const [s, a, al] = await Promise.all([itunes.searchSongs(q), ytmusic.searchArtists(q), ytmusic.searchAlbums(q)]);
+      const [s, a, al] = await Promise.all([soundcloud.searchTracks(q), ytmusic.searchArtists(q), ytmusic.searchAlbums(q)]);
       setRSongs(s); setRArtists(a); setRAlbums(al); setSearching(false);
     }, 400);
     return () => window.clearTimeout(tRef.current);
@@ -581,7 +598,7 @@ export default function MusicView() {
               {searching ? (
                 <div className="flex items-center gap-2 text-zinc-400 py-8"><Loader2 className="w-5 h-5 animate-spin text-amber-500" /> Searching…</div>
               ) : searchTab === 'songs' ? (
-                rSongs.length ? <div className="grid sm:grid-cols-2 gap-2">{rSongs.map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(rSongs, i)} /></Fragment>)}</div> : <p className="text-zinc-500 py-8">No songs found.</p>
+                rSongs.length ? <div className="grid sm:grid-cols-2 gap-2">{rSongs.map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playSC(rSongs, i, 'Search')} /></Fragment>)}</div> : <p className="text-zinc-500 py-8">No songs found.</p>
               ) : searchTab === 'artists' ? (
                 rArtists.length ? <div className="flex flex-wrap gap-5">{rArtists.map(artistTile)}</div> : <p className="text-zinc-500 py-8">No artists found.</p>
               ) : (
@@ -647,7 +664,7 @@ export default function MusicView() {
               {bgShelves.map((sh) => (
                 <section key={`bg-${sh.title}`} className="mb-9">
                   <SectionHead icon={<Sparkles className="w-5 h-5 text-sauti" />}>{sh.title}</SectionHead>
-                  <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{sh.tracks.map((t, i) => <Fragment key={t.id}><TrackCard track={t} onPlay={() => playQueue(sh.tracks, i, sh.title)} /></Fragment>)}</div>
+                  <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{sh.tracks.map((t, i) => <Fragment key={t.id}><TrackCard track={t} onPlay={() => playSC(sh.tracks, i, sh.title)} /></Fragment>)}</div>
                 </section>
               ))}
 
