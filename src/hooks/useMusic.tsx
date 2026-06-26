@@ -417,8 +417,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       try { navigator.sendBeacon(`https://localhost/__bgsync?url=${encodeURIComponent(url)}&pos=${pos}&playing=${isPlaying ? 1 : 0}`); } catch { /* ignore */ }
     };
     sync();
-    const iv = setInterval(sync, 2000);
-    return () => clearInterval(iv);
+    const iv = setInterval(sync, 1500);
+    const onVis = () => sync(); // push the freshest position the moment we background
+    document.addEventListener('visibilitychange', onVis);
+    return () => { clearInterval(iv); document.removeEventListener('visibilitychange', onVis); };
   }, [current, isPlaying]);
 
   const playQueue = (tracks: Track[], startIndex = 0, source = '') => {
