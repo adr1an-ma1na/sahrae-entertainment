@@ -72,7 +72,16 @@ export async function getPodcastEpisodes(feedUrl: string, fallback?: Partial<Pod
   const eps: Track[] = [];
   for (const it of items) {
     const enc = it.getElementsByTagName('enclosure')[0];
-    const audioUrl = enc?.getAttribute('url') || '';
+    let audioUrl = enc?.getAttribute('url') || '';
+    if (!audioUrl) {
+      // Some feeds use <media:content> instead of <enclosure>.
+      const media = it.getElementsByTagName('media:content');
+      for (let k = 0; k < media.length; k++) {
+        const ty = media[k].getAttribute('type') || '';
+        const mu = media[k].getAttribute('url') || '';
+        if (mu && (ty.startsWith('audio') || /\.(mp3|m4a|aac|ogg|oga)(\?|$)/i.test(mu))) { audioUrl = mu; break; }
+      }
+    }
     if (!audioUrl) continue; // no media → skip
     const title = tagText(it, 'title') || 'Episode';
     const pub = tagText(it, 'pubDate');

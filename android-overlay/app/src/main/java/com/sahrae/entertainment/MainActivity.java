@@ -109,15 +109,20 @@ public class MainActivity extends BridgeActivity {
     static volatile String bgUrl = "";
     static volatile int bgPosMs = 0;
     static volatile boolean bgPlaying = false;
-    static synchronized void bgPlay(String url, int posMs) {
+    static synchronized void bgPlay(android.content.Context ctx, String url, int posMs) {
         bgStop();
         try {
             android.media.MediaPlayer mp = new android.media.MediaPlayer();
             mp.setAudioAttributes(new android.media.AudioAttributes.Builder()
                 .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
                 .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC).build());
-            mp.setDataSource(url);
+            // Send the same User-Agent the WebView uses — some CDNs (e.g. SoundCloud)
+            // 403 a generic native UA, which is why background playback failed.
+            java.util.HashMap<String, String> headers = new java.util.HashMap<>();
+            headers.put("User-Agent", PROXY_UA);
+            mp.setDataSource(ctx, android.net.Uri.parse(url), headers);
             mp.setOnPreparedListener(m -> { try { if (posMs > 0) m.seekTo(posMs); m.start(); } catch (Throwable ignore) {} });
+            mp.setOnErrorListener((m, what, extra) -> { bgStop(); return true; });
             mp.prepareAsync();
             bgPlayer = mp;
         } catch (Throwable ignore) { bgPlayer = null; }
@@ -139,7 +144,7 @@ public class MainActivity extends BridgeActivity {
         super.onStop();
         // App no longer visible → take over the current direct-URL track natively
         // so audio keeps playing in the background (the WebView <audio> is suspended).
-        try { if (bgPlaying && bgUrl != null && !bgUrl.isEmpty() && !bgActive()) bgPlay(bgUrl, bgPosMs); } catch (Throwable ignore) {}
+        try { if (bgPlaying && bgUrl != null && !bgUrl.isEmpty() && !bgActive()) bgPlay(this, bgUrl, bgPosMs); } catch (Throwable ignore) {}
     }
 
     @Override
@@ -822,7 +827,7 @@ public class MainActivity extends BridgeActivity {
             conn = (HttpURLConnection) new URL(target).openConnection();
             conn.setInstanceFollowRedirects(true);
             conn.setConnectTimeout(8000);
-            conn.setReadTimeout(10000);
+            conn.setReadTimeout(30000); // large podcast RSS feeds can be MBs
             conn.setRequestProperty("User-Agent", PROXY_UA);
             conn.setRequestProperty("Accept", "*/*");
             conn.setRequestProperty("Accept-Encoding", "identity");
