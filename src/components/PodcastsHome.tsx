@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Loader2, Heart, Play, ChevronLeft, Check, Circle } from 'lucide-react';
-import { Track } from '../services/ytmusic';
+import { Search, Loader2, Heart, Play, ChevronLeft, Check, Circle, Video, X } from 'lucide-react';
+import { Track, ytmusic } from '../services/ytmusic';
 import { searchPodcastShows, getPodcastEpisodes, PodShow } from '../services/podcastRss';
 import { useMusic } from '../hooks/useMusic';
 import { CoverArt } from './ui/CoverArt';
@@ -14,8 +14,12 @@ const fmt = (s: number) => { if (!s || !isFinite(s)) return ''; const m = Math.f
 const showToTrack = (s: PodShow): Track => ({ id: s.id, title: s.title, artist: s.author, artwork: s.artwork, artworkLarge: s.artwork, duration: 0, feedUrl: s.feedUrl });
 
 export default function PodcastsHome() {
-  const { playQueue, seek } = useMusic();
+  const { playQueue, seek, stop } = useMusic();
   const [query, setQuery] = useState('');
+  // Watch an episode on YouTube (searched on demand).
+  const [watchOpen, setWatchOpen] = useState(false);
+  const [watchId, setWatchId] = useState<string | null>(null);
+  const [watchTitle, setWatchTitle] = useState('');
   const [results, setResults] = useState<Track[]>([]);
   const [searching, setSearching] = useState(false);
   const [shelves, setShelves] = useState<{ title: string; items: Track[] }[]>([]);
@@ -88,6 +92,15 @@ export default function PodcastsHome() {
   const resume = (p: EpisodeProgress) => { playQueue([p.track], 0, 'Podcasts'); window.setTimeout(() => { try { seek(p.positionMs / 1000); } catch { /* ignore */ } }, 1200); };
   const togglePlayed = (t: Track) => { if (getProgress(t.id)?.completed) markUnplayed(t.id); else markPlayed(t); setProgV((v) => v + 1); };
 
+  // Watch the episode on YouTube — pause audio, find the video on demand, embed it.
+  const onWatch = async (t: Track) => {
+    stop();
+    setWatchTitle(t.title); setWatchId(null); setWatchOpen(true);
+    const q = `${t.artist} ${t.title}`.replace(/\s+/g, ' ').trim().slice(0, 110);
+    const r = await ytmusic.searchVideos(q).catch(() => [] as Track[]);
+    setWatchId(r[0]?.id || '');
+  };
+
   // Show card (tap to open the show; heart to follow).
   const card = (t: Track) => (
     <div key={t.id} onClick={() => setShowView(t)} tabIndex={0} data-tv-focusable role="button"
@@ -98,6 +111,23 @@ export default function PodcastsHome() {
       </div>
       <h3 className="text-sm font-bold text-white line-clamp-2 mb-0.5 group-hover:text-sauti transition-colors">{t.title}</h3>
       <p className="text-xs text-zinc-500 truncate">{t.artist}</p>
+    </div>
+  );
+
+  // Watch-on-YouTube modal (shared by the show page + home).
+  const videoModal = watchOpen && (
+    <div role="dialog" data-tv-layer className="dark fixed inset-0 z-[140] bg-black flex flex-col animate-in fade-in duration-200">
+      <div className="flex items-center gap-3 px-3 pt-[calc(env(safe-area-inset-top)+0.5rem)] pb-2.5 glass">
+        <p className="text-white font-bold text-sm truncate flex-1">{watchTitle}</p>
+        <button onClick={() => { setWatchOpen(false); setWatchId(null); }} data-tv-close tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full glass-liquid flex items-center justify-center text-white shrink-0" aria-label="Close"><X className="w-5 h-5" /></button>
+      </div>
+      {watchId === null ? (
+        <div className="flex-1 flex items-center justify-center gap-2 text-zinc-400"><Loader2 className="w-6 h-6 animate-spin text-amber-500" /> Finding video…</div>
+      ) : watchId ? (
+        <iframe src={`https://www.youtube.com/embed/${watchId}?autoplay=1&playsinline=1`} title="Watch" className="flex-1 w-full bg-black border-0" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />
+      ) : (
+        <div className="flex-1 flex items-center justify-center text-zinc-400 px-8 text-center">No video found for this episode on YouTube.</div>
+      )}
     </div>
   );
 
@@ -155,11 +185,13 @@ export default function PodcastsHome() {
                   </div>
                   <button onClick={() => togglePlayed(ep)} className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${played ? 'text-sauti' : 'text-zinc-500 hover:text-white'}`} aria-label={played ? 'Mark unplayed' : 'Mark played'}>{played ? <Check className="w-5 h-5" /> : <Circle className="w-5 h-5" />}</button>
                   <button onClick={() => onListen(ep)} className="btn-sauti w-10 h-10 rounded-full flex items-center justify-center shrink-0" aria-label="Listen"><Play className="w-4 h-4 fill-current ml-0.5" /></button>
+                  <button onClick={() => onWatch(ep)} className="btn-glass w-10 h-10 rounded-lg flex items-center justify-center shrink-0" aria-label="Watch on YouTube"><Video className="w-4 h-4" /></button>
                 </div>
               );
             })}
           </div>
         )}
+        {videoModal}
       </div>
     );
   }
@@ -218,6 +250,7 @@ export default function PodcastsHome() {
           {loadingHome && shelves.length === 0 && <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3 text-zinc-400"><Loader2 className="w-9 h-9 animate-spin text-amber-500" /><span>Loading podcasts…</span></div>}
         </>
       )}
+      {videoModal}
     </div>
   );
 }
