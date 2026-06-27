@@ -67,24 +67,23 @@ function LyricsPanel({ track, position, onSeek }: { track: Track; position: numb
   if (state === 'loading') return <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">Finding lyrics…</div>;
   if (state === 'none') return <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm px-8 text-center">No lyrics found for this track.</div>;
   if (state === 'plain') return (
-    <div className="flex-1 overflow-y-auto custom-scrollbar px-2 text-center py-8">
-      <p className="text-[11px] uppercase tracking-[0.2em] text-amber-400/80 mb-6">Timed lyrics unavailable</p>
+    <div className="flex-1 overflow-y-auto custom-scrollbar px-6 text-left py-10" style={{ background: `linear-gradient(180deg, ${track.dominantColor || '#3b3b44'} 0%, rgba(0,0,0,0.5) 100%)` }}>
+      <p className="text-[11px] uppercase tracking-[0.2em] text-white/60 mb-6">Lyrics · not synced</p>
       {plain.split('\n').map((l, i) => <p key={i} className="text-lg font-semibold text-white/80 leading-relaxed py-0.5">{l || ' '}</p>)}
     </div>
   );
   return (
     <div className="relative h-full">
-      <div aria-hidden className="absolute inset-0 overflow-hidden pointer-events-none"
-        style={{ background: `linear-gradient(180deg, ${track.dominantColor || '#27272a'} 0%, rgba(9,9,11,0.92) 78%)` }}>
-        {(track.artworkLarge || track.artwork) && <img src={track.artworkLarge || track.artwork} alt="" className="w-full h-full object-cover blur-[70px] scale-150 opacity-20 mix-blend-soft-light" />}
-      </div>
-      <div className="relative h-full overflow-y-auto custom-scrollbar px-6 py-[42vh] text-center">
+      <div aria-hidden className="absolute inset-0 pointer-events-none"
+        style={{ background: `linear-gradient(180deg, ${track.dominantColor || '#3b3b44'} 0%, ${track.dominantColor || '#3b3b44'} 62%, rgba(0,0,0,0.5) 100%)` }} />
+      <div className="relative h-full overflow-y-auto custom-scrollbar px-6 py-[40vh] text-left">
       {synced.map((l, i) => (
         <button key={i} ref={i === activeIdx ? activeRef : undefined} onClick={() => onSeek?.(l.t)}
-          className={`block w-full leading-snug py-2.5 px-2 font-sans tracking-tight transition-colors duration-300 ${i === activeIdx ? 'text-white text-[26px] md:text-3xl font-extrabold' : 'text-white/45 text-xl md:text-2xl font-bold'}`}>
+          className={`block w-full text-left leading-[1.15] py-2.5 font-sans tracking-tight transition-colors duration-200 text-2xl md:text-[32px] font-extrabold ${i === activeIdx ? 'text-white' : 'text-white/50 hover:text-white/75'}`}>
           {l.text || '♪'}
         </button>
       ))}
+      <p className="text-[10px] text-white/45 pt-6 pb-2">Lyrics provided by LRCLIB</p>
       </div>
     </div>
   );
