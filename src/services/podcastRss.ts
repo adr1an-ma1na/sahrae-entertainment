@@ -24,9 +24,11 @@ async function fetchText(url: string): Promise<string | null> {
   return null;
 }
 
-/** Search podcast SHOWS by name/topic (iTunes Search API, key-less). */
-export async function searchPodcastShows(query: string, limit = 24): Promise<PodShow[]> {
-  const t = await fetchText(`https://itunes.apple.com/search?media=podcast&limit=${limit}&term=${encodeURIComponent(query)}`);
+/** Search podcast SHOWS by name/topic (iTunes Search API, key-less). `country`
+ *  (ISO-2, e.g. 'ke') scopes results to a storefront — powers country charts. */
+export async function searchPodcastShows(query: string, limit = 24, country?: string): Promise<PodShow[]> {
+  const cc = country ? `&country=${encodeURIComponent(country)}` : '';
+  const t = await fetchText(`https://itunes.apple.com/search?media=podcast&limit=${limit}${cc}&term=${encodeURIComponent(query)}`);
   if (!t) return [];
   let j: { results?: Array<Record<string, unknown>> };
   try { j = JSON.parse(t); } catch { return []; }

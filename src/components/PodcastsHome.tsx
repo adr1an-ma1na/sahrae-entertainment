@@ -1,13 +1,23 @@
 import { useState, useEffect, useRef, type MouseEvent as RMouseEvent } from 'react';
-import { Search, Loader2, Heart, Play, ChevronLeft, Check, Circle, Video, X, ListTree } from 'lucide-react';
+import { Search, Loader2, Heart, Play, ChevronLeft, ChevronRight, Check, Circle, Video, X, ListTree, Download, Trash2, Sparkles } from 'lucide-react';
 import { Track, ytmusic } from '../services/ytmusic';
 import { searchPodcastShows, getPodcastEpisodes, fetchChapters, PodShow } from '../services/podcastRss';
+import { downloads, useDownloads } from '../services/downloads';
 import { useMusic } from '../hooks/useMusic';
 import { CoverArt } from './ui/CoverArt';
 import { getFollows, isFollowed, toggleFollow, listInProgress, getProgress, getMany, markPlayed, markUnplayed, EpisodeProgress } from '../services/podcasts';
 
 const CATEGORIES = ['Top', 'News', 'Comedy', 'Business', 'Technology', 'True Crime', 'Sports', 'Health', 'Education'];
 const catQuery = (c: string) => (c === 'Top' ? 'podcasts' : c);
+// Country charts (spec §2.2.4 numbered list). iTunes storefront codes.
+const CHART_MARKETS = [
+  { cc: 'us', name: 'USA', flag: '\u{1F1FA}\u{1F1F8}' },
+  { cc: 'gb', name: 'UK', flag: '\u{1F1EC}\u{1F1E7}' },
+  { cc: 'ke', name: 'Kenya', flag: '\u{1F1F0}\u{1F1EA}' },
+  { cc: 'ng', name: 'Nigeria', flag: '\u{1F1F3}\u{1F1EC}' },
+  { cc: 'za', name: 'S. Africa', flag: '\u{1F1FF}\u{1F1E6}' },
+  { cc: 'ca', name: 'Canada', flag: '\u{1F1E8}\u{1F1E6}' },
+];
 const fmt = (s: number) => { if (!s || !isFinite(s)) return ''; const m = Math.floor(s / 60); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m} min`; };
 // Clock format for chapters / timestamps: H:MM:SS or M:SS.
 const clock = (s: number) => { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = Math.floor(s % 60); const p = (n: number) => String(n).padStart(2, '0'); return h ? `${h}:${p(m)}:${p(ss)}` : `${m}:${p(ss)}`; };
@@ -65,6 +75,41 @@ export default function PodcastsHome() {
       .finally(() => { if (!cancelled) setEpChLoading(false); });
     return () => { cancelled = true; };
   }, [episodeView]);
+
+  const downloaded = useDownloads();
+  const [chartCountry, setChartCountry] = useState('us');
+  const [charts, setCharts] = useState<Record<string, Track[]>>({});
+  const [chartLoading, setChartLoading] = useState(false);
+  const [chartAll, setChartAll] = useState(false);
+  const [epFilter, setEpFilter] = useState<'all' | 'unplayed' | 'inprogress' | 'downloaded'>('all');
+  const [suggested, setSuggested] = useState<Track[]>([]);
+
+  // Top Podcasts chart for the selected country — numbered list (spec §2.2.4).
+  useEffect(() => {
+    if (query.trim() || charts[chartCountry]) return;
+    let cancelled = false; setChartLoading(true);
+    searchPodcastShows('podcasts', 20, chartCountry)
+      .then((shows) => { if (!cancelled) setCharts((p) => ({ ...p, [chartCountry]: shows.map(showToTrack) })); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setChartLoading(false); });
+    return () => { cancelled = true; };
+  }, [chartCountry, query, charts]);
+
+  // "Shows you might like" — seeded from your followed shows (spec §2.6.1).
+  useEffect(() => {
+    if (follows.length === 0) { setSuggested([]); return; }
+    let cancelled = false;
+    (async () => {
+      const seeds = follows.slice(0, 3);
+      const lists = await Promise.all(seeds.map((s) => searchPodcastShows(s.artist || s.title, 8).catch(() => [] as PodShow[])));
+      if (cancelled) return;
+      const followedIds = new Set(follows.map((f) => f.id));
+      const seen = new Set<string>(); const out: Track[] = [];
+      for (const list of lists) for (const s of list) { const tr = showToTrack(s); if (!followedIds.has(tr.id) && !seen.has(tr.id)) { seen.add(tr.id); out.push(tr); } }
+      if (!cancelled) setSuggested(out.slice(0, 12));
+    })();
+    return () => { cancelled = true; };
+  }, [follows]);
 
   // Refresh "continue" whenever we return to this screen / progress changes.
   useEffect(() => { setCont(listInProgress()); }, [progV]);
@@ -204,6 +249,11 @@ export default function PodcastsHome() {
           <button onClick={() => onListen(ep)} className="btn-sauti px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Play className="w-4 h-4 fill-current" /> Play episode</button>
           <button onClick={() => onWatch(ep)} className="btn-glass px-5 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Video className="w-4 h-4" /> Watch</button>
           <button onClick={() => togglePlayed(ep)} className="btn-glass px-5 py-2.5 rounded-full text-sm font-bold flex items-center gap-2">{played ? <Check className="w-4 h-4 text-sauti" /> : <Circle className="w-4 h-4" />} {played ? 'Played' : 'Mark played'}</button>
+          {(() => { const dl = downloaded.some((d) => d.id === ep.id); const st = downloads.state(ep.id)?.status; return (
+            <button onClick={() => (dl ? downloads.remove(ep.id) : downloads.download(ep))} disabled={st === 'downloading'} className="btn-glass px-5 py-2.5 rounded-full text-sm font-bold flex items-center gap-2 disabled:opacity-50">
+              {st === 'downloading' ? <><Loader2 className="w-4 h-4 animate-spin" /> Downloading</> : dl ? <><Trash2 className="w-4 h-4 text-sauti" /> Downloaded</> : <><Download className="w-4 h-4" /> Download</>}
+            </button>
+          ); })()}
         </div>
 
         {chapters.length > 0 && (
@@ -237,6 +287,17 @@ export default function PodcastsHome() {
     const hc = showView.dominantColor || 'rgba(245,158,11,0.4)';
     const sortedEps = [...showEpisodes].sort((a, b) => (epSort === 'new' ? (b.uploaded || 0) - (a.uploaded || 0) : (a.uploaded || 0) - (b.uploaded || 0)));
     const prog = getMany(showEpisodes.map((e) => e.id)); void progV;
+    const filteredEps = sortedEps.filter((ep) => {
+      if (epFilter === 'downloaded') return downloaded.some((d) => d.id === ep.id);
+      const st = prog[ep.id]?.state;
+      if (epFilter === 'inprogress') return st === 'in_progress';
+      if (epFilter === 'unplayed') return st !== 'in_progress' && st !== 'played';
+      return true; // 'all'
+    });
+    const EP_FILTERS: { k: typeof epFilter; label: string }[] = [
+      { k: 'all', label: 'All' }, { k: 'unplayed', label: 'Unplayed' },
+      { k: 'inprogress', label: 'In progress' }, { k: 'downloaded', label: 'Downloaded' },
+    ];
     return (
       <div className="relative animate-in fade-in duration-300">
         <div aria-hidden className="absolute -inset-x-4 md:-inset-x-12 top-0 h-72 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${hc} 0%, transparent 100%)`, opacity: 0.5 }} />
@@ -262,15 +323,22 @@ export default function PodcastsHome() {
           <p className="text-zinc-500 py-10 text-center">No episodes found for this show.</p>
         ) : (
           <div className="space-y-2 pb-6">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-zinc-500 tabular">{showEpisodes.length} episodes</span>
-              <div className="flex gap-1 glass p-1 rounded-lg">
+            <div className="flex items-center justify-between mb-2 gap-3">
+              <span className="text-xs text-zinc-500 tabular shrink-0">{showEpisodes.length} episodes</span>
+              <div className="flex gap-1 glass p-1 rounded-lg shrink-0">
                 {(['new', 'old'] as const).map((s) => (
                   <button key={s} onClick={() => setEpSort(s)} className={`px-3 py-1 rounded-md text-xs font-bold transition-colors ${epSort === s ? 'bg-sauti text-amber-950' : 'text-zinc-400 hover:text-white'}`}>{s === 'new' ? 'Newest' : 'Oldest'}</button>
                 ))}
               </div>
             </div>
-            {sortedEps.map((ep) => {
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 mb-1">
+              {EP_FILTERS.map((f) => (
+                <button key={f.k} onClick={() => setEpFilter(f.k)} className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap border transition-colors ${epFilter === f.k ? 'bg-sauti text-amber-950 border-transparent' : 'glass-liquid text-white border-transparent'}`}>{f.label}</button>
+              ))}
+            </div>
+            {filteredEps.length === 0 ? (
+              <p className="text-zinc-500 py-8 text-center text-sm">No matching episodes.</p>
+            ) : filteredEps.map((ep) => {
               const pr = prog[ep.id];
               const played = pr?.state === 'played';
               const inProg = pr?.state === 'in_progress';
@@ -343,6 +411,36 @@ export default function PodcastsHome() {
             </section>
           )}
 
+          {/* Top Podcasts — numbered chart, per country (spec §2.2.4) */}
+          <section className="mb-9">
+            <h3 className="text-xl font-display font-bold text-white tracking-tight mb-3">Top Podcasts</h3>
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2 mb-1">
+              {CHART_MARKETS.map((m) => (
+                <button key={m.cc} onClick={() => { setChartCountry(m.cc); setChartAll(false); }} className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap border transition-colors ${chartCountry === m.cc ? 'bg-sauti text-amber-950 border-transparent' : 'glass-liquid text-white border-transparent'}`}>{m.flag} {m.name}</button>
+              ))}
+            </div>
+            {chartLoading && !charts[chartCountry]?.length ? (
+              <div className="flex items-center gap-2 text-zinc-400 py-6"><Loader2 className="w-5 h-5 animate-spin text-amber-500" /> Loading chart…</div>
+            ) : (
+              <div className="space-y-1">
+                {(charts[chartCountry] || []).slice(0, chartAll ? 20 : 10).map((t, i) => (
+                  <button key={t.id} onClick={() => setShowView(t)} tabIndex={0} data-tv-focusable className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 text-left transition-colors">
+                    <span className="w-7 text-center text-lg font-display font-extrabold text-zinc-500 tabular shrink-0">{i + 1}</span>
+                    <div className="w-12 h-12 rounded-lg overflow-hidden bg-zinc-800 shrink-0 relative"><CoverArt imageUrl={t.artwork} dominantColor={t.dominantColor} rounded="" className="absolute inset-0 w-full h-full" /></div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-white truncate">{t.title}</p>
+                      <p className="text-xs text-zinc-500 truncate">{t.artist}</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-zinc-600 shrink-0" />
+                  </button>
+                ))}
+                {(charts[chartCountry]?.length || 0) > 10 && (
+                  <button onClick={() => setChartAll((v) => !v)} className="text-xs font-bold text-sauti px-2 py-2 hover:underline">{chartAll ? 'Show less' : 'Show all'}</button>
+                )}
+              </div>
+            )}
+          </section>
+
           {/* Curated category shelves */}
           {shelves.map((s) => (
             <section key={s.title} className="mb-9">
@@ -350,6 +448,14 @@ export default function PodcastsHome() {
               <div className="flex overflow-x-auto gap-4 pb-3 scrollbar-hide">{s.items.map(card)}</div>
             </section>
           ))}
+
+          {/* Shows you might like (spec §2.6.1) */}
+          {suggested.length >= 4 && (
+            <section className="mb-9">
+              <h3 className="text-xl font-display font-bold text-white tracking-tight mb-4 flex items-center gap-2"><Sparkles className="w-5 h-5 text-sauti" /> Shows you might like</h3>
+              <div className="flex overflow-x-auto gap-4 pb-3 scrollbar-hide">{suggested.map(card)}</div>
+            </section>
+          )}
           {loadingHome && shelves.length === 0 && <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3 text-zinc-400"><Loader2 className="w-9 h-9 animate-spin text-amber-500" /><span>Loading podcasts…</span></div>}
         </>
       )}
