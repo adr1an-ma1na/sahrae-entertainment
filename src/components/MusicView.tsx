@@ -156,7 +156,10 @@ function greeting(): string {
 }
 
 export default function MusicView() {
-  const { playQueue, likedTracks, playlists, recentlyPlayed, createPlaylist, deletePlaylist, removeFromPlaylist, openAddSheet } = useMusic();
+  const { playQueue, likedTracks, playlists, recentlyPlayed: rawRecent, createPlaylist, deletePlaylist, removeFromPlaylist, openAddSheet } = useMusic();
+  // Sauti is music only — podcasts play through the shared engine, so strip them
+  // from every recently-played-derived shelf, pill, mix, and the header gradient.
+  const recentlyPlayed = rawRecent.filter((t) => !t.id.startsWith('pod:') && !t.feedUrl);
 
   const [tab, setTab] = useState<'home' | 'library'>('home');
   const [sections, setSections] = useState<{ title: string; tracks: Track[] }[]>([]);
