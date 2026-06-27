@@ -91,6 +91,18 @@ export async function getPodcastEpisodes(feedUrl: string, fallback?: Partial<Pod
     const epImgEl = it.getElementsByTagName('itunes:image')[0];
     const art = (epImgEl?.getAttribute('href') || channelArt).replace(/^http:\/\//i, 'https://');
     const dur = durationToSec(tagText(it, 'itunes:duration'));
+    // Show notes: prefer full HTML (<content:encoded>), then <description>, then itunes:summary.
+    const description = tagText(it, 'content:encoded') || tagText(it, 'description') || tagText(it, 'itunes:summary');
+    // Inline Podlove Simple Chapters (<psc:chapter start="HH:MM:SS" title="…">), if present.
+    const chapters: { start: number; title: string }[] = [];
+    const pscList = it.getElementsByTagName('psc:chapter');
+    for (let k = 0; k < pscList.length; k++) {
+      const st = pscList[k].getAttribute('start') || '';
+      const ti = pscList[k].getAttribute('title') || '';
+      if (st && ti) chapters.push({ start: durationToSec(st), title: ti });
+    }
+    // <podcast:chapters url="…" /> JSON — fetched on demand when the detail opens.
+    const chaptersUrl = (it.getElementsByTagName('podcast:chapters')[0]?.getAttribute('url') || '').replace(/^http:\/\//i, 'https://') || undefined;
     eps.push({
       id: `pod:${guid}`,
       title,
@@ -102,7 +114,23 @@ export async function getPodcastEpisodes(feedUrl: string, fallback?: Partial<Pod
       feedUrl,
       date: uploaded ? new Date(uploaded).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '',
       uploaded: uploaded || 0,
+      description,
+      chapters: chapters.length ? chapters : undefined,
+      chaptersUrl,
     });
   }
   return eps;
+}
+
+/** Fetch + parse a <podcast:chapters> JSON file into {start,title} chapters. */
+export async function fetchChapters(url: string): Promise<{ start: number; title: string }[]> {
+  const txt = await fetchText(url);
+  if (!txt) return [];
+  try {
+    const j = JSON.parse(txt) as { chapters?: { startTime?: number; title?: string }[] };
+    const arr = Array.isArray(j.chapters) ? j.chapters : [];
+    return arr
+      .map((c) => ({ start: Math.floor(Number(c.startTime) || 0), title: String(c.title || '').trim() }))
+      .filter((c) => c.title);
+  } catch { return []; }
 }

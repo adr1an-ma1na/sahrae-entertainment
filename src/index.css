@@ -686,3 +686,12 @@ a:focus-visible {
   html.nav-collapsed .lg\:pl-64 { padding-left: 0 !important; }
   html.nav-collapsed .lg\:left-64 { left: 0 !important; }
 }
+
+/* Podcast episode show-notes (HTML rendered from the feed). */
+.podcast-notes p { margin: 0 0 0.75rem; }
+.podcast-notes a { color: #f59e0b; text-decoration: underline; word-break: break-word; }
+.podcast-notes ul, .podcast-notes ol { margin: 0 0 0.75rem 1.25rem; list-style: revert; }
+.podcast-notes li { margin: 0.15rem 0; }
+.podcast-notes img { max-width: 100%; height: auto; border-radius: 8px; margin: 0.5rem 0; }
+.podcast-notes h1, .podcast-notes h2, .podcast-notes h3 { font-weight: 700; color: #fff; margin: 0.5rem 0; }
+.podcast-notes .ts-seek { color: #f59e0b; font-weight: 700; background: rgba(245, 158, 11, 0.12); border-radius: 4px; padding: 0 4px; cursor: pointer; }

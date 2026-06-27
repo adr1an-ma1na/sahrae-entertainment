@@ -18,6 +18,9 @@ export interface Track {
   audioUrl?: string;  // direct audio file URL (podcast RSS / owned catalog) → plays via <audio>, backgrounds
   feedUrl?: string;   // podcast show RSS feed (for opening a show's episodes)
   scStream?: string;  // SoundCloud progressive transcoding URL → resolved to audioUrl on play
+  description?: string; // podcast episode show-notes (HTML), for the episode detail page
+  chaptersUrl?: string; // <podcast:chapters> JSON url (fetched on demand)
+  chapters?: { start: number; title: string }[]; // inline <psc:chapter> chapters
 }
 
 // Deterministic, pleasant "dominant colour" per track for CoverArt /

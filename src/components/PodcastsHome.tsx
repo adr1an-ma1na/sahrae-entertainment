@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
-import { Search, Loader2, Heart, Play, ChevronLeft, Check, Circle, Video, X } from 'lucide-react';
+import { useState, useEffect, useRef, type MouseEvent as RMouseEvent } from 'react';
+import { Search, Loader2, Heart, Play, ChevronLeft, Check, Circle, Video, X, ListTree } from 'lucide-react';
 import { Track, ytmusic } from '../services/ytmusic';
-import { searchPodcastShows, getPodcastEpisodes, PodShow } from '../services/podcastRss';
+import { searchPodcastShows, getPodcastEpisodes, fetchChapters, PodShow } from '../services/podcastRss';
 import { useMusic } from '../hooks/useMusic';
 import { CoverArt } from './ui/CoverArt';
 import { getFollows, isFollowed, toggleFollow, listInProgress, getProgress, getMany, markPlayed, markUnplayed, EpisodeProgress } from '../services/podcasts';
@@ -9,12 +9,29 @@ import { getFollows, isFollowed, toggleFollow, listInProgress, getProgress, getM
 const CATEGORIES = ['Top', 'News', 'Comedy', 'Business', 'Technology', 'True Crime', 'Sports', 'Health', 'Education'];
 const catQuery = (c: string) => (c === 'Top' ? 'podcasts' : c);
 const fmt = (s: number) => { if (!s || !isFinite(s)) return ''; const m = Math.floor(s / 60); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m} min`; };
+// Clock format for chapters / timestamps: H:MM:SS or M:SS.
+const clock = (s: number) => { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = Math.floor(s % 60); const p = (n: number) => String(n).padStart(2, '0'); return h ? `${h}:${p(m)}:${p(ss)}` : `${m}:${p(ss)}`; };
+
+// Make HH:MM(:SS) timestamps in show-notes tappable (spec §2.4 linkifyTimestamps).
+function linkifyTimestamps(html: string): string {
+  return html.replace(/\b(\d{1,2}):([0-5]\d)(?::([0-5]\d))?\b/g, (m, h, mm, s) => {
+    const sec = s ? Number(h) * 3600 + Number(mm) * 60 + Number(s) : Number(h) * 60 + Number(mm);
+    return `<button type="button" class="ts-seek" data-seek="${sec}">${m}</button>`;
+  });
+}
+// Light sanitiser for feed HTML: drop scripts/embeds, inline handlers, js: urls.
+function sanitizeNotes(html: string): string {
+  return (html || '')
+    .replace(/<\s*(script|style|iframe|object|embed|form)[\s\S]*?<\s*\/\s*\1\s*>/gi, '')
+    .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/(href|src)\s*=\s*("|')\s*javascript:[^"']*\2/gi, '$1="#"');
+}
 
 // A podcast SHOW is carried as a Track (so it reuses follows/cards), with feedUrl set.
 const showToTrack = (s: PodShow): Track => ({ id: s.id, title: s.title, artist: s.author, artwork: s.artwork, artworkLarge: s.artwork, duration: 0, feedUrl: s.feedUrl });
 
 export default function PodcastsHome() {
-  const { playQueue, seek, stop } = useMusic();
+  const { playQueue, seek, stop, current } = useMusic();
   const [query, setQuery] = useState('');
   // Watch an episode on YouTube (searched on demand).
   const [watchOpen, setWatchOpen] = useState(false);
@@ -31,7 +48,23 @@ export default function PodcastsHome() {
   const [showEpisodes, setShowEpisodes] = useState<Track[]>([]);
   const [showLoading, setShowLoading] = useState(false);
   const [epSort, setEpSort] = useState<'new' | 'old'>('new');
+  const [episodeView, setEpisodeView] = useState<Track | null>(null);
+  const [epChapters, setEpChapters] = useState<{ start: number; title: string }[]>([]);
+  const [epChLoading, setEpChLoading] = useState(false);
   const tRef = useRef<number | undefined>(undefined);
+
+  // Resolve <podcast:chapters> JSON on demand when an episode detail opens
+  // (inline psc:chapters, if any, are already on the track).
+  useEffect(() => {
+    setEpChapters([]); setEpChLoading(false);
+    if (!episodeView || episodeView.chapters?.length || !episodeView.chaptersUrl) return;
+    let cancelled = false; setEpChLoading(true);
+    fetchChapters(episodeView.chaptersUrl)
+      .then((c) => { if (!cancelled) setEpChapters(c); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setEpChLoading(false); });
+    return () => { cancelled = true; };
+  }, [episodeView]);
 
   // Refresh "continue" whenever we return to this screen / progress changes.
   useEffect(() => { setCont(listInProgress()); }, [progV]);
@@ -92,6 +125,22 @@ export default function PodcastsHome() {
   const resume = (p: EpisodeProgress) => { playQueue([p.track], 0, 'Podcasts'); window.setTimeout(() => { try { seek(p.positionMs / 1000); } catch { /* ignore */ } }, 1200); };
   const togglePlayed = (t: Track) => { if (getProgress(t.id)?.completed) markUnplayed(t.id); else markPlayed(t); setProgV((v) => v + 1); };
 
+  // Seek to a chapter / timestamp: if this episode is already playing, seek now;
+  // otherwise start it, then seek once it has loaded.
+  const seekTo = (ep: Track, seconds: number) => {
+    if (current?.id === ep.id) { try { seek(seconds); } catch { /* ignore */ } return; }
+    playQueue([ep], 0, 'Podcasts');
+    window.setTimeout(() => { try { seek(seconds); } catch { /* ignore */ } }, 1400);
+  };
+  // Delegate clicks on tappable timestamps inside the (HTML) show-notes.
+  const onNotesClick = (e: RMouseEvent<HTMLDivElement>) => {
+    const el = (e.target as HTMLElement).closest('[data-seek]');
+    if (!el || !episodeView) return;
+    e.preventDefault();
+    const s = Number(el.getAttribute('data-seek'));
+    if (isFinite(s)) seekTo(episodeView, s);
+  };
+
   // Watch the episode on YouTube — pause audio, find the video on demand, embed it.
   const onWatch = async (t: Track) => {
     stop();
@@ -130,6 +179,58 @@ export default function PodcastsHome() {
       )}
     </div>
   );
+
+  // ── Episode detail: show-notes (tappable timestamps) + chapters (spec §2.4) ──
+  if (episodeView) {
+    const ep = episodeView;
+    const hc = ep.dominantColor || 'rgba(245,158,11,0.4)';
+    const played = getProgress(ep.id)?.state === 'played';
+    const notes = linkifyTimestamps(sanitizeNotes(ep.description || ''));
+    const chapters = ep.chapters?.length ? ep.chapters : epChapters;
+    return (
+      <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 max-w-3xl">
+        <button onClick={() => setEpisodeView(null)} className="flex items-center gap-1 text-zinc-400 hover:text-white mb-5 text-sm"><ChevronLeft className="w-4 h-4" /> Back</button>
+        <div className="relative rounded-2xl overflow-hidden mb-5" style={{ background: `linear-gradient(160deg, ${hc}, transparent 75%)` }}>
+          <div className="p-5 flex gap-4 items-start">
+            <div className="w-20 h-20 md:w-24 md:h-24 rounded-xl overflow-hidden bg-zinc-800 shrink-0 relative"><CoverArt imageUrl={ep.artworkLarge || ep.artwork} dominantColor={ep.dominantColor} rounded="" className="absolute inset-0 w-full h-full" /></div>
+            <div className="min-w-0">
+              <button onClick={() => { setEpisodeView(null); }} className="text-xs text-zinc-300 hover:text-white truncate block max-w-full">{ep.artist}</button>
+              <h2 className="text-xl md:text-2xl font-display font-bold text-white line-clamp-3 leading-tight">{ep.title}</h2>
+              <p className="text-xs text-zinc-400 mt-1.5">{ep.date}{ep.duration ? ` · ${fmt(ep.duration)}` : ''}</p>
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 mb-7">
+          <button onClick={() => onListen(ep)} className="btn-sauti px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Play className="w-4 h-4 fill-current" /> Play episode</button>
+          <button onClick={() => onWatch(ep)} className="btn-glass px-5 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Video className="w-4 h-4" /> Watch</button>
+          <button onClick={() => togglePlayed(ep)} className="btn-glass px-5 py-2.5 rounded-full text-sm font-bold flex items-center gap-2">{played ? <Check className="w-4 h-4 text-sauti" /> : <Circle className="w-4 h-4" />} {played ? 'Played' : 'Mark played'}</button>
+        </div>
+
+        {chapters.length > 0 && (
+          <section className="mb-7">
+            <h3 className="overline mb-2 flex items-center gap-1.5"><ListTree className="w-3.5 h-3.5 text-sauti" /> Chapters</h3>
+            <div className="space-y-0.5">
+              {chapters.map((c, i) => (
+                <button key={i} onClick={() => seekTo(ep, c.start)} tabIndex={0} data-tv-focusable className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 text-left transition-colors">
+                  <span className="text-xs font-bold text-sauti tabular shrink-0 w-16">{clock(c.start)}</span>
+                  <span className="text-sm text-zinc-200 truncate">{c.title}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+        {epChLoading && <p className="text-zinc-500 text-sm mb-5 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading chapters…</p>}
+
+        <section>
+          <h3 className="overline mb-2">Episode notes</h3>
+          {notes ? (
+            <div className="podcast-notes text-sm text-zinc-300 leading-relaxed" onClick={onNotesClick} dangerouslySetInnerHTML={{ __html: notes }} />
+          ) : <p className="text-zinc-500 text-sm">No notes for this episode.</p>}
+        </section>
+        {videoModal}
+      </div>
+    );
+  }
 
   // ── Show page: a series' episodes, organised (Spotify-style) ──
   if (showView) {
@@ -175,14 +276,16 @@ export default function PodcastsHome() {
               const inProg = pr?.state === 'in_progress';
               return (
                 <div key={ep.id} className="tier-card card-lift rounded-xl p-3 flex items-center gap-3">
-                  <div className={`w-14 h-14 rounded-lg overflow-hidden bg-zinc-800 shrink-0 relative ${played ? 'opacity-60' : ''}`}><CoverArt imageUrl={ep.artwork} dominantColor={ep.dominantColor} rounded="" className="absolute inset-0 w-full h-full" /></div>
-                  <div className="min-w-0 flex-1">
-                    <p className={`text-sm font-bold line-clamp-2 ${played ? 'text-zinc-400' : 'text-white'}`}>{ep.title}</p>
-                    <p className="text-xs text-zinc-500 truncate">
-                      {played ? '✓ Played' : inProg ? `${fmt((pr.durationMs - pr.positionMs) / 1000)} left` : `${ep.date || 'Episode'}${ep.duration ? ` · ${fmt(ep.duration)}` : ''}`}
-                    </p>
-                    {inProg && <div className="h-1 rounded-full bg-white/10 overflow-hidden mt-1.5 max-w-[220px]"><div className="h-full bg-sauti" style={{ width: `${pr.durationMs ? Math.min(100, (pr.positionMs / pr.durationMs) * 100) : 0}%` }} /></div>}
-                  </div>
+                  <button onClick={() => setEpisodeView(ep)} tabIndex={0} data-tv-focusable className="flex items-center gap-3 min-w-0 flex-1 text-left">
+                    <div className={`w-14 h-14 rounded-lg overflow-hidden bg-zinc-800 shrink-0 relative ${played ? 'opacity-60' : ''}`}><CoverArt imageUrl={ep.artwork} dominantColor={ep.dominantColor} rounded="" className="absolute inset-0 w-full h-full" /></div>
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-sm font-bold line-clamp-2 ${played ? 'text-zinc-400' : 'text-white'}`}>{ep.title}</p>
+                      <p className="text-xs text-zinc-500 truncate">
+                        {played ? '✓ Played' : inProg ? `${fmt((pr.durationMs - pr.positionMs) / 1000)} left` : `${ep.date || 'Episode'}${ep.duration ? ` · ${fmt(ep.duration)}` : ''}`}
+                      </p>
+                      {inProg && <div className="h-1 rounded-full bg-white/10 overflow-hidden mt-1.5 max-w-[220px]"><div className="h-full bg-sauti" style={{ width: `${pr.durationMs ? Math.min(100, (pr.positionMs / pr.durationMs) * 100) : 0}%` }} /></div>}
+                    </div>
+                  </button>
                   <button onClick={() => togglePlayed(ep)} className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${played ? 'text-sauti' : 'text-zinc-500 hover:text-white'}`} aria-label={played ? 'Mark unplayed' : 'Mark played'}>{played ? <Check className="w-5 h-5" /> : <Circle className="w-5 h-5" />}</button>
                   <button onClick={() => onListen(ep)} className="btn-sauti w-10 h-10 rounded-full flex items-center justify-center shrink-0" aria-label="Listen"><Play className="w-4 h-4 fill-current ml-0.5" /></button>
                   <button onClick={() => onWatch(ep)} className="btn-glass w-10 h-10 rounded-lg flex items-center justify-center shrink-0" aria-label="Watch on YouTube"><Video className="w-4 h-4" /></button>
