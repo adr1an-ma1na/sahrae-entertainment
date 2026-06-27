@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { X, SlidersHorizontal, Sparkles, Waves } from 'lucide-react';
-import { EqSettings, EQ_FREQS, EQ_PRESETS, loadEq, saveEq } from '../services/eq';
+import { EqSettings, EQ_FREQS, EQ_PRESETS, PRESET_EXTRAS, loadEq, saveEq } from '../services/eq';
 
 const fmtDb = (mb: number) => `${mb > 0 ? '+' : ''}${(mb / 100).toFixed(0)} dB`;
 
@@ -18,7 +18,8 @@ export default function EqualizerPanel({ open, onClose }: { open: boolean; onClo
   };
   const usePreset = (name: string) => {
     const bands = EQ_PRESETS[name] || EQ_PRESETS.Flat;
-    commit({ ...eq, bands: bands.slice(), preset: name, on: true });
+    const ex = PRESET_EXTRAS[name];
+    commit({ ...eq, bands: bands.slice(), preset: name, on: true, ...(ex ? { bass: ex.bass, spatial: ex.spatial, loud: ex.loud } : {}) });
   };
 
   if (!open) return null;
@@ -89,6 +90,13 @@ export default function EqualizerPanel({ open, onClose }: { open: boolean; onClo
                 onChange={(e) => commit({ ...eq, spatial: Number(e.target.value), on: true })}
                 tabIndex={0} data-tv-focusable className="flex-1 h-1.5 cursor-pointer" style={{ accentColor: '#f59e0b' }} aria-label="Spatial audio" />
               <span className="w-10 text-right text-[11px] font-semibold text-zinc-300 tabular shrink-0">{Math.round(eq.spatial / 10)}%</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="w-24 flex items-center gap-1.5 text-xs font-bold text-zinc-300 shrink-0"><Waves className="w-3.5 h-3.5 text-sauti" /> Loudness</span>
+              <input type="range" min={0} max={2000} step={50} value={eq.loud ?? 0}
+                onChange={(e) => commit({ ...eq, loud: Number(e.target.value), on: true })}
+                tabIndex={0} data-tv-focusable className="flex-1 h-1.5 cursor-pointer" style={{ accentColor: '#f59e0b' }} aria-label="Loudness" />
+              <span className="w-10 text-right text-[11px] font-semibold text-zinc-300 tabular shrink-0">{Math.round((eq.loud ?? 0) / 20)}%</span>
             </div>
           </div>
 

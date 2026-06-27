@@ -5,6 +5,7 @@ import android.webkit.WebResourceResponse;
 import android.media.audiofx.Equalizer;
 import android.media.audiofx.BassBoost;
 import android.media.audiofx.Virtualizer;
+import android.media.audiofx.LoudnessEnhancer;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
@@ -29,6 +30,7 @@ final class AudioFx {
     private static Equalizer eq;
     private static BassBoost bass;
     private static Virtualizer virt;
+    private static LoudnessEnhancer loud;
 
     private AudioFx() {}
 
@@ -36,6 +38,7 @@ final class AudioFx {
         if (eq == null)   { try { eq = new Equalizer(0, 0); }   catch (Throwable ignore) {} }
         if (bass == null) { try { bass = new BassBoost(0, 0); } catch (Throwable ignore) {} }
         if (virt == null) { try { virt = new Virtualizer(0, 0); } catch (Throwable ignore) {} }
+        if (loud == null) { try { loud = new LoudnessEnhancer(0); } catch (Throwable ignore) {} }
     }
 
     static WebResourceResponse ok() {
@@ -77,7 +80,20 @@ final class AudioFx {
                 catch (Throwable ignore) {}
             }
             if (virt != null) {
-                try { if (virt.getStrengthSupported()) { virt.setEnabled(on); if (on) virt.setStrength((short) clamp(qi(u, "virt", 0), 0, 1000)); } }
+                try {
+                    if (virt.getStrengthSupported()) {
+                        virt.setEnabled(on);
+                        if (on) {
+                            // Strong spatial widening (closest to an Atmos-style room feel).
+                            try { virt.forceVirtualizationMode(Virtualizer.VIRTUALIZATION_MODE_AUTO); } catch (Throwable ignore) {}
+                            virt.setStrength((short) clamp(qi(u, "virt", 0), 0, 1000));
+                        }
+                    }
+                } catch (Throwable ignore) {}
+            }
+            if (loud != null) {
+                // Perceived loudness / fullness — the "mastered", premium body.
+                try { loud.setEnabled(on); if (on) loud.setTargetGain(clamp(qi(u, "loud", 0), 0, 2000)); }
                 catch (Throwable ignore) {}
             }
         } catch (Throwable ignore) {

@@ -1399,6 +1399,9 @@ public class MainActivity extends BridgeActivity {
         //    (The clean Chrome user-agent that gets embeds to play is set in
         //    capacitor.config.ts via overrideUserAgent, applied at WebView init.)
         webView.getSettings().setMediaPlaybackRequiresUserGesture(false);
+        // Allow http media (some podcast MP3 enclosures are http) to play on the
+        // https app origin — otherwise it's blocked as mixed content and shows 0:00.
+        try { webView.getSettings().setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW); } catch (Throwable ignore) {}
 
         // Allow drawing under the display cutout ONCE, up front. Toggling this
         // per fullscreen-transition forced a full window relayout each time,

@@ -83,12 +83,13 @@ export async function getPodcastEpisodes(feedUrl: string, fallback?: Partial<Pod
       }
     }
     if (!audioUrl) continue; // no media → skip
+    audioUrl = audioUrl.replace(/^http:\/\//i, 'https://'); // https app can't play http media
     const title = tagText(it, 'title') || 'Episode';
     const pub = tagText(it, 'pubDate');
     const uploaded = pub ? Date.parse(pub) : 0;
     const guid = tagText(it, 'guid') || audioUrl;
     const epImgEl = it.getElementsByTagName('itunes:image')[0];
-    const art = epImgEl?.getAttribute('href') || channelArt;
+    const art = (epImgEl?.getAttribute('href') || channelArt).replace(/^http:\/\//i, 'https://');
     const dur = durationToSec(tagText(it, 'itunes:duration'));
     eps.push({
       id: `pod:${guid}`,

@@ -33,7 +33,7 @@ function parseLRC(lrc: string): LyricLine[] {
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-function LyricsPanel({ track, position, duration, onSeek }: { track: Track; position: number; duration?: number; onSeek?: (t: number) => void }) {
+function LyricsPanel({ track, position, duration, isPlaying, onSeek }: { track: Track; position: number; duration?: number; isPlaying?: boolean; onSeek?: (t: number) => void }) {
   const [state, setState] = useState<'loading' | 'synced' | 'plain' | 'none'>('loading');
   const [synced, setSynced] = useState<LyricLine[]>([]);
   const [plain, setPlain] = useState('');
@@ -72,8 +72,20 @@ function LyricsPanel({ track, position, duration, onSeek }: { track: Track; posi
     return () => { cancelled = true; };
   }, [track.id, Math.round(duration || 0)]);
 
+  // Interpolate the time between the ~1s position updates so the active line moves
+  // smoothly in step with the song. Re-anchors on each real position update.
+  const baseRef = useRef({ pos: 0, at: Date.now() });
+  useEffect(() => { baseRef.current = { pos: position, at: Date.now() }; }, [position]);
+  const [, force] = useState(0);
+  useEffect(() => {
+    if (!isPlaying || state !== 'synced') return;
+    const iv = setInterval(() => force((n) => n + 1), 200);
+    return () => clearInterval(iv);
+  }, [isPlaying, state]);
+  const livePos = isPlaying ? baseRef.current.pos + (Date.now() - baseRef.current.at) / 1000 : position;
+
   let activeIdx = -1;
-  if (state === 'synced') for (let i = 0; i < synced.length; i++) { if (synced[i].t <= position + 0.25) activeIdx = i; else break; }
+  if (state === 'synced') for (let i = 0; i < synced.length; i++) { if (synced[i].t <= livePos + 0.2) activeIdx = i; else break; }
 
   useEffect(() => { activeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, [activeIdx]);
 
@@ -294,7 +306,7 @@ export default function MusicPlayer() {
           </div>
           {qTab === 'lyrics' ? (
             <div className="flex-1 min-h-0 flex flex-col">
-              <div className="flex-1 min-h-0 relative"><LyricsPanel track={current} position={position} duration={duration} onSeek={seek} /></div>
+              <div className="flex-1 min-h-0 relative"><LyricsPanel track={current} position={position} duration={duration} isPlaying={isPlaying} onSeek={seek} /></div>
               {/* Mini track player below the lyrics (Spotify-style) */}
               <div className="shrink-0 border-t border-white/10 bg-black/45 backdrop-blur px-4 py-3 flex items-center gap-3">
                 <CoverArt imageUrl={current.artwork} dominantColor={current.dominantColor} className="w-11 h-11 shrink-0" />
