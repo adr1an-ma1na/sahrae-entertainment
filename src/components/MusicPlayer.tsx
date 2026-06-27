@@ -33,7 +33,7 @@ function parseLRC(lrc: string): LyricLine[] {
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-function LyricsPanel({ track, position, onSeek }: { track: Track; position: number; onSeek?: (t: number) => void }) {
+function LyricsPanel({ track, position, duration, onSeek }: { track: Track; position: number; duration?: number; onSeek?: (t: number) => void }) {
   const [state, setState] = useState<'loading' | 'synced' | 'plain' | 'none'>('loading');
   const [synced, setSynced] = useState<LyricLine[]>([]);
   const [plain, setPlain] = useState('');
@@ -44,12 +44,25 @@ function LyricsPanel({ track, position, onSeek }: { track: Track; position: numb
     setState('loading'); setSynced([]); setPlain('');
     (async () => {
       try {
-        const q = `${track.artist} ${track.title}`.replace(/\([^)]*\)|\[[^\]]*\]/g, '').replace(/\s+/g, ' ').trim();
+        // Strip common YouTube title noise so lrclib matches the right song.
+        const clean = (s: string) => s
+          .replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
+          .replace(/\s*-\s*topic\s*$/i, '')
+          .replace(/\b(official\s*(music\s*)?video|official\s*audio|lyric[s]?\s*video|visuali[sz]er|audio|hd|4k|mv|remaster(ed)?)\b/gi, ' ')
+          .replace(/\s+/g, ' ').trim();
+        const q = `${clean(track.artist)} ${clean(track.title)}`.replace(/\s+/g, ' ').trim();
         const r = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(q)}`);
         const arr = r.ok ? await r.json() : [];
         if (cancelled) return;
         const list: any[] = Array.isArray(arr) ? arr : [];
-        const s = list.find((x) => x.syncedLyrics);
+        // Pick the SYNCED version whose duration best matches what's playing, so
+        // the timestamps line up with this exact recording (fixes drift/offset).
+        const syncedList = list.filter((x) => x.syncedLyrics);
+        const dur = duration && isFinite(duration) && duration > 0 ? duration : (track.duration || 0);
+        let s = syncedList[0];
+        if (dur && syncedList.length > 1) {
+          s = syncedList.reduce((best, x) => (Math.abs((x.duration || 0) - dur) < Math.abs((best.duration || 0) - dur) ? x : best), syncedList[0]);
+        }
         if (s?.syncedLyrics) { const p = parseLRC(s.syncedLyrics); if (p.length) { setSynced(p); setState('synced'); return; } }
         const p = list.find((x) => x.plainLyrics);
         if (p?.plainLyrics) { setPlain(p.plainLyrics); setState('plain'); return; }
@@ -57,7 +70,7 @@ function LyricsPanel({ track, position, onSeek }: { track: Track; position: numb
       } catch { if (!cancelled) setState('none'); }
     })();
     return () => { cancelled = true; };
-  }, [track.id]);
+  }, [track.id, Math.round(duration || 0)]);
 
   let activeIdx = -1;
   if (state === 'synced') for (let i = 0; i < synced.length; i++) { if (synced[i].t <= position + 0.25) activeIdx = i; else break; }
@@ -281,7 +294,7 @@ export default function MusicPlayer() {
           </div>
           {qTab === 'lyrics' ? (
             <div className="flex-1 min-h-0 flex flex-col">
-              <div className="flex-1 min-h-0 relative"><LyricsPanel track={current} position={position} onSeek={seek} /></div>
+              <div className="flex-1 min-h-0 relative"><LyricsPanel track={current} position={position} duration={duration} onSeek={seek} /></div>
               {/* Mini track player below the lyrics (Spotify-style) */}
               <div className="shrink-0 border-t border-white/10 bg-black/45 backdrop-blur px-4 py-3 flex items-center gap-3">
                 <CoverArt imageUrl={current.artwork} dominantColor={current.dominantColor} className="w-11 h-11 shrink-0" />
