@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useRef, useEffect, ReactNode } from 'react';
 import { Track, ytmusic } from '../services/ytmusic';
+import { songRadio, diverseSample } from '../services/recommend';
 import { haptics } from '../services/haptics';
 import { downloads } from '../services/downloads';
 
@@ -30,6 +31,7 @@ interface MusicCtx {
   playQueue: (tracks: Track[], startIndex?: number, source?: string) => void;
   addToQueue: (t: Track) => void;
   playNext: (t: Track) => void;
+  startRadio: (seed: Track) => void;
   removeFromQueue: (i: number) => void;
   jumpTo: (i: number) => void;
   toggle: () => void;
@@ -311,7 +313,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       if (!fresh.length) return;
       setQueue((prev) => {
         const ph = new Set(prev.map((t) => t.id));
-        const add = fresh.filter((t) => !ph.has(t.id)).slice(0, 25);
+        // Diversify the appended run so radio doesn't stack the same artist.
+        const add = diverseSample(fresh.filter((t) => !ph.has(t.id)), 25);
         return add.length ? [...prev, ...add] : prev;
       });
     })();
@@ -441,6 +444,26 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     haptics.tap(); setActive(true);
     setQueue((prev) => { if (!prev.length) { setIndex(0); return [t]; } const n = [...prev]; n.splice(index + 1, 0, t); return n; });
   };
+  // Song Radio (spec §1.3.5): start the seed instantly, then extend into a
+  // diversified ~50-track radio from its related-tracks graph. The seed stays at
+  // index 0 so playback never restarts when the radio fills in.
+  const startRadio = (seed: Track) => {
+    if (!seed) return;
+    playQueue([seed], 0, `${seed.title} Radio`);
+    const sid = seed.id;
+    (async () => {
+      const have = new Set<string>([sid]);
+      const pool: Track[] = [];
+      const take = (list: Track[]) => { for (const t of list) if (t && !have.has(t.id)) { have.add(t.id); pool.push(t); } };
+      take(await ytmusic.related(sid).catch(() => [] as Track[]));
+      if (pool.length < 20 && seed.artist) take(await ytmusic.search(`${seed.artist} mix`).catch(() => [] as Track[]));
+      if (pool.length < 10) take(await ytmusic.search('top hits 2026').catch(() => [] as Track[]));
+      if (!pool.length) return;
+      const radio = songRadio(seed, pool, 50);
+      // only apply if the user is still on this radio (didn't start something else)
+      setQueue((prev) => (prev.length && prev[0]?.id === sid ? radio : prev));
+    })();
+  };
   const removeFromQueue = (i: number) => {
     if (i === index) return;
     setQueue((prev) => prev.filter((_, k) => k !== i));
@@ -538,7 +561,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       value={{
         queue, index, current, isPlaying, position, duration, shuffle, repeat, expanded, buffering, active,
         autoplay, toggleAutoplay, queueSource,
-        playQueue, addToQueue, playNext, removeFromQueue, jumpTo,
+        playQueue, addToQueue, playNext, startRadio, removeFromQueue, jumpTo,
         toggle, stop, next, prev, seek, setRate, toggleShuffle, cycleRepeat, toggleLike, isLiked,
         likedTracks, setExpanded,
         playlists, recentlyPlayed, createPlaylist, deletePlaylist, renamePlaylist, addToPlaylist, removeFromPlaylist,

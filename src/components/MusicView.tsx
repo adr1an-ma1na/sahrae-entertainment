@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, Fragment, ReactNode } from 'react';
 import { Search, Play, Pause, Heart, Loader2, Music2, Plus, X, ListMusic, Shuffle, Trash2, ChevronLeft, Library, Sparkles, Disc3, User } from 'lucide-react';
 import { ytmusic, Track, Artist, Album, GENRES, SECTIONS, TRENDING_PLAYLISTS, TrendingPlaylist } from '../services/ytmusic';
+import { buildMix, diverseSample } from '../services/recommend';
 import { useMusic } from '../hooks/useMusic';
 import { CoverArt } from './ui/CoverArt';
 
@@ -194,7 +195,7 @@ export default function MusicView() {
       const agg: Track[] = [];
       for (const list of lists) for (const t of list) if (!seen.has(t.id)) { seen.add(t.id); agg.push(t); }
       for (let i = agg.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [agg[i], agg[j]] = [agg[j], agg[i]]; }
-      setMix(agg.slice(0, 30));
+      setMix(diverseSample(agg, 30)); // no clustered artists
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -251,12 +252,14 @@ export default function MusicView() {
           const aSeeds = byArtist.get(ak)!;
           const idx = topSeeds.findIndex((s) => (s.artist || '').toLowerCase() === ak);
           const rel = idx >= 0 ? related[idx] : [];
-          const tracks = [...aSeeds, ...rel.filter((t) => !aSeeds.some((s) => s.id === t.id))].slice(0, 30);
+          // Blend familiar (your plays of this artist) with discovery (its related),
+          // interleaved in blocks and artist-diversified (spec §1.3.3).
+          const tracks = buildMix(aSeeds, rel.filter((t) => !aSeeds.some((s) => s.id === t.id)), 30);
           if (tracks.length >= 6) { out.push({ id: `daily-${dm}`, title: `Daily Mix ${dm}`, subtitle: `${aSeeds[0].artist} & similar`, tracks }); dm++; }
         }
 
         // Discover Weekly — highest cross-seed-agreement songs you haven't heard.
-        const discover = ranked.filter((t) => !known.has(t.id)).slice(0, 30);
+        const discover = diverseSample(ranked.filter((t) => !known.has(t.id)), 30);
         if (discover.length >= 8) out.push({ id: 'discover', title: 'Discover Weekly', subtitle: "Fresh picks your taste agrees on", tracks: discover });
 
         if (!cancelled) setMadeForYou(out);

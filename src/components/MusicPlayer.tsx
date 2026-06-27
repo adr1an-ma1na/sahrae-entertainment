@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, Fragment, type CSSProperties } from 'react';
-import { Play, Pause, SkipForward, SkipBack, ChevronDown, Heart, Shuffle, Repeat, Repeat1, Music2, Plus, X, ListMusic, Mic2, SlidersHorizontal, RotateCcw, RotateCw, Gauge, Moon } from 'lucide-react';
+import { Play, Pause, SkipForward, SkipBack, ChevronDown, Heart, Shuffle, Repeat, Repeat1, Music2, Plus, X, ListMusic, Mic2, SlidersHorizontal, RotateCcw, RotateCw, Gauge, Moon, Radio } from 'lucide-react';
 import { useMusic } from '../hooks/useMusic';
 import { Track, ytmusic } from '../services/ytmusic';
 import { hdArtwork } from '../services/albumArt';
@@ -129,7 +129,7 @@ function QueueRow({ track, activeRow, onPlay, onRemove }: { track: Track; active
 export default function MusicPlayer() {
   const {
     current, isPlaying, position, duration, shuffle, repeat, expanded, active,
-    queue, index, queueSource, jumpTo, removeFromQueue, playQueue,
+    queue, index, queueSource, jumpTo, removeFromQueue, playQueue, startRadio,
     toggle, stop, next, prev, seek, setRate, toggleShuffle, cycleRepeat, toggleLike, isLiked, setExpanded, openAddSheet,
   } = useMusic();
   const [showQueue, setShowQueue] = useState(false);
@@ -337,7 +337,15 @@ export default function MusicPlayer() {
               ) : related.length === 0 ? (
                 <p className="text-zinc-500 text-sm px-1">No related songs found.</p>
               ) : (
-                related.map((t, i) => <Fragment key={`rel-${t.id}-${i}`}><QueueRow track={t} onPlay={() => playQueue(related, i, 'Related')} /></Fragment>)
+                <>
+                  {current && (
+                    <button onClick={() => { startRadio(current); setShowQueue(false); }} tabIndex={0} data-tv-focusable
+                      className="w-full mb-3 btn-sauti px-4 py-2.5 rounded-full text-sm font-bold flex items-center justify-center gap-2">
+                      <Radio className="w-4 h-4" /> Start radio from this song
+                    </button>
+                  )}
+                  {related.map((t, i) => <Fragment key={`rel-${t.id}-${i}`}><QueueRow track={t} onPlay={() => playQueue(related, i, 'Related')} /></Fragment>)}
+                </>
               )}
             </div>
           )}
