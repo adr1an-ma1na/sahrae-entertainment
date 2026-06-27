@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, type MouseEvent as RMouseEvent } from 'react';
 import { Search, Loader2, Heart, Play, ChevronLeft, ChevronRight, Check, Circle, Video, X, ListTree, Download, Trash2, Sparkles } from 'lucide-react';
 import { Track, ytmusic } from '../services/ytmusic';
-import { searchPodcastShows, getPodcastEpisodes, fetchChapters, PodShow } from '../services/podcastRss';
+import { searchPodcastShows, getPodcastEpisodes, fetchChapters, getShowsLatest, PodShow } from '../services/podcastRss';
 import { downloads, useDownloads } from '../services/downloads';
 import { useMusic } from '../hooks/useMusic';
 import { CoverArt } from './ui/CoverArt';
-import { getFollows, isFollowed, toggleFollow, listInProgress, getProgress, getMany, markPlayed, markUnplayed, EpisodeProgress } from '../services/podcasts';
+import { getFollows, isFollowed, toggleFollow, listInProgress, getProgress, getMany, getSeen, markShowSeen, markPlayed, markUnplayed, EpisodeProgress } from '../services/podcasts';
 
 const CATEGORIES = ['Top', 'News', 'Comedy', 'Business', 'Technology', 'True Crime', 'Sports', 'Health', 'Education'];
 const catQuery = (c: string) => (c === 'Top' ? 'podcasts' : c);
@@ -83,6 +83,7 @@ export default function PodcastsHome() {
   const [chartAll, setChartAll] = useState(false);
   const [epFilter, setEpFilter] = useState<'all' | 'unplayed' | 'inprogress' | 'downloaded'>('all');
   const [suggested, setSuggested] = useState<Track[]>([]);
+  const [newShows, setNewShows] = useState<Set<string>>(new Set());
 
   // Top Podcasts chart for the selected country — numbered list (spec §2.2.4).
   useEffect(() => {
@@ -107,6 +108,27 @@ export default function PodcastsHome() {
       const seen = new Set<string>(); const out: Track[] = [];
       for (const list of lists) for (const s of list) { const tr = showToTrack(s); if (!followedIds.has(tr.id) && !seen.has(tr.id)) { seen.add(tr.id); out.push(tr); } }
       if (!cancelled) setSuggested(out.slice(0, 12));
+    })();
+    return () => { cancelled = true; };
+  }, [follows]);
+
+  // New-episode blue dots — one batched iTunes lookup of followed shows' latest
+  // release dates, compared to what the user has already seen (spec §2.10.3).
+  useEffect(() => {
+    if (follows.length === 0) { setNewShows(new Set()); return; }
+    let cancelled = false;
+    (async () => {
+      const latest = await getShowsLatest(follows.map((f) => f.id));
+      if (cancelled) return;
+      const seen = getSeen();
+      const fresh = new Set<string>();
+      for (const f of follows) {
+        const lt = latest[f.id];
+        if (!lt) continue;
+        if (seen[f.id] == null) markShowSeen(f.id, lt); // first sight → seed, no dot
+        else if (lt > seen[f.id]) fresh.add(f.id);
+      }
+      setNewShows(fresh);
     })();
     return () => { cancelled = true; };
   }, [follows]);
@@ -154,7 +176,12 @@ export default function PodcastsHome() {
       }
       if (!feed) { if (!cancelled) { setShowEpisodes([]); setShowLoading(false); } return; }
       const eps = await getPodcastEpisodes(feed, { title: showView.title, artwork: showView.artwork }).catch(() => [] as Track[]);
-      if (!cancelled) { setShowEpisodes(eps); setShowLoading(false); }
+      if (!cancelled) {
+        setShowEpisodes(eps); setShowLoading(false);
+        const newest = eps.reduce((mx, e) => Math.max(mx, e.uploaded || 0), 0) || Date.now();
+        markShowSeen(showView.id, newest);
+        setNewShows((prev) => { if (!prev.has(showView.id)) return prev; const n = new Set(prev); n.delete(showView.id); return n; });
+      }
     })();
     return () => { cancelled = true; };
   }, [showView]);
@@ -202,6 +229,7 @@ export default function PodcastsHome() {
       <div className="aspect-square rounded-xl overflow-hidden mb-3 relative bg-zinc-800">
         <CoverArt imageUrl={t.artworkLarge || t.artwork} dominantColor={t.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
         <button onClick={(e) => { e.stopPropagation(); onFollow(t); }} className={`absolute top-2 right-2 w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-sm ${isFollowed(t.id) ? 'bg-sauti text-amber-950' : 'bg-black/55 text-white'}`} aria-label="Follow"><Heart className={`w-4 h-4 ${isFollowed(t.id) ? 'fill-current' : ''}`} /></button>
+        {newShows.has(t.id) && <span className="absolute top-2 left-2 w-3 h-3 rounded-full bg-sky-400 ring-2 ring-black/50 shadow" title="New episode" />}
       </div>
       <h3 className="text-sm font-bold text-white line-clamp-2 mb-0.5 group-hover:text-sauti transition-colors">{t.title}</h3>
       <p className="text-xs text-zinc-500 truncate">{t.artist}</p>

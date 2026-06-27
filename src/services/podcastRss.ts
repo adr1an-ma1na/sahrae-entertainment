@@ -124,6 +124,23 @@ export async function getPodcastEpisodes(feedUrl: string, fallback?: Partial<Pod
   return eps;
 }
 
+/** Batched iTunes lookup → map of {showId → latest-episode time (ms)}. One call
+ *  for all followed shows, so we can flag new episodes without fetching feeds. */
+export async function getShowsLatest(ids: string[]): Promise<Record<string, number>> {
+  const numeric = ids.filter((id) => /^\d+$/.test(id));
+  if (!numeric.length) return {};
+  const t = await fetchText(`https://itunes.apple.com/lookup?id=${numeric.join(',')}`);
+  if (!t) return {};
+  try {
+    const j = JSON.parse(t) as { results?: Array<{ collectionId?: number; releaseDate?: string }> };
+    const out: Record<string, number> = {};
+    for (const r of j.results || []) {
+      if (r.collectionId && r.releaseDate) out[String(r.collectionId)] = Date.parse(r.releaseDate) || 0;
+    }
+    return out;
+  } catch { return {}; }
+}
+
 /** Fetch + parse a <podcast:chapters> JSON file into {start,title} chapters. */
 export async function fetchChapters(url: string): Promise<{ start: number; title: string }[]> {
   const txt = await fetchText(url);

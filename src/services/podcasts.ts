@@ -36,6 +36,15 @@ export function toggleFollow(t: Track): Track[] {
   return next;
 }
 
+// ── New-episode "seen" markers (powers the blue-dot badge on Your Shows) ──
+const SEEN_KEY = 'sahrae.podcast.seen.v1';
+export function getSeen(): Record<string, number> { return read<Record<string, number>>(SEEN_KEY, {}); }
+/** Record the newest-episode timestamp the user has seen for a show (clears its dot). */
+export function markShowSeen(showId: string, latestMs: number): void {
+  if (!showId) return;
+  const s = getSeen(); s[showId] = Math.max(s[showId] || 0, latestMs || 0); write(SEEN_KEY, s);
+}
+
 // ── Progress ──
 function allProgress(): Record<string, EpisodeProgress> { return read<Record<string, EpisodeProgress>>(PROGRESS_KEY, {}); }
 function isComplete(posMs: number, durMs: number): boolean {

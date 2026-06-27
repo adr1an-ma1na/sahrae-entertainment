@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, Fragment, ReactNode } from 'react';
+import { useState, useEffect, useRef, Fragment, ReactNode, type MouseEvent as RMouseEvent } from 'react';
 import { Search, Play, Pause, Heart, Loader2, Music2, Plus, X, ListMusic, Shuffle, Trash2, ChevronLeft, Library, Sparkles, Disc3, User } from 'lucide-react';
 import { ytmusic, Track, Artist, Album, GENRES, SECTIONS, TRENDING_PLAYLISTS, TrendingPlaylist } from '../services/ytmusic';
 import { buildMix, diverseSample } from '../services/recommend';
@@ -47,11 +47,29 @@ function Equalizer() {
   );
 }
 
+// Long-press (mobile) / right-click (desktop) → open the track context menu
+// (the add-to-playlist sheet, which carries Radio / Play next / Queue / Download).
+// `consumed()` lets the row swallow the click that follows a long-press.
+function useLongPress(onTrigger: () => void) {
+  const timer = useRef<number | undefined>(undefined);
+  const fired = useRef(false);
+  const clear = () => { if (timer.current) { window.clearTimeout(timer.current); timer.current = undefined; } };
+  const handlers = {
+    onContextMenu: (e: RMouseEvent) => { e.preventDefault(); onTrigger(); },
+    onTouchStart: () => { fired.current = false; clear(); timer.current = window.setTimeout(() => { fired.current = true; onTrigger(); }, 500); },
+    onTouchEnd: clear,
+    onTouchMove: clear,
+  };
+  const consumed = () => { if (fired.current) { fired.current = false; return true; } return false; };
+  return { handlers, consumed };
+}
+
 function TrackRow({ track, onPlay, onRemove }: { track: Track; onPlay: () => void; onRemove?: () => void }) {
   const { current, isPlaying, toggle, toggleLike, isLiked, openAddSheet } = useMusic();
   const active = current?.id === track.id;
+  const { handlers, consumed } = useLongPress(() => openAddSheet(track));
   return (
-    <div tabIndex={0} data-tv-focusable role="button" onClick={() => (active ? toggle() : onPlay())}
+    <div tabIndex={0} data-tv-focusable role="button" {...handlers} onClick={() => { if (consumed()) return; active ? toggle() : onPlay(); }}
       className="card-lift group flex items-center gap-3 p-2 pr-2 rounded-xl border border-white/5 bg-zinc-900/40 cursor-pointer focus:outline-none">
       <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-zinc-800 shrink-0">
         <CoverArt imageUrl={track.artwork} dominantColor={track.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
@@ -78,8 +96,9 @@ function TrackRow({ track, onPlay, onRemove }: { track: Track; onPlay: () => voi
 function TrackCard({ track, onPlay }: { track: Track; onPlay: () => void }) {
   const { current, isPlaying, openAddSheet } = useMusic();
   const active = current?.id === track.id;
+  const { handlers, consumed } = useLongPress(() => openAddSheet(track));
   return (
-    <div tabIndex={0} data-tv-focusable role="button" onClick={onPlay} className="card-lift group relative flex-none w-[150px] rounded-2xl overflow-hidden border border-white/10 bg-zinc-900 cursor-pointer focus:outline-none">
+    <div tabIndex={0} data-tv-focusable role="button" {...handlers} onClick={() => { if (consumed()) return; onPlay(); }} className="card-lift group relative flex-none w-[150px] rounded-2xl overflow-hidden border border-white/10 bg-zinc-900 cursor-pointer focus:outline-none">
       <div className="aspect-square bg-zinc-800 relative">
         <CoverArt imageUrl={track.artwork} dominantColor={track.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
         {!track.artwork && <Music2 className="w-8 h-8 text-zinc-600 absolute inset-0 m-auto" />}
@@ -97,8 +116,9 @@ function TrackCard({ track, onPlay }: { track: Track; onPlay: () => void }) {
 function QuickRow({ track, onPlay }: { track: Track; onPlay: () => void }) {
   const { current, isPlaying, toggle, openAddSheet } = useMusic();
   const active = current?.id === track.id;
+  const { handlers, consumed } = useLongPress(() => openAddSheet(track));
   return (
-    <div tabIndex={0} data-tv-focusable role="button" onClick={() => (active ? toggle() : onPlay())}
+    <div tabIndex={0} data-tv-focusable role="button" {...handlers} onClick={() => { if (consumed()) return; active ? toggle() : onPlay(); }}
       className="group flex items-center gap-3 p-1.5 rounded-lg hover:bg-white/5 focus:bg-white/5 cursor-pointer focus:outline-none">
       <div className="relative w-12 h-12 rounded-md overflow-hidden bg-zinc-800 shrink-0">
         <CoverArt imageUrl={track.artwork} dominantColor={track.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
