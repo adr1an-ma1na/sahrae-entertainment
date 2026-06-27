@@ -16,6 +16,18 @@ const fmt = (s: number) => {
 function hashStr(s: string): number { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
 function mulberry32(seed: number) { return () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 function seededShuffle<T>(arr: T[], seed: number): T[] { const a = [...arr]; const rng = mulberry32(seed); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+// Bias a pool toward recent uploads so "top/trending/new" lists feel current
+// instead of surfacing 6-year-old viral videos. Recent (≤ ~18 months) come first
+// (shuffled by seed), older fill the tail so lists never go thin. Undated tracks
+// are treated as older.
+function freshFirst(pool: Track[], seed: number, count: number): Track[] {
+  const RECENT_MS = 1000 * 60 * 60 * 24 * 30 * 18; // ~18 months
+  const now = Date.now();
+  const recent: Track[] = []; const older: Track[] = [];
+  for (const t of pool) ((t.uploaded && now - t.uploaded < RECENT_MS) ? recent : older).push(t);
+  return [...seededShuffle(recent, seed), ...seededShuffle(older, seed ^ 0x9e3779b9)].slice(0, count);
+}
 const dayKey = () => Number(new Date().toISOString().slice(0, 10).replace(/-/g, ''));
 const weekKey = () => { const d = new Date(); const oneJan = new Date(d.getFullYear(), 0, 1); const week = Math.ceil((((d.getTime() - oneJan.getTime()) / 86400000) + oneJan.getDay() + 1) / 7); return d.getFullYear() * 100 + week; };
 
@@ -205,8 +217,9 @@ export default function MusicView() {
     setSections([]); setLoadingHome(true);
     (async () => {
       for (const s of SECTIONS) {
-        const tracks = await ytmusic.search(s.q);
+        const raw = await ytmusic.search(s.q);
         if (cancelled) return;
+        const tracks = freshFirst(raw, dayKey() ^ hashStr(s.title), 40);
         if (tracks.length) setSections((prev) => [...prev, { title: s.title, tracks }]);
         setLoadingHome(false);
       }
@@ -333,7 +346,7 @@ export default function MusicView() {
       if (cancelled) return;
       const seen = new Set<string>(); const pool: Track[] = [];
       for (const l of lists) for (const t of l) if (!seen.has(t.id)) { seen.add(t.id); pool.push(t); }
-      const rotated = seededShuffle(pool, dayKey() ^ hashStr(genre)).slice(0, 60);
+      const rotated = freshFirst(pool, dayKey() ^ hashStr(genre), 60);
       if (!cancelled) { setGenreTracks(rotated); setGenreLoading(false); }
     })();
     return () => { cancelled = true; };
@@ -345,13 +358,24 @@ export default function MusicView() {
     if (!playlistView) return;
     let cancelled = false; setPlLoading(true); setPlTracks([]);
     (async () => {
-      const lists = await Promise.all(playlistView.queries.map((q) => ytmusic.search(q).catch(() => [] as Track[])));
+      // Pull BOTH YT-Music songs (clean covers) and videos (which carry upload
+      // dates) so the list can be biased to CURRENT releases, not old viral hits.
+      const lists = await Promise.all(playlistView.queries.map(async (q) => {
+        const [songs, vids] = await Promise.all([
+          ytmusic.search(q).catch(() => [] as Track[]),
+          ytmusic.searchVideos(q).catch(() => [] as Track[]),
+        ]);
+        return [...songs, ...vids];
+      }));
       if (cancelled) return;
       const seen = new Set<string>(); const pool: Track[] = [];
-      for (const l of lists) for (const t of l) if (!seen.has(t.id)) { seen.add(t.id); pool.push(t); }
-      // NMF lists reshuffle weekly; the rest daily.
+      for (const l of lists) for (const t of l) {
+        if (seen.has(t.id) || t.duration < 60 || t.duration > 900) continue; // skip shorts & hour-long mixes
+        seen.add(t.id); pool.push(t);
+      }
+      // NMF lists reshuffle weekly; the rest daily. Recent uploads surface first.
       const seed = (playlistView.weekly ? weekKey() : dayKey()) ^ hashStr(playlistView.id);
-      const rotated = seededShuffle(pool, seed).slice(0, playlistView.count);
+      const rotated = freshFirst(pool, seed, playlistView.count);
       if (!cancelled) { setPlTracks(rotated); setPlLoading(false); }
     })();
     return () => { cancelled = true; };
