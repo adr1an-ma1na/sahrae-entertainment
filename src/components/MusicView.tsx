@@ -126,6 +126,15 @@ const SectionHead = ({ children, icon }: { children: ReactNode; icon?: ReactNode
 
 type Detail = { kind: 'artist' | 'album'; id: string; name: string; thumbnail?: string; subtitle?: string };
 
+// Time-of-day greeting (spec §1.2.3 / §1.2.4).
+function greeting(): string {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 12) return 'Good morning';
+  if (h >= 12 && h < 17) return 'Good afternoon';
+  if (h >= 17 && h < 21) return 'Good evening';
+  return 'Good night';
+}
+
 export default function MusicView() {
   const { playQueue, likedTracks, playlists, recentlyPlayed, createPlaylist, deletePlaylist, removeFromPlaylist, openAddSheet } = useMusic();
 
@@ -149,7 +158,6 @@ export default function MusicView() {
   const [plLoading, setPlLoading] = useState(false);
 
   const [query, setQuery] = useState('');
-  const [searchTab, setSearchTab] = useState<'songs' | 'artists' | 'albums'>('songs');
   const [searching, setSearching] = useState(false);
   const [rSongs, setRSongs] = useState<Track[]>([]);
   const [rArtists, setRArtists] = useState<Artist[]>([]);
@@ -527,14 +535,14 @@ export default function MusicView() {
 
   return (
     <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
-      {/* premium aurora glow behind the header so the top never reads flat */}
+      {/* Living aurora glow — tinted by the most recently played track (spec §1.2.4) */}
       <div aria-hidden className="pointer-events-none absolute -top-10 left-0 right-0 h-64 -z-0 opacity-70"
-        style={{ background: 'radial-gradient(60% 70% at 12% 0%, rgba(245,158,11,0.22), transparent 70%), radial-gradient(50% 60% at 80% 10%, rgba(251,191,36,0.12), transparent 72%)', filter: 'blur(8px)' }} />
+        style={{ background: `radial-gradient(60% 70% at 12% 0%, ${recentlyPlayed[0]?.dominantColor || 'rgba(245,158,11,0.5)'}, transparent 70%), radial-gradient(50% 60% at 80% 10%, rgba(251,191,36,0.12), transparent 72%)`, filter: 'blur(8px)', transition: 'background 700ms ease' }} />
       <div className="relative overline text-sauti mb-1.5">Sauti · sound on Sahrae</div>
       <div className="relative flex items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-300 via-amber-500 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/30"><Music2 className="w-6 h-6 text-white" /></div>
-          <div><h2 className="text-3xl font-display font-bold text-white leading-tight tracking-tight">Sauti</h2><p className="text-sm text-zinc-400">Songs · artists · albums · radio</p></div>
+          <div><h2 className="text-3xl font-display font-bold text-white leading-tight tracking-tight">{tab === 'home' ? greeting() : 'Your Library'}</h2><p className="text-sm text-zinc-400">Songs · artists · albums · radio</p></div>
         </div>
         <div className="flex gap-1 glass p-1 rounded-xl self-start">
           {(['home', 'library'] as const).map((t) => (
@@ -553,25 +561,56 @@ export default function MusicView() {
           </div>
 
           {query.trim() ? (
-            <section>
-              {/* search tabs */}
-              <div className="flex gap-2 mb-5">
-                {(['songs', 'artists', 'albums'] as const).map((st) => (
-                  <button key={st} onClick={() => setSearchTab(st)} tabIndex={0} data-tv-focusable className={`px-4 py-1.5 rounded-full text-xs font-bold capitalize ${searchTab === st ? 'bg-white text-zinc-950' : 'chip text-zinc-300 hover:text-white'}`}>{st}</button>
-                ))}
+            searching ? (
+              <div className="flex items-center gap-2 text-zinc-400 py-8"><Loader2 className="w-5 h-5 animate-spin text-amber-500" /> Searching…</div>
+            ) : (rSongs.length + rArtists.length + rAlbums.length === 0) ? (
+              <p className="text-zinc-500 py-8">No results found.</p>
+            ) : (
+              <div className="space-y-8">
+                {/* Top result + Songs (Spotify-exact, spec §1.3.7) */}
+                <div className="grid lg:grid-cols-2 gap-5 lg:gap-7 items-start">
+                  {rSongs[0] && (
+                    <div>
+                      <SectionHead>Top result</SectionHead>
+                      <button onClick={() => playQueue(rSongs, 0)} tabIndex={0} data-tv-focusable className="group relative w-full text-left rounded-2xl p-5 bg-white/5 hover:bg-white/10 transition-colors">
+                        <div className="w-24 h-24 rounded-xl overflow-hidden mb-4 relative shadow-xl"><CoverArt imageUrl={rSongs[0].artworkLarge || rSongs[0].artwork} fallbackUrl={rSongs[0].artwork} dominantColor={rSongs[0].dominantColor} rounded="" className="absolute inset-0 w-full h-full" /></div>
+                        <p className="text-2xl font-display font-bold text-white truncate">{rSongs[0].title}</p>
+                        <p className="text-sm text-zinc-400 mt-1 truncate">{rSongs[0].artist} · <span className="text-zinc-300 font-semibold">Song</span></p>
+                        <span className="absolute bottom-5 right-5 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all btn-sauti w-12 h-12 rounded-full flex items-center justify-center shadow-lg"><Play className="w-5 h-5 fill-current ml-0.5" /></span>
+                      </button>
+                    </div>
+                  )}
+                  {rSongs.length > 0 && (
+                    <div>
+                      <SectionHead>Songs</SectionHead>
+                      <div className="space-y-1">{rSongs.slice(0, 4).map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(rSongs, i)} /></Fragment>)}</div>
+                    </div>
+                  )}
+                </div>
+                {rArtists.length > 0 && (
+                  <section><SectionHead>Artists</SectionHead><div className="flex overflow-x-auto gap-5 pt-1 pb-3 scrollbar-hide">{rArtists.map(artistTile)}</div></section>
+                )}
+                {rAlbums.length > 0 && (
+                  <section><SectionHead>Albums</SectionHead><div className="flex overflow-x-auto gap-4 pt-1 pb-3 scrollbar-hide">{rAlbums.map(albumTile)}</div></section>
+                )}
               </div>
-              {searching ? (
-                <div className="flex items-center gap-2 text-zinc-400 py-8"><Loader2 className="w-5 h-5 animate-spin text-amber-500" /> Searching…</div>
-              ) : searchTab === 'songs' ? (
-                rSongs.length ? <div className="grid sm:grid-cols-2 gap-2">{rSongs.map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(rSongs, i)} /></Fragment>)}</div> : <p className="text-zinc-500 py-8">No songs found.</p>
-              ) : searchTab === 'artists' ? (
-                rArtists.length ? <div className="flex flex-wrap gap-5">{rArtists.map(artistTile)}</div> : <p className="text-zinc-500 py-8">No artists found.</p>
-              ) : (
-                rAlbums.length ? <div className="flex flex-wrap gap-4">{rAlbums.map(albumTile)}</div> : <p className="text-zinc-500 py-8">No albums found.</p>
-              )}
-            </section>
+            )
           ) : (
             <>
+              {/* Quick-access pills — jump straight back into recent plays (spec §1.2.5) */}
+              {recentlyPlayed.length >= 2 && (
+                <div className="grid grid-cols-2 gap-2 mb-7">
+                  {recentlyPlayed.slice(0, 6).map((t, i) => (
+                    <button key={t.id} onClick={() => playQueue(recentlyPlayed, i, 'Recently played')} tabIndex={0} data-tv-focusable
+                      className="group flex items-center gap-3 rounded-lg overflow-hidden bg-white/5 hover:bg-white/10 transition-colors h-14 pr-3 text-left">
+                      <div className="w-14 h-14 shrink-0 relative"><CoverArt imageUrl={t.artwork} dominantColor={t.dominantColor} rounded="" className="absolute inset-0 w-full h-full" /></div>
+                      <span className="text-sm font-bold text-white truncate flex-1 min-w-0">{t.title}</span>
+                      <span className="opacity-0 group-hover:opacity-100 transition-opacity btn-sauti w-8 h-8 rounded-full flex items-center justify-center shrink-0"><Play className="w-4 h-4 fill-current ml-0.5" /></span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {/* Mood cards — colourful, scannable at a glance (Spotify pattern) */}
               <section className="mb-6">
                 <SectionHead>Moods &amp; genres</SectionHead>
