@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Fragment, ReactNode, type MouseEvent as RMouseEvent } from 'react';
 import { Search, Play, Pause, Heart, Loader2, Music2, Plus, X, ListMusic, Shuffle, Trash2, ChevronLeft, Library, Sparkles, Disc3, User } from 'lucide-react';
-import { ytmusic, Track, Artist, Album, GENRES, SECTIONS, TRENDING_PLAYLISTS, TrendingPlaylist } from '../services/ytmusic';
+import { ytmusic, Track, Artist, Album, GENRES, SECTIONS } from '../services/ytmusic';
 import { buildMix, diverseSample } from '../services/recommend';
 import { useMusic } from '../hooks/useMusic';
 import { CoverArt } from './ui/CoverArt';
@@ -29,17 +29,7 @@ function freshFirst(pool: Track[], seed: number, count: number): Track[] {
   return [...seededShuffle(recent, seed), ...seededShuffle(older, seed ^ 0x9e3779b9)].slice(0, count);
 }
 
-// Map each chart playlist to the real YouTube trending region(s) that feed it, so
-// the songs are what's ACTUALLY trending now (Google keeps these updated) rather
-// than a static search. NMF lists are omitted on purpose — they're about NEW
-// releases, not trending, so they keep the recency-biased search build.
-const CHART_REGIONS: Record<string, string[]> = {
-  us: ['US'], ke: ['KE'], ug: ['UG'], tz: ['TZ'], ng: ['NG'], gh: ['GH'], za: ['ZA'],
-  americas: ['US', 'BR', 'CA', 'MX'], africa: ['NG', 'ZA', 'KE', 'GH'],
-  southamerica: ['BR', 'AR', 'CO', 'CL'], uk: ['GB'], europe: ['DE', 'FR', 'ES', 'IT', 'GB'],
-};
 const dayKey = () => Number(new Date().toISOString().slice(0, 10).replace(/-/g, ''));
-const weekKey = () => { const d = new Date(); const oneJan = new Date(d.getFullYear(), 0, 1); const week = Math.ceil((((d.getTime() - oneJan.getTime()) / 86400000) + oneJan.getDay() + 1) / 7); return d.getFullYear() * 100 + week; };
 
 // Spotify-style mood cards — each scannable at a glance with its own colour.
 // `grad` classes are literal so Tailwind keeps them; `tint` colours the mood page.
@@ -197,10 +187,6 @@ export default function MusicView() {
   const [genreLoading, setGenreLoading] = useState(false);
   const openMood = (name: string, tint?: string) => { setGenreTint(tint || null); setGenre(name); };
 
-  // Trending playlists (per-country) detail view.
-  const [playlistView, setPlaylistView] = useState<TrendingPlaylist | null>(null);
-  const [plTracks, setPlTracks] = useState<Track[]>([]);
-  const [plLoading, setPlLoading] = useState(false);
 
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
@@ -362,40 +348,6 @@ export default function MusicView() {
     return () => { cancelled = true; };
   }, [genre]);
 
-  // Load a trending playlist's tracks — pooled from its region queries, deduped,
-  // shuffled by today's date so each list is ~50 songs and refreshes daily.
-  useEffect(() => {
-    if (!playlistView) return;
-    let cancelled = false; setPlLoading(true); setPlTracks([]);
-    (async () => {
-      const seen = new Set<string>(); const pool: Track[] = [];
-      const add = (list: Track[]) => { for (const t of list) { if (seen.has(t.id) || t.duration < 60 || t.duration > 900) continue; seen.add(t.id); pool.push(t); } };
-      // 1) REAL trending — YouTube's own, auto-updated, per country/region.
-      const regions = CHART_REGIONS[playlistView.id];
-      if (regions) {
-        const tr = await Promise.all(regions.map((r) => ytmusic.trending(r).catch(() => [] as Track[])));
-        if (cancelled) return;
-        for (const l of tr) add(l);
-      }
-      // 2) Supplement with YT-Music songs (clean covers) + dated videos so the
-      //    list is full and music-centric even where trending is thin.
-      const lists = await Promise.all(playlistView.queries.map(async (q) => {
-        const [songs, vids] = await Promise.all([
-          ytmusic.search(q).catch(() => [] as Track[]),
-          ytmusic.searchVideos(q).catch(() => [] as Track[]),
-        ]);
-        return [...songs, ...vids];
-      }));
-      if (cancelled) return;
-      for (const l of lists) add(l);
-      // Recent uploads (incl. the live trending items) surface first; weekly for NMF.
-      const seed = (playlistView.weekly ? weekKey() : dayKey()) ^ hashStr(playlistView.id);
-      const rotated = freshFirst(pool, seed, playlistView.count);
-      if (!cancelled) { setPlTracks(rotated); setPlLoading(false); }
-    })();
-    return () => { cancelled = true; };
-  }, [playlistView]);
-
   const openArtist = async (a: Artist) => {
     setDetail({ kind: 'artist', id: a.id, name: a.name, thumbnail: a.thumbnail, subtitle: 'Artist' });
     setDetailLoading(true); setDetailTracks([]); setDetailAlbums([]);
@@ -461,39 +413,6 @@ export default function MusicView() {
     </select>
   );
 
-  if (playlistView) {
-    const shown = sortTracks(plTracks);
-    return (
-      <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
-        <button onClick={() => setPlaylistView(null)} className="flex items-center gap-1 text-zinc-400 hover:text-white mb-5 text-sm"><ChevronLeft className="w-4 h-4" /> Back</button>
-        <div className="flex flex-col sm:flex-row sm:items-end gap-5 mb-8">
-          <div className={`relative w-36 h-36 md:w-44 md:h-44 rounded-2xl bg-gradient-to-br ${playlistView.grad} shrink-0 shadow-xl flex items-end p-4 overflow-hidden`}>
-            <span className="absolute top-3 left-3 text-5xl drop-shadow-lg">{playlistView.flag}</span>
-            <span className="text-white font-display font-black text-2xl leading-tight drop-shadow">{playlistView.short}</span>
-          </div>
-          <div className="min-w-0">
-            <div className="overline mb-1">Playlist</div>
-            <h2 className="text-3xl md:text-5xl font-display font-bold text-white">{playlistView.title}</h2>
-            <p className="text-sm text-zinc-400 mb-4">{playlistView.subtitle} · {plTracks.length} songs</p>
-            {plTracks.length > 0 && (
-              <div className="flex gap-2 flex-wrap">
-                <button onClick={() => playQueue(shown, 0, playlistView.title)} className="btn-sauti px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Play className="w-4 h-4 fill-current" /> Play</button>
-                <button onClick={() => { const arr = [...plTracks].sort(() => Math.random() - 0.5); playQueue(arr, 0, playlistView.title); }} className="btn-glass px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Shuffle className="w-4 h-4" /> Shuffle</button>
-                {sortSelect}
-              </div>
-            )}
-          </div>
-        </div>
-        {plLoading ? (
-          <div className="flex items-center gap-2 text-zinc-400 py-10"><Loader2 className="w-6 h-6 animate-spin text-amber-500" /> Loading…</div>
-        ) : plTracks.length === 0 ? (
-          <p className="text-zinc-500 py-8">Couldn't load this playlist right now. Try again shortly.</p>
-        ) : (
-          <div className="grid sm:grid-cols-2 gap-2">{shown.map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(shown, i, playlistView.title)} /></Fragment>)}</div>
-        )}
-      </div>
-    );
-  }
 
   if (genre) {
     const shown = sortTracks(genreTracks);
@@ -725,24 +644,6 @@ export default function MusicView() {
                   </div>
                 </section>
               )}
-
-              {/* Trending playlists by country — tappable cards */}
-              <section className="mb-9">
-                <SectionHead>Trending Playlists</SectionHead>
-                <div className="flex overflow-x-auto gap-3 pt-1 pb-4 scrollbar-hide md:grid md:grid-cols-4 md:overflow-visible">
-                  {TRENDING_PLAYLISTS.map((pl) => (
-                    <button key={pl.id} onClick={() => setPlaylistView(pl)} tabIndex={0} data-tv-focusable className="card-lift flex-none w-[150px] md:w-auto text-left focus:outline-none">
-                      <div className={`aspect-square rounded-2xl bg-gradient-to-br ${pl.grad} relative overflow-hidden mb-2 flex items-end p-3 shadow-lg`}>
-                        <span className="absolute top-2 left-2.5 text-3xl drop-shadow-lg">{pl.flag}</span>
-                        <span className="text-white font-display font-black text-lg leading-tight drop-shadow">{pl.short}</span>
-                        <div className="absolute -top-3 -right-3 w-16 h-16 rounded-full bg-white/15 blur-md" />
-                      </div>
-                      <p className="text-sm font-semibold text-white truncate">{pl.title}</p>
-                      <p className="text-xs text-zinc-500 truncate">{pl.subtitle}</p>
-                    </button>
-                  ))}
-                </div>
-              </section>
 
               {madeForYou.length > 0 && (
                 <section className="mb-9">
