@@ -421,11 +421,10 @@ export default function SportsView() {
     return events.filter((m) => {
       if (!m.date) return true;          // no time → keep (always-on / unknown)
       if (m.date > now) return true;     // upcoming
+      if (m.live) return true;           // feed says it's on → always show it
       const dur = SPORT_DURATION_MS[m.category] ?? 3 * HR;
-      const elapsed = now - m.date;
-      // Live events may overrun → +1h grace; otherwise drop once past its runtime
-      // so finished matches don't keep showing as if they're still on.
-      return m.live ? elapsed <= dur + HR : elapsed <= dur;
+      // Non-live past events: keep until their runtime elapses, then drop.
+      return now - m.date <= dur;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feed]);
