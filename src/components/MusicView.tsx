@@ -28,6 +28,16 @@ function freshFirst(pool: Track[], seed: number, count: number): Track[] {
   for (const t of pool) ((t.uploaded && now - t.uploaded < RECENT_MS) ? recent : older).push(t);
   return [...seededShuffle(recent, seed), ...seededShuffle(older, seed ^ 0x9e3779b9)].slice(0, count);
 }
+
+// Map each chart playlist to the real YouTube trending region(s) that feed it, so
+// the songs are what's ACTUALLY trending now (Google keeps these updated) rather
+// than a static search. NMF lists are omitted on purpose — they're about NEW
+// releases, not trending, so they keep the recency-biased search build.
+const CHART_REGIONS: Record<string, string[]> = {
+  us: ['US'], ke: ['KE'], ug: ['UG'], tz: ['TZ'], ng: ['NG'], gh: ['GH'], za: ['ZA'],
+  americas: ['US', 'BR', 'CA', 'MX'], africa: ['NG', 'ZA', 'KE', 'GH'],
+  southamerica: ['BR', 'AR', 'CO', 'CL'], uk: ['GB'], europe: ['DE', 'FR', 'ES', 'IT', 'GB'],
+};
 const dayKey = () => Number(new Date().toISOString().slice(0, 10).replace(/-/g, ''));
 const weekKey = () => { const d = new Date(); const oneJan = new Date(d.getFullYear(), 0, 1); const week = Math.ceil((((d.getTime() - oneJan.getTime()) / 86400000) + oneJan.getDay() + 1) / 7); return d.getFullYear() * 100 + week; };
 
@@ -358,8 +368,17 @@ export default function MusicView() {
     if (!playlistView) return;
     let cancelled = false; setPlLoading(true); setPlTracks([]);
     (async () => {
-      // Pull BOTH YT-Music songs (clean covers) and videos (which carry upload
-      // dates) so the list can be biased to CURRENT releases, not old viral hits.
+      const seen = new Set<string>(); const pool: Track[] = [];
+      const add = (list: Track[]) => { for (const t of list) { if (seen.has(t.id) || t.duration < 60 || t.duration > 900) continue; seen.add(t.id); pool.push(t); } };
+      // 1) REAL trending — YouTube's own, auto-updated, per country/region.
+      const regions = CHART_REGIONS[playlistView.id];
+      if (regions) {
+        const tr = await Promise.all(regions.map((r) => ytmusic.trending(r).catch(() => [] as Track[])));
+        if (cancelled) return;
+        for (const l of tr) add(l);
+      }
+      // 2) Supplement with YT-Music songs (clean covers) + dated videos so the
+      //    list is full and music-centric even where trending is thin.
       const lists = await Promise.all(playlistView.queries.map(async (q) => {
         const [songs, vids] = await Promise.all([
           ytmusic.search(q).catch(() => [] as Track[]),
@@ -368,12 +387,8 @@ export default function MusicView() {
         return [...songs, ...vids];
       }));
       if (cancelled) return;
-      const seen = new Set<string>(); const pool: Track[] = [];
-      for (const l of lists) for (const t of l) {
-        if (seen.has(t.id) || t.duration < 60 || t.duration > 900) continue; // skip shorts & hour-long mixes
-        seen.add(t.id); pool.push(t);
-      }
-      // NMF lists reshuffle weekly; the rest daily. Recent uploads surface first.
+      for (const l of lists) add(l);
+      // Recent uploads (incl. the live trending items) surface first; weekly for NMF.
       const seed = (playlistView.weekly ? weekKey() : dayKey()) ^ hashStr(playlistView.id);
       const rotated = freshFirst(pool, seed, playlistView.count);
       if (!cancelled) { setPlTracks(rotated); setPlLoading(false); }

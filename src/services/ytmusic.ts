@@ -286,6 +286,15 @@ export const ytmusic = {
     return out;
   },
 
+  // Real, auto-updated YouTube trending feed for a country (region = ISO-2:
+  // US, KE, NG, GB, ZA…). Song-length items only. Powers the country/region
+  // charts so they reflect what's ACTUALLY trending now, not a static search.
+  trending: async (region: string): Promise<Track[]> => {
+    const j = await pipedGet(`/trending?region=${encodeURIComponent(region)}`);
+    const arr = Array.isArray(j) ? j : (j && Array.isArray(j.items) ? j.items : []);
+    return mapItems(arr).filter((t) => t.duration >= 60 && t.duration <= 600);
+  },
+
   // Best directly-playable AUDIO stream for a video (used for offline downloads).
   // Prefers m4a/mp4 (broadest <audio> support) at a sane bitrate, then anything.
   // Most Piped instances return proxied URLs that play/fetch from any IP.
