@@ -1182,11 +1182,27 @@ public class MainActivity extends BridgeActivity {
         // into the app's OWN private storage + Downloads section, instead of the
         // device's public Downloads / file manager.
         webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
-            DownloadStore.enqueue(getApplicationContext(), url, userAgent, contentDisposition, mimetype);
+            // Hand movie/series downloads to the Android system DownloadManager so the
+            // file lands in the device's public Downloads (file manager), like a normal
+            // browser download — not managed inside the app.
             try {
+                String name = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimetype);
+                android.app.DownloadManager.Request req = new android.app.DownloadManager.Request(android.net.Uri.parse(url));
+                req.setMimeType(mimetype);
+                if (userAgent != null && !userAgent.isEmpty()) req.addRequestHeader("User-Agent", userAgent);
+                try { String ck = android.webkit.CookieManager.getInstance().getCookie(url); if (ck != null && !ck.isEmpty()) req.addRequestHeader("Cookie", ck); } catch (Throwable ignore) {}
+                req.setTitle(name);
+                req.setDescription("Sahrae");
+                req.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                req.setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, name);
+                android.app.DownloadManager dm = (android.app.DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+                if (dm != null) dm.enqueue(req);
                 runOnUiThread(() -> android.widget.Toast.makeText(
-                    getApplicationContext(), "Saving to your in-app Downloads…", android.widget.Toast.LENGTH_SHORT).show());
-            } catch (Throwable ignore) {}
+                    getApplicationContext(), "Saving to your device's Downloads…", android.widget.Toast.LENGTH_SHORT).show());
+            } catch (Throwable t) {
+                runOnUiThread(() -> android.widget.Toast.makeText(
+                    getApplicationContext(), "Couldn't start the download.", android.widget.Toast.LENGTH_SHORT).show());
+            }
         });
 
         // Ask for notification permission (Android 13+) so the background-playback
