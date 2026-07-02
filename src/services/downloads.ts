@@ -26,22 +26,22 @@ function read(): Entry[] { try { return JSON.parse(localStorage.getItem(KEY) || 
 function write(list: Entry[]) { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch { /* ignore */ } emit(); }
 function emit() { listeners.forEach((l) => { try { l(); } catch { /* ignore */ } }); }
 
-function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onloadend = () => { const s = String(r.result || ''); resolve(s.slice(s.indexOf(',') + 1)); };
-    r.onerror = () => reject(new Error('read failed'));
-    r.readAsDataURL(blob);
-  });
+// Base64 (no data: prefix) for a byte array, sub-chunked so fromCharCode never
+// overflows the call stack.
+function bytesToBase64(bytes: Uint8Array): string {
+  let bin = '';
+  const CH = 0x8000;
+  for (let i = 0; i < bytes.length; i += CH) bin += String.fromCharCode(...bytes.subarray(i, i + CH));
+  return btoa(bin);
 }
 
 // File-system-safe name (track ids can contain ':' etc. — invalid in paths).
 function safeName(id: string): string { return id.replace(/[^a-zA-Z0-9._-]/g, '_'); }
 
-async function fetchBytes(url: string): Promise<Blob | null> {
-  try { const r = await fetch(url); if (r.ok) return await r.blob(); } catch { /* try proxy */ }
-  // CORS / IP fallback: pull it through the native passthrough.
-  try { const r = await fetch(`https://localhost/__ddfetch?u=${encodeURIComponent(url)}`); if (r.ok) return await r.blob(); } catch { /* give up */ }
+// Open a STREAMABLE response — direct first, then the native passthrough (CORS/IP).
+async function openStream(url: string): Promise<Response | null> {
+  try { const r = await fetch(url); if (r.ok && r.body) return r; } catch { /* try proxy */ }
+  try { const r = await fetch(`https://localhost/__ddfetch?u=${encodeURIComponent(url)}`); if (r.ok && r.body) return r; } catch { /* give up */ }
   return null;
 }
 
@@ -69,16 +69,41 @@ export const downloads = {
       let mime = 'audio/mpeg';
       if (track.audioUrl) { url = track.audioUrl; }
       else { const a = await ytmusic.audioStream(track.id); if (!a) throw new Error('no audio stream'); url = a.url; mime = a.mime; }
-      const blob = await fetchBytes(url);
-      if (!blob || blob.size < 10000) throw new Error('audio fetch failed');
-      const base64 = await blobToBase64(blob);
+
+      const resp = await openStream(url);
+      if (!resp || !resp.body) throw new Error('audio fetch failed');
+      const total = Number(resp.headers.get('content-length') || 0);
       const path = `downloads/${safeName(track.id)}.dat`;
-      await Filesystem.writeFile({ path, data: base64, directory: Directory.Data, recursive: true });
+
+      // Stream to disk in 3-byte-aligned base64 chunks: never hold the whole file
+      // (or its base64) in memory. Prevents the OOM crash on big podcasts,
+      // especially while the <audio> is also buffering the same episode.
+      await Filesystem.writeFile({ path, data: '', directory: Directory.Data, recursive: true });
+      const reader = resp.body.getReader();
+      let carry = new Uint8Array(0);
+      let size = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!value || !value.length) continue;
+        size += value.length;
+        let buf: Uint8Array;
+        if (carry.length) { buf = new Uint8Array(carry.length + value.length); buf.set(carry); buf.set(value, carry.length); }
+        else buf = value;
+        const usable = buf.length - (buf.length % 3);
+        if (usable > 0) await Filesystem.appendFile({ path, data: bytesToBase64(buf.subarray(0, usable)), directory: Directory.Data });
+        carry = new Uint8Array(buf.subarray(usable)); // 0–2 trailing bytes, copied out
+        states.set(track.id, { status: 'downloading', progress: total ? Math.min(0.99, size / total) : 0 }); emit();
+      }
+      if (carry.length) await Filesystem.appendFile({ path, data: bytesToBase64(carry), directory: Directory.Data });
+      if (size < 10000) throw new Error('audio too small');
+
       const { uri } = await Filesystem.getUri({ path, directory: Directory.Data });
-      write([{ track, uri, mime, ts: Date.now(), size: blob.size }, ...read().filter((e) => e.track.id !== track.id)]);
+      write([{ track, uri, mime, ts: Date.now(), size }, ...read().filter((e) => e.track.id !== track.id)]);
       states.set(track.id, { status: 'done', progress: 1 }); emit();
       return true;
     } catch {
+      try { await Filesystem.deleteFile({ path: `downloads/${safeName(track.id)}.dat`, directory: Directory.Data }); } catch { /* ignore partial cleanup */ }
       states.set(track.id, { status: 'error', progress: 0 }); emit();
       setTimeout(() => { states.delete(track.id); emit(); }, 4000);
       return false;
