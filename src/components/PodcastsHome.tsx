@@ -262,7 +262,7 @@ export default function PodcastsHome() {
     const chapters = ep.chapters?.length ? ep.chapters : epChapters;
     return (
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 max-w-3xl">
-        <button onClick={() => setEpisodeView(null)} className="flex items-center gap-1 text-zinc-400 hover:text-white mb-5 text-sm"><ChevronLeft className="w-4 h-4" /> Back</button>
+        <button onClick={() => setEpisodeView(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-30 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-5 text-sm px-3.5 py-2 rounded-full glass-liquid"><ChevronLeft className="w-4 h-4" /> Back</button>
         <div className="relative rounded-2xl overflow-hidden mb-5" style={{ background: `linear-gradient(160deg, ${hc}, transparent 75%)` }}>
           <div className="p-5 flex gap-4 items-start">
             <div className="w-20 h-20 md:w-24 md:h-24 rounded-xl overflow-hidden bg-zinc-800 shrink-0 relative"><CoverArt imageUrl={ep.artworkLarge || ep.artwork} dominantColor={ep.dominantColor} rounded="" className="absolute inset-0 w-full h-full" /></div>
@@ -329,7 +329,7 @@ export default function PodcastsHome() {
     return (
       <div className="relative animate-in fade-in duration-300">
         <div aria-hidden className="absolute -inset-x-4 md:-inset-x-12 top-0 h-72 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${hc} 0%, transparent 100%)`, opacity: 0.5 }} />
-        <button onClick={() => setShowView(null)} className="flex items-center gap-1 text-zinc-400 hover:text-white mb-5 text-sm"><ChevronLeft className="w-4 h-4" /> Back</button>
+        <button onClick={() => setShowView(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-30 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-5 text-sm px-3.5 py-2 rounded-full glass-liquid"><ChevronLeft className="w-4 h-4" /> Back</button>
         <div className="flex items-end gap-4 md:gap-5 mb-7">
           <div className="w-28 h-28 md:w-40 md:h-40 rounded-2xl overflow-hidden bg-zinc-800 shrink-0 shadow-xl relative">
             <CoverArt imageUrl={showView.artworkLarge || showView.artwork} dominantColor={showView.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />

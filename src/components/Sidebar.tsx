@@ -86,7 +86,7 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
       )}
 
       {/* Full labelled sidebar (lg+) */}
-      <aside className={`hidden lg:flex flex-col fixed left-0 top-0 bottom-0 w-64 z-40 glass border-r border-white/10 pt-[env(safe-area-inset-top)] transition-transform duration-300 ${collapsed ? '-translate-x-full' : 'translate-x-0'}`}>
+      <aside className={`hidden lg:flex flex-col fixed left-0 top-0 bottom-0 w-64 z-40 glass border-r border-white/15 shadow-[inset_-1px_0_0_rgba(255,255,255,0.08),12px_0_48px_rgba(0,0,0,0.45)] pt-[env(safe-area-inset-top)] transition-transform duration-300 ${collapsed ? '-translate-x-full' : 'translate-x-0'}`}>
         <div className="px-5 pt-5 pb-4 flex items-center justify-between">
           <h1 className="text-2xl font-black tracking-tighter cursor-pointer whitespace-nowrap" onClick={() => setActiveTab('home')}>
             <span className="text-gold">SAHRAE</span>
