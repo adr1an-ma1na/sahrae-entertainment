@@ -561,7 +561,7 @@ export default function App() {
 
         {/* Main column shifts right of the sidebar on desktop; pads for the
             bottom tab bar + mini player on mobile. */}
-        <div className="lg:pl-64">
+        <div className="md:pl-16 lg:pl-64">
           <Navbar
             activeTab={activeTab}
             setActiveTab={navigate}
@@ -569,7 +569,7 @@ export default function App() {
             onPlay={handlePlay}
           />
 
-          <main className="pb-28 lg:pb-0">
+          <main className="pb-28 md:pb-0">
             {/* Cinematic crossfade between sections. Opacity-only on purpose:
                 a transform here would re-anchor fixed overlays (e.g. the Sports
                 fullscreen player) to this wrapper instead of the viewport. */}

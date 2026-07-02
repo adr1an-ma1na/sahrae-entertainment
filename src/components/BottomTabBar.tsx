@@ -34,7 +34,7 @@ export default function BottomTabBar({ activeTab, setActiveTab }: { activeTab: s
     <>
       {/* More sheet */}
       {moreOpen && (
-        <div role="dialog" className="lg:hidden fixed inset-0 z-[95] flex flex-col justify-end" onClick={() => setMoreOpen(false)}>
+        <div role="dialog" className="md:hidden fixed inset-0 z-[95] flex flex-col justify-end" onClick={() => setMoreOpen(false)}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in" />
           <div onClick={(e) => e.stopPropagation()} className="relative glass rounded-t-3xl p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] animate-in slide-in-from-bottom-4 duration-200">
             <div className="flex items-center justify-between mb-3 px-1">
@@ -58,7 +58,7 @@ export default function BottomTabBar({ activeTab, setActiveTab }: { activeTab: s
       )}
 
       {/* Tab bar */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-[90] glass border-t border-white/10 pb-[env(safe-area-inset-bottom)]">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-[90] glass border-t border-white/10 pb-[env(safe-area-inset-bottom)]">
         <div className="flex items-stretch">
           {PRIMARY.map((t) => {
             const Icon = t.icon; const on = activeTab === t.id;

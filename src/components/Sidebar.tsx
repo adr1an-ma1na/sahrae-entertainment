@@ -1,32 +1,38 @@
 import { Home, Search, Music2, Radio, Film, Tv2, Clapperboard, Trophy, Heart, Clock, Download, Library, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
 /**
- * Desktop left sidebar (Spotify-style). Visible on lg+; the BottomTabBar takes
- * over on smaller screens. Drives the same activeTab routing as before — it only
- * replaces the navigation chrome. Fixed to the left; the app shell pads main
- * content by its width on lg+.
+ * Left navigation, grouped Watch / Listen / Library.
+ * - Phone (<md): hidden; the BottomTabBar takes over.
+ * - Tablet (md–lg): a compact icon rail (w-16), so the big canvas isn't wasted on
+ *   a phone-style bottom bar.
+ * - Laptop / TV (lg+): the full labelled sidebar, collapsible to reveal button.
+ * The app shell pads main content by the sidebar/rail width at each breakpoint.
  */
 const PRIMARY = [
   { id: 'home', label: 'Home', icon: Home },
   { id: 'search', label: 'Search', icon: Search },
 ];
-const BROWSE = [
+const WATCH = [
   { id: 'movies', label: 'Movies', icon: Film },
   { id: 'series', label: 'Series', icon: Tv2 },
   { id: 'tv', label: 'Live TV', icon: Radio },
   { id: 'sports', label: 'Live Sports', icon: Trophy },
   { id: 'channels', label: 'Flow Channels', icon: Clapperboard },
 ];
-const LIBRARY = [
+const LISTEN = [
   { id: 'music', label: 'Sauti', icon: Music2 },
   { id: 'audio', label: 'Radio', icon: Radio },
+];
+const LIBRARY = [
   { id: 'mylist', label: 'My List', icon: Heart },
   { id: 'continue', label: 'Continue Watching', icon: Clock },
   { id: 'downloads', label: 'Downloads', icon: Download },
 ];
 
+type NavItem = { id: string; label: string; icon: typeof Home };
+
 export default function Sidebar({ activeTab, setActiveTab, collapsed = false, onToggle }: { activeTab: string; setActiveTab: (t: string) => void; collapsed?: boolean; onToggle?: () => void }) {
-  const renderNav = (items: { id: string; label: string; icon: typeof Home }[]) =>
+  const renderNav = (items: NavItem[]) =>
     items.map((t) => {
       const Icon = t.icon;
       const active = activeTab === t.id;
@@ -41,9 +47,37 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
       );
     });
 
+  // Compact icon button for the tablet rail (label as a hover/focus tooltip).
+  const railBtn = (t: NavItem) => {
+    const Icon = t.icon;
+    const active = activeTab === t.id;
+    return (
+      <button key={t.id} onClick={() => setActiveTab(t.id)} tabIndex={0} data-tv-focusable title={t.label} aria-label={t.label}
+        className={`w-11 h-11 rounded-xl flex items-center justify-center transition-colors focus:outline-none ${
+          active ? 'text-sauti bg-white/10' : 'text-zinc-400 hover:text-white hover:bg-white/5'
+        }`}>
+        <Icon className="w-5 h-5" />
+      </button>
+    );
+  };
+  const railDivider = <div className="w-6 h-px bg-white/10 my-1.5 shrink-0" />;
+
   return (
     <>
-      {/* Reveal button — only on lg+ and only while the sidebar is hidden. */}
+      {/* Tablet icon rail (md–lg) */}
+      <aside className="hidden md:flex lg:hidden flex-col items-center fixed left-0 top-0 bottom-0 w-16 z-40 glass border-r border-white/10 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 overflow-y-auto scrollbar-hide">
+        <button onClick={() => setActiveTab('home')} aria-label="Sahrae home"
+          className="w-10 h-10 mb-2 rounded-xl bg-gradient-to-tr from-amber-400 to-amber-600 flex items-center justify-center font-black text-white text-lg shrink-0">S</button>
+        <div className="flex flex-col items-center gap-1">{PRIMARY.map(railBtn)}</div>
+        {railDivider}
+        <div className="flex flex-col items-center gap-1">{WATCH.map(railBtn)}</div>
+        {railDivider}
+        <div className="flex flex-col items-center gap-1">{LISTEN.map(railBtn)}</div>
+        {railDivider}
+        <div className="flex flex-col items-center gap-1">{LIBRARY.map(railBtn)}</div>
+      </aside>
+
+      {/* Reveal button — only on lg+ and only while the full sidebar is hidden. */}
       {collapsed && (
         <button onClick={onToggle} tabIndex={0} data-tv-focusable aria-label="Show sidebar"
           className="hidden lg:flex fixed top-[calc(env(safe-area-inset-top)+0.6rem)] left-3 z-50 w-10 h-10 items-center justify-center rounded-full glass border border-white/10 text-white hover:text-sauti shadow-lg">
@@ -51,6 +85,7 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
         </button>
       )}
 
+      {/* Full labelled sidebar (lg+) */}
       <aside className={`hidden lg:flex flex-col fixed left-0 top-0 bottom-0 w-64 z-40 glass border-r border-white/10 pt-[env(safe-area-inset-top)] transition-transform duration-300 ${collapsed ? '-translate-x-full' : 'translate-x-0'}`}>
         <div className="px-5 pt-5 pb-4 flex items-center justify-between">
           <h1 className="text-2xl font-black tracking-tighter cursor-pointer whitespace-nowrap" onClick={() => setActiveTab('home')}>
@@ -65,8 +100,10 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
         <nav className="px-3 space-y-1">{renderNav(PRIMARY)}</nav>
 
         <div className="mt-6 px-3 flex-1 overflow-y-auto custom-scrollbar pb-4">
-          <div className="overline px-3 mb-1.5">Browse</div>
-          <nav className="space-y-1 mb-5">{renderNav(BROWSE)}</nav>
+          <div className="overline px-3 mb-1.5">Watch</div>
+          <nav className="space-y-1 mb-5">{renderNav(WATCH)}</nav>
+          <div className="overline px-3 mb-1.5">Listen</div>
+          <nav className="space-y-1 mb-5">{renderNav(LISTEN)}</nav>
           <div className="overline px-3 mb-1.5 flex items-center gap-2"><Library className="w-3.5 h-3.5" /> Your Library</div>
           <nav className="space-y-1">{renderNav(LIBRARY)}</nav>
         </div>
