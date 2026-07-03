@@ -7,7 +7,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
-import SplashScreen from './components/SplashScreen';
 import MediaRow from './components/MediaRow';
 import Top10Row from './components/Top10Row';
 import MediaGrid from './components/MediaGrid';
@@ -39,11 +38,6 @@ import { applyEq, loadEq } from './services/eq';
 
 export default function App() {
   const { user, activeProfile, loading: authLoading } = useAuth();
-  const [showSplash, setShowSplash] = useState(() => {
-    // Basic session storage check so it only shows once per tab session
-    const hasSeenSplash = sessionStorage.getItem('hasSeenSplash');
-    return !hasSeenSplash;
-  });
   const [activeTab, setActiveTab] = useState('home');
   const [searchQuery, setSearchQuery] = useState('');
   // Desktop/TV sidebar can be hidden to reclaim the full width; the CSS class
@@ -93,11 +87,6 @@ export default function App() {
   }>({ isOpen: false, mediaId: null, mediaType: null, startInInfo: false });
 
   const [initialLoadError, setInitialLoadError] = useState<boolean>(false);
-
-  const handleSplashComplete = useCallback(() => {
-    sessionStorage.setItem('hasSeenSplash', 'true');
-    setShowSplash(false);
-  }, []);
 
   const handleClosePlayer = useCallback(() => {
     setPlayerConfig({ isOpen: false, mediaId: null, mediaType: null, startInInfo: false });
@@ -609,7 +598,6 @@ export default function App() {
   return (
     <>
       <AnimatePresence>
-        {showSplash && <SplashScreen onComplete={handleSplashComplete} />}
       </AnimatePresence>
       {renderAppLayout()}
     </>

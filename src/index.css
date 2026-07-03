@@ -482,28 +482,28 @@ html.tv-mode {
   html::-webkit-scrollbar,
   body::-webkit-scrollbar,
   .section-scroll-container::-webkit-scrollbar {
-    width: 10px;
+    width: 13px;
     -webkit-appearance: none;
     appearance: none;
   }
   html::-webkit-scrollbar-track,
   body::-webkit-scrollbar-track,
   .section-scroll-container::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(255, 255, 255, 0.07);
   }
   html::-webkit-scrollbar-thumb,
   body::-webkit-scrollbar-thumb,
   .section-scroll-container::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: 6px;
+    background: rgba(245, 158, 11, 0.6);
+    border-radius: 7px;
     border: 2px solid transparent;
     background-clip: content-box;
-    min-height: 48px;
+    min-height: 56px;
   }
   html::-webkit-scrollbar-thumb:hover,
   body::-webkit-scrollbar-thumb:hover,
   .section-scroll-container::-webkit-scrollbar-thumb:hover {
-    background: rgba(245, 158, 11, 0.6);
+    background: rgba(245, 158, 11, 0.9);
     background-clip: content-box;
   }
 }
