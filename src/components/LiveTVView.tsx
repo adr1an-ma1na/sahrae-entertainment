@@ -1,9 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import Hls from 'hls.js';
 import { X, Maximize, Search, Heart, RadioTower, Loader2, WifiOff } from 'lucide-react';
-import { probeHls, probeAll } from '../services/streamHealth';
-
-type Health = 'checking' | 'ok' | 'dead';
 
 interface Channel { name: string; country: string; category: Category; url: string; kind?: 'hls' | 'yt' }
 type Category = 'News' | 'Regional' | 'Sports' | 'Documentary' | 'Science' | 'Music' | 'Kids' | 'Lifestyle';
@@ -138,20 +135,10 @@ export default function LiveTVView() {
   const [favs, setFavs] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(FAV_KEY) || '[]'); } catch { return []; } });
   const [recent, setRecent] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch { return []; } });
 
-  // On-device health: probe every channel through the proxy on the user's real
-  // network and hide any that don't return a playlist — so a listed channel
-  // always plays. Dead ones are hidden ONLY once probing has proven it works
-  // here (≥1 healthy), so a probe-hostile environment never blanks the list.
-  const [health, setHealth] = useState<Record<string, Health>>(() => Object.fromEntries(CHANNELS.map((c) => [c.url, 'checking' as Health])));
-  useEffect(() => {
-    let cancelled = false;
-    probeAll(CHANNELS, (c) => c.url, (c) => (c.kind === 'yt' ? Promise.resolve(true) : probeHls(proxied(c.url), 13000)), (url, ok) => {
-      if (!cancelled) setHealth((h) => ({ ...h, [url]: ok ? 'ok' : 'dead' }));
-    }, 5);
-    return () => { cancelled = true; };
-  }, []);
-  const probingWorks = useMemo(() => Object.values(health).some((v) => v === 'ok'), [health]);
-  const isDead = (url: string) => probingWorks && health[url] === 'dead';
+  // Show EVERY channel, always. The old on-device probe hid any channel that
+  // didn't return a playlist to it — but the proxy probe throws false negatives,
+  // so good channels (Al Jazeera etc.) flashed then vanished. A listed channel
+  // that's genuinely down just shows the player's "offline, try another" state.
 
   const cats = ['All', 'Favorites', ...Array.from(new Set<string>(CHANNELS.map((c) => c.category)))];
 
@@ -165,13 +152,11 @@ export default function LiveTVView() {
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return CHANNELS
-      .filter((c) => !isDead(c.url))
       .filter((c) => (cat === 'Favorites' ? favs.includes(c.name) : cat === 'All' ? true : c.category === cat))
       .filter((c) => !q || c.name.toLowerCase().includes(q) || c.country.toLowerCase().includes(q));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cat, query, favs, health, probingWorks]);
+  }, [cat, query, favs]);
 
-  const recentChannels = (recent.map((n) => CHANNELS.find((c) => c.name === n)).filter(Boolean) as Channel[]).filter((c) => !isDead(c.url));
+  const recentChannels = (recent.map((n) => CHANNELS.find((c) => c.name === n)).filter(Boolean) as Channel[]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && active) setActive(null); };

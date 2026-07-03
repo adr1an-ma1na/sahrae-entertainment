@@ -37,17 +37,22 @@ export const GENRES = [
   'Afrobeats', 'Amapiano', 'Bongo Flava', 'Hip-Hop', 'R&B', 'Gengetone',
   'Reggae', 'Pop', 'Gospel', 'Drill', 'Lo-Fi', 'Dancehall',
 ];
+// Genre- & region-curated shelves (song-oriented queries — no "mix"/"tiktok"
+// that pull cheap DJ compilations). Reads like a connoisseur's browse, not a
+// bootleg mixtape wall.
 export const SECTIONS: { title: string; q: string }[] = [
   { title: 'New Music Friday', q: 'new music friday 2026 latest songs' },
-  { title: 'Top Hits', q: 'top hits this week' },
-  { title: 'Trending Now', q: 'trending songs right now 2026' },
-  { title: 'Viral Hits', q: 'viral hits 2026 tiktok songs' },
+  { title: 'Top Hits', q: 'top hits this week 2026' },
+  { title: 'Trending Now', q: 'trending songs 2026' },
   { title: 'Fresh Finds', q: 'new releases 2026 this week songs' },
-  { title: 'Afrobeats', q: 'afrobeats 2026 hits' },
-  { title: 'Amapiano', q: 'amapiano 2026 mix songs' },
+  { title: 'Afrobeats Essentials', q: 'best afrobeats songs 2026' },
+  { title: 'Amapiano', q: 'amapiano 2026 hits' },
   { title: 'Bongo Flava', q: 'bongo flava 2026 hits' },
-  { title: 'Hip-Hop & Rap', q: 'hip hop rap hits 2026' },
-  { title: 'R&B Slow Jams', q: 'rnb slow jams 2026' },
+  { title: 'Gengetone', q: 'gengetone 2026 hits' },
+  { title: 'US Hip-Hop', q: 'us hip hop hits 2026' },
+  { title: 'UK Rap & Drill', q: 'uk rap drill 2026' },
+  { title: 'R&B', q: 'best rnb songs 2026' },
+  { title: 'Pop', q: 'best pop songs 2026' },
   { title: 'Gospel', q: 'gospel hits 2026' },
 ];
 

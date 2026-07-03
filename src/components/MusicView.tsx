@@ -337,7 +337,8 @@ export default function MusicView() {
     if (!genre) return;
     let cancelled = false; setGenreLoading(true); setGenreTracks([]);
     (async () => {
-      const queries = [`${genre} mix`, `${genre} hits 2026`, `best ${genre} songs`, `${genre} playlist`, `top ${genre}`];
+      // Song-oriented (NOT "mix"/"playlist", which pull cheap DJ-mix compilations).
+      const queries = [`best ${genre} songs 2026`, `${genre} hits 2026`, `popular ${genre} songs`, `${genre} essentials`, `top ${genre} tracks`];
       const lists = await Promise.all(queries.map((q) => ytmusic.search(q).catch(() => [] as Track[])));
       if (cancelled) return;
       const seen = new Set<string>(); const pool: Track[] = [];
