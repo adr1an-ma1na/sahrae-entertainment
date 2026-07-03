@@ -200,6 +200,29 @@
       0 16px 44px rgba(0,0,0,.5);
   }
 
+  /* Liquid-glass sheen for the FIXED side nav — a brighter gradient + top-left
+     specular glare over the glass base. Unlike .glass-liquid this sets NO
+     position/hover/transform, so it never breaks the sidebar's fixed layout.
+     Pair with .glass; !important wins over the per-theme .glass overrides. */
+  .sidebar-glass {
+    background:
+      radial-gradient(125% 44% at 20% 0%, rgba(255,255,255,.16), transparent 60%),
+      linear-gradient(165deg, rgba(255,255,255,.17) 0%, rgba(255,255,255,.05) 34%, rgba(255,255,255,.015) 100%),
+      rgba(12, 12, 16, 0.5) !important;
+  }
+  html.light .sidebar-glass {
+    background:
+      radial-gradient(125% 44% at 20% 0%, rgba(255,255,255,.6), transparent 62%),
+      linear-gradient(165deg, rgba(255,255,255,.62) 0%, rgba(255,255,255,.4) 100%),
+      rgba(239, 230, 211, 0.62) !important;
+  }
+  html.midnight .sidebar-glass {
+    background:
+      radial-gradient(125% 44% at 20% 0%, rgba(205,188,255,.18), transparent 62%),
+      linear-gradient(165deg, rgba(255,255,255,.13) 0%, rgba(255,255,255,.03) 100%),
+      rgba(30, 19, 64, 0.56) !important;
+  }
+
   /* Secondary button — liquid glass with sheen + rim */
   .btn-glass {
     background: linear-gradient(135deg, rgba(255,255,255,.32), rgba(255,255,255,.09));
