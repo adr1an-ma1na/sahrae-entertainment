@@ -393,6 +393,18 @@ html.tv-mode {
 .tv-mode textarea {
   scroll-margin: 7rem 2.5rem 3rem 2.5rem;  /* breathing room on every side */
 }
+
+/* 10-foot scale — on a large screen driven by a remote/keyboard, enlarge the
+   whole rem-based UI (~13%) so text, cards, buttons and focus targets read from
+   across a room. Layout stays in proportion because sidebar width, content
+   offsets and spacing are all rem. Small screens (phones/tablets in D-pad mode)
+   are left alone. */
+@media (min-width: 1024px) {
+  html.tv-mode { font-size: 113%; }
+}
+@media (min-width: 1600px) {
+  html.tv-mode { font-size: 125%; }  /* 1080p TVs, viewed from further back */
+}
 /* The section nav (Home / Movies / Series / Live TV / Audio Hub …) is hidden
    below md; on a TV we force it visible + reachable and drop the horizontal
    mobile strip that's awkward to drive with a remote. */
