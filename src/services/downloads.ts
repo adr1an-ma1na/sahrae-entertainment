@@ -38,10 +38,12 @@ function bytesToBase64(bytes: Uint8Array): string {
 // File-system-safe name (track ids can contain ':' etc. — invalid in paths).
 function safeName(id: string): string { return id.replace(/[^a-zA-Z0-9._-]/g, '_'); }
 
-// Open a STREAMABLE response — direct first, then the native passthrough (CORS/IP).
+// Open a response — direct first, then the native passthrough (CORS/IP). We do
+// NOT require a streamable body here: some intercepted/proxy responses are `ok`
+// but expose no ReadableStream, and the caller falls back to arrayBuffer.
 async function openStream(url: string): Promise<Response | null> {
-  try { const r = await fetch(url); if (r.ok && r.body) return r; } catch { /* try proxy */ }
-  try { const r = await fetch(`https://localhost/__ddfetch?u=${encodeURIComponent(url)}`); if (r.ok && r.body) return r; } catch { /* give up */ }
+  try { const r = await fetch(url); if (r.ok) return r; } catch { /* try proxy */ }
+  try { const r = await fetch(`https://localhost/__ddfetch?u=${encodeURIComponent(url)}`); if (r.ok) return r; } catch { /* give up */ }
   return null;
 }
 
@@ -71,31 +73,43 @@ export const downloads = {
       else { const a = await ytmusic.audioStream(track.id); if (!a) throw new Error('no audio stream'); url = a.url; mime = a.mime; }
 
       const resp = await openStream(url);
-      if (!resp || !resp.body) throw new Error('audio fetch failed');
+      if (!resp) throw new Error('audio fetch failed');
       const total = Number(resp.headers.get('content-length') || 0);
       const path = `downloads/${safeName(track.id)}.dat`;
-
-      // Stream to disk in 3-byte-aligned base64 chunks: never hold the whole file
-      // (or its base64) in memory. Prevents the OOM crash on big podcasts,
-      // especially while the <audio> is also buffering the same episode.
       await Filesystem.writeFile({ path, data: '', directory: Directory.Data, recursive: true });
-      const reader = resp.body.getReader();
-      let carry = new Uint8Array(0);
       let size = 0;
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (!value || !value.length) continue;
-        size += value.length;
-        let buf: Uint8Array;
-        if (carry.length) { buf = new Uint8Array(carry.length + value.length); buf.set(carry); buf.set(value, carry.length); }
-        else buf = value;
-        const usable = buf.length - (buf.length % 3);
-        if (usable > 0) await Filesystem.appendFile({ path, data: bytesToBase64(buf.subarray(0, usable)), directory: Directory.Data });
-        carry = new Uint8Array(buf.subarray(usable)); // 0–2 trailing bytes, copied out
-        states.set(track.id, { status: 'downloading', progress: total ? Math.min(0.99, size / total) : 0 }); emit();
+
+      if (resp.body && typeof resp.body.getReader === 'function') {
+        // BEST: stream to disk in 3-byte-aligned base64 chunks — never holds the
+        // whole file (or its base64) in memory. Prevents the OOM crash on big
+        // podcasts while the <audio> is also buffering the same episode.
+        const reader = resp.body.getReader();
+        let carry = new Uint8Array(0);
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (!value || !value.length) continue;
+          size += value.length;
+          let buf: Uint8Array;
+          if (carry.length) { buf = new Uint8Array(carry.length + value.length); buf.set(carry); buf.set(value, carry.length); }
+          else buf = value;
+          const usable = buf.length - (buf.length % 3);
+          if (usable > 0) await Filesystem.appendFile({ path, data: bytesToBase64(buf.subarray(0, usable)), directory: Directory.Data });
+          carry = new Uint8Array(buf.subarray(usable)); // 0–2 trailing bytes, copied out
+          states.set(track.id, { status: 'downloading', progress: total ? Math.min(0.99, size / total) : 0 }); emit();
+        }
+        if (carry.length) await Filesystem.appendFile({ path, data: bytesToBase64(carry), directory: Directory.Data });
+      } else {
+        // FALLBACK (proxy responses with no ReadableStream): buffer once, then
+        // write in chunks. Still avoids the ~3x dataURL blowup of the old path.
+        const bytes = new Uint8Array(await resp.arrayBuffer());
+        size = bytes.length;
+        const STEP = 3 * 0x10000; // 192 KB, 3-byte aligned
+        for (let i = 0; i < bytes.length; i += STEP) {
+          await Filesystem.appendFile({ path, data: bytesToBase64(bytes.subarray(i, Math.min(i + STEP, bytes.length))), directory: Directory.Data });
+          states.set(track.id, { status: 'downloading', progress: total ? Math.min(0.99, Math.min(i + STEP, bytes.length) / total) : 0 }); emit();
+        }
       }
-      if (carry.length) await Filesystem.appendFile({ path, data: bytesToBase64(carry), directory: Directory.Data });
       if (size < 10000) throw new Error('audio too small');
 
       const { uri } = await Filesystem.getUri({ path, directory: Directory.Data });

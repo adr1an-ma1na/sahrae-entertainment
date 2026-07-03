@@ -420,7 +420,7 @@ export default function MusicView() {
     return (
       <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
         <div aria-hidden className="absolute inset-x-0 top-0 h-80 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${hc} 0%, transparent 100%)`, opacity: 0.5 }} />
-        <button onClick={() => setGenre(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-30 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-5 text-sm px-3.5 py-2 rounded-full glass-liquid"><ChevronLeft className="w-4 h-4" /> Back</button>
+        <button onClick={() => setGenre(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-5 text-sm px-3.5 py-2 rounded-full bg-zinc-900/85 backdrop-blur-xl border border-white/10 shadow-lg"><ChevronLeft className="w-4 h-4" /> Back</button>
         <div className="overline mb-1">Mood &amp; genre</div>
         <h2 className="text-3xl md:text-5xl font-display font-bold text-white mb-4">{genre}</h2>
         {genreTracks.length > 0 && (
@@ -447,7 +447,7 @@ export default function MusicView() {
     return (
       <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
         <div aria-hidden className="absolute inset-x-0 top-0 h-80 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${hc} 0%, transparent 100%)`, opacity: 0.5 }} />
-        <button onClick={() => setViewMix(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-30 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-5 text-sm px-3.5 py-2 rounded-full glass-liquid"><ChevronLeft className="w-4 h-4" /> Back</button>
+        <button onClick={() => setViewMix(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-5 text-sm px-3.5 py-2 rounded-full bg-zinc-900/85 backdrop-blur-xl border border-white/10 shadow-lg"><ChevronLeft className="w-4 h-4" /> Back</button>
         <div className="flex items-end gap-5 mb-8">
           <div className="w-32 h-32 md:w-40 md:h-40 rounded-2xl overflow-hidden bg-zinc-800 border border-white/10 shrink-0 shadow-xl relative">
             <CoverArt imageUrl={viewMix.tracks[0]?.artworkLarge || viewMix.tracks[0]?.artwork} dominantColor={viewMix.tracks[0]?.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
@@ -474,7 +474,7 @@ export default function MusicView() {
     return (
       <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
         <div aria-hidden className="absolute inset-x-0 top-0 h-80 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${heroColor} 0%, transparent 100%)`, opacity: 0.5 }} />
-        <button onClick={() => setDetail(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-30 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-5 text-sm px-3.5 py-2 rounded-full glass-liquid"><ChevronLeft className="w-4 h-4" /> Back</button>
+        <button onClick={() => setDetail(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-5 text-sm px-3.5 py-2 rounded-full bg-zinc-900/85 backdrop-blur-xl border border-white/10 shadow-lg"><ChevronLeft className="w-4 h-4" /> Back</button>
         <div className="flex items-end gap-5 mb-8">
           <div className={`w-32 h-32 md:w-40 md:h-40 ${detail.kind === 'artist' ? 'rounded-full' : 'rounded-2xl'} overflow-hidden bg-zinc-800 border border-white/10 shrink-0 shadow-xl`}>
             {detail.thumbnail ? <img src={detail.thumbnail} alt="" className="w-full h-full object-cover" /> : (detail.kind === 'artist' ? <User className="w-14 h-14 text-zinc-600 absolute inset-0 m-auto" /> : <Disc3 className="w-14 h-14 text-zinc-600 absolute inset-0 m-auto" />)}
@@ -691,7 +691,7 @@ export default function MusicView() {
       ) : openList ? (
         <section className="relative">
           <div aria-hidden className="absolute inset-x-0 -top-24 h-72 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${openList.tracks[0]?.dominantColor || 'rgba(245,158,11,0.4)'} 0%, transparent 100%)`, opacity: 0.5 }} />
-          <button onClick={() => setOpenId(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-30 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-4 text-sm px-3.5 py-2 rounded-full glass-liquid"><ChevronLeft className="w-4 h-4" /> Library</button>
+          <button onClick={() => setOpenId(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-4 text-sm px-3.5 py-2 rounded-full bg-zinc-900/85 backdrop-blur-xl border border-white/10 shadow-lg"><ChevronLeft className="w-4 h-4" /> Library</button>
           <div className="flex items-end gap-4 mb-6">
             <div className="w-28 h-28 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-500 flex items-center justify-center shadow-xl shrink-0">{openList.id === 'liked' ? <Heart className="w-12 h-12 text-white fill-current" /> : <ListMusic className="w-12 h-12 text-white" />}</div>
             <div className="min-w-0">
