@@ -41,19 +41,24 @@ export const GENRES = [
 // that pull cheap DJ compilations). Reads like a connoisseur's browse, not a
 // bootleg mixtape wall.
 export const SECTIONS: { title: string; q: string }[] = [
-  { title: 'New Music Friday', q: 'new music friday 2026 latest songs' },
-  { title: 'Top Hits', q: 'top hits this week 2026' },
+  // Discovery
+  { title: 'New Music Friday', q: 'new music friday 2026 new songs' },
   { title: 'Trending Now', q: 'trending songs 2026' },
-  { title: 'Fresh Finds', q: 'new releases 2026 this week songs' },
+  { title: 'Top Hits', q: 'top hits 2026' },
+  { title: 'Fresh Finds', q: 'new song releases 2026' },
+  // By region
+  { title: 'USA', q: 'usa top songs 2026' },
+  { title: 'United Kingdom', q: 'uk top songs 2026' },
+  { title: 'France', q: 'french songs 2026' },
+  { title: 'Spain', q: 'spanish songs 2026 exitos' },
+  { title: 'Brazil', q: 'brazil songs 2026 sucessos' },
+  { title: 'Europe', q: 'european top hits 2026' },
+  // By genre
   { title: 'Afrobeats Essentials', q: 'best afrobeats songs 2026' },
   { title: 'Amapiano', q: 'amapiano 2026 hits' },
-  { title: 'Bongo Flava', q: 'bongo flava 2026 hits' },
-  { title: 'Gengetone', q: 'gengetone 2026 hits' },
-  { title: 'US Hip-Hop', q: 'us hip hop hits 2026' },
-  { title: 'UK Rap & Drill', q: 'uk rap drill 2026' },
+  { title: 'US Hip-Hop', q: 'us hip hop songs 2026' },
   { title: 'R&B', q: 'best rnb songs 2026' },
   { title: 'Pop', q: 'best pop songs 2026' },
-  { title: 'Gospel', q: 'gospel hits 2026' },
 ];
 
 // Trending playlists by country/region — rendered as tappable cards. Each opens

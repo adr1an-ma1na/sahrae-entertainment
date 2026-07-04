@@ -10,8 +10,8 @@ export default function SplashIntro() {
   const [phase, setPhase] = useState<'in' | 'out' | 'done'>('in');
 
   useEffect(() => {
-    const t1 = setTimeout(() => setPhase('out'), 2300);
-    const t2 = setTimeout(() => setPhase('done'), 3000);
+    const t1 = setTimeout(() => setPhase('out'), 1500);
+    const t2 = setTimeout(() => setPhase('done'), 2050);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, []);
 

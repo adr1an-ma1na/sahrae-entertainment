@@ -29,6 +29,15 @@ function freshFirst(pool: Track[], seed: number, count: number): Track[] {
   return [...seededShuffle(recent, seed), ...seededShuffle(older, seed ^ 0x9e3779b9)].slice(0, count);
 }
 
+// Drop bootleg compilations / DJ mixes / bass-boosted junk so shelves show real
+// songs, not "TOP HITS 2026 V2" or "EDM MIX ULTRA BEATS BASS BOOSTED".
+const JUNK_RE = /(\bdj\s|nonstop|non-stop|mashup|megamix|mega\s?mix|\bmix\b|bass\s?boosted|ultra\s?beats|top\s?hits\s?(vol|v\d|\d{2,})|vol\.?\s*\d|hour[s]?\s(of|mix)|full\salbum|compilation|greatest\shits|the\stop\sdeep|slowed|reverb|\bremix\b)/i;
+function isCleanSong(t: Track): boolean {
+  if (!t) return false;
+  if (t.duration && t.duration > 600) return false; // >10 min → almost always a mix/compilation
+  return !JUNK_RE.test(`${t.title} ${t.artist}`);
+}
+
 const dayKey = () => Number(new Date().toISOString().slice(0, 10).replace(/-/g, ''));
 
 // Spotify-style mood cards — each scannable at a glance with its own colour.
@@ -84,7 +93,7 @@ function TrackRow({ track, onPlay, onRemove }: { track: Track; onPlay: () => voi
     <div tabIndex={0} data-tv-focusable role="button" {...handlers} onClick={() => { if (consumed()) return; active ? toggle() : onPlay(); }}
       className="card-lift group flex items-center gap-3 p-2 pr-2 rounded-xl border border-white/5 bg-zinc-900/40 cursor-pointer focus:outline-none">
       <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-zinc-800 shrink-0">
-        <CoverArt imageUrl={track.artwork} dominantColor={track.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
+        <CoverArt imageUrl={track.artworkLarge || track.artwork} fallbackUrl={track.artwork} dominantColor={track.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
         {!track.artwork && <Music2 className="w-5 h-5 text-zinc-600 absolute inset-0 m-auto" />}
         <div className={`absolute inset-0 bg-black/45 flex items-center justify-center transition-opacity ${active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
           {active && isPlaying ? <Pause className="w-5 h-5 text-white fill-current" /> : <Play className="w-5 h-5 text-white fill-current ml-0.5" />}
@@ -112,7 +121,7 @@ function TrackCard({ track, onPlay }: { track: Track; onPlay: () => void }) {
   return (
     <div tabIndex={0} data-tv-focusable role="button" {...handlers} onClick={() => { if (consumed()) return; onPlay(); }} className="card-lift group relative flex-none w-[150px] rounded-2xl overflow-hidden border border-white/10 bg-zinc-900 cursor-pointer focus:outline-none">
       <div className="aspect-square bg-zinc-800 relative">
-        <CoverArt imageUrl={track.artwork} dominantColor={track.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
+        <CoverArt imageUrl={track.artworkLarge || track.artwork} fallbackUrl={track.artwork} dominantColor={track.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
         {!track.artwork && <Music2 className="w-8 h-8 text-zinc-600 absolute inset-0 m-auto" />}
         <button onClick={(e) => { e.stopPropagation(); openAddSheet(track); }} className="absolute top-2 left-2 z-10 w-8 h-8 rounded-full bg-black/55 backdrop-blur-sm text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" aria-label="Add"><Plus className="w-4 h-4" /></button>
         <div className={`absolute inset-0 bg-gradient-to-t from-black/80 to-transparent transition-opacity flex items-end justify-end p-2 ${active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
@@ -133,7 +142,7 @@ function QuickRow({ track, onPlay }: { track: Track; onPlay: () => void }) {
     <div tabIndex={0} data-tv-focusable role="button" {...handlers} onClick={() => { if (consumed()) return; active ? toggle() : onPlay(); }}
       className="group flex items-center gap-3 p-1.5 rounded-lg hover:bg-white/5 focus:bg-white/5 cursor-pointer focus:outline-none">
       <div className="relative w-12 h-12 rounded-md overflow-hidden bg-zinc-800 shrink-0">
-        <CoverArt imageUrl={track.artwork} dominantColor={track.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
+        <CoverArt imageUrl={track.artworkLarge || track.artwork} fallbackUrl={track.artwork} dominantColor={track.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
         {!track.artwork && <Music2 className="w-5 h-5 text-zinc-600 absolute inset-0 m-auto" />}
         <div className={`absolute inset-0 bg-black/45 flex items-center justify-center transition-opacity ${active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
           {active && isPlaying ? <Pause className="w-4 h-4 text-white fill-current" /> : <Play className="w-4 h-4 text-white fill-current ml-0.5" />}
@@ -215,7 +224,7 @@ export default function MusicView() {
       for (const s of SECTIONS) {
         const raw = await ytmusic.search(s.q);
         if (cancelled) return;
-        const tracks = freshFirst(raw, dayKey() ^ hashStr(s.title), 40);
+        const tracks = freshFirst(raw.filter(isCleanSong), dayKey() ^ hashStr(s.title), 40);
         if (tracks.length) setSections((prev) => [...prev, { title: s.title, tracks }]);
         setLoadingHome(false);
       }
@@ -343,7 +352,7 @@ export default function MusicView() {
       if (cancelled) return;
       const seen = new Set<string>(); const pool: Track[] = [];
       for (const l of lists) for (const t of l) if (!seen.has(t.id)) { seen.add(t.id); pool.push(t); }
-      const rotated = freshFirst(pool, dayKey() ^ hashStr(genre), 60);
+      const rotated = freshFirst(pool.filter(isCleanSong), dayKey() ^ hashStr(genre), 60);
       if (!cancelled) { setGenreTracks(rotated); setGenreLoading(false); }
     })();
     return () => { cancelled = true; };
