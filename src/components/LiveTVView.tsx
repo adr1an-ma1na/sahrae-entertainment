@@ -5,27 +5,27 @@ import { X, Maximize, Search, Heart, RadioTower, Loader2, WifiOff } from 'lucide
 interface Channel { name: string; country: string; category: Category; url: string; kind?: 'hls' | 'yt' }
 type Category = 'News' | 'Regional' | 'Sports' | 'Documentary' | 'Science' | 'Music' | 'Kids' | 'Lifestyle';
 
-// Verified, working free HLS broadcasts (probed live). Broadcaster-official feeds
-// (Al Jazeera, DW, France 24, NASA, NHK, TRT, CGTN, Red Bull) are the most stable.
+// News plays via each broadcaster's permanent YouTube live channel (kind: 'yt') —
+// the most stable option since channel IDs never change. Everything else uses
+// broadcaster-official / FAST HLS feeds (NASA, Red Bull, DW Documentary, etc.).
 const CHANNELS: Channel[] = [
-  // News (English-language)
-  { name: 'Al Jazeera English', country: 'Qatar', category: 'News', url: 'https://live-hls-web-aje.getaj.net/AJE/index.m3u8' },
-  { name: 'Sky News', country: 'UK', category: 'News', url: 'https://skynews2-plutolive-vo.akamaized.net/cdhlsskynewsamericas/1013/latest.m3u8' },
-  { name: 'DW English', country: 'Germany', category: 'News', url: 'https://dwamdstream102.akamaized.net/hls/live/2015525/dwstream102/index.m3u8' },
-  { name: 'France 24 English', country: 'France', category: 'News', url: 'https://static.france24.com/live/F24_EN_HI_HLS/live_web.m3u8' },
-  { name: 'TRT World', country: 'Turkey', category: 'News', url: 'https://tv-trtworld.live.trt.com.tr/master_720.m3u8' },
-  { name: 'CGTN', country: 'China', category: 'News', url: 'https://live.cgtn.com/1000/prog_index.m3u8' },
-  { name: 'CNA', country: 'Singapore', category: 'News', url: 'https://d2e1asnsl7br7b.cloudfront.net/7782e205e72f43aeb4a48ec97f66ebbe/index.m3u8' },
-  { name: 'WION', country: 'India', category: 'News', url: 'https://d7x8z4yuq42qn.cloudfront.net/index_7.m3u8' },
-  { name: 'GB News', country: 'UK', category: 'News', url: 'https://gbnews.simplestreamcdn.com/gbnews/gbnews/playlist.m3u8' },
-  { name: 'NBC News NOW', country: 'USA', category: 'News', url: 'https://nbcnews2.akamaized.net/hls/live/723426/NBCNewsPlaymaker24x7/master_hd.m3u8' },
-  { name: 'ABC News Live', country: 'USA', category: 'News', url: 'https://content.uplynk.com/channel/3324f2467c414329b3b0cc5cd987b6be.m3u8' },
-  { name: 'Bloomberg TV', country: 'USA', category: 'News', url: 'https://bloomberg-bloomberg-1-gb.samsung.wurl.tv/playlist.m3u8' },
-  { name: 'Euronews English', country: 'Europe', category: 'News', url: 'https://euronews-euronews-world-1-gb.samsung.wurl.tv/playlist.m3u8' },
-  { name: 'CBS News', country: 'USA', category: 'News', url: 'https://cbsn-us-cbsnstream.cbsnstream.cbsnews.com/out/v1/55a8648e840f4fa9b0d5b85d6c8f9f9a/master.m3u8' },
-  { name: 'ABC News (Australia)', country: 'Australia', category: 'News', url: 'https://abc-iview-coombe.akamaized.net/hls/live/2038312/2038312_3132/index.m3u8' },
-  { name: 'NHK World', country: 'Japan', category: 'News', url: 'https://nhkwlive-ojp.akamaized.net/hls/live/2003459/nhkwlive-ojp-en/index.m3u8' },
-  { name: 'Arirang TV', country: 'Korea', category: 'News', url: 'https://amdlive-ch01-ctnd-com.akamaized.net/arirang_1ch/smil:arirang_1ch.smil/playlist.m3u8' },
+  // News — official 24/7 YouTube live streams. Channel IDs are permanent and were
+  // each verified against the channel's real live feed, so unlike raw HLS URLs
+  // (which rotate CDN tokens and rot within weeks) these never break.
+  { name: 'Al Jazeera English', country: 'Qatar', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCNye-wNBqNL5ZzHSJj3l8Bg&autoplay=1' },
+  { name: 'Sky News', country: 'UK', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCoMdktPbSTixAyNGwb-UYkQ&autoplay=1' },
+  { name: 'DW News', country: 'Germany', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCknLrEdhRCp1aegoMqRaCZg&autoplay=1' },
+  { name: 'France 24 English', country: 'France', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCQfwfsi5VrQ8yKZ-UWmAEFg&autoplay=1' },
+  { name: 'GB News', country: 'UK', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UC0vn8ISa4LKMunLbzaXLnOQ&autoplay=1' },
+  { name: 'Euronews English', country: 'Europe', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCSrZ3UV4jOidv8ppoVuvW9Q&autoplay=1' },
+  { name: 'TRT World', country: 'Turkey', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UC7fWeaHhqgM4Ry-RMpM2YYw&autoplay=1' },
+  { name: 'ABC News Live', country: 'USA', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCBi2mrWuNuyYy4gbM6fU18Q&autoplay=1' },
+  { name: 'CBS News', country: 'USA', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UC8p1vwvWtl6T73JiExfWs1g&autoplay=1' },
+  { name: 'NBC News NOW', country: 'USA', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCeY0bbntWzzVIaj2z3QigXg&autoplay=1' },
+  { name: 'CNA', country: 'Singapore', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UC83jt4dlz1Gjl58fzQrrKZg&autoplay=1' },
+  { name: 'WION', country: 'India', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UC_gUM8rL-Lrg6O3adPW9K1g&autoplay=1' },
+  { name: 'CGTN', country: 'China', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCgrNz-aDmcr2uuto8_DL2jg&autoplay=1' },
+  { name: 'NHK World', country: 'Japan', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCSPEjw8F2nQDtmUKPFNF7_A&autoplay=1' },
   // Sports
   { name: 'Red Bull TV', country: 'Global', category: 'Sports', url: 'https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master.m3u8' },
   { name: 'beIN Sports XTRA', country: 'Global', category: 'Sports', url: 'https://bein-xtra-bein.amagi.tv/playlist.m3u8' },
