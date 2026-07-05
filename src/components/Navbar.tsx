@@ -88,11 +88,11 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
             onSubmit={handleSearchSubmit}
             className={`flex items-center transition-all duration-300 ${isSearchOpen ? 'glass rounded-full px-3 py-1.5' : ''}`}
           >
-            <button 
+            <button
               type="button"
               onClick={() => setIsSearchOpen(!isSearchOpen)}
-              className="text-white p-1 hover:text-amber-500 transition-colors"
-              title="Standard Search"
+              className="text-white p-2 rounded-full hover:bg-white/10 transition-colors"
+              title="Search" aria-label="Search"
             >
               <Search className="w-5 h-5" />
             </button>
@@ -108,9 +108,10 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
           </form>
           
           <div className="relative" ref={notificationsRef}>
-            <button 
-              className="text-white p-1 hover:bg-white/10 rounded-full transition-colors relative"
+            <button
+              className="text-white p-2 hover:bg-white/10 rounded-full transition-colors relative"
               onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+              aria-label="Notifications"
             >
               <Bell className="w-5 h-5" />
               {unreadCount > 0 && (
@@ -179,9 +180,9 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
             )}
           </div>
           
-          <button 
+          <button
             onClick={toggleTheme}
-            className="text-white p-1 hover:bg-white/10 rounded-full transition-colors"
+            className="text-white p-2 hover:bg-white/10 rounded-full transition-colors"
             aria-label="Toggle theme"
           >
             {theme === 'light' ? <Sun className="w-5 h-5" /> : theme === 'dark' ? <Moon className="w-5 h-5" /> : <Palette className="w-5 h-5" />}

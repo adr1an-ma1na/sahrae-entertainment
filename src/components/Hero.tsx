@@ -1,4 +1,4 @@
-import { Play, Info, Star } from 'lucide-react';
+import { Play, Info, Star, Film } from 'lucide-react';
 import { MediaItem, getImageUrl } from '../services/tmdb';
 
 interface HeroProps {
@@ -7,7 +7,7 @@ interface HeroProps {
 }
 
 export default function Hero({ item, onPlay }: HeroProps) {
-  if (!item) return <div className="h-[70vh] bg-zinc-950 animate-pulse"></div>;
+  if (!item) return <div className="h-[85vh] bg-zinc-950 skeleton"></div>;
 
   const title = item.title || item.name;
   const type = item.media_type || 'movie';
@@ -77,7 +77,7 @@ export default function Hero({ item, onPlay }: HeroProps) {
               onClick={() => onPlay(item.id, type, true, true)}
               className="btn-glass flex items-center justify-center gap-2 px-7 md:px-9 py-3 rounded-xl font-bold text-lg"
             >
-              <Play className="w-6 h-6 fill-current" />
+              <Film className="w-6 h-6" />
               Trailer
             </button>
             <button 

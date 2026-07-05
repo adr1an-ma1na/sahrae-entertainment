@@ -40,6 +40,18 @@ function isCleanSong(t: Track): boolean {
 
 const dayKey = () => Number(new Date().toISOString().slice(0, 10).replace(/-/g, ''));
 
+// Stable colour identity for playlists / covers that have no artwork — one
+// hand-picked duotone per name, so the Library reads as distinct, colourful
+// tiles instead of identical grey slabs. Literal strings so Tailwind keeps them.
+const COVER_GRADS = [
+  'from-rose-500 to-orange-600', 'from-emerald-500 to-teal-700', 'from-sky-500 to-indigo-700',
+  'from-violet-500 to-fuchsia-700', 'from-fuchsia-500 to-rose-700', 'from-cyan-500 to-blue-700',
+  'from-lime-500 to-emerald-700', 'from-indigo-500 to-purple-800', 'from-amber-400 to-orange-700',
+  'from-teal-400 to-cyan-700',
+];
+const gradFor = (s: string) => COVER_GRADS[hashStr(s || 'x') % COVER_GRADS.length];
+const monogram = (n: string) => (n || '').replace(/[^A-Za-z0-9 ]/g, '').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '♪';
+
 // Spotify-style mood cards — each scannable at a glance with its own colour.
 // `grad` classes are literal so Tailwind keeps them; `tint` colours the mood page.
 const MOODS: { name: string; grad: string; tint: string }[] = [
@@ -532,8 +544,12 @@ export default function MusicView() {
       <div className="relative overline text-sauti mb-1.5">Sauti · sound on Sahrae</div>
       <div className="relative flex items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-300 via-amber-500 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/30"><Music2 className="w-6 h-6 text-white" /></div>
-          <div><h2 className="text-3xl font-display font-bold text-white leading-tight tracking-tight">{tab === 'home' ? greeting() : 'Your Library'}</h2><p className="text-sm text-zinc-400">Songs · artists · albums · radio</p></div>
+          <div className="relative w-12 h-12 shrink-0" aria-hidden>
+            <div className="absolute inset-0 rounded-full bg-[#0b0b0d] shadow-lg shadow-amber-500/25" style={{ backgroundImage: 'repeating-radial-gradient(circle at 50% 50%, rgba(245,158,11,0.20) 0 1px, transparent 1px 4px)' }} />
+            <div className="absolute inset-0 rounded-full ring-1 ring-white/10" />
+            <div className="absolute inset-0 m-auto w-[22px] h-[22px] rounded-full bg-gradient-to-tr from-amber-300 via-amber-500 to-amber-600 flex items-center justify-center shadow-inner"><Music2 className="w-3.5 h-3.5 text-amber-950" /></div>
+          </div>
+          <div><h2 className="text-3xl font-display font-bold text-white leading-tight tracking-tight">{tab === 'home' ? greeting() : 'Your Library'}</h2><p className="text-sm text-zinc-400">Songs · artists · albums · playlists</p></div>
         </div>
         <div className="flex gap-1 glass p-1 rounded-xl self-start">
           {(['home', 'library'] as const).map((t) => (
@@ -703,7 +719,7 @@ export default function MusicView() {
           <div aria-hidden className="absolute inset-x-0 -top-24 h-72 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${openList.tracks[0]?.dominantColor || 'rgba(245,158,11,0.4)'} 0%, transparent 100%)`, opacity: 0.5 }} />
           <button onClick={() => setOpenId(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-4 text-sm px-3.5 py-2 rounded-full bg-zinc-900/85 backdrop-blur-xl border border-white/10 shadow-lg"><ChevronLeft className="w-4 h-4" /> Library</button>
           <div className="flex items-end gap-4 mb-6">
-            <div className="w-28 h-28 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-500 flex items-center justify-center shadow-xl shrink-0">{openList.id === 'liked' ? <Heart className="w-12 h-12 text-white fill-current" /> : <ListMusic className="w-12 h-12 text-white" />}</div>
+            <div className={`w-28 h-28 rounded-2xl bg-gradient-to-br ${openList.id === 'liked' ? 'from-amber-400 via-orange-500 to-rose-600' : gradFor(openList.name)} flex items-center justify-center shadow-xl shrink-0`}>{openList.id === 'liked' ? <Heart className="w-12 h-12 text-white fill-current drop-shadow" /> : <ListMusic className="w-12 h-12 text-white drop-shadow" />}</div>
             <div className="min-w-0">
               <h3 className="text-3xl font-display font-bold text-white truncate">{openList.name}</h3>
               <p className="text-sm text-zinc-400 tabular">{openList.tracks.length} songs</p>
@@ -724,8 +740,8 @@ export default function MusicView() {
       ) : (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-10">
-            <button onClick={() => setOpenId('liked')} tabIndex={0} data-tv-focusable className="card-lift flex items-center gap-3 p-4 rounded-2xl bg-gradient-to-br from-amber-500/20 to-amber-500/20 border border-amber-500/20 text-left">
-              <span className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-amber-500 flex items-center justify-center shrink-0"><Heart className="w-6 h-6 text-white fill-current" /></span>
+            <button onClick={() => setOpenId('liked')} tabIndex={0} data-tv-focusable className="card-lift flex items-center gap-3 p-4 rounded-2xl bg-gradient-to-br from-orange-500/20 to-rose-600/20 border border-rose-500/25 text-left">
+              <span className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 via-orange-500 to-rose-600 flex items-center justify-center shrink-0 shadow-lg shadow-rose-600/25"><Heart className="w-6 h-6 text-white fill-current" /></span>
               <span><span className="block font-bold text-white">Liked Songs</span><span className="block text-xs text-zinc-300 tabular">{likedTracks.length} songs</span></span>
             </button>
             {creating ? (
@@ -744,7 +760,7 @@ export default function MusicView() {
             {playlists.length === 0 ? <p className="text-zinc-500 py-6">No playlists yet. Create one above, or tap + on any song.</p> : (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">{playlists.map((p) => (
                 <button key={p.id} onClick={() => setOpenId(p.id)} tabIndex={0} data-tv-focusable className="card-lift text-left rounded-2xl overflow-hidden border border-white/10 bg-zinc-900">
-                  <div className="aspect-square bg-gradient-to-br from-zinc-700 to-zinc-900 relative flex items-center justify-center">{p.tracks[0]?.artwork ? <img src={p.tracks[0].artwork} alt="" className="w-full h-full object-cover" /> : <ListMusic className="w-10 h-10 text-zinc-500" />}</div>
+                  <div className={`aspect-square relative flex items-center justify-center overflow-hidden ${p.tracks[0]?.artwork ? 'bg-zinc-800' : `bg-gradient-to-br ${gradFor(p.name)}`}`}>{p.tracks[0]?.artwork ? <img src={p.tracks[0].artwork} alt="" className="w-full h-full object-cover" /> : <><div aria-hidden className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-black/20" /><span className="relative font-display font-black text-white/95 text-3xl tracking-tight drop-shadow">{monogram(p.name)}</span></>}</div>
                   <div className="p-2.5"><p className="text-sm font-semibold text-white truncate">{p.name}</p><p className="text-xs text-zinc-500 tabular">{p.tracks.length} songs</p></div>
                 </button>
               ))}</div>
