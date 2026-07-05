@@ -1269,6 +1269,24 @@ public class MainActivity extends BridgeActivity {
                         } else if (path.startsWith("/__dltitle")) {
                             DownloadStore.setPendingTitle(request.getUrl().getQueryParameter("t"));
                             return DownloadStore.json("{\"ok\":true}");
+                        } else if (path.startsWith("/__openext")) {
+                            // Open a URL in the EXTERNAL browser (Chrome). The download
+                            // screen uses this so a provider's download button works even
+                            // when it relies on a popup / blob link — the in-app WebView
+                            // refuses popups app-wide as an ad defense, so Chrome (which
+                            // handles every download mechanism and saves to Downloads) is
+                            // the reliable path.
+                            final String ext = request.getUrl().getQueryParameter("url");
+                            if (ext != null && (ext.startsWith("http://") || ext.startsWith("https://"))) {
+                                runOnUiThread(() -> {
+                                    try {
+                                        android.content.Intent i = new android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(ext));
+                                        i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                                        startActivity(i);
+                                    } catch (Throwable ignore) {}
+                                });
+                            }
+                            return AudioFx.ok();
                         }
                     }
 

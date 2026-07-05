@@ -80,10 +80,10 @@ export default function Hero({ item, onPlay }: HeroProps) {
               <Film className="w-6 h-6" />
               Trailer
             </button>
-            <button 
+            <button
               onClick={() => onPlay(item.id, type, true)}
-              className="w-12 h-12 flex items-center justify-center bg-white/10 text-white rounded-full hover:bg-white/15 hover:scale-105 transition-all backdrop-blur-md border border-white/15 shadow-lg cursor-pointer shrink-0"
-              title="More Info"
+              className="w-12 h-12 flex items-center justify-center bg-black/40 text-white rounded-full hover:bg-black/55 hover:scale-105 transition-transform border border-white/25 shadow-md cursor-pointer shrink-0 isolate"
+              title="More Info" aria-label="More info"
             >
               <Info className="w-6 h-6" />
             </button>

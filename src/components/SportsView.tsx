@@ -116,10 +116,18 @@ function channelForSport(sport: string): Channel {
  *  dead one cascades to the next (see onUnplayable). */
 function fallbackChannels(sport: string): Channel[] {
   const primary = channelForSport(sport);
-  const universal = ['Red Bull TV', 'Fubo Sports', 'Stadium', 'FIFA+']
+  // The sport's OWN channels first (best coverage of the event), then the
+  // universal always-on HD feeds — deduped. More options = the cascade always
+  // finds a live one, and the viewer can flip between the channels covering it
+  // (Cricfy-style) even before an event's dedicated server is live.
+  const sameCat = CHANNELS.filter((c) => c.category === primary.category);
+  const universal = ['Red Bull TV', 'Fubo Sports', 'Stadium', 'FIFA+', 'beIN Sports XTRA']
     .map((n) => CHANNELS.find((c) => c.name === n))
-    .filter((c): c is Channel => !!c && c.name !== primary.name);
-  return [primary, ...universal];
+    .filter((c): c is Channel => !!c);
+  const seen = new Set<string>();
+  const out: Channel[] = [];
+  for (const c of [primary, ...sameCat, ...universal]) if (c && !seen.has(c.name)) { seen.add(c.name); out.push(c); }
+  return out;
 }
 
 const initials = (n: string) => n.replace(/[^A-Za-z0-9 ]/g, '').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
@@ -212,7 +220,10 @@ const HLSPlayer = ({ src, onUnplayable }: { src: string; onUnplayable?: () => vo
         fragLoadingTimeOut: 30000, fragLoadingMaxRetry: 8,
         nudgeMaxRetry: 10,
         startLevel: -1,
-        abrEwmaDefaultEstimate: 1_200_000,
+        // Prefer higher quality: don't cap the level to the (small) player box, and
+        // assume a healthy pipe up front so ABR opens on a sharp rendition for sport.
+        capLevelToPlayerSize: false,
+        abrEwmaDefaultEstimate: 2_500_000,
       });
       let started = false;
       let netRetries = 0;

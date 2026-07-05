@@ -196,11 +196,14 @@ export default function MusicView() {
   const recentlyPlayed = rawRecent.filter((t) => !t.id.startsWith('pod:') && !t.feedUrl);
 
   // Cold-start onboarding: show the taste picker only to a genuinely fresh
-  // listener (no plays, likes, or seeds yet). `hasTasteSeeds` (0/1) is a stable
-  // dep that flips once when onboarding lands, so the personalised builders below
-  // re-run and Home fills in immediately — without thrashing on every play.
-  const hasTasteSeeds = tasteSeeds.length > 0 ? 1 : 0;
-  const showOnboarding = !onboarded && recentlyPlayed.length === 0 && likedTracks.length === 0 && tasteSeeds.length === 0;
+  // listener (no plays, likes, or seeds yet). `tasteSig` is a stable dep for the
+  // personalised builders below — it changes when seeds are added (first
+  // onboarding OR a later "Tune your taste"), but NOT while listening, so the
+  // mixes rebuild on taste changes without thrashing on every play.
+  const tasteSig = tasteSeeds.length;
+  const [redoTaste, setRedoTaste] = useState(false); // "Tune your taste" manually re-opens the picker
+  const showOnboarding = redoTaste || (!onboarded && recentlyPlayed.length === 0 && likedTracks.length === 0 && tasteSeeds.length === 0);
+  const closeOnboarding = () => { completeOnboarding(); setRedoTaste(false); };
   const seedFromArtists = async (names: string[]) => {
     try {
       const lists = await Promise.all(names.map((n) => ytmusic.search(`${n} songs`).catch(() => [] as Track[])));
@@ -215,7 +218,7 @@ export default function MusicView() {
       }
       if (seeds.length) addTasteSeeds(seeds);
     } finally {
-      completeOnboarding();
+      closeOnboarding();
     }
   };
 
@@ -285,7 +288,7 @@ export default function MusicView() {
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasTasteSeeds]);
+  }, [tasteSig]);
 
   // ── "Made For You" — Spotify-grade curated playlists from your listening
   //    (On Repeat, Daily Mixes, Discover Weekly, Release Radar). DEFERRED ~3s so
@@ -361,7 +364,7 @@ export default function MusicView() {
     }, 3000);
     return () => { cancelled = true; clearTimeout(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasTasteSeeds]);
+  }, [tasteSig]);
 
   // Debounced search (songs + artists + albums)
   useEffect(() => {
@@ -563,7 +566,7 @@ export default function MusicView() {
 
   return (
     <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
-      {showOnboarding && <SautiOnboarding onComplete={seedFromArtists} onSkip={completeOnboarding} />}
+      {showOnboarding && <SautiOnboarding onComplete={seedFromArtists} onSkip={closeOnboarding} />}
       {/* Living aurora glow — tinted by the most recently played track (spec §1.2.4) */}
       <div aria-hidden className="pointer-events-none absolute -top-10 left-0 right-0 h-64 -z-0 opacity-70"
         style={{ background: `radial-gradient(60% 70% at 12% 0%, ${recentlyPlayed[0]?.dominantColor || 'rgba(245,158,11,0.5)'}, transparent 70%), radial-gradient(50% 60% at 80% 10%, rgba(251,191,36,0.12), transparent 72%)`, filter: 'blur(8px)', transition: 'background 700ms ease' }} />
@@ -778,6 +781,10 @@ export default function MusicView() {
             ) : (
               <button onClick={() => setCreating(true)} tabIndex={0} data-tv-focusable className="card-lift flex items-center gap-3 p-4 rounded-2xl bg-zinc-900/50 border border-white/10 text-left"><span className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center shrink-0"><Plus className="w-6 h-6 text-sauti" /></span><span className="font-bold text-white">New playlist</span></button>
             )}
+            <button onClick={() => setRedoTaste(true)} tabIndex={0} data-tv-focusable className="card-lift flex items-center gap-3 p-4 rounded-2xl bg-gradient-to-br from-violet-500/20 to-fuchsia-600/20 border border-violet-500/25 text-left">
+              <span className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center shrink-0 shadow-lg shadow-fuchsia-600/25"><Sparkles className="w-6 h-6 text-white" /></span>
+              <span><span className="block font-bold text-white">Tune your taste</span><span className="block text-xs text-zinc-300">Refresh your mixes</span></span>
+            </button>
           </div>
           {recentlyPlayed.length > 0 && (
             <section className="mb-10"><SectionHead>Recently Played</SectionHead><div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{recentlyPlayed.map((t, i) => <Fragment key={t.id}><TrackCard track={t} onPlay={() => playQueue(recentlyPlayed, i)} /></Fragment>)}</div></section>
