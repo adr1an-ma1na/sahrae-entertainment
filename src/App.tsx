@@ -550,7 +550,7 @@ export default function App() {
 
         {/* Main column shifts right of the sidebar on desktop; pads for the
             bottom tab bar + mini player on mobile. */}
-        <div className="md:pl-16 lg:pl-64">
+        <div className="md:pl-16 lg:pl-64 tv-shell">
           <Navbar
             activeTab={activeTab}
             setActiveTab={navigate}

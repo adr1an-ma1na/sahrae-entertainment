@@ -746,3 +746,46 @@ a:focus-visible {
 .podcast-notes img { max-width: 100%; height: auto; border-radius: 8px; margin: 0.5rem 0; }
 .podcast-notes h1, .podcast-notes h2, .podcast-notes h3 { font-weight: 700; color: #fff; margin: 0.5rem 0; }
 .podcast-notes .ts-seek { color: #f59e0b; font-weight: 700; background: rgba(245, 158, 11, 0.12); border-radius: 4px; padding: 0 4px; cursor: pointer; }
+
+/* ─────────────────────────────────────────────────────────────
+   TV MODE — performance + Netflix-style navigation. TV boxes have weak GPUs,
+   so the backdrop-blur on every glass surface, the always-animating aurora,
+   and the card-lift float/shadow churn are what make the remote feel laggy.
+   In tv-mode we flatten everything to opaque, static surfaces, and force the
+   FULL LABELLED sidebar (never the icon-only rail) so every feature is legible
+   across the room. Placed last so it wins over the nav-collapse offsets above.
+   ───────────────────────────────────────────────────────────── */
+
+/* 1) Stop the GPU-heavy compositing (the real cause of the lag). */
+html.tv-mode .aurora-glow,
+html.tv-mode .splash-aurora,
+html.tv-mode .np-bleed,
+html.tv-mode .kenburns { animation: none !important; }
+html.tv-mode .glass,
+html.tv-mode .glass-liquid,
+html.tv-mode .btn-glass,
+html.tv-mode .sidebar-glass,
+html.tv-mode .chip,
+html.tv-mode .control-deck {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+/* Opaque fallbacks so the flattened surfaces stay legible without the blur. */
+html.tv-mode .glass,
+html.tv-mode .sidebar-glass { background: #0f0f13 !important; }
+html.tv-mode .btn-glass { background: rgba(255, 255, 255, 0.14) !important; }
+html.tv-mode .chip { background: rgba(255, 255, 255, 0.10) !important; }
+html.tv-mode .np-bleed { filter: blur(24px) saturate(120%) !important; }
+/* No hover-float / will-change repaint churn on the remote — the focus ring is
+   the selection cue, so the card doesn't also need to scale + cast a big shadow. */
+html.tv-mode .card-lift { transition: none !important; will-change: auto !important; }
+html.tv-mode .card-lift:hover,
+html.tv-mode .card-lift:focus-visible,
+html.tv-mode .card-lift:focus-within { transform: none !important; box-shadow: none !important; }
+
+/* 2) Always show the full LABELLED sidebar on TV (never the icon-only rail),
+      and shift the shell + navbar to match, so users read every feature. */
+html.tv-mode .tv-rail { display: none !important; }
+html.tv-mode .tv-full { display: flex !important; transform: none !important; }
+html.tv-mode .tv-shell { padding-left: 16rem !important; }
+html.tv-mode .tv-navbar { left: 16rem !important; }

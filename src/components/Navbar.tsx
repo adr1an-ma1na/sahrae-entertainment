@@ -71,7 +71,7 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
 
   return (
     <>
-    <nav className={`fixed top-0 left-0 right-0 md:left-16 lg:left-64 z-40 transition-all duration-500 pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] ${isScrolled ? 'bg-zinc-950/95 border-b border-white/10' : 'bg-gradient-to-b from-black/60 via-black/25 to-transparent'}`}>
+    <nav className={`fixed top-0 left-0 right-0 md:left-16 lg:left-64 tv-navbar z-40 transition-all duration-500 pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] ${isScrolled ? 'bg-zinc-950/95 border-b border-white/10' : 'bg-gradient-to-b from-black/60 via-black/25 to-transparent'}`}>
       <div className="px-4 md:px-12 py-4 flex items-center justify-between">
         <div className="flex items-center gap-8 md:gap-12 min-w-0 flex-1">
           <h1

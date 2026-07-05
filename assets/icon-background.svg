@@ -1,23 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <title>Sahrae Entertainment — Adaptive Background (premium obsidian)</title>
+  <title>Sahrae Entertainment — Adaptive Background</title>
   <defs>
-    <radialGradient id="obsidian" cx="0.5" cy="0.42" r="0.85">
-      <stop offset="0%" stop-color="#292524"/>
-      <stop offset="45%" stop-color="#1c1917"/>
-      <stop offset="78%" stop-color="#0c0a09"/>
-      <stop offset="100%" stop-color="#000000"/>
-    </radialGradient>
-    <radialGradient id="warmGlow" cx="0.5" cy="0.46" r="0.5">
-      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.30"/>
-      <stop offset="60%" stop-color="#b45309" stop-opacity="0.10"/>
-      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
-    </radialGradient>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1b1b20"/>
+      <stop offset="1" stop-color="#0a0a0c"/>
+    </linearGradient>
   </defs>
-
-  <rect x="0" y="0" width="1024" height="1024" fill="url(#obsidian)"/>
-  <rect x="0" y="0" width="1024" height="1024" fill="url(#warmGlow)"/>
-
-  <!-- Faint Sahara-horizon arc — a subtle nod to the name -->
-  <path d="M -40 760 C 280 690 744 690 1064 760"
-    fill="none" stroke="#f59e0b" stroke-width="5" opacity="0.16"/>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
 </svg>
