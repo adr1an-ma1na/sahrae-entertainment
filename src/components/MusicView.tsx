@@ -4,6 +4,7 @@ import { ytmusic, Track, Artist, Album, GENRES, SECTIONS } from '../services/ytm
 import { buildMix, diverseSample } from '../services/recommend';
 import { useMusic } from '../hooks/useMusic';
 import { CoverArt } from './ui/CoverArt';
+import SautiOnboarding from './SautiOnboarding';
 
 const fmt = (s: number) => {
   if (!s || !isFinite(s)) return '0:00';
@@ -189,10 +190,34 @@ function greeting(): string {
 }
 
 export default function MusicView() {
-  const { playQueue, likedTracks, playlists, recentlyPlayed: rawRecent, createPlaylist, deletePlaylist, removeFromPlaylist, openAddSheet } = useMusic();
+  const { playQueue, likedTracks, playlists, recentlyPlayed: rawRecent, tasteSeeds, onboarded, addTasteSeeds, completeOnboarding, createPlaylist, deletePlaylist, removeFromPlaylist, openAddSheet } = useMusic();
   // Sauti is music only — podcasts play through the shared engine, so strip them
   // from every recently-played-derived shelf, pill, mix, and the header gradient.
   const recentlyPlayed = rawRecent.filter((t) => !t.id.startsWith('pod:') && !t.feedUrl);
+
+  // Cold-start onboarding: show the taste picker only to a genuinely fresh
+  // listener (no plays, likes, or seeds yet). `hasTasteSeeds` (0/1) is a stable
+  // dep that flips once when onboarding lands, so the personalised builders below
+  // re-run and Home fills in immediately — without thrashing on every play.
+  const hasTasteSeeds = tasteSeeds.length > 0 ? 1 : 0;
+  const showOnboarding = !onboarded && recentlyPlayed.length === 0 && likedTracks.length === 0 && tasteSeeds.length === 0;
+  const seedFromArtists = async (names: string[]) => {
+    try {
+      const lists = await Promise.all(names.map((n) => ytmusic.search(`${n} songs`).catch(() => [] as Track[])));
+      const seen = new Set<string>(); const seeds: Track[] = [];
+      for (const list of lists) {
+        let added = 0;
+        for (const t of list) {
+          if (added >= 3) break;
+          if (!isCleanSong(t) || seen.has(t.id)) continue;
+          seen.add(t.id); seeds.push(t); added++;
+        }
+      }
+      if (seeds.length) addTasteSeeds(seeds);
+    } finally {
+      completeOnboarding();
+    }
+  };
 
   const [tab, setTab] = useState<'home' | 'library'>('home');
   const [sections, setSections] = useState<{ title: string; tracks: Track[] }[]>([]);
@@ -246,13 +271,13 @@ export default function MusicView() {
 
   // Your Mix from listening (built on entry)
   useEffect(() => {
-    if (recentlyPlayed.length === 0) return;
+    if (recentlyPlayed.length === 0 && tasteSeeds.length === 0) return;
     let cancelled = false;
     (async () => {
-      const seeds = recentlyPlayed.slice(0, 4);
+      const seeds = (recentlyPlayed.length ? recentlyPlayed : tasteSeeds).slice(0, 4);
       const lists = await Promise.all(seeds.map((s) => ytmusic.related(s.id)));
       if (cancelled) return;
-      const seen = new Set(recentlyPlayed.map((t) => t.id));
+      const seen = new Set([...recentlyPlayed, ...tasteSeeds].map((t) => t.id));
       const agg: Track[] = [];
       for (const list of lists) for (const t of list) if (!seen.has(t.id)) { seen.add(t.id); agg.push(t); }
       for (let i = agg.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [agg[i], agg[j]] = [agg[j], agg[i]]; }
@@ -260,21 +285,21 @@ export default function MusicView() {
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [hasTasteSeeds]);
 
   // ── "Made For You" — Spotify-grade curated playlists from your listening
   //    (On Repeat, Daily Mixes, Discover Weekly, Release Radar). DEFERRED ~3s so
   //    the first track + home shelves get priority, and globally throttled (see
   //    ytmusic pipedGet limiter) so it can never starve playback. ──
   useEffect(() => {
-    if (recentlyPlayed.length === 0 && likedTracks.length === 0) return;
+    if (recentlyPlayed.length === 0 && likedTracks.length === 0 && tasteSeeds.length === 0) return;
     let cancelled = false;
     const timer = setTimeout(() => {
       (async () => {
         // Seeds: explicit taste (liked) first, then recent rotation. Unique.
         const seedSeen = new Set<string>();
         const seeds: Track[] = [];
-        for (const t of [...likedTracks, ...recentlyPlayed]) { if (!seedSeen.has(t.id)) { seedSeen.add(t.id); seeds.push(t); } }
+        for (const t of [...likedTracks, ...tasteSeeds, ...recentlyPlayed]) { if (!seedSeen.has(t.id)) { seedSeen.add(t.id); seeds.push(t); } }
         const topSeeds = seeds.slice(0, 8);
         const known = new Set(seeds.map((t) => t.id));
 
@@ -336,7 +361,7 @@ export default function MusicView() {
     }, 3000);
     return () => { cancelled = true; clearTimeout(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [hasTasteSeeds]);
 
   // Debounced search (songs + artists + albums)
   useEffect(() => {
@@ -538,6 +563,7 @@ export default function MusicView() {
 
   return (
     <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
+      {showOnboarding && <SautiOnboarding onComplete={seedFromArtists} onSkip={completeOnboarding} />}
       {/* Living aurora glow — tinted by the most recently played track (spec §1.2.4) */}
       <div aria-hidden className="pointer-events-none absolute -top-10 left-0 right-0 h-64 -z-0 opacity-70"
         style={{ background: `radial-gradient(60% 70% at 12% 0%, ${recentlyPlayed[0]?.dominantColor || 'rgba(245,158,11,0.5)'}, transparent 70%), radial-gradient(50% 60% at 80% 10%, rgba(251,191,36,0.12), transparent 72%)`, filter: 'blur(8px)', transition: 'background 700ms ease' }} />

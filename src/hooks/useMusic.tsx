@@ -49,6 +49,12 @@ interface MusicCtx {
   // Library
   playlists: Playlist[];
   recentlyPlayed: Track[];
+  // Cold-start taste (from first-run onboarding) — seeds the recommender before
+  // there's any listening history, so Sauti is personal from the first open.
+  tasteSeeds: Track[];
+  onboarded: boolean;
+  addTasteSeeds: (tracks: Track[]) => void;
+  completeOnboarding: () => void;
   createPlaylist: (name: string) => string;
   deletePlaylist: (id: string) => void;
   renamePlaylist: (id: string, name: string) => void;
@@ -64,6 +70,8 @@ const Ctx = createContext<MusicCtx | undefined>(undefined);
 const LIKED_KEY = 'sahrae.music.liked.v1';
 const PL_KEY = 'sahrae.music.playlists.v1';
 const RECENT_KEY = 'sahrae.music.recent.v1';
+const SEEDS_KEY = 'sahrae.music.tasteSeeds.v1';
+const ONBOARD_KEY = 'sahrae.music.onboarded.v1';
 const loadLS = <T,>(k: string, fb: T): T => { try { const s = localStorage.getItem(k); return s ? JSON.parse(s) : fb; } catch { return fb; } };
 const saveLS = (k: string, v: unknown) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ } };
 
@@ -116,6 +124,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   });
   const [playlists, setPlaylists] = useState<Playlist[]>(() => loadLS<Playlist[]>(PL_KEY, []));
   const [recentlyPlayed, setRecentlyPlayed] = useState<Track[]>(() => loadLS<Track[]>(RECENT_KEY, []));
+  const [tasteSeeds, setTasteSeeds] = useState<Track[]>(() => loadLS<Track[]>(SEEDS_KEY, []));
+  const [onboarded, setOnboarded] = useState<boolean>(() => loadLS<boolean>(ONBOARD_KEY, false));
   const [addSheetTrack, setAddSheetTrack] = useState<Track | null>(null);
 
   const current = queue[index] || null;
@@ -151,6 +161,19 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const removeFromPlaylist = (id: string, trackId: string) => setPlaylists((prev) => { const n = prev.map((p) => (p.id === id ? { ...p, tracks: p.tracks.filter((t) => t.id !== trackId) } : p)); saveLS(PL_KEY, n); return n; });
   const openAddSheet = (t: Track) => setAddSheetTrack(t);
   const closeAddSheet = () => setAddSheetTrack(null);
+
+  // Merge onboarding / discovery picks into the taste-seed pool (deduped, capped).
+  const addTasteSeeds = (tracks: Track[]) => {
+    setTasteSeeds((prev) => {
+      const seen = new Set(prev.map((t) => t.id));
+      const merged = [...prev];
+      for (const t of tracks) { if (t && !seen.has(t.id)) { seen.add(t.id); merged.push(t); } }
+      const capped = merged.slice(0, 40);
+      saveLS(SEEDS_KEY, capped);
+      return capped;
+    });
+  };
+  const completeOnboarding = () => { setOnboarded(true); saveLS(ONBOARD_KEY, true); };
 
   // ── transport (fresh closures kept on refs so the YT callbacks see latest state) ──
   const next = () => {
@@ -564,7 +587,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         playQueue, addToQueue, playNext, startRadio, removeFromQueue, jumpTo,
         toggle, stop, next, prev, seek, setRate, toggleShuffle, cycleRepeat, toggleLike, isLiked,
         likedTracks, setExpanded,
-        playlists, recentlyPlayed, createPlaylist, deletePlaylist, renamePlaylist, addToPlaylist, removeFromPlaylist,
+        playlists, recentlyPlayed, tasteSeeds, onboarded, addTasteSeeds, completeOnboarding,
+        createPlaylist, deletePlaylist, renamePlaylist, addToPlaylist, removeFromPlaylist,
         addSheetTrack, openAddSheet, closeAddSheet,
       }}
     >
