@@ -81,8 +81,10 @@ import org.json.JSONObject;
  *       host set. The most common popup technique is `top.location = ad`;
  *       this blocks it cold no matter which ad host is targeted.
  *
- *  L3 — Popup window refusal: WebChromeClient.onCreateWindow returns false
- *       so JS-initiated `window.open()` never spawns a new window.
+ *  L3 — Popup arbitration: WebChromeClient.onCreateWindow refuses popups that
+ *       have no user gesture (ad popunders); a real user-gesture popup (the
+ *       download provider's download button) is routed to the external browser
+ *       instead of spawning an in-app window.
  *
  *  L4 — JS shim injection on the top frame: when our React app finishes
  *       loading, we override window.open / location setters so even
@@ -977,6 +979,21 @@ public class MainActivity extends BridgeActivity {
      * and hand the rewritten document back to the WebView. Returns null to fall
      * back to normal loading for anything that isn't a plain HTML document.
      */
+    /** Open a URL in the external browser (Chrome), where downloads work
+     *  reliably and land in the device's public Downloads. */
+    private void openExternalUrl(String url) {
+        if (url == null) return;
+        final String u = url.trim();
+        if (!(u.startsWith("http://") || u.startsWith("https://"))) return;
+        runOnUiThread(() -> {
+            try {
+                android.content.Intent i = new android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(u));
+                i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(i);
+            } catch (Throwable ignore) {}
+        });
+    }
+
     private WebResourceResponse maybeRewriteEmbedHtml(WebResourceRequest request, String host) {
         HttpURLConnection conn = null;
         try {
@@ -1270,22 +1287,10 @@ public class MainActivity extends BridgeActivity {
                             DownloadStore.setPendingTitle(request.getUrl().getQueryParameter("t"));
                             return DownloadStore.json("{\"ok\":true}");
                         } else if (path.startsWith("/__openext")) {
-                            // Open a URL in the EXTERNAL browser (Chrome). The download
-                            // screen uses this so a provider's download button works even
-                            // when it relies on a popup / blob link — the in-app WebView
-                            // refuses popups app-wide as an ad defense, so Chrome (which
-                            // handles every download mechanism and saves to Downloads) is
-                            // the reliable path.
-                            final String ext = request.getUrl().getQueryParameter("url");
-                            if (ext != null && (ext.startsWith("http://") || ext.startsWith("https://"))) {
-                                runOnUiThread(() -> {
-                                    try {
-                                        android.content.Intent i = new android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(ext));
-                                        i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
-                                        startActivity(i);
-                                    } catch (Throwable ignore) {}
-                                });
-                            }
+                            // Open a URL in the EXTERNAL browser (Chrome) — the download
+                            // screen + in-app download popups use this, since Chrome
+                            // handles every download mechanism and saves to Downloads.
+                            openExternalUrl(request.getUrl().getQueryParameter("url"));
                             return AudioFx.ok();
                         }
                     }
@@ -1359,7 +1364,38 @@ public class MainActivity extends BridgeActivity {
             @Override
             public boolean onCreateWindow(WebView view, boolean isDialog,
                                           boolean isUserGesture, Message resultMsg) {
-                return false;
+                // Ad / auto popups (no user gesture) stay refused — the ad-block guarantee.
+                if (!isUserGesture) return false;
+                // A DELIBERATE tap that opens a new window (e.g. the download
+                // provider's download button) — capture its target URL with a
+                // throwaway WebView and open it in the external browser (Chrome),
+                // where downloads work and land in the device Downloads. This never
+                // spawns an in-app popup window, so the ad surface stays closed.
+                try {
+                    final WebView tmp = new WebView(view.getContext());
+                    tmp.getSettings().setJavaScriptEnabled(true);
+                    final boolean[] handled = { false };
+                    final Runnable kill = () -> { try { tmp.stopLoading(); tmp.destroy(); } catch (Throwable ignore) {} };
+                    tmp.setWebViewClient(new WebViewClient() {
+                        private void route(String u) {
+                            if (handled[0]) return;
+                            if (u != null && u.startsWith("http")) { handled[0] = true; openExternalUrl(u); tmp.post(kill); }
+                        }
+                        @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest req) {
+                            route(req.getUrl() != null ? req.getUrl().toString() : null);
+                            return true;
+                        }
+                        @Override public void onPageStarted(WebView v, String u, android.graphics.Bitmap f) { route(u); }
+                    });
+                    tmp.setDownloadListener((u, ua, cd, mt, len) -> { if (!handled[0]) { handled[0] = true; openExternalUrl(u); } tmp.post(kill); });
+                    tmp.postDelayed(kill, 20000); // never leak the throwaway WebView
+                    WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
+                    transport.setWebView(tmp);
+                    resultMsg.sendToTarget();
+                    return true;
+                } catch (Throwable t) {
+                    return false;
+                }
             }
 
             // ── Kill the embeds' JS dialog spam.
@@ -1424,7 +1460,11 @@ public class MainActivity extends BridgeActivity {
         // ── L5 — low-level lockdown
         webView.getSettings().setAllowFileAccessFromFileURLs(false);
         webView.getSettings().setAllowUniversalAccessFromFileURLs(false);
-        webView.getSettings().setSupportMultipleWindows(false);
+        // Allow multiple windows so onCreateWindow fires for real user-gesture
+        // popups (the download provider's download button) — we route those to the
+        // external browser. JS still can't auto-open windows (no gesture), so ad
+        // popunders stay blocked (onCreateWindow also refuses non-gesture popups).
+        webView.getSettings().setSupportMultipleWindows(true);
         webView.getSettings().setJavaScriptCanOpenWindowsAutomatically(false);
         webView.getSettings().setSafeBrowsingEnabled(true);
 
