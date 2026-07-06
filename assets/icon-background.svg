@@ -1,10 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <title>Sahrae Entertainment — Adaptive Background</title>
+  <title>Sahrae Entertainment — Adaptive Background (dawn sky + sun)</title>
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#1b1b20"/>
-      <stop offset="1" stop-color="#0a0a0c"/>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#141329"/><stop offset="0.32" stop-color="#352a4d"/>
+      <stop offset="0.5" stop-color="#8a4a54"/><stop offset="0.63" stop-color="#e07d3c"/>
+      <stop offset="0.72" stop-color="#ffc673"/><stop offset="1" stop-color="#ffe0a0"/>
     </linearGradient>
+    <radialGradient id="bloom" cx="0.5" cy="0.5" r="0.45">
+      <stop offset="0" stop-color="#fff2cf" stop-opacity="0.95"/><stop offset="0.28" stop-color="#ffcf7a" stop-opacity="0.55"/>
+      <stop offset="0.6" stop-color="#f59e0b" stop-opacity="0.14"/><stop offset="1" stop-color="#f59e0b" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="sunDisc" cx="0.5" cy="0.45" r="0.6">
+      <stop offset="0" stop-color="#fff8e6"/><stop offset="0.5" stop-color="#ffd678"/><stop offset="1" stop-color="#f6a52a"/>
+    </radialGradient>
+    <linearGradient id="duneFar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e9b57f"/><stop offset="1" stop-color="#cd9058"/></linearGradient>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="26"/></filter>
   </defs>
-  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <rect width="1024" height="1024" fill="url(#sky)"/>
+  <ellipse cx="512" cy="565" rx="820" ry="70" fill="#ffcf82" opacity="0.4" filter="url(#soft)"/>
+  <rect width="1024" height="1024" fill="url(#bloom)"/>
+  <circle cx="512" cy="512" r="112" fill="url(#sunDisc)"/>
+  <path d="M -30 556 C 220 528 420 540 560 548 C 760 558 900 540 1054 556 L 1054 640 L -30 640 Z" fill="url(#duneFar)" opacity="0.9"/>
+  <rect x="-30" y="536" width="1084" height="66" fill="#ffd18a" opacity="0.16" filter="url(#soft)"/>
+  <!-- Fill below the far dune so parallax never reveals a bright sliver under the foreground dunes -->
+  <rect x="-30" y="600" width="1084" height="484" fill="#6e4526"/>
 </svg>

@@ -1,17 +1,37 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <title>Sahrae Entertainment — App Icon</title>
+  <title>Sahrae Entertainment — App Icon (desert dawn)</title>
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#1b1b20"/>
-      <stop offset="1" stop-color="#0a0a0c"/>
+    <clipPath id="sq"><rect width="1024" height="1024" rx="228"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#141329"/><stop offset="0.32" stop-color="#352a4d"/>
+      <stop offset="0.5" stop-color="#8a4a54"/><stop offset="0.63" stop-color="#e07d3c"/>
+      <stop offset="0.72" stop-color="#ffc673"/><stop offset="1" stop-color="#ffe0a0"/>
     </linearGradient>
-    <linearGradient id="gold" x1="0.2" y1="0.05" x2="0.8" y2="0.95">
-      <stop offset="0" stop-color="#fcd34d"/>
-      <stop offset="1" stop-color="#f59e0b"/>
-    </linearGradient>
+    <radialGradient id="bloom" cx="0.5" cy="0.5" r="0.45">
+      <stop offset="0" stop-color="#fff2cf" stop-opacity="0.95"/><stop offset="0.28" stop-color="#ffcf7a" stop-opacity="0.55"/>
+      <stop offset="0.6" stop-color="#f59e0b" stop-opacity="0.14"/><stop offset="1" stop-color="#f59e0b" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="sunDisc" cx="0.5" cy="0.45" r="0.6">
+      <stop offset="0" stop-color="#fff8e6"/><stop offset="0.5" stop-color="#ffd678"/><stop offset="1" stop-color="#f6a52a"/>
+    </radialGradient>
+    <linearGradient id="duneFar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e9b57f"/><stop offset="1" stop-color="#cd9058"/></linearGradient>
+    <linearGradient id="duneMid" x1="0.3" y1="0" x2="0.6" y2="1"><stop offset="0" stop-color="#e3aa62"/><stop offset="0.5" stop-color="#b47a3e"/><stop offset="1" stop-color="#6e4526"/></linearGradient>
+    <linearGradient id="duneNear" x1="0.35" y1="0" x2="0.55" y2="1"><stop offset="0" stop-color="#7a5230"/><stop offset="0.5" stop-color="#4a3018"/><stop offset="1" stop-color="#241608"/></linearGradient>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="26"/></filter>
   </defs>
-  <rect width="1024" height="1024" rx="228" fill="url(#bg)"/>
-  <path transform="translate(32 57)"
-    d="M 720 320 C 720 240 640 190 530 190 L 430 190 C 320 190 240 250 240 360 C 240 450 310 500 420 520 L 540 540 C 620 555 660 580 660 620 C 660 680 590 720 480 720 L 320 720"
-    fill="none" stroke="url(#gold)" stroke-width="152" stroke-linecap="round" stroke-linejoin="round"/>
+  <g clip-path="url(#sq)">
+    <rect width="1024" height="1024" fill="url(#sky)"/>
+    <ellipse cx="512" cy="565" rx="820" ry="70" fill="#ffcf82" opacity="0.4" filter="url(#soft)"/>
+    <rect width="1024" height="1024" fill="url(#bloom)"/>
+    <circle cx="512" cy="512" r="112" fill="url(#sunDisc)"/>
+    <path d="M -30 556 C 220 528 420 540 560 548 C 760 558 900 540 1054 556 L 1054 640 L -30 640 Z" fill="url(#duneFar)" opacity="0.9"/>
+    <rect x="-30" y="536" width="1084" height="66" fill="#ffd18a" opacity="0.16" filter="url(#soft)"/>
+    <path d="M -30 604 C 200 556 430 566 566 574 C 770 584 900 566 1054 598 L 1054 720 L -30 720 Z" fill="url(#duneMid)"/>
+    <path d="M -30 604 C 200 556 430 566 566 574 C 770 584 900 566 1054 598" fill="none" stroke="#ffe6ad" stroke-width="4" opacity="0.7"/>
+    <path d="M -30 712 C 180 640 430 656 566 672 C 770 694 880 706 1054 694 L 1054 1054 L -30 1054 Z" fill="url(#duneNear)"/>
+    <path d="M -30 712 C 180 640 430 656 566 672 C 770 694 880 706 1054 694" fill="none" stroke="#c98c4e" stroke-width="3.5" opacity="0.55"/>
+    <g stroke="#3a2512" stroke-width="3" opacity="0.32" fill="none">
+      <path d="M 120 802 C 320 772 520 780 720 802"/><path d="M 80 884 C 340 856 560 864 800 888"/><path d="M 210 952 C 430 930 600 936 820 958"/>
+    </g>
+  </g>
 </svg>
