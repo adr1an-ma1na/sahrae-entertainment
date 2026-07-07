@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import Hls from 'hls.js';
 import { X, Maximize, Search, Heart, RadioTower, Loader2, WifiOff } from 'lucide-react';
+import Coachmark from './Coachmark';
 
 interface Channel { name: string; country: string; category: Category; url: string; kind?: 'hls' | 'yt' }
 type Category = 'News' | 'Regional' | 'Sports' | 'Documentary' | 'Science' | 'Music' | 'Kids' | 'Lifestyle';
@@ -249,6 +250,8 @@ export default function LiveTVView() {
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search channels…" className="w-full glass rounded-full pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none" />
         </div>
       </div>
+
+      <Coachmark id="livetv" text="Tap any channel to start watching. The news channels stream live 24/7." />
 
       {/* Categories */}
       <div className="flex overflow-x-auto gap-2 pb-2 mb-8 scrollbar-hide">

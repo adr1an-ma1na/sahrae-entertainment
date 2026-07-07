@@ -6,6 +6,7 @@ import { useMusic } from '../hooks/useMusic';
 import { CoverArt } from './ui/CoverArt';
 import SautiOnboarding from './SautiOnboarding';
 import ListenTabs from './ListenTabs';
+import Coachmark from './Coachmark';
 
 const fmt = (s: number) => {
   if (!s || !isFinite(s)) return '0:00';
@@ -593,6 +594,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
 
       {tab === 'home' ? (
         <>
+          <Coachmark id="sauti" text="Long-press any song for Radio, Play next, Queue and Download." />
           <div className="relative mb-5 max-w-lg">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search songs, artists, albums…" className="w-full bg-zinc-900/70 border border-white/10 rounded-full pl-10 pr-4 py-3 text-sm text-white focus:outline-none focus:border-amber-500/60" />

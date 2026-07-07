@@ -27,7 +27,7 @@ import MusicView from './components/MusicView';
 import DownloadsView from './components/DownloadsView';
 import MusicPlayer from './components/MusicPlayer';
 import AddToPlaylistSheet from './components/AddToPlaylistSheet';
-import { ChevronDown, AlertCircle, RefreshCw } from 'lucide-react';
+import { ChevronDown, AlertCircle, RefreshCw, Heart } from 'lucide-react';
 import { fetchTrending, fetchDiscover, searchMedia, fetchGenres, fetchRecommendations, MediaItem, Genre } from './services/tmdb';
 import { useMyList } from './hooks/useMyList';
 import { useWatchProgress } from './hooks/useWatchProgress';
@@ -36,6 +36,8 @@ import { useAuth } from './hooks/useAuth';
 import { haptics } from './services/haptics';
 import SplashIntro from './components/SplashIntro';
 import Onboarding, { TasteGenre } from './components/Onboarding';
+import EmptyState from './components/EmptyState';
+import Coachmark from './components/Coachmark';
 import { applyEq, loadEq } from './services/eq';
 
 export default function App() {
@@ -422,6 +424,7 @@ export default function App() {
           <>
             <Hero item={heroItem} onPlay={handlePlay} />
             <div className="-mt-16 relative z-10 pb-12">
+              <div className="px-4 md:px-12"><Coachmark id="home" text="Press Play on any title to start — or tap a poster for details, trailers & episodes." /></div>
               <Top10Row items={trending} onPlay={handlePlay} />
               {forYou.length > 0 && <MediaRow title={`For You · ${tasteGenres[0]?.name}`} items={forYou} onPlay={handlePlay} defaultType="movie" isLoading={loading} />}
               <Top10Row items={trendingSeries} onPlay={handlePlay} title="Top 10 Series Today" />
@@ -444,9 +447,15 @@ export default function App() {
       case 'channels':
         return <FlowChannelsView onPlay={handlePlay} />;
       case 'mylist':
-        return <MediaGrid title="My List" items={myList} onPlay={handlePlay} onRemove={toggleMyList} />;
+        return myList.length === 0 ? (
+          <EmptyState icon={Heart} title="Your list is empty"
+            message="Tap the ♥ on any movie or show to save it here and watch it later."
+            actionLabel="Browse movies" onAction={() => navigate('movies')} />
+        ) : (
+          <MediaGrid title="My List" items={myList} onPlay={handlePlay} onRemove={toggleMyList} />
+        );
       case 'continue':
-        return <ContinueWatchingView onPlay={handlePlay} />;
+        return <ContinueWatchingView onPlay={handlePlay} onBrowse={() => navigate('movies')} />;
       case 'search':
         return (
           <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto pb-12">

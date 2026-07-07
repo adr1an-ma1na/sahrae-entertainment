@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Trophy, Play, X, Maximize, Loader2, Radio, Tv, Clapperboard, CalendarClock, Search } from 'lucide-react';
 import Hls from 'hls.js';
 import { haptics } from '../services/haptics';
+import Coachmark from './Coachmark';
 
 /**
  * Live Sports.
@@ -605,6 +606,8 @@ export default function SportsView() {
           ))}
         </div>
       </div>
+
+      <Coachmark id="sports" text="Tap any event — a reliable channel plays instantly while the exact match servers load. Switch servers any time." />
 
       {tab === 'channels' ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">

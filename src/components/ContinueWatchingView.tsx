@@ -1,25 +1,21 @@
 import { Play, Trash2 } from 'lucide-react';
 import { MediaItem, getImageUrl } from '../services/tmdb';
 import { useWatchProgress } from '../hooks/useWatchProgress';
+import EmptyState from './EmptyState';
 
 interface ContinueWatchingViewProps {
   onPlay: (id: number, type: 'movie' | 'tv', startInInfo?: boolean, playTrailer?: boolean, season?: number, episode?: number) => void;
+  onBrowse?: () => void;
 }
 
-export default function ContinueWatchingView({ onPlay }: ContinueWatchingViewProps) {
+export default function ContinueWatchingView({ onPlay, onBrowse }: ContinueWatchingViewProps) {
   const { progress, removeProgress } = useWatchProgress();
 
   if (progress.length === 0) {
     return (
-      <div className="min-h-[60vh] flex flex-col items-center justify-center text-center px-4 pt-24">
-        <div className="w-24 h-24 bg-zinc-900 rounded-full flex items-center justify-center mb-6">
-          <Play className="w-10 h-10 text-zinc-600 ml-2" />
-        </div>
-        <h2 className="text-2xl font-bold text-white mb-2">Nothing to continue</h2>
-        <p className="text-zinc-400 max-w-md">
-          Movies and TV shows you start watching will appear here so you can easily pick up where you left off.
-        </p>
-      </div>
+      <EmptyState icon={Play} title="Nothing to continue — yet"
+        message="Movies and shows you start watching show up here, so you can pick up right where you left off."
+        actionLabel={onBrowse ? 'Find something to watch' : undefined} onAction={onBrowse} />
     );
   }
 
