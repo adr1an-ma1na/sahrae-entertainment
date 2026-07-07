@@ -35,6 +35,7 @@ import { useTheme } from './hooks/useTheme';
 import { useAuth } from './hooks/useAuth';
 import { haptics } from './services/haptics';
 import SplashIntro from './components/SplashIntro';
+import Onboarding, { TasteGenre } from './components/Onboarding';
 import { applyEq, loadEq } from './services/eq';
 
 export default function App() {
@@ -88,6 +89,15 @@ export default function App() {
   }>({ isOpen: false, mediaId: null, mediaType: null, startInInfo: false });
 
   const [initialLoadError, setInitialLoadError] = useState<boolean>(false);
+
+  // First-launch onboarding + the taste it captures (feeds a personalised Home row).
+  const [appOnboarded, setAppOnboarded] = useState<boolean>(() => { try { return localStorage.getItem('sahrae.onboarded.v1') === '1'; } catch { return true; } });
+  const [tasteGenres, setTasteGenres] = useState<TasteGenre[]>(() => { try { return JSON.parse(localStorage.getItem('sahrae.taste.genres.v1') || '[]'); } catch { return []; } });
+  const [forYou, setForYou] = useState<MediaItem[]>([]);
+  const finishOnboarding = (genres: TasteGenre[]) => {
+    try { localStorage.setItem('sahrae.onboarded.v1', '1'); localStorage.setItem('sahrae.taste.genres.v1', JSON.stringify(genres)); } catch { /* ignore */ }
+    setTasteGenres(genres); setAppOnboarded(true);
+  };
 
   const handleClosePlayer = useCallback(() => {
     setPlayerConfig({ isOpen: false, mediaId: null, mediaType: null, startInInfo: false });
@@ -155,6 +165,13 @@ export default function App() {
   useEffect(() => {
     loadInitialData();
   }, []);
+
+  // Personalised Home row from the onboarding taste (top picked genre).
+  useEffect(() => {
+    const g = tasteGenres[0]?.id;
+    if (!g) { setForYou([]); return; }
+    fetchDiscover('movie', 1, g, 'popularity.desc').then(setForYou).catch(() => {});
+  }, [tasteGenres]);
 
   // Re-apply the saved equalizer to the native global audio effects on launch.
   useEffect(() => { applyEq(loadEq()); }, []);
@@ -406,6 +423,7 @@ export default function App() {
             <Hero item={heroItem} onPlay={handlePlay} />
             <div className="-mt-16 relative z-10 pb-12">
               <Top10Row items={trending} onPlay={handlePlay} />
+              {forYou.length > 0 && <MediaRow title={`For You · ${tasteGenres[0]?.name}`} items={forYou} onPlay={handlePlay} defaultType="movie" isLoading={loading} />}
               <Top10Row items={trendingSeries} onPlay={handlePlay} title="Top 10 Series Today" />
               {recommendations && recommendations.items.length > 0 && (
                 <MediaRow title={`Because you watched ${recommendations.basedOn}`} items={recommendations.items} onPlay={handlePlay} isLoading={loading} />
@@ -544,6 +562,7 @@ export default function App() {
     return (
       <div className="aurora-bg isolate min-h-screen text-zinc-50 font-sans selection:bg-amber-500/30 transition-colors duration-300">
         <SplashIntro />
+        {!appOnboarded && <Onboarding onDone={finishOnboarding} />}
         {/* Ambient cinematic glow field — viewport-fixed, above the base canvas
             but behind all content (root is `isolate` so -z stays contained). */}
         <div className="aurora-glow pointer-events-none fixed inset-0 -z-10" aria-hidden="true" />
