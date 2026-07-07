@@ -12,6 +12,7 @@ import Top10Row from './components/Top10Row';
 import MediaGrid from './components/MediaGrid';
 import PlayerModal from './components/PlayerModal';
 import AudioHubView from './components/AudioHubView';
+import PodcastsView from './components/PodcastsView';
 import LiveTVView from './components/LiveTVView';
 import SportsView from './components/SportsView';
 import ContinueWatchingView from './components/ContinueWatchingView';
@@ -504,9 +505,11 @@ export default function App() {
           </div>
         );
       case 'audio':
-        return <AudioHubView />;
+        return <AudioHubView onNav={navigate} />;
       case 'music':
-        return <MusicView />;
+        return <MusicView onNav={navigate} />;
+      case 'podcasts':
+        return <PodcastsView onNav={navigate} />;
       case 'downloads':
         return <DownloadsView />;
       case 'tv':

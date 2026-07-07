@@ -5,6 +5,7 @@ import { buildMix, diverseSample } from '../services/recommend';
 import { useMusic } from '../hooks/useMusic';
 import { CoverArt } from './ui/CoverArt';
 import SautiOnboarding from './SautiOnboarding';
+import ListenTabs from './ListenTabs';
 
 const fmt = (s: number) => {
   if (!s || !isFinite(s)) return '0:00';
@@ -189,7 +190,7 @@ function greeting(): string {
   return 'Good night';
 }
 
-export default function MusicView() {
+export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) {
   const { playQueue, likedTracks, playlists, recentlyPlayed: rawRecent, tasteSeeds, onboarded, addTasteSeeds, completeOnboarding, createPlaylist, deletePlaylist, removeFromPlaylist, openAddSheet } = useMusic();
   // Sauti is music only — podcasts play through the shared engine, so strip them
   // from every recently-played-derived shelf, pill, mix, and the header gradient.
@@ -570,6 +571,7 @@ export default function MusicView() {
       {/* Living aurora glow — tinted by the most recently played track (spec §1.2.4) */}
       <div aria-hidden className="pointer-events-none absolute -top-10 left-0 right-0 h-64 -z-0 opacity-70"
         style={{ background: `radial-gradient(60% 70% at 12% 0%, ${recentlyPlayed[0]?.dominantColor || 'rgba(245,158,11,0.5)'}, transparent 70%), radial-gradient(50% 60% at 80% 10%, rgba(251,191,36,0.12), transparent 72%)`, filter: 'blur(8px)', transition: 'background 700ms ease' }} />
+      <div className="relative"><ListenTabs active="music" onNav={onNav ?? (() => {})} /></div>
       <div className="relative overline text-sauti mb-1.5">Sauti · sound on Sahrae</div>
       <div className="relative flex items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-3">

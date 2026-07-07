@@ -1,4 +1,4 @@
-import { Home, Search, Music2, Radio, Film, Tv2, Clapperboard, Trophy, Heart, Clock, Download, Library, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Home, Search, Headphones, Radio, Film, Tv2, Clapperboard, Trophy, Heart, Clock, Download, Library, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
 /**
  * Left navigation, grouped Watch / Listen / Library.
@@ -20,9 +20,11 @@ const WATCH = [
   { id: 'channels', label: 'Flow Channels', icon: Clapperboard },
 ];
 const LISTEN = [
-  { id: 'music', label: 'Sauti', icon: Music2 },
-  { id: 'audio', label: 'Radio', icon: Radio },
+  { id: 'music', label: 'Listen', icon: Headphones },
 ];
+// The single "Listen" entry stays highlighted for any audio destination
+// (Music / Podcasts / Radio all live inside the Listen hub).
+const AUDIO_TABS = ['music', 'podcasts', 'audio'];
 const LIBRARY = [
   { id: 'mylist', label: 'My List', icon: Heart },
   { id: 'continue', label: 'Continue Watching', icon: Clock },
@@ -35,7 +37,7 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
   const renderNav = (items: NavItem[]) =>
     items.map((t) => {
       const Icon = t.icon;
-      const active = activeTab === t.id;
+      const active = t.id === 'music' ? AUDIO_TABS.includes(activeTab) : activeTab === t.id;
       return (
         <button key={t.id} onClick={() => setActiveTab(t.id)} tabIndex={0} data-tv-focusable
           className={`w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all focus:outline-none ${

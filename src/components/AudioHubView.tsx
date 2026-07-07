@@ -1,10 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Play, Pause, Radio, Headphones, Mic2, Signal } from 'lucide-react';
+import { useState } from 'react';
+import { Play, Pause, Radio, Signal } from 'lucide-react';
 import { useRadio } from '../hooks/useRadio';
-import { probeAudio, probeAll } from '../services/streamHealth';
-import PodcastsHome from './PodcastsHome';
-
-type Health = 'checking' | 'ok' | 'dead';
+import ListenTabs from './ListenTabs';
 
 const STATIONS = [
   // ── Kenya (all verified working) ──
@@ -65,30 +62,16 @@ function EqBars({ className = 'h-6', bar = 'bg-white' }: { className?: string; b
   );
 }
 
-export default function AudioHubView() {
+export default function AudioHubView({ onNav }: { onNav?: (tab: string) => void }) {
   const [radioCategory, setRadioCategory] = useState<string>('All');
   const { playingUrl, togglePlay } = useRadio();
 
-  // Stations | Podcasts toggle (Podcasts is the rich PodcastsHome component).
-  const [media, setMedia] = useState<'stations' | 'podcasts'>('stations');
-
-  // On-device health: probe every station on the user's real network and hide
-  // any that won't play. Dead ones hide only once ≥1 station has verified, so a
-  // probe-hostile network never blanks the whole list.
-  const [health, setHealth] = useState<Record<string, Health>>(() => Object.fromEntries(STATIONS.map((s) => [s.url, 'checking' as Health])));
-  useEffect(() => {
-    let cancelled = false;
-    probeAll(STATIONS, (s) => s.url, (s) => probeAudio(s.url), (url, ok) => {
-      if (!cancelled) setHealth((h) => ({ ...h, [url]: ok ? 'ok' : 'dead' }));
-    }, 4);
-    return () => { cancelled = true; };
-  }, []);
-  const probingWorks = useMemo(() => Object.values(health).some((v) => v === 'ok'), [health]);
-  const alive = (s: { url: string }) => !(probingWorks && health[s.url] === 'dead');
-
-  const liveStations = STATIONS.filter(alive);
-  const radioCategories = ['All', ...Array.from(new Set(liveStations.map((s) => s.category)))].sort();
-  const filteredStations = (radioCategory === 'All' ? liveStations : liveStations.filter((s) => s.category === radioCategory));
+  // Show EVERY station, always. A previous on-device health probe hid any station
+  // that didn't answer its probe — but the probe throws false negatives on many
+  // networks, so good stations silently vanished. A listed station that's
+  // genuinely down just shows the player's offline state; nothing is ever dropped.
+  const radioCategories = ['All', ...Array.from(new Set(STATIONS.map((s) => s.category)))].sort();
+  const filteredStations = (radioCategory === 'All' ? STATIONS : STATIONS.filter((s) => s.category === radioCategory));
   const nowPlaying = STATIONS.find((s) => s.url === playingUrl) || null;
 
   return (
@@ -96,29 +79,20 @@ export default function AudioHubView() {
       {/* Aurora glow behind the header — warms to the now-playing station's colour */}
       <div aria-hidden className="pointer-events-none absolute -top-10 left-0 right-0 h-64 -z-10 opacity-70"
         style={{ background: 'radial-gradient(60% 70% at 12% 0%, rgba(245,158,11,0.22), transparent 70%), radial-gradient(50% 60% at 80% 10%, rgba(251,191,36,0.12), transparent 72%)', filter: 'blur(8px)' }} />
-      {/* Header — same premium pattern as every other Sahrae section */}
-      <div className="overline mb-1.5">Sahrae · Radio</div>
+      {/* Header */}
+      <div className="overline mb-1.5">Sahrae · Listen</div>
       <div className="flex items-center gap-3 mb-6">
         <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-300 via-amber-500 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/25">
-          <Headphones className="w-6 h-6 text-white" />
+          <Radio className="w-6 h-6 text-white" />
         </div>
         <div>
           <h2 className="text-3xl font-display font-bold text-white leading-tight tracking-tight">Radio</h2>
-          <p className="text-sm text-zinc-400">Live stations · podcasts · news · music</p>
+          <p className="text-sm text-zinc-400">Live stations · news · music</p>
         </div>
       </div>
 
-      {/* Media type tabs */}
-      <div className="flex gap-1 glass p-1 rounded-xl w-fit mb-6">
-        {(['stations', 'podcasts'] as const).map((t) => (
-          <button key={t} onClick={() => setMedia(t)} tabIndex={0} data-tv-focusable
-            className={`px-5 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2 ${media === t ? 'bg-sauti text-amber-950' : 'text-zinc-400 hover:text-white'}`}>
-            {t === 'stations' ? <><Radio className="w-4 h-4" /> Stations</> : <><Mic2 className="w-4 h-4" /> Podcasts</>}
-          </button>
-        ))}
-      </div>
+      <ListenTabs active="audio" onNav={onNav ?? (() => {})} />
 
-      {media === 'stations' ? (
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
         {/* ── Now-playing banner — the station's colour, an equalizer, and a big pause ── */}
         {nowPlaying && (
@@ -212,9 +186,6 @@ export default function AudioHubView() {
           })}
         </div>
       </div>
-      ) : (
-        <PodcastsHome />
-      )}
     </div>
   );
 }
