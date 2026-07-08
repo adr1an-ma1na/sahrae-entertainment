@@ -783,9 +783,12 @@ html.tv-mode .card-lift:hover,
 html.tv-mode .card-lift:focus-visible,
 html.tv-mode .card-lift:focus-within { transform: none !important; box-shadow: none !important; }
 
-/* 2) Always show the full LABELLED sidebar on TV (never the icon-only rail),
-      and shift the shell + navbar to match, so users read every feature. */
+/* 2) Show the full LABELLED sidebar on TV (never the icon-only rail), and shift
+      the shell + navbar to match — but ONLY while the user hasn't hidden it.
+      The `:not(.nav-collapsed)` guard is essential: without it, tv-mode forces
+      the offset back and "hide sidebar" can't reclaim the width (goes fullscreen
+      as expected once collapsed). */
 html.tv-mode .tv-rail { display: none !important; }
-html.tv-mode .tv-full { display: flex !important; transform: none !important; }
-html.tv-mode .tv-shell { padding-left: 16rem !important; }
-html.tv-mode .tv-navbar { left: 16rem !important; }
+html.tv-mode:not(.nav-collapsed) .tv-full { display: flex !important; transform: none !important; }
+html.tv-mode:not(.nav-collapsed) .tv-shell { padding-left: 16rem !important; }
+html.tv-mode:not(.nav-collapsed) .tv-navbar { left: 16rem !important; }
