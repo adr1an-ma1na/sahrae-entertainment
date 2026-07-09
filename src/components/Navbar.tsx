@@ -75,7 +75,7 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
       <div className="px-4 md:px-12 py-4 flex items-center justify-between">
         <div className="flex items-center gap-8 md:gap-12 min-w-0 flex-1">
           <h1
-            className="text-2xl md:text-3xl font-black tracking-tighter cursor-pointer whitespace-nowrap shrink-0 lg:hidden"
+            className={`text-2xl md:text-3xl font-black tracking-tighter cursor-pointer whitespace-nowrap shrink-0 lg:hidden ${isSearchOpen ? 'hidden' : ''}`}
             onClick={() => setActiveTab('home')}
           >
             <span className="text-gold drop-shadow-[0_1px_8px_rgba(245,158,11,0.25)]">SAHRAE</span> <span className="text-white font-light text-xl md:text-2xl tracking-normal hidden sm:inline-block">ENTERTAINMENT</span>

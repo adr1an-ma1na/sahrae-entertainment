@@ -92,12 +92,20 @@ export default function App() {
 
   const [initialLoadError, setInitialLoadError] = useState<boolean>(false);
 
-  // First-launch onboarding + the taste it captures (feeds a personalised Home row).
-  const [appOnboarded, setAppOnboarded] = useState<boolean>(() => { try { return localStorage.getItem('sahrae.onboarded.v1') === '1'; } catch { return true; } });
+  // Onboarding is per-ACCOUNT (keyed by uid), not per-device, so a newly
+  // registered user always gets it even on a device someone else already
+  // onboarded. Guests fall back to the shared device flag.
+  const onboardKey = () => { const u = user as any; return u ? `sahrae.onboarded.u.${u.uid || u.id || u.email || 'acct'}` : 'sahrae.onboarded.v1'; };
+  const [appOnboarded, setAppOnboarded] = useState<boolean>(true);
   const [tasteGenres, setTasteGenres] = useState<TasteGenre[]>(() => { try { return JSON.parse(localStorage.getItem('sahrae.taste.genres.v1') || '[]'); } catch { return []; } });
   const [forYou, setForYou] = useState<MediaItem[]>([]);
+  useEffect(() => {
+    if (authLoading) return; // wait until we know who (if anyone) is signed in
+    try { setAppOnboarded(localStorage.getItem(onboardKey()) === '1'); } catch { setAppOnboarded(true); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, authLoading]);
   const finishOnboarding = (genres: TasteGenre[]) => {
-    try { localStorage.setItem('sahrae.onboarded.v1', '1'); localStorage.setItem('sahrae.taste.genres.v1', JSON.stringify(genres)); } catch { /* ignore */ }
+    try { localStorage.setItem(onboardKey(), '1'); localStorage.setItem('sahrae.taste.genres.v1', JSON.stringify(genres)); } catch { /* ignore */ }
     setTasteGenres(genres); setAppOnboarded(true);
   };
 

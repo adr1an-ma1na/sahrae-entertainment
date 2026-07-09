@@ -1,4 +1,4 @@
-import { X, ExternalLink, AlertCircle, Info, Star, Calendar, Clock, Play, RefreshCw, Plus, Check, Maximize, ArrowLeft, SkipBack, SkipForward, ThumbsUp, ThumbsDown, Download } from 'lucide-react';
+import { X, ExternalLink, AlertCircle, Info, Star, Calendar, Clock, Play, RefreshCw, Plus, Check, Maximize, ArrowLeft, SkipBack, SkipForward, ThumbsUp, ThumbsDown, Download, Server } from 'lucide-react';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import ReactPlayer from 'react-player';
 import { fetchMediaDetails, MediaDetails, getImageUrl, fetchSimilar, MediaItem, SeasonDetails, fetchSeasonDetails } from '../services/tmdb';
@@ -376,7 +376,12 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                 )}
                 
                 {/* Floating Top Controls */}
-                <div className={`absolute top-4 right-4 md:right-16 z-20 flex gap-2 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0'}`}>
+                <div className={`absolute top-4 right-4 md:right-16 z-20 flex gap-2 items-center transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0'}`}>
+                  {/* Switch server WHILE watching — the fix for "content isn't available". */}
+                  <select value={selectedServer} onChange={e => setSelectedServer(Number(e.target.value))} data-tv-focusable aria-label="Switch server" title="Switch server if it won't play"
+                    className="bg-black/50 hover:bg-black/80 text-white text-xs font-bold rounded-full px-3 py-1.5 border border-white/20 outline-none cursor-pointer backdrop-blur appearance-none">
+                    {dynamicServers.map((server, idx) => <option key={server.id} value={idx} className="bg-zinc-900 text-white">{`Server ${idx + 1}`}</option>)}
+                  </select>
                   {currentMediaType === 'tv' && currentServerObj.type !== 'youtube' && (
                     <>
                       <button onClick={() => handleSkipEpisode('prev')} disabled={!hasPrevEpisode()} className="p-2 bg-black/50 hover:bg-black/80 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-full transition-colors backdrop-blur border border-white/20" title="Previous Episode"><SkipBack className="w-4 h-4"/></button>
@@ -425,6 +430,14 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       <Download className="w-5 h-5 group-hover:animate-bounce"/>
                       <span className="text-sm">Download</span>
                     </button>
+                    {/* Server picker — right in the action row. If a title won't play, switch here. */}
+                    <div className="relative flex items-center gap-2 px-4 md:px-5 py-2 md:py-3 bg-zinc-900/90 border border-zinc-600/60 rounded text-white shadow-lg hover:bg-zinc-800 transition-colors ml-2" title="Pick a server if it won't play">
+                      <Server className="w-5 h-5 shrink-0" />
+                      <select value={selectedServer} onChange={e => setSelectedServer(Number(e.target.value))} data-tv-focusable aria-label="Choose server"
+                        className="bg-transparent text-white font-bold text-sm outline-none cursor-pointer appearance-none pr-1">
+                        {dynamicServers.map((server, idx) => <option key={server.id} value={idx} className="bg-zinc-900 text-white">{server.name}</option>)}
+                      </select>
+                    </div>
                   </div>
                 </div>
               </>
