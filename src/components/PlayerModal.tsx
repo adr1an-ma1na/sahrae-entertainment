@@ -37,8 +37,15 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const [offlineBlobUrl, setOfflineBlobUrl] = useState<string | null>(null);
   const [showDownload, setShowDownload] = useState(false);
   const [showXRay, setShowXRay] = useState(false);
+  // Loading indicator + slow-load recovery for the video embed.
+  const [videoLoaded, setVideoLoaded] = useState(false);
+  const [loadPct, setLoadPct] = useState(0);
+  const [slowLoad, setSlowLoad] = useState(false);
 
   const hideControlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const loadTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const slowTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const autoRetriedRef = useRef(false);
 
   // Go fullscreen AFTER the embed has loaded and started playing (fired from the
   // iframe's onLoad), not the instant Play is tapped. Tapping Play then waiting
@@ -264,6 +271,30 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     return () => window.removeEventListener('message', handleMessage);
   }, [currentMediaType, details, selectedSeason, selectedEpisode]);
 
+  // Loading indicator + slow-load recovery. We can't read inside the cross-origin
+  // embed, so progress is a smooth simulation that completes when the iframe fires
+  // `load`; after ~12s with no load we surface Reload / Next-server. That's the
+  // in-app fix for the transient "no content available" — a reload usually clears
+  // it, so users don't have to close and reopen the whole app.
+  useEffect(() => {
+    if (!isPlaying) { setVideoLoaded(false); setLoadPct(0); setSlowLoad(false); return; }
+    setVideoLoaded(false); setLoadPct(8); setSlowLoad(false);
+    if (loadTimerRef.current) clearInterval(loadTimerRef.current);
+    if (slowTimerRef.current) clearTimeout(slowTimerRef.current);
+    loadTimerRef.current = setInterval(() => { setLoadPct(p => (p >= 92 ? p : p + Math.max(0.7, (92 - p) * 0.05))); }, 250);
+    // First: silently remount once (the embed 'load' fires fast on any reachable
+    // provider, so no load in ~10s = a real failure — a remount usually fixes it,
+    // like closing/reopening the app). If it STILL fails, show manual recovery.
+    slowTimerRef.current = setTimeout(() => {
+      if (!autoRetriedRef.current) { autoRetriedRef.current = true; setRefreshKey(k => k + 1); }
+      else { setSlowLoad(true); }
+    }, 10000);
+    return () => { if (loadTimerRef.current) clearInterval(loadTimerRef.current); if (slowTimerRef.current) clearTimeout(slowTimerRef.current); };
+  }, [isPlaying, selectedServer, selectedSeason, selectedEpisode, refreshKey]);
+
+  // Reset the one-shot auto-retry when the content or server actually changes.
+  useEffect(() => { autoRetriedRef.current = false; }, [isPlaying, selectedServer, selectedSeason, selectedEpisode]);
+
   const handleMouseMove = () => {
     setShowControls(true);
     if (hideControlsTimeoutRef.current) {
@@ -344,10 +375,32 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                     // Auto-fullscreen once the embed has loaded + autostarted
                     // (media playback no longer needs a separate gesture), so a
                     // single Play tap ends up fullscreen and playing.
-                    onLoad={() => setTimeout(enterFullscreen, 600)}
+                    onLoad={() => { setVideoLoaded(true); setLoadPct(100); if (loadTimerRef.current) clearInterval(loadTimerRef.current); if (slowTimerRef.current) clearTimeout(slowTimerRef.current); setTimeout(enterFullscreen, 600); }}
                     className="w-full h-full absolute inset-0 bg-black"
                     title="Video Player"
                   />
+                )}
+                {/* Netflix-style loading ring + slow-load recovery (Reload / Next server) */}
+                {!videoLoaded && !['m3u8', 'youtube'].includes(currentServerObj?.type || '') && (
+                  <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/85 pointer-events-none">
+                    <div className="relative w-20 h-20">
+                      <svg viewBox="0 0 48 48" className="w-20 h-20 -rotate-90">
+                        <circle cx="24" cy="24" r="20" fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth="4" />
+                        <circle cx="24" cy="24" r="20" fill="none" stroke="#f59e0b" strokeWidth="4" strokeLinecap="round" strokeDasharray={125.66} strokeDashoffset={125.66 * (1 - loadPct / 100)} style={{ transition: 'stroke-dashoffset 0.3s ease' }} />
+                      </svg>
+                      <span className="absolute inset-0 flex items-center justify-center text-white font-bold text-sm">{Math.round(loadPct)}%</span>
+                    </div>
+                    <p className="text-zinc-300 text-sm mt-4 font-medium px-6 text-center max-w-full truncate">Loading {details.title || details.name}…</p>
+                    {slowLoad && (
+                      <div className="pointer-events-auto mt-5 flex flex-col items-center gap-3 px-6">
+                        <p className="text-zinc-400 text-xs text-center max-w-xs">Still loading? Reload, or switch to another server.</p>
+                        <div className="flex gap-2">
+                          <button onClick={() => setRefreshKey(k => k + 1)} data-tv-focusable className="px-4 py-2 bg-white text-black text-sm font-bold rounded-full flex items-center gap-2 active:scale-95"><RefreshCw className="w-4 h-4" /> Reload</button>
+                          <button onClick={() => setSelectedServer(s => (s + 1) % dynamicServers.length)} data-tv-focusable className="px-4 py-2 bg-zinc-800 text-white text-sm font-bold rounded-full flex items-center gap-2 border border-white/15 active:scale-95"><Server className="w-4 h-4" /> Next server</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
                 {isSandboxed && (['vidlink', 'vidsrccc', 'vidfast', 'vidsrcto', 'vidsrcpm', 'vidrock', 'vidsrcicu', 'vidzee'].includes(currentServerObj.id)) && (
                   <div className="absolute top-0 left-0 w-full z-40 bg-[#e50914]/95 text-white text-xs md:text-sm font-bold px-4 py-3 flex flex-col md:flex-row items-center justify-center gap-3 md:gap-4 text-center backdrop-blur shadow-2xl border-b border-white/20 animate-in slide-in-from-top-2">
