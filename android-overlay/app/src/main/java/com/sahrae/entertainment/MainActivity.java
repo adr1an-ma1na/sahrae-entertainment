@@ -81,10 +81,8 @@ import org.json.JSONObject;
  *       host set. The most common popup technique is `top.location = ad`;
  *       this blocks it cold no matter which ad host is targeted.
  *
- *  L3 — Popup arbitration: WebChromeClient.onCreateWindow refuses popups that
- *       have no user gesture (ad popunders); a real user-gesture popup (the
- *       download provider's download button) is routed to the external browser
- *       instead of spawning an in-app window.
+ *  L3 — Popup window refusal: WebChromeClient.onCreateWindow returns false
+ *       so JS-initiated `window.open()` never spawns a new window.
  *
  *  L4 — JS shim injection on the top frame: when our React app finishes
  *       loading, we override window.open / location setters so even
@@ -1364,38 +1362,13 @@ public class MainActivity extends BridgeActivity {
             @Override
             public boolean onCreateWindow(WebView view, boolean isDialog,
                                           boolean isUserGesture, Message resultMsg) {
-                // Ad / auto popups (no user gesture) stay refused — the ad-block guarantee.
-                if (!isUserGesture) return false;
-                // A DELIBERATE tap that opens a new window (e.g. the download
-                // provider's download button) — capture its target URL with a
-                // throwaway WebView and open it in the external browser (Chrome),
-                // where downloads work and land in the device Downloads. This never
-                // spawns an in-app popup window, so the ad surface stays closed.
-                try {
-                    final WebView tmp = new WebView(view.getContext());
-                    tmp.getSettings().setJavaScriptEnabled(true);
-                    final boolean[] handled = { false };
-                    final Runnable kill = () -> { try { tmp.stopLoading(); tmp.destroy(); } catch (Throwable ignore) {} };
-                    tmp.setWebViewClient(new WebViewClient() {
-                        private void route(String u) {
-                            if (handled[0]) return;
-                            if (u != null && u.startsWith("http")) { handled[0] = true; openExternalUrl(u); tmp.post(kill); }
-                        }
-                        @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest req) {
-                            route(req.getUrl() != null ? req.getUrl().toString() : null);
-                            return true;
-                        }
-                        @Override public void onPageStarted(WebView v, String u, android.graphics.Bitmap f) { route(u); }
-                    });
-                    tmp.setDownloadListener((u, ua, cd, mt, len) -> { if (!handled[0]) { handled[0] = true; openExternalUrl(u); } tmp.post(kill); });
-                    tmp.postDelayed(kill, 20000); // never leak the throwaway WebView
-                    WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
-                    transport.setWebView(tmp);
-                    resultMsg.sendToTarget();
-                    return true;
-                } catch (Throwable t) {
-                    return false;
-                }
+                // Refuse EVERY popup. Streaming embeds (vidlink/vidsrc/etc.) fire ad
+                // popunders on the user's PLAY tap (a user gesture) — a previous
+                // download tweak routed user-gesture popups to the browser, which let
+                // those ads back in. So block them all. Downloads use the explicit
+                // "Open in browser" button in MovieDownloadModal (native /__openext
+                // intent — not a popup), so they still work with popups fully off.
+                return false;
             }
 
             // ── Kill the embeds' JS dialog spam.
@@ -1460,11 +1433,9 @@ public class MainActivity extends BridgeActivity {
         // ── L5 — low-level lockdown
         webView.getSettings().setAllowFileAccessFromFileURLs(false);
         webView.getSettings().setAllowUniversalAccessFromFileURLs(false);
-        // Allow multiple windows so onCreateWindow fires for real user-gesture
-        // popups (the download provider's download button) — we route those to the
-        // external browser. JS still can't auto-open windows (no gesture), so ad
-        // popunders stay blocked (onCreateWindow also refuses non-gesture popups).
-        webView.getSettings().setSupportMultipleWindows(true);
+        // Popups fully off — no new windows at all. This is a core part of the ad
+        // defence (streaming embeds spawn ad popunders via window.open on tap).
+        webView.getSettings().setSupportMultipleWindows(false);
         webView.getSettings().setJavaScriptCanOpenWindowsAutomatically(false);
         webView.getSettings().setSafeBrowsingEnabled(true);
 
