@@ -207,20 +207,10 @@ export default function App() {
     };
     window.addEventListener('pointerdown', onDown, { capture: true, passive: true });
 
-    // Subtle tick while scrolling any list (throttled so a fling doesn't buzz
-    // continuously). selectionChanged is the lightest tap, ideal for scroll.
-    let lastScroll = 0;
-    const onScroll = () => {
-      const now = Date.now();
-      if (now - lastScroll < 320) return;
-      lastScroll = now;
-      haptics.select();
-    };
-    document.addEventListener('scroll', onScroll, { capture: true, passive: true });
-
+    // (No scroll haptic — firing the vibration motor mid-scroll can micro-stutter
+    //  scrolling on lower-end Android. Press haptics above stay.)
     return () => {
       window.removeEventListener('pointerdown', onDown, { capture: true } as EventListenerOptions);
-      document.removeEventListener('scroll', onScroll, { capture: true } as EventListenerOptions);
     };
   }, []);
 
@@ -607,7 +597,7 @@ export default function App() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+                transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
               >
                 {renderContent()}
               </motion.div>
