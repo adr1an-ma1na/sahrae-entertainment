@@ -1,10 +1,11 @@
-import { X, ExternalLink, AlertCircle, Info, Star, Calendar, Clock, Play, RefreshCw, Plus, Check, Maximize, ArrowLeft, SkipBack, SkipForward, ThumbsUp, ThumbsDown, Download, Server } from 'lucide-react';
+import { X, ExternalLink, AlertCircle, Info, Star, Calendar, Clock, Play, RefreshCw, Plus, Check, Maximize, ArrowLeft, SkipBack, SkipForward, ThumbsUp, ThumbsDown, Download, Server, Waves } from 'lucide-react';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import ReactPlayer from 'react-player';
 import { fetchMediaDetails, MediaDetails, getImageUrl, fetchSimilar, MediaItem, SeasonDetails, fetchSeasonDetails } from '../services/tmdb';
 import { useWatchProgress } from '../hooks/useWatchProgress';
 import { useMyList } from '../hooks/useMyList';
 import MovieDownloadModal from './MovieDownloadModal';
+import { loadEq, saveEq, EQ_PRESETS, PRESET_EXTRAS } from '../services/eq';
 
 interface PlayerModalProps {
   isOpen: boolean;
@@ -41,6 +42,9 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [loadPct, setLoadPct] = useState(0);
   const [slowLoad, setSlowLoad] = useState(false);
+  // Audio enhancement (native global EQ / virtualizer — affects the movie audio too).
+  const [eqPreset, setEqPreset] = useState<string>(() => loadEq().preset);
+  const [showAudioMenu, setShowAudioMenu] = useState(false);
 
   const hideControlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const loadTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -305,6 +309,25 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     }, 3000);
   };
 
+  // Curated audio-enhancement presets for the player (map to the global native EQ).
+  const AUDIO_PRESETS: { key: string; label: string }[] = [
+    { key: 'Off', label: 'Off' },
+    { key: 'Cinema', label: 'Cinema · Spatial' },
+    { key: 'Premium', label: 'Premium' },
+    { key: 'Bass Boost', label: 'Bass Boost' },
+    { key: 'Vocal', label: 'Dialogue Clarity' },
+  ];
+  const applyAudioPreset = (name: string) => {
+    if (name === 'Off') saveEq({ on: false, bands: [0, 0, 0, 0, 0], bass: 0, spatial: 0, loud: 0, preset: 'Off' });
+    else {
+      const extra = PRESET_EXTRAS[name] || { bass: 0, spatial: 0, loud: 0 };
+      saveEq({ on: true, bands: EQ_PRESETS[name] || [0, 0, 0, 0, 0], ...extra, preset: name });
+    }
+    setEqPreset(name);
+    setShowAudioMenu(false);
+  };
+  const audioOn = eqPreset !== 'Off' && eqPreset !== 'Flat';
+
   if (!isOpen || !currentMediaId || !currentMediaType || !details) return null;
 
   const dynamicServers = [...SERVERS];
@@ -441,10 +464,23 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       <button onClick={() => handleSkipEpisode('next')} disabled={!hasNextEpisode()} className="p-2 bg-black/50 hover:bg-black/80 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-full transition-colors backdrop-blur border border-white/20" title="Next Episode"><SkipForward className="w-4 h-4"/></button>
                     </>
                   )}
+                  <button onClick={() => setShowAudioMenu(v => !v)} data-tv-focusable className={`p-2 rounded-full transition-colors backdrop-blur border ${audioOn ? 'bg-amber-500 text-amber-950 border-amber-500' : 'bg-black/50 hover:bg-black/80 text-white border-white/20'}`} title="Audio enhancement"><Waves className="w-4 h-4"/></button>
                   <button onClick={toggleFullScreen} className="p-2 bg-black/50 hover:bg-black/80 text-white rounded-full transition-colors backdrop-blur border border-white/20" title="Full Screen"><Maximize className="w-4 h-4"/></button>
                   <button onClick={() => setRefreshKey(prev=>prev+1)} className="p-2 bg-black/50 hover:bg-black/80 text-white rounded-full transition-colors backdrop-blur border border-white/20" title="Reload Video"><RefreshCw className="w-4 h-4"/></button>
                   <button onClick={() => setIsPlaying(false)} className="p-2 bg-black/50 hover:bg-black/80 text-white rounded-full transition-colors backdrop-blur border border-white/20" title="Back to Details"><ArrowLeft className="w-4 h-4"/></button>
                 </div>
+                {/* Audio-enhancement presets — enables spatial/EQ on the global native mix */}
+                {showAudioMenu && (
+                  <div className="absolute top-16 right-4 md:right-16 z-50 w-56 bg-zinc-950/95 backdrop-blur rounded-xl border border-white/15 shadow-2xl p-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 px-2 pt-1 pb-2 flex items-center gap-1.5"><Waves className="w-3.5 h-3.5" /> Audio Enhancement</p>
+                    {AUDIO_PRESETS.map(p => (
+                      <button key={p.key} onClick={() => applyAudioPreset(p.key)} data-tv-focusable className={`w-full text-left px-3 py-2 rounded-lg text-sm font-semibold flex items-center justify-between transition-colors ${eqPreset === p.key ? 'bg-amber-500 text-amber-950' : 'text-white hover:bg-white/10'}`}>
+                        {p.label} {eqPreset === p.key && <Check className="w-4 h-4"/>}
+                      </button>
+                    ))}
+                    <p className="text-[10px] text-zinc-500 px-2 pt-2 leading-snug">Enhances all app audio — movies, music &amp; podcasts.</p>
+                  </div>
+                )}
               </div>
             ) : (
               <>
