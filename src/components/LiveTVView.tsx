@@ -30,19 +30,23 @@ const CHANNELS: Channel[] = [
   //    to return a valid #EXTM3U playlist before being committed - none were
   //    copied from memory or documentation.
   //
-  // NOTE on the two indirection URLs: CBS News deliberately keeps its jmp2.uk
-  // form. That endpoint re-issues Pluto's stitcher token on each request; the
-  // URL it redirects to embeds a JWT that expires within about a day, so
-  // "resolving" it to the direct link would ship a stream that dies tomorrow.
+  // Every URL was additionally re-tested with fetch() FROM THE APP'S OWN ORIGIN,
+  // not just with curl, because that is what exposes CORS. Two candidates passed
+  // curl but failed in the browser and were swapped for CORS-clean equivalents:
+  // GB News (simplestreamcdn -> amagi/Rakuten) and CBS News (a Pluto jmp2.uk
+  // redirect whose target embeds a ~24h JWT -> CBS's own cbsnstream feed, which
+  // has no token at all). In the APK these go through the native /__hlsproxy so
+  // CORS is moot, but the PWA build fetches them directly and would have shown
+  // two dead channels.
   { name: 'Al Jazeera English', country: 'Qatar', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCNye-wNBqNL5ZzHSJj3l8Bg&autoplay=1' },
   { name: 'Sky News', country: 'UK', category: 'News', url: 'https://xumo-drct-skynews-nc91a.fast.nbcuni.com/live/master.m3u8' },
   { name: 'DW News', country: 'Germany', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCknLrEdhRCp1aegoMqRaCZg&autoplay=1' },
   { name: 'France 24 English', country: 'France', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCQfwfsi5VrQ8yKZ-UWmAEFg&autoplay=1' },
-  { name: 'GB News', country: 'UK', category: 'News', url: 'https://live-gbnews.simplestreamcdn.com/s3/gbnews/index.m3u8' },
+  { name: 'GB News', country: 'UK', category: 'News', url: 'https://rakutenaa-lightning-gbnews-rakuten-ccoa9.amagi.tv/playlist/rakutenAA-lightning-gbnews-rakuten/playlist.m3u8' },
   { name: 'Euronews English', country: 'Europe', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCSrZ3UV4jOidv8ppoVuvW9Q&autoplay=1' },
   { name: 'TRT World', country: 'Turkey', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UC7fWeaHhqgM4Ry-RMpM2YYw&autoplay=1' },
   { name: 'ABC News Live', country: 'USA', category: 'News', url: 'https://abcnews-streams.akamaized.net/hls/live/2023560/abcnewshudson1/master.m3u8' },
-  { name: 'CBS News', country: 'USA', category: 'News', url: 'https://jmp2.uk/plu-6350fdd266e9ea0007bedec5.m3u8' },
+  { name: 'CBS News', country: 'USA', category: 'News', url: 'https://cbsn-us.cbsnstream.cbsnews.com/out/v1/55a8648e8f134e82a470f83d562deeca/master.m3u8' },
   { name: 'NBC News NOW', country: 'USA', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCeY0bbntWzzVIaj2z3QigXg&autoplay=1' },
   { name: 'CNA', country: 'Singapore', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UC83jt4dlz1Gjl58fzQrrKZg&autoplay=1' },
   { name: 'WION', country: 'India', category: 'News', url: 'https://d7x8z4yuq42qn.cloudfront.net/index_7.m3u8' },
