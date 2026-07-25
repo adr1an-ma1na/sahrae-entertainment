@@ -3,7 +3,12 @@
 **Branch:** `hardening-2026-07` (3 commits off `sauti-premium-redesign`)
 **Date:** 2026-07-25
 **Build source:** `sahrae-entertainment (3).zip` (25 Jul export), reconciled into the git repo
-**Verdict:** **Do not ship yet — one blocker cleared, one gate outstanding (no device test).**
+**Verdict:** **Ready for device testing.** Build blocker cleared, native layer
+compiles, signed release APK produced. Remaining gate is human: does a movie and
+a live match actually play, ad-free, on a real device.
+
+**CI:** run [30167835240](https://github.com/adr1an-ma1na/sahrae-entertainment/actions/runs/30167835240)
+— success. Debug and signed release APKs published to the rolling `preview` release.
 
 ---
 
@@ -304,18 +309,27 @@ direction from you (reference apps, brand intent) before anyone writes CSS.
 - Catalog fix confirmed visually in the running app.
 - Contrast ratios computed with the WCAG relative-luminance formula, not eyeballed.
 
-**NOT verified — and this is the gate before release:**
-- **No APK was built and nothing ran on a device.** No JDK is available here, so
-  my `MainActivity.java` / `AudioFx.java` / `DownloadStore.java` changes are
-  **not compiled**. I verified them by structural analysis (a brace/paren scanner
-  that skips strings and comments — all balanced) and by re-reading every hunk
-  against its imports and call sites. That is careful, but it is not a compiler.
-- Whether the 10 restored providers now actually play. This is the change most
-  likely to deliver your fix and it is entirely untested.
+**Verified in CI** (run 30167835240, after this report was first written):
+- `compileReleaseJavaWithJavac` passed — the `MainActivity.java` / `AudioFx.java`
+  / `DownloadStore.java` changes **do compile**. This was the largest open risk
+  when this report was first issued; it is now closed.
+- TypeScript check, Vite build, Android overlay application, Capacitor sync, R8
+  shrink/obfuscation, and both the debug and **signed release** APK builds all
+  passed. Release APK: 7.28 MB.
+
+**STILL NOT verified — this is now the only gate, and it needs a human:**
+- Whether the 10 restored providers actually play. This is the change most likely
+  to deliver your fix, and only a device can answer it.
 - Whether pop-ups are gone in practice.
-- Whether anonymous Firebase auth is enabled in your console. If it is disabled,
-  cloud watch-progress degrades to local-only — which works, but silently.
-- I did not push this branch or run CI. That is your call to make.
+- Whether Live Sports plays end-to-end on-device (the on-device resolver path
+  cannot run in a desktop browser at all).
+- Whether anonymous Firebase auth is enabled in your Firebase console. If it is
+  disabled, cloud watch-progress silently degrades to local-only. Worth checking
+  while you have the console open.
+
+**Install the RELEASE APK, not the debug one.** The debug keystore is regenerated
+every CI run, so debug builds have a different signature each time and fail to
+install over one another.
 
 ---
 
@@ -337,13 +351,24 @@ direction from you (reference apps, brand intent) before anyone writes CSS.
 
 ## 9. Recommended next step
 
-**Push the branch and run the Android workflow, then install the release APK and
-test one movie and one live match.**
+**Install `Sahrae-release.apk` and run this 5-minute smoke test.** Everything
+machine-checkable is now green; this is the only remaining gate.
 
-```bash
-git push -u origin hardening-2026-07 && gh workflow run android.yml --ref hardening-2026-07
-```
+1. **Uninstall the current app first.** You are moving from a debug-signed to a
+   release-signed build; Android refuses the update otherwise.
+2. **Movie —** open any film, press Play, let it run 30 seconds. Then deliberately
+   tap around the player surface half a dozen times. *Watching for:* does it play
+   at all, and does anything open in Chrome or a new window.
+3. **Server sweep —** on the same title, step through 4–5 servers from the list.
+   *Watching for:* the 10 previously-broken providers — MultiEmbed, VidSrc.cc,
+   SmashyStream, VidBinge, MoviesAPI, VidSrc.pro, 2Embed, VidSrc.net, VidSrc.me,
+   Embed.su. Note which play and which don't.
+4. **Series —** open any show, play an episode, skip to the next.
+5. **Live match —** Live Sports → any event with a LIVE badge. *Watching for:*
+   playback within ~15s, and that "server dead" cascades instead of stranding you.
+6. **Music/podcasts —** play one song and one podcast episode. *Watching for:*
+   nothing regressed. My bridge change touched the path these use, and it is the
+   change I would most want a second look at on-device.
 
-That single run answers the two questions this report cannot: does the native
-layer still compile, and do the 10 restored providers play. Everything else here
-is verified; this is the gate.
+If step 6 misbehaves, that points at the `Origin`/`Referer` bridge gate and is a
+quick fix — tell me and I'll adjust it.
