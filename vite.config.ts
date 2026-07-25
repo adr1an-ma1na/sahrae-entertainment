@@ -5,7 +5,14 @@ import {defineConfig} from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(() => {
+  // GitHub Pages serves a project site from /<repo>/, so assets need that
+  // prefix. The Android/Capacitor build and Firebase Hosting both serve from
+  // the root, and a prefix there would break every asset URL — so this is opt-in
+  // via an env var that ONLY the Pages workflow sets.
+  const base = process.env.GH_PAGES === '1' ? '/sahrae-entertainment/' : '/';
+
   return {
+    base,
     plugins: [
       react(), 
       tailwindcss(),
@@ -28,6 +35,11 @@ export default defineConfig(() => {
           theme_color: '#09090b',
           background_color: '#09090b',
           display: 'standalone',
+          // Must match `base`, or the installed app opens at the wrong path and
+          // the service worker's scope will not cover the pages it serves.
+          scope: base,
+          start_url: base,
+          orientation: 'any',
           icons: [
             {
               src: 'pwa-icon.svg',

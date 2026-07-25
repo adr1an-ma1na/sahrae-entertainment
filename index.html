@@ -6,8 +6,15 @@
     <meta name="theme-color" content="#09090b" />
     <link rel="icon" href="/pwa-icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/pwa-icon.svg">
-    <link rel="manifest" href="/manifest.json">
+    <!-- No hand-written manifest link. vite-plugin-pwa injects one whose
+         start_url and scope are derived from the build's `base`, so the app
+         installs correctly at the root (APK / Firebase) and at the
+         /sahrae-entertainment/ subpath (GitHub Pages) without edits. The old
+         public/manifest.json hardcoded start_url "/" and won over the generated
+         one, so an installed shortcut opened the host's root, not the app. -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Sahrae" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Sahrae Entertainment</title>
   </head>
