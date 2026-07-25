@@ -303,9 +303,17 @@ export default function SportsView() {
   const [isSandboxed, setIsSandboxed] = useState(false);
   const [showAdNotice, setShowAdNotice] = useState(false);
   const [showServerDeadNotice, setShowServerDeadNotice] = useState(false);
+  // Held so the auto-dismiss can be cancelled: without this, leaving Sports
+  // within four seconds left a timer running that set state on a gone component,
+  // and rapid taps stacked one timer per tap.
+  const deadNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setIsSandboxed(window.self !== window.top);
+  }, []);
+
+  useEffect(() => () => {
+    if (deadNoticeTimerRef.current) clearTimeout(deadNoticeTimerRef.current);
   }, []);
 
   // Ad Shield redirect prevention for Live Sports
@@ -558,32 +566,40 @@ export default function SportsView() {
   const reportCurrentSportsServerDead = () => {
     haptics.tap();
     if (!playing) return;
-    const currentIdx = playing.idx;
-    
-    setPlaying((p) => {
-      if (!p) return p;
-      const sources = p.sources.map((s, i) => (i === currentIdx ? { ...s, status: 'failed' as SrcStatus, url: undefined } : s));
-      
-      // Find the next source in sequence that is NOT failed
-      let nextIdx = (currentIdx + 1) % sources.length;
-      let iterations = 0;
-      while (sources[nextIdx].status === 'failed' && iterations < sources.length) {
-        nextIdx = (nextIdx + 1) % sources.length;
-        iterations++;
+    const { idx: currentIdx, sources: currentSources, tokens } = playing;
+    // Guard: `% 0` is NaN, and sources[NaN].status would throw. An event should
+    // always carry at least one fallback channel, but a crash in the middle of a
+    // live match is not the place to rely on "should".
+    if (currentSources.length === 0) return;
+
+    const sources = currentSources.map((s, i) =>
+      i === currentIdx ? { ...s, status: 'failed' as SrcStatus, url: undefined } : s,
+    );
+
+    // Next source in sequence that is not already failed; if every source is
+    // dead we stay put rather than silently landing on another dead one.
+    let nextIdx = currentIdx;
+    for (let step = 1; step <= sources.length; step++) {
+      const candidate = (currentIdx + step) % sources.length;
+      if (sources[candidate].status !== 'failed') {
+        nextIdx = candidate;
+        break;
       }
-      
-      const nextS = sources[nextIdx];
-      if (nextS && nextS.kind === 'server' && !nextS.url && nextS.embed) {
-        setTimeout(() => {
-          resolveServer(nextS.id, nextS.embed!, p.tokens, false);
-        }, 50);
-      }
-      
-      return { ...p, sources, idx: nextIdx };
-    });
+    }
+
+    setPlaying((p) => (p ? { ...p, sources, idx: nextIdx } : p));
+
+    // Resolve OUTSIDE the state updater. Scheduling work from inside one is a
+    // side effect in a function React may call more than once, which fired
+    // duplicate resolves for the same server.
+    const nextS = sources[nextIdx];
+    if (nextS && nextS.kind === 'server' && !nextS.url && nextS.embed) {
+      resolveServer(nextS.id, nextS.embed, tokens, false);
+    }
 
     setShowServerDeadNotice(true);
-    setTimeout(() => setShowServerDeadNotice(false), 4000);
+    if (deadNoticeTimerRef.current) clearTimeout(deadNoticeTimerRef.current);
+    deadNoticeTimerRef.current = setTimeout(() => setShowServerDeadNotice(false), 4000);
   };
 
   // A playing source died → mark it failed (keep it in the list for retry) and
@@ -806,6 +822,13 @@ export default function SportsView() {
                     allow="autoplay; encrypted-media; fullscreen"
                     allowFullScreen
                     referrerPolicy="no-referrer-when-downgrade"
+                    // Same split as the movie/series player: in the Android app
+                    // the native shell refuses every popup and top-frame hijack,
+                    // and sandboxing trips the embeds' anti-tamper checks. On the
+                    // web build there is no native shell, so sandbox there —
+                    // scripts and same-origin only, never allow-popups.
+                    sandbox={Capacitor.isNativePlatform() ? undefined
+                      : 'allow-scripts allow-same-origin allow-forms allow-presentation allow-orientation-lock'}
                   />
                   {isSandboxed && (
                     <div className="absolute top-0 left-0 w-full z-40 bg-amber-500/95 text-amber-950 text-xs md:text-sm font-bold px-4 py-3 flex flex-col md:flex-row items-center justify-center gap-3 md:gap-4 text-center backdrop-blur shadow-2xl border-b border-amber-400/30 animate-in slide-in-from-top-2">
