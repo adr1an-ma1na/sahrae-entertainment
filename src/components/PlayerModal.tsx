@@ -1,11 +1,12 @@
-import { X, ExternalLink, AlertCircle, Info, Star, Calendar, Clock, Play, RefreshCw, Plus, Check, Maximize, ArrowLeft, SkipBack, SkipForward, ThumbsUp, ThumbsDown, Download, Server, Waves } from 'lucide-react';
+import { X, ExternalLink, AlertCircle, Info, Star, Calendar, Clock, Play, RefreshCw, Plus, Check, Maximize, ArrowLeft, SkipBack, SkipForward, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import ReactPlayer from 'react-player';
 import { fetchMediaDetails, MediaDetails, getImageUrl, fetchSimilar, MediaItem, SeasonDetails, fetchSeasonDetails } from '../services/tmdb';
 import { useWatchProgress } from '../hooks/useWatchProgress';
 import { useMyList } from '../hooks/useMyList';
-import MovieDownloadModal from './MovieDownloadModal';
 import { loadEq, saveEq, EQ_PRESETS, PRESET_EXTRAS } from '../services/eq';
+import { haptics } from '../services/haptics';
+import { videoDownloads, VideoDownloadItem } from '../services/videoDownloads';
 
 interface PlayerModalProps {
   isOpen: boolean;
@@ -37,6 +38,89 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const [rating, setRating] = useState<'up' | 'down' | null>(null);
   const [offlineBlobUrl, setOfflineBlobUrl] = useState<string | null>(null);
   const [showDownload, setShowDownload] = useState(false);
+  const [localVideoUrl, setLocalVideoUrl] = useState<string | null>(null);
+  const [downloadItem, setDownloadItem] = useState<VideoDownloadItem | null>(null);
+
+  // Check if this video (movie or TV episode) is downloaded offline
+  useEffect(() => {
+    let active = true;
+    const checkOffline = async () => {
+      if (!currentMediaId || !currentMediaType) {
+        if (active) setLocalVideoUrl(null);
+        return;
+      }
+      const id = currentMediaType === 'movie' 
+        ? `movie_${currentMediaId}` 
+        : `tv_${currentMediaId}_s${selectedSeason}_e${selectedEpisode}`;
+      
+      const item = await videoDownloads.get(id);
+      if (item && item.status === 'done') {
+        const url = await videoDownloads.localUrl(id);
+        if (active) {
+          setLocalVideoUrl(url);
+          console.log('Playing downloaded local media file!', url);
+        }
+      } else {
+        if (active) setLocalVideoUrl(null);
+      }
+    };
+    checkOffline();
+    // Subscribe to download events to refresh localUrl if it finishes while the modal is open
+    const unsubscribe = videoDownloads.subscribe(checkOffline);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [currentMediaId, currentMediaType, selectedSeason, selectedEpisode, isOpen]);
+
+  // Check download progress/status
+  useEffect(() => {
+    let active = true;
+    const fetchStatus = async () => {
+      if (!currentMediaId || !currentMediaType) return;
+      const id = currentMediaType === 'movie' 
+        ? `movie_${currentMediaId}` 
+        : `tv_${currentMediaId}_s${selectedSeason}_e${selectedEpisode}`;
+      const item = await videoDownloads.get(id);
+      if (active) setDownloadItem(item);
+    };
+    fetchStatus();
+    const unsubscribe = videoDownloads.subscribe(fetchStatus);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [currentMediaId, currentMediaType, selectedSeason, selectedEpisode, isOpen]);
+
+  const handleToggleDownload = async () => {
+    if (!currentMediaId || !currentMediaType || !details) return;
+    const id = currentMediaType === 'movie' 
+      ? `movie_${currentMediaId}` 
+      : `tv_${currentMediaId}_s${selectedSeason}_e${selectedEpisode}`;
+
+    if (downloadItem) {
+      if (downloadItem.status === 'downloading') {
+        videoDownloads.cancel(id);
+      } else {
+        if (confirm('Delete this download from the app?')) {
+          await videoDownloads.remove(id);
+        }
+      }
+    } else {
+      const ep = currentMediaType === 'tv' ? (seasonDetails?.episodes?.find(e => e.episode_number === selectedEpisode)) : undefined;
+      await videoDownloads.download({
+        mediaId: currentMediaId,
+        type: currentMediaType,
+        title: details.title || details.name,
+        season: currentMediaType === 'tv' ? selectedSeason : undefined,
+        episode: currentMediaType === 'tv' ? selectedEpisode : undefined,
+        episodeTitle: ep?.name || (currentMediaType === 'tv' ? `Episode ${selectedEpisode}` : undefined),
+        posterPath: details.poster_path || '',
+        backdropPath: details.backdrop_path || '',
+        overview: details.overview || ''
+      });
+    }
+  };
   const [showXRay, setShowXRay] = useState(false);
   // Loading indicator + slow-load recovery for the video embed.
   const [videoLoaded, setVideoLoaded] = useState(false);
@@ -45,6 +129,9 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   // Audio enhancement (native global EQ / virtualizer — affects the movie audio too).
   const [eqPreset, setEqPreset] = useState<string>(() => loadEq().preset);
   const [showAudioMenu, setShowAudioMenu] = useState(false);
+  const [showAdNotice, setShowAdNotice] = useState(false);
+  const [failedServers, setFailedServers] = useState<string[]>([]);
+  const [showServerDeadNotice, setShowServerDeadNotice] = useState(false);
 
   const hideControlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const loadTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -64,9 +151,65 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     setIsSandboxed(window.self !== window.top);
   }, []);
 
+  // Ad Shield redirect prevention for Movies and Series
+  useEffect(() => {
+    if (!isOpen || !isPlaying) return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      const msg = 'Ad Shield protected you from an external redirect attempt.';
+      e.preventDefault();
+      e.returnValue = msg;
+      return msg;
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [isOpen, isPlaying]);
+
+  // Detect clicks/interaction on the third-party iframe (blur of parent window)
+  useEffect(() => {
+    if (!isOpen || !isPlaying) {
+      setShowAdNotice(false);
+      return;
+    }
+
+    const handleBlur = () => {
+      setTimeout(() => {
+        if (document.activeElement instanceof HTMLIFrameElement) {
+          setShowAdNotice(true);
+          // Auto-hide after 8 seconds
+          setTimeout(() => setShowAdNotice(false), 8000);
+        }
+      }, 100);
+    };
+
+    window.addEventListener('blur', handleBlur);
+    return () => {
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, [isOpen, isPlaying]);
+
+  // Ad Shield: Intercept window.open popup attempts globally while playing
+  useEffect(() => {
+    if (!isOpen || !isPlaying) return;
+    const originalOpen = window.open;
+    window.open = function (...args: any[]) {
+      console.warn('[Ad Shield] Intercepted and blocked popup attempt:', args);
+      setShowAdNotice(true);
+      setTimeout(() => setShowAdNotice(false), 6000);
+      return null;
+    };
+    return () => {
+      window.open = originalOpen;
+    };
+  }, [isOpen, isPlaying]);
+
   useEffect(() => {
     setCurrentMediaId(mediaId);
     setCurrentMediaType(mediaType);
+    setFailedServers([]);
   }, [mediaId, mediaType]);
   
   const { saveProgress } = useWatchProgress();
@@ -79,12 +222,40 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     const el = playerContainerRef.current as any;
     const fsEl = doc.fullscreenElement || doc.webkitFullscreenElement;
     if (fsEl) {
-      const exit = doc.exitFullscreen || doc.webkitExitFullscreen;
-      try { exit?.call(document); } catch { /* noop */ }
+       const exit = doc.exitFullscreen || doc.webkitExitFullscreen;
+       try { exit?.call(document); } catch { /* noop */ }
     } else if (el) {
-      const req = el.requestFullscreen || el.webkitRequestFullscreen;
-      try { const p = req?.call(el); if (p && p.catch) p.catch(() => {}); } catch { /* noop */ }
+       const req = el.requestFullscreen || el.webkitRequestFullscreen;
+       try { const p = req?.call(el); if (p && p.catch) p.catch(() => {}); } catch { /* noop */ }
     }
+  };
+
+  const reportCurrentMovieServerDead = () => {
+    haptics.tap();
+    const currentServerId = SERVERS[selectedServer]?.id;
+    if (!currentServerId) return;
+
+    setFailedServers(prev => {
+      if (prev.includes(currentServerId)) return prev;
+      return [...prev, currentServerId];
+    });
+
+    // Automatically switch to the next non-failed server in sequence
+    let nextIdx = (selectedServer + 1) % SERVERS.length;
+    let iterations = 0;
+    while (iterations < SERVERS.length) {
+      const serverId = SERVERS[nextIdx].id;
+      // Is this server also failed?
+      if (!failedServers.includes(serverId) && serverId !== currentServerId) {
+        break;
+      }
+      nextIdx = (nextIdx + 1) % SERVERS.length;
+      iterations++;
+    }
+
+    setSelectedServer(nextIdx);
+    setShowServerDeadNotice(true);
+    setTimeout(() => setShowServerDeadNotice(false), 4000);
   };
 
   // When a movie/show starts playing, silence music & radio (claim the speaker).
@@ -130,18 +301,22 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     };
   }, [isOpen, isPlaying]);
 
-  // Server priority per user: VidLink → VidZee → VidRock, then the most reliable
-  // high-quality embeds. Dropped VidLink-API (returns JSON, not a player) and the
-  // flaky AutoEmbed; added VidSrc.cc + VidFast (4K/HD, multi-audio).
+  // Server priority per user: restore the highly reliable older embed servers that work best.
   const SERVERS = [
-    { id: 'vidlink', name: 'Server 1 (VidLink)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidlink.pro/movie/${id}?primaryColor=f59e0b&autoplay=true` : `https://vidlink.pro/tv/${id}/${s}/${e}?primaryColor=f59e0b&autoplay=true&nextbutton=false`, type: 'iframe' },
-    { id: 'vidzee', name: 'Server 2 (VidZee)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://player.vidzee.wtf/embed/movie/${id}` : `https://player.vidzee.wtf/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
-    { id: 'vidrock', name: 'Server 3 (VidRock)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidrock.ru/embed/movie/${id}` : `https://vidrock.ru/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
-    { id: 'vidsrccc', name: 'Server 4 (VidSrc CC)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.cc/v2/embed/movie/${id}?autoPlay=true` : `https://vidsrc.cc/v2/embed/tv/${id}/${s}/${e}?autoPlay=true`, type: 'iframe' },
-    { id: 'vidfast', name: 'Server 5 (VidFast)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidfast.pro/movie/${id}?theme=f59e0b&autoPlay=true` : `https://vidfast.pro/tv/${id}/${s}/${e}?theme=f59e0b&autoPlay=true`, type: 'iframe' },
-    { id: 'vidsrcto', name: 'Server 6 (VidSrc To)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.to/embed/movie/${id}` : `https://vidsrc.to/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
-    { id: 'vidsrcpm', name: 'Server 7 (VidSrc PM)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.pm/embed/movie?tmdb=${id}` : `https://vidsrc.pm/embed/tv?tmdb=${id}&season=${s}&episode=${e}`, type: 'iframe' },
-    { id: 'vidsrcicu', name: 'Server 8 (VidSrc ICU)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.icu/embed/movie/${id}` : `https://vidsrc.icu/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
+    { id: 'vidvault', name: 'Ultra HD (VidVault)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidvault.ru/movie/${id}` : `https://vidvault.ru/tv/${id}/${s}/${e}`, type: 'iframe' },
+    { id: 'multiembed', name: 'Ultra HD 2 (MultiEmbed)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://multiembed.mov/?video_id=${id}&tmdb=1` : `https://multiembed.mov/?video_id=${id}&tmdb=1&s=${s}&e=${e}`, type: 'iframe' },
+    { id: 'vidsrccc', name: 'Ultra HD V3 (VidSrc.cc)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.cc/v3/embed/movie/${id}` : `https://vidsrc.cc/v3/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
+    { id: 'smashystream', name: 'Multi-Source HQ (SmashyStream)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://embed.smashystream.com/playere.php?tmdb=${id}` : `https://embed.smashystream.com/playere.php?tmdb=${id}&season=${s}&episode=${e}`, type: 'iframe' },
+    { id: 'vidsrcto', name: 'Premium 4K CDN (VidSrc.to)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.to/embed/movie/${id}` : `https://vidsrc.to/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
+    { id: 'vidbinge', name: 'HQ Cinema (VidBinge)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidbinge.com/embed/movie/${id}` : `https://vidbinge.com/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
+    { id: 'superembed', name: 'Ultra HD 3 (SuperEmbed)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://multiembed.mov/direct/superembed/movie/${id}` : `https://multiembed.mov/direct/superembed/tv/${id}/${s}/${e}`, type: 'iframe' },
+    { id: 'moviesapi', name: 'HiFi Premium (MoviesAPI)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://moviesapi.club/movie/${id}` : `https://moviesapi.club/tv/${id}-${s}-${e}`, type: 'iframe' },
+    { id: 'autoembed', name: 'Cloud AutoEmbed (AutoEmbed)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://autoembed.co/movie/tmdb/${id}` : `https://autoembed.co/tv/tmdb/${id}-${s}-${e}`, type: 'iframe' },
+    { id: 'vidsrcpro', name: 'Premium HD (VidSrc.pro)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.pro/embed/movie/${id}` : `https://vidsrc.pro/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
+    { id: '2embed', name: 'HQ Stream (2Embed)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://www.2embed.cc/embed/${id}` : `https://www.2embed.cc/embedtv/${id}&s=${s}&e=${e}`, type: 'iframe' },
+    { id: 'vidsrcnet', name: 'Fast Stream (VidSrc.net)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.net/embed/movie?tmdb=${id}` : `https://vidsrc.net/embed/tv?tmdb=${id}&season=${s}&episode=${e}`, type: 'iframe' },
+    { id: 'vidsrcme', name: 'Fast Stream 2 (VidSrc.me)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.me/embed/movie?tmdb=${id}` : `https://vidsrc.me/embed/tv?tmdb=${id}&season=${s}&episode=${e}`, type: 'iframe' },
+    { id: 'embedsu', name: 'Backup (Embed.su)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://embed.su/embed/movie/${id}` : `https://embed.su/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
   ];
 
   useEffect(() => {
@@ -358,7 +533,6 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                   className="w-full h-full border-none bg-black"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
-                  sandbox="allow-same-origin allow-scripts allow-presentation allow-popups"
                 />
                 <div className="absolute top-4 right-16 md:right-32 z-20 flex gap-2">
                   {/* External YouTube link removed to keep users on platform */}
@@ -377,7 +551,18 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                   title="Back to details">
                   <ArrowLeft className="w-4 h-4" /> Back
                 </button>
-                {['m3u8', 'youtube'].includes(currentServerObj?.type || '') ? (
+                {localVideoUrl ? (
+                  <div className="w-full h-full absolute inset-0 bg-black flex items-center justify-center">
+                    <video 
+                      src={localVideoUrl}
+                      controls
+                      autoPlay
+                      className="w-full h-full object-contain"
+                      onPlay={() => setVideoLoaded(true)}
+                      onEnded={() => handleSkipEpisode('next')}
+                    />
+                  </div>
+                ) : ['m3u8', 'youtube'].includes(currentServerObj?.type || '') ? (
                   <div className="w-full h-full absolute inset-0">
                     {(() => {
                       const Player = ReactPlayer as any;
@@ -391,10 +576,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                     frameBorder="0"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
                     allowFullScreen
-                    // No sandbox attribute — VidZee/VidRock/etc. refuse to play
-                    // in any sandboxed context. Native Android MainActivity
-                    // (top-frame whitelist + popup refusal + ad-host blocklist
-                    // + JS shim) handles ad defence.
+                    referrerPolicy="no-referrer"
                     // Auto-fullscreen once the embed has loaded + autostarted
                     // (media playback no longer needs a separate gesture), so a
                     // single Play tap ends up fullscreen and playing.
@@ -404,7 +586,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                   />
                 )}
                 {/* Netflix-style loading ring + slow-load recovery (Reload / Next server) */}
-                {!videoLoaded && !['m3u8', 'youtube'].includes(currentServerObj?.type || '') && (
+                {!videoLoaded && !['m3u8', 'youtube'].includes(currentServerObj?.type || '') && !localVideoUrl && (
                   <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/85 pointer-events-none">
                     <div className="relative w-20 h-20">
                       <svg viewBox="0 0 48 48" className="w-20 h-20 -rotate-90">
@@ -425,7 +607,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                     )}
                   </div>
                 )}
-                {isSandboxed && (['vidlink', 'vidsrccc', 'vidfast', 'vidsrcto', 'vidsrcpm', 'vidrock', 'vidsrcicu', 'vidzee'].includes(currentServerObj.id)) && (
+                {isSandboxed && (['superembed', 'vidsrcpro', '2embed', 'vidbinge', 'multiembed', 'vidsrcnet', 'vidsrcme', 'embedsu'].includes(currentServerObj.id)) && (
                   <div className="absolute top-0 left-0 w-full z-40 bg-[#e50914]/95 text-white text-xs md:text-sm font-bold px-4 py-3 flex flex-col md:flex-row items-center justify-center gap-3 md:gap-4 text-center backdrop-blur shadow-2xl border-b border-white/20 animate-in slide-in-from-top-2">
                     <AlertCircle className="w-5 h-5 shrink-0" />
                     <span>Google AI Studio's preview window secretly blocks this server. <b>Sahrae works perfectly on its own tab!</b></span>
@@ -438,7 +620,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                 {/* Floating "Next Episode" button overlay at 90% completion (for APIs that emit progress) or on hover for TV shows */}
                 {currentMediaType === 'tv' && hasNextEpisode() && currentServerObj.type !== 'youtube' && (
                   <div className={`absolute bottom-24 right-4 z-50 transition-all duration-500 ${
-                    (currentServerObj.id === 'vidlink' || currentServerObj.id === 'vidsrccc')
+                    (currentServerObj.id === 'vidsrcpro' || currentServerObj.id === 'multiembed')
                       ? (showNextEpisodeOverlay ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-4 pointer-events-none')
                       : 'opacity-50 hover:opacity-100 translate-y-0 pointer-events-auto'
                   }`}>
@@ -456,8 +638,24 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                   {/* Switch server WHILE watching — the fix for "content isn't available". */}
                   <select value={selectedServer} onChange={e => setSelectedServer(Number(e.target.value))} data-tv-focusable aria-label="Switch server" title="Switch server if it won't play"
                     className="bg-black/50 hover:bg-black/80 text-white text-xs font-bold rounded-full px-3 py-1.5 border border-white/20 outline-none cursor-pointer backdrop-blur appearance-none">
-                    {dynamicServers.map((server, idx) => <option key={server.id} value={idx} className="bg-zinc-900 text-white">{`Server ${idx + 1}`}</option>)}
+                    {dynamicServers.map((server, idx) => {
+                      const isDown = failedServers.includes(server.id);
+                      return (
+                        <option key={server.id} value={idx} className="bg-zinc-900 text-white">
+                          {`Server ${idx + 1}${isDown ? ' (🔴 Down)' : ''}`}
+                        </option>
+                      );
+                    })}
                   </select>
+                  {currentServerObj.type !== 'youtube' && (
+                    <button
+                      onClick={reportCurrentMovieServerDead}
+                      className="px-3 py-1.5 text-xs font-bold bg-black/50 hover:bg-red-500/20 border border-white/20 hover:border-red-500/50 text-zinc-300 hover:text-red-400 rounded-full flex items-center gap-1.5 transition-all shadow-md active:scale-95 backdrop-blur"
+                      title="Report server dead/broken and switch to next server"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5" /> Dead Server?
+                    </button>
+                  )}
                   {currentMediaType === 'tv' && currentServerObj.type !== 'youtube' && (
                     <>
                       <button onClick={() => handleSkipEpisode('prev')} disabled={!hasPrevEpisode()} className="p-2 bg-black/50 hover:bg-black/80 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-full transition-colors backdrop-blur border border-white/20" title="Previous Episode"><SkipBack className="w-4 h-4"/></button>
@@ -479,6 +677,48 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       </button>
                     ))}
                     <p className="text-[10px] text-zinc-500 px-2 pt-2 leading-snug">Enhances all app audio — movies, music &amp; podcasts.</p>
+                  </div>
+                )}
+
+                {showAdNotice && (
+                  <div className="absolute bottom-24 right-4 z-[100] max-w-sm bg-zinc-950/95 border border-amber-500/30 text-white rounded-xl p-4 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-4 duration-300">
+                    <div className="flex items-start gap-3">
+                      <div className="p-1.5 rounded-lg bg-amber-500/15 text-amber-500">
+                        <ShieldCheck className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-sm font-bold text-amber-400">Ad Shield protected you</h4>
+                          <button onClick={() => setShowAdNotice(false)} className="text-zinc-400 hover:text-white transition-colors ml-2">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <p className="text-xs text-zinc-300 mt-1 leading-relaxed">
+                          A background pop-up was blocked or opened. <b>Simply close the ad tab</b> to resume watching without interruption!
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {showServerDeadNotice && (
+                  <div className="absolute bottom-24 left-4 z-[100] max-w-sm bg-zinc-950/95 border border-red-500/30 text-white rounded-xl p-4 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-4 duration-300">
+                    <div className="flex items-start gap-3">
+                      <div className="p-1.5 rounded-lg bg-red-500/15 text-red-400">
+                        <AlertTriangle className="w-5 h-5 animate-pulse" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-sm font-bold text-red-400">Server marked offline</h4>
+                          <button onClick={() => setShowServerDeadNotice(false)} className="text-zinc-400 hover:text-white transition-colors ml-2">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <p className="text-xs text-zinc-300 mt-1 leading-relaxed">
+                          We've flagged that server down in your session and successfully switched you to the next server.
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -512,12 +752,32 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       <ThumbsDown className="w-4 h-4 md:w-5 md:h-5"/>
                     </button>
                     <button
-                      onClick={() => setShowDownload(true)}
-                      className="group px-6 md:px-8 py-2 md:py-3 font-bold flex items-center justify-center gap-2 border border-zinc-600/60 bg-zinc-900/90 text-white rounded hover:bg-zinc-800 transition-colors shadow-lg ml-2"
-                      title="Download to your device"
+                      onClick={handleToggleDownload}
+                      className={`group px-6 md:px-8 py-2 md:py-3 font-bold flex items-center justify-center gap-2 border rounded transition-colors shadow-lg ml-2 ${
+                        downloadItem?.status === 'done'
+                          ? 'border-emerald-500/50 bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/40'
+                          : downloadItem?.status === 'downloading'
+                          ? 'border-amber-500/50 bg-amber-950/40 text-amber-400 hover:bg-amber-900/40'
+                          : 'border-zinc-600/60 bg-zinc-900/90 text-white hover:bg-zinc-800'
+                      }`}
+                      title={downloadItem?.status === 'done' ? 'Downloaded (Click to delete)' : downloadItem?.status === 'downloading' ? 'Downloading (Click to cancel)' : 'Download inside the app'}
                     >
-                      <Download className="w-5 h-5 group-hover:animate-bounce"/>
-                      <span className="text-sm">Download</span>
+                      {downloadItem?.status === 'done' ? (
+                        <>
+                          <Check className="w-5 h-5 text-emerald-400" />
+                          <span className="text-sm">Downloaded</span>
+                        </>
+                      ) : downloadItem?.status === 'downloading' ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin shrink-0"></div>
+                          <span className="text-sm">Downloading {Math.round((downloadItem.progress || 0) * 100)}%</span>
+                        </>
+                      ) : (
+                        <>
+                          <Download className="w-5 h-5 group-hover:animate-bounce"/>
+                          <span className="text-sm">Download</span>
+                        </>
+                      )}
                     </button>
                     {/* Server picker — right in the action row. If a title won't play, switch here. */}
                     <div className="relative flex items-center gap-2 px-4 md:px-5 py-2 md:py-3 bg-zinc-900/90 border border-zinc-600/60 rounded text-white shadow-lg hover:bg-zinc-800 transition-colors ml-2" title="Pick a server if it won't play">
@@ -687,15 +947,6 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
             </div>
           </div>
         </div>
-        {showDownload && currentMediaId != null && (
-          <MovieDownloadModal
-            url={currentMediaType === 'movie'
-              ? `https://vidvault.ru/movie/${currentMediaId}`
-              : `https://vidvault.ru/tv/${currentMediaId}/${selectedSeason}/${selectedEpisode}`}
-            title={(details?.title || details?.name || 'Download') + (currentMediaType === 'tv' ? ` S${selectedSeason}E${selectedEpisode}` : '')}
-            onClose={() => setShowDownload(false)}
-          />
-        )}
     </>
   );
 }

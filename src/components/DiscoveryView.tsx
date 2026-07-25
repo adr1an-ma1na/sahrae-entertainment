@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Filter, ChevronDown } from 'lucide-react';
+import { motion } from 'motion/react';
 import { MediaItem, Genre, fetchDiscover } from '../services/tmdb';
 import MediaGrid from './MediaGrid';
 
@@ -8,6 +9,19 @@ interface DiscoveryViewProps {
   genres: Genre[];
   onPlay: (id: number, type: 'movie' | 'tv', startInInfo?: boolean) => void;
 }
+
+const headerVariants = {
+  hidden: { opacity: 0, y: -10 },
+  show: { 
+    opacity: 1, 
+    y: 0,
+    transition: {
+      type: 'spring' as const,
+      stiffness: 260,
+      damping: 24,
+    }
+  }
+};
 
 export default function DiscoveryView({ type, genres, onPlay }: DiscoveryViewProps) {
   const [items, setItems] = useState<MediaItem[]>([]);
@@ -43,8 +57,19 @@ export default function DiscoveryView({ type, genres, onPlay }: DiscoveryViewPro
   };
 
   return (
-    <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-12">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.25 }}
+      className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-12"
+    >
+      <motion.div 
+        variants={headerVariants}
+        initial="hidden"
+        animate="show"
+        className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8"
+      >
         <h2 className="text-3xl font-display font-bold text-white capitalize tracking-tight">{type === 'movie' ? 'Movies' : 'TV Series'}</h2>
         
         <div className="flex flex-wrap items-center gap-3 glass p-2.5 rounded-xl">
@@ -86,17 +111,19 @@ export default function DiscoveryView({ type, genres, onPlay }: DiscoveryViewPro
             ))}
           </select>
         </div>
-      </div>
+      </motion.div>
 
       {items.length > 0 ? (
         <>
           <MediaGrid title="" items={items} onPlay={onPlay} />
           
           <div className="mt-12 flex justify-center">
-            <button 
+            <motion.button 
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
               onClick={() => setPage(p => p + 1)}
               disabled={loading}
-              className="bg-amber-500 hover:bg-amber-400 text-amber-950 px-8 py-3 rounded-full font-bold transition-all hover:scale-105 shadow-[0_0_15px_rgba(245,158,11,0.3)] disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-2"
+              className="bg-amber-500 hover:bg-amber-400 text-amber-950 px-8 py-3 rounded-full font-bold transition-all shadow-[0_0_15px_rgba(245,158,11,0.3)] disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-2 cursor-pointer"
             >
               {loading ? (
                 <div className="w-5 h-5 border-2 border-amber-950 border-t-transparent rounded-full animate-spin"></div>
@@ -104,7 +131,7 @@ export default function DiscoveryView({ type, genres, onPlay }: DiscoveryViewPro
                 <ChevronDown className="w-5 h-5" />
               )}
               {loading ? 'Loading...' : 'Load More'}
-            </button>
+            </motion.button>
           </div>
         </>
       ) : loading ? (
@@ -112,10 +139,10 @@ export default function DiscoveryView({ type, genres, onPlay }: DiscoveryViewPro
           <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
         </div>
       ) : (
-        <div className="text-center py-20 text-zinc-500">
+        <div className="text-center py-20 text-zinc-500 animate-pulse">
           No results found for these filters.
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }

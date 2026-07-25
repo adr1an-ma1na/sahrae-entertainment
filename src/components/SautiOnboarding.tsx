@@ -87,7 +87,7 @@ export default function SautiOnboarding({ onComplete, onSkip }: { onComplete: (n
         </div>
 
         <h1 className="text-3xl md:text-5xl font-display font-black text-white tracking-tight leading-[1.05] mb-2">Who do you love?</h1>
-        <p className="text-zinc-400 text-sm md:text-base mb-7 max-w-xl">Pick <span className="text-sauti font-semibold">3 or more</span> artists and Sauti builds your mixes around them — Daily Mixes, Discover, Release Radar. Nothing pre-filled; this is <span className="text-white font-semibold">your</span> sound from the first play.</p>
+        <p className="text-zinc-400 text-sm md:text-base mb-7 max-w-xl">Pick <span className="text-sauti font-semibold">3 or more</span> artists and Sauti builds your mixes around them, including Daily Mixes, Discover, and Release Radar. Nothing pre-filled; this is <span className="text-white font-semibold">your</span> sound from the first play.</p>
 
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
           {ARTISTS.map((a) => {

@@ -11,6 +11,11 @@
 const cache = new Map<string, string | null>();
 const pending = new Map<string, Promise<string | null>>();
 
+export function clearHdArtworkCache(): void {
+  cache.clear();
+  pending.clear();
+}
+
 // Strip "(Official Video)", "[Lyrics]", "feat. …" noise so the search matches.
 function clean(s: string): string {
   return (s || '')

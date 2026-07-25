@@ -99,7 +99,7 @@ export default function AddToPlaylistSheet() {
         {/* Existing playlists */}
         <div className="overflow-y-auto custom-scrollbar p-2">
           {playlists.length === 0 ? (
-            <p className="text-zinc-500 text-sm text-center py-8">No playlists yet — create one above.</p>
+            <p className="text-zinc-500 text-sm text-center py-8">No playlists yet. Create one above.</p>
           ) : (
             playlists.map((p) => {
               const has = p.tracks.some((t) => t.id === track.id);

@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, Fragment, ReactNode, type MouseEvent as RMouseEvent } from 'react';
-import { Search, Play, Pause, Heart, Loader2, Music2, Plus, X, ListMusic, Shuffle, Trash2, ChevronLeft, Library, Sparkles, Disc3, User } from 'lucide-react';
+import { Search, Play, Pause, Heart, Loader2, Music2, Plus, X, ListMusic, Shuffle, Trash2, ChevronLeft, Library, Sparkles, Disc3, User, Youtube } from 'lucide-react';
 import { ytmusic, Track, Artist, Album, GENRES, SECTIONS } from '../services/ytmusic';
 import { buildMix, diverseSample } from '../services/recommend';
 import { useMusic } from '../hooks/useMusic';
+import { youtubeService, YoutubePlaylist, YoutubeUserProfile } from '../services/youtube';
 import { CoverArt } from './ui/CoverArt';
 import SautiOnboarding from './SautiOnboarding';
 import ListenTabs from './ListenTabs';
@@ -231,6 +232,16 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   const [madeForYou, setMadeForYou] = useState<{ id: string; title: string; subtitle: string; tracks: Track[] }[]>([]);
   const [viewMix, setViewMix] = useState<{ id: string; title: string; subtitle: string; tracks: Track[] } | null>(null);
 
+  // YouTube Music style Mood filter chips
+  const [activeMood, setActiveMood] = useState<string>('All');
+  const [moodTracks, setMoodTracks] = useState<Track[]>([]);
+  const [moodLoading, setMoodLoading] = useState(false);
+
+  // Live Trending Charts region
+  const [chartRegion, setChartRegion] = useState<string>('US');
+  const [chartTracks, setChartTracks] = useState<Track[]>([]);
+  const [chartLoading, setChartLoading] = useState(false);
+
   // Mood / genre page (YouTube-Music-style) — a chip opens a dedicated page.
   const [genre, setGenre] = useState<string | null>(null);
   const [genreTint, setGenreTint] = useState<string | null>(null);
@@ -258,17 +269,173 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
 
-  // Home shelves (progressive)
+  // YouTube Sync States
+  const [isYoutubeConnected, setIsYoutubeConnected] = useState(youtubeService.isConnected());
+  const [youtubeProfile, setYoutubeProfile] = useState<YoutubeUserProfile | null>(null);
+  const [youtubePlaylists, setYoutubePlaylists] = useState<YoutubePlaylist[]>([]);
+  const [youtubeLoading, setYoutubeLoading] = useState(false);
+  const [youtubeError, setYoutubeError] = useState<string | null>(null);
+
+  const [ytTracks, setYtTracks] = useState<Track[]>([]);
+  const [ytTracksLoading, setYtTracksLoading] = useState(false);
+
+  const loadYoutubeData = async () => {
+    if (!youtubeService.isConnected()) return;
+    setYoutubeLoading(true);
+    setYoutubeError(null);
+    try {
+      const profile = await youtubeService.fetchUserProfile();
+      setYoutubeProfile(profile);
+      const playlists = await youtubeService.fetchPlaylists();
+      setYoutubePlaylists(playlists);
+    } catch (err: any) {
+      console.error('Error loading YouTube data:', err);
+      setYoutubeError(err.message || 'Failed to sync your YouTube Music account.');
+    } finally {
+      setYoutubeLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isYoutubeConnected) {
+      loadYoutubeData();
+    }
+  }, [isYoutubeConnected]);
+
+  useEffect(() => {
+    if (!openId) {
+      setYtTracks([]);
+      return;
+    }
+
+    if (openId === 'yt_liked') {
+      setYtTracksLoading(true);
+      youtubeService.fetchLikedMusic()
+        .then(tracks => {
+          setYtTracks(tracks);
+        })
+        .catch(err => {
+          console.error(err);
+          setYoutubeError(err.message || 'Failed to load Liked Music.');
+        })
+        .finally(() => {
+          setYtTracksLoading(false);
+        });
+    } else if (openId.startsWith('yt_')) {
+      const pId = openId.replace('yt_', '');
+      setYtTracksLoading(true);
+      youtubeService.fetchPlaylistTracks(pId)
+        .then(tracks => {
+          setYtTracks(tracks);
+        })
+        .catch(err => {
+          console.error(err);
+          setYoutubeError(err.message || 'Failed to load YouTube playlist.');
+        })
+        .finally(() => {
+          setYtTracksLoading(false);
+        });
+    }
+  }, [openId]);
+
+  const handleConnectYoutube = async () => {
+    setYoutubeLoading(true);
+    setYoutubeError(null);
+    try {
+      await youtubeService.signInWithGoogle();
+      setIsYoutubeConnected(true);
+    } catch (err: any) {
+      console.error('YouTube login error:', err);
+      setYoutubeError(err.message || 'Failed to connect your YouTube Music account.');
+    } finally {
+      setYoutubeLoading(false);
+    }
+  };
+
+  const handleDisconnectYoutube = () => {
+    youtubeService.disconnect();
+    setIsYoutubeConnected(false);
+    setYoutubeProfile(null);
+    setYoutubePlaylists([]);
+    setOpenId(null);
+  };
+
+  // Fetch real-time YouTube trending songs based on region choice
+  useEffect(() => {
+    let cancelled = false;
+    setChartLoading(true);
+    (async () => {
+      try {
+        const raw = await ytmusic.trending(chartRegion);
+        if (cancelled) return;
+        const cleaned = raw.filter(isCleanSong).slice(0, 30);
+        setChartTracks(cleaned);
+      } catch (err) {
+        console.error('Error fetching trending tracks', err);
+      } finally {
+        if (!cancelled) setChartLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [chartRegion]);
+
+  // Fetch in-place tracks for active mood filter chip
+  useEffect(() => {
+    if (activeMood === 'All') {
+      setMoodTracks([]);
+      return;
+    }
+    let cancelled = false;
+    setMoodLoading(true);
+    setMoodTracks([]);
+    (async () => {
+      try {
+        const moodQueries: Record<string, string> = {
+          'Energize': 'best energy upbeat pop songs 2026',
+          'Relax': 'lofi chill relax acoustic instrumental indie',
+          'Focus': 'deep focus study brain music ambient lofi',
+          'Workout': 'gym motivation workout pump hip hop electro dance',
+          'Feel Good': 'happy feel good positive hits 2026',
+        };
+        const q = moodQueries[activeMood] || `${activeMood} music`;
+        const raw = await ytmusic.search(q);
+        if (cancelled) return;
+        const cleaned = raw.filter(isCleanSong).slice(0, 24);
+        setMoodTracks(cleaned);
+      } catch (err) {
+        console.error('Error fetching mood tracks', err);
+      } finally {
+        if (!cancelled) setMoodLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activeMood]);
+
+  // Home shelves (parallel, fast, simple)
   useEffect(() => {
     let cancelled = false;
     setSections([]); setLoadingHome(true);
     (async () => {
-      for (const s of SECTIONS) {
-        const raw = await ytmusic.search(s.q);
+      try {
+        const shelves = [
+          { title: 'New Releases', q: 'new releases music hits 2026' },
+          { title: 'Fresh Discoveries', q: 'fresh discoveries alternative acoustic 2026' }
+        ];
+        const results = await Promise.all(
+          shelves.map(async (s) => {
+            try {
+              const raw = await ytmusic.search(s.q);
+              const tracks = freshFirst(raw.filter(isCleanSong), dayKey() ^ hashStr(s.title), 30);
+              return { title: s.title, tracks };
+            } catch {
+              return { title: s.title, tracks: [] };
+            }
+          })
+        );
         if (cancelled) return;
-        const tracks = freshFirst(raw.filter(isCleanSong), dayKey() ^ hashStr(s.title), 40);
-        if (tracks.length) setSections((prev) => [...prev, { title: s.title, tracks }]);
-        setLoadingHome(false);
+        setSections(results.filter((r) => r.tracks.length > 0));
+      } finally {
+        if (!cancelled) setLoadingHome(false);
       }
     })();
     return () => { cancelled = true; };
@@ -436,7 +603,20 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
     </button>
   );
 
-  const openList = openId === 'liked' ? { name: 'Liked Songs', tracks: likedTracks, id: 'liked' } : playlists.find((p) => p.id === openId) || null;
+  const isYtList = openId && openId.startsWith('yt_');
+  let openList: { name: string; tracks: Track[]; id: string } | null = null;
+  if (openId === 'liked') {
+    openList = { name: 'Liked Songs', tracks: likedTracks, id: 'liked' };
+  } else if (openId === 'yt_liked') {
+    openList = { name: 'YouTube Liked Music', tracks: ytTracks, id: 'yt_liked' };
+  } else if (isYtList) {
+    const pId = openId!.replace('yt_', '');
+    const ytPl = youtubePlaylists.find(p => p.id === pId);
+    openList = ytPl ? { name: ytPl.title, tracks: ytTracks, id: openId! } : null;
+  } else {
+    const localPl = playlists.find((p) => p.id === openId);
+    openList = localPl ? { name: localPl.name, tracks: localPl.tracks, id: localPl.id } : null;
+  }
 
   // Featured spotlight for the Home hero — the freshest thing we have.
   const featuredList = mix.length ? mix : (sections[0]?.tracks ?? []);
@@ -595,9 +775,35 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
       {tab === 'home' ? (
         <>
           <Coachmark id="sauti" text="Long-press any song for Radio, Play next, Queue and Download." />
-          <div className="relative mb-5 max-w-lg">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search songs, artists, albums…" className="w-full bg-zinc-900/70 border border-white/10 rounded-full pl-10 pr-4 py-3 text-sm text-white focus:outline-none focus:border-amber-500/60" />
+          
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+            <div className="relative flex-1 max-w-lg">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search songs, artists, albums…" className="w-full bg-zinc-900/70 border border-white/10 rounded-full pl-10 pr-4 py-3 text-sm text-white focus:outline-none focus:border-amber-500/60" />
+            </div>
+
+            {/* YouTube Music style Mood filter pills */}
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+              {['All', 'Energize', 'Relax', 'Focus', 'Workout', 'Feel Good'].map((m) => {
+                const isActive = activeMood === m;
+                return (
+                  <button
+                    key={m}
+                    onClick={() => {
+                      setActiveMood(m);
+                      setGenre(null); // Close other genres
+                    }}
+                    className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap border ${
+                      isActive
+                        ? 'bg-sauti border-sauti text-amber-950 font-black scale-105 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+                        : 'bg-zinc-900/60 border-white/5 text-zinc-300 hover:text-white hover:bg-zinc-800'
+                    }`}
+                  >
+                    {m}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {query.trim() ? (
@@ -635,11 +841,41 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                 )}
               </div>
             )
+          ) : activeMood !== 'All' ? (
+            <div className="space-y-6 mt-4">
+              <div className="flex items-center justify-between">
+                <SectionHead icon={<span className="w-2 h-6 rounded bg-sauti" />}>
+                  {activeMood} Anthems
+                </SectionHead>
+                {moodTracks.length > 0 && (
+                  <button onClick={() => playQueue(moodTracks, 0, activeMood)} className="btn-sauti px-5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5">
+                    <Play className="w-3.5 h-3.5 fill-current" /> Play All
+                  </button>
+                )}
+              </div>
+
+              {moodLoading ? (
+                <div className="flex items-center justify-center py-20 gap-3 text-zinc-400">
+                  <Loader2 className="w-6 h-6 animate-spin text-amber-500" />
+                  <span>Curating {activeMood} vibes…</span>
+                </div>
+              ) : moodTracks.length === 0 ? (
+                <p className="text-zinc-500 text-center py-10">Vibes are refreshing. Try again shortly.</p>
+              ) : (
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {moodTracks.map((t, i) => (
+                    <Fragment key={t.id}>
+                      <TrackRow track={t} onPlay={() => playQueue(moodTracks, i, activeMood)} />
+                    </Fragment>
+                  ))}
+                </div>
+              )}
+            </div>
           ) : (
             <>
               {/* Quick-access pills — jump straight back into recent plays (spec §1.2.5) */}
               {recentlyPlayed.length >= 2 && (
-                <div className="grid grid-cols-2 gap-2 mb-7">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-7">
                   {recentlyPlayed.slice(0, 6).map((t, i) => (
                     <button key={t.id} onClick={() => playQueue(recentlyPlayed, i, 'Recently played')} tabIndex={0} data-tv-focusable
                       className="group flex items-center gap-3 rounded-lg overflow-hidden bg-white/5 hover:bg-white/10 transition-colors h-14 pr-3 text-left">
@@ -651,47 +887,6 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                 </div>
               )}
 
-              {/* Mood cards — colourful, scannable at a glance (Spotify pattern) */}
-              <section className="mb-6">
-                <SectionHead>Moods &amp; genres</SectionHead>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {MOODS.map((m) => (
-                    <button key={m.name} onClick={() => openMood(m.name, m.tint)} tabIndex={0} data-tv-focusable
-                      className={`card-lift relative overflow-hidden rounded-xl h-[100px] md:h-[120px] p-3 flex items-start text-left bg-gradient-to-br ${m.grad} focus:outline-none`}>
-                      <span className="text-white font-display font-bold text-lg leading-tight drop-shadow-md">{m.name}</span>
-                      <div className="absolute -bottom-3 -right-3 w-16 h-16 rounded-lg bg-black/25 rotate-[18deg] shadow-lg" />
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              {/* Quick genre chips */}
-              <div className="flex overflow-x-auto gap-2 pb-2 mb-6 scrollbar-hide">
-                {GENRES.map((g) => <button key={g} onClick={() => setGenre(g)} tabIndex={0} data-tv-focusable className="chip px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap text-zinc-300 hover:text-white">{g}</button>)}
-              </div>
-
-              {/* ── Featured spotlight hero ── */}
-              {featured && (
-                <section className="relative mb-9 rounded-3xl overflow-hidden border border-white/10 elev-2">
-                  <img aria-hidden alt="" src={featured.artworkLarge || featured.artwork} className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-50" />
-                  <div className="absolute inset-0" style={{ background: 'linear-gradient(90deg, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.6) 45%, rgba(0,0,0,0.2) 100%)' }} />
-                  <div className="relative flex items-center gap-4 md:gap-7 p-5 md:p-7">
-                    <div className="relative w-24 h-24 md:w-40 md:h-40 shrink-0">
-                      <CoverArt imageUrl={featured.artworkLarge || featured.artwork} fallbackUrl={featured.artwork} dominantColor={featured.dominantColor} rounded="rounded-2xl" className="np-art w-full h-full" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="overline mb-1.5">Featured · {featuredSource}</div>
-                      <h3 className="np-title text-2xl md:text-4xl font-display font-bold text-white truncate">{featured.title}</h3>
-                      <p className="text-zinc-300 truncate mb-4 font-medium">{featured.artist}</p>
-                      <div className="flex gap-2">
-                        <button onClick={() => playQueue(featuredList, 0, featuredSource)} tabIndex={0} data-tv-focusable className="btn-sauti px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Play className="w-4 h-4 fill-current" /> Play</button>
-                        <button onClick={() => openAddSheet(featured)} tabIndex={0} data-tv-focusable className="btn-glass px-5 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Plus className="w-4 h-4" /> Add</button>
-                      </div>
-                    </div>
-                  </div>
-                </section>
-              )}
-
               {/* ── Quick picks — YouTube-Music's signature 4-row tap-to-play grid ── */}
               {quickPicks.length > 0 && (
                 <section className="mb-9">
@@ -699,6 +894,91 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                   <div className="overflow-x-auto scrollbar-hide pb-3 -mx-1 px-1">
                     <div className="grid grid-rows-4 grid-flow-col auto-cols-[86%] sm:auto-cols-[minmax(320px,360px)] gap-x-5 gap-y-0.5">
                       {quickPicks.map((t, i) => <Fragment key={t.id}><QuickRow track={t} onPlay={() => playQueue(quickPicks, i, 'Quick picks')} /></Fragment>)}
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {/* ── YouTube Music Real-Time Trending Charts Section ── */}
+              <section className="mb-10 bg-zinc-900/30 border border-white/5 rounded-3xl p-5 md:p-6 relative overflow-hidden">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                  <SectionHead icon={<span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />}>
+                    Live Trending Charts
+                  </SectionHead>
+
+                  {/* Region Tabs */}
+                  <div className="flex items-center gap-1 bg-zinc-950 p-1 rounded-xl border border-white/5 overflow-x-auto scrollbar-hide">
+                    {[
+                      { code: 'US', label: 'US 🇺🇸' },
+                      { code: 'GB', label: 'UK 🇬🇧' },
+                      { code: 'KE', label: 'Kenya 🇰🇪' },
+                      { code: 'NG', label: 'Nigeria 🇳🇬' },
+                      { code: 'ZA', label: 'SA 🇿🇦' }
+                    ].map((r) => (
+                      <button
+                        key={r.code}
+                        onClick={() => setChartRegion(r.code)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
+                          chartRegion === r.code
+                            ? 'bg-amber-500/10 text-sauti border border-amber-500/20'
+                            : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        {r.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {chartLoading ? (
+                  <div className="flex items-center justify-center py-16 gap-3 text-zinc-400">
+                    <Loader2 className="w-5 h-5 animate-spin text-amber-500" />
+                    <span className="text-sm font-semibold">Retrieving official charts…</span>
+                  </div>
+                ) : chartTracks.length === 0 ? (
+                  <p className="text-zinc-500 py-10 text-center">Charts are updating. Try again shortly.</p>
+                ) : (
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                    {chartTracks.slice(0, 9).map((t, i) => (
+                      <div key={t.id} className="relative group/chart flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 transition-all">
+                        <span className="w-5 text-center font-display font-black text-sm text-zinc-500 group-hover/chart:text-sauti tabular">
+                          {i + 1}
+                        </span>
+                        <CoverArt imageUrl={t.artwork} dominantColor={t.dominantColor} className="w-12 h-12 rounded-lg shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-bold text-white truncate">{t.title}</p>
+                          <p className="text-xs text-zinc-400 truncate">{t.artist}</p>
+                        </div>
+                        <button
+                          onClick={() => playQueue(chartTracks, i, `${chartRegion} Charts`)}
+                          className="btn-sauti w-8 h-8 rounded-full flex items-center justify-center opacity-0 group-hover/chart:opacity-100 transition-opacity shrink-0"
+                          aria-label="Play song"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              {/* ── Featured spotlight hero ── */}
+              {featured && (
+                <section className="relative mb-9 rounded-3xl overflow-hidden border border-white/10 shadow-lg">
+                  <img aria-hidden alt="" src={featured.artworkLarge || featured.artwork} className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-40" />
+                  <div className="absolute inset-0" style={{ background: 'linear-gradient(90deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.65) 50%, rgba(0,0,0,0.35) 100%)' }} />
+                  <div className="relative flex items-center gap-4 md:gap-7 p-5 md:p-6">
+                    <div className="relative w-24 h-24 md:w-36 md:h-36 shrink-0">
+                      <CoverArt imageUrl={featured.artworkLarge || featured.artwork} fallbackUrl={featured.artwork} dominantColor={featured.dominantColor} rounded="rounded-2xl" className="np-art w-full h-full" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="overline mb-1 text-[10px]">Featured · {featuredSource}</div>
+                      <h3 className="np-title text-xl md:text-3xl font-display font-bold text-white truncate">{featured.title}</h3>
+                      <p className="text-zinc-300 truncate mb-4 text-xs md:text-sm font-medium">{featured.artist}</p>
+                      <div className="flex gap-2">
+                        <button onClick={() => playQueue(featuredList, 0, featuredSource)} tabIndex={0} data-tv-focusable className="btn-sauti px-5 py-2 rounded-full text-xs font-bold flex items-center gap-1.5"><Play className="w-3.5 h-3.5 fill-current" /> Play</button>
+                        <button onClick={() => openAddSheet(featured)} tabIndex={0} data-tv-focusable className="btn-glass px-4 py-2 rounded-full text-xs font-bold flex items-center gap-1.5"><Plus className="w-3.5 h-3.5" /> Add</button>
+                      </div>
                     </div>
                   </div>
                 </section>
@@ -752,26 +1032,86 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
           <div aria-hidden className="absolute inset-x-0 -top-24 h-72 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${openList.tracks[0]?.dominantColor || 'rgba(245,158,11,0.4)'} 0%, transparent 100%)`, opacity: 0.5 }} />
           <button onClick={() => setOpenId(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-4 text-sm px-3.5 py-2 rounded-full bg-zinc-900/85 backdrop-blur-xl border border-white/10 shadow-lg"><ChevronLeft className="w-4 h-4" /> Library</button>
           <div className="flex items-end gap-4 mb-6">
-            <div className={`w-28 h-28 rounded-2xl bg-gradient-to-br ${openList.id === 'liked' ? 'from-amber-400 via-orange-500 to-rose-600' : gradFor(openList.name)} flex items-center justify-center shadow-xl shrink-0`}>{openList.id === 'liked' ? <Heart className="w-12 h-12 text-white fill-current drop-shadow" /> : <ListMusic className="w-12 h-12 text-white drop-shadow" />}</div>
+            <div className={`w-28 h-28 rounded-2xl bg-gradient-to-br ${
+              openList.id === 'liked' ? 'from-amber-400 via-orange-500 to-rose-600' :
+              openList.id === 'yt_liked' ? 'from-red-600 via-rose-500 to-amber-500' :
+              gradFor(openList.name)
+            } flex items-center justify-center shadow-xl shrink-0`}>
+              {openList.id === 'liked' || openList.id === 'yt_liked' ? (
+                <Heart className="w-12 h-12 text-white fill-current drop-shadow" />
+              ) : (
+                <ListMusic className="w-12 h-12 text-white drop-shadow" />
+              )}
+            </div>
             <div className="min-w-0">
               <h3 className="text-3xl font-display font-bold text-white truncate">{openList.name}</h3>
               <p className="text-sm text-zinc-400 tabular">{openList.tracks.length} songs</p>
               <div className="flex gap-2 mt-3">
-                <button disabled={!openList.tracks.length} onClick={() => playQueue(openList.tracks, 0)} className="btn-sauti px-5 py-2 rounded-full text-sm font-bold flex items-center gap-2 disabled:opacity-40"><Play className="w-4 h-4 fill-current" /> Play</button>
-                <button disabled={!openList.tracks.length} onClick={() => { const arr = [...openList.tracks].sort(() => Math.random() - 0.5); playQueue(arr, 0); }} className="btn-glass px-5 py-2 rounded-full text-sm font-bold flex items-center gap-2 disabled:opacity-40"><Shuffle className="w-4 h-4" /> Shuffle</button>
-                {openList.id !== 'liked' && <button onClick={() => { deletePlaylist(openList.id); setOpenId(null); }} className="px-4 py-2 rounded-full text-sm font-bold text-red-400 border border-red-500/30 hover:bg-red-500/10 flex items-center gap-2"><Trash2 className="w-4 h-4" /></button>}
+                <button disabled={!openList.tracks.length || ytTracksLoading} onClick={() => playQueue(openList.tracks, 0)} className="btn-sauti px-5 py-2 rounded-full text-sm font-bold flex items-center gap-2 disabled:opacity-40"><Play className="w-4 h-4 fill-current" /> Play</button>
+                <button disabled={!openList.tracks.length || ytTracksLoading} onClick={() => { const arr = [...openList.tracks].sort(() => Math.random() - 0.5); playQueue(arr, 0); }} className="btn-glass px-5 py-2 rounded-full text-sm font-bold flex items-center gap-2 disabled:opacity-40"><Shuffle className="w-4 h-4" /> Shuffle</button>
+                {openList.id !== 'liked' && openList.id !== 'yt_liked' && !openList.id.startsWith('yt_') && (
+                  <button onClick={() => { deletePlaylist(openList.id); setOpenId(null); }} className="px-4 py-2 rounded-full text-sm font-bold text-red-400 border border-red-500/30 hover:bg-red-500/10 flex items-center gap-2"><Trash2 className="w-4 h-4" /></button>
+                )}
               </div>
             </div>
           </div>
-          {openList.tracks.length === 0 ? <p className="text-zinc-500 py-8">No songs yet. Tap the + on any song to add it here.</p> : (
+          {ytTracksLoading ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-3 text-zinc-400">
+              <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
+              <span className="text-sm font-bold">Syncing tracks from YouTube…</span>
+            </div>
+          ) : openList.tracks.length === 0 ? (
+            <p className="text-zinc-500 py-8">No songs yet. Sync more songs on YouTube or add local ones.</p>
+          ) : (
             <>
               <div className="flex justify-end mb-3">{sortSelect}</div>
-              <div className="grid sm:grid-cols-2 gap-2">{sortTracks(openList.tracks).map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(sortTracks(openList.tracks), i)} onRemove={openList.id !== 'liked' ? () => removeFromPlaylist(openList.id, t.id) : undefined} /></Fragment>)}</div>
+              <div className="grid sm:grid-cols-2 gap-2">{sortTracks(openList.tracks).map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(sortTracks(openList.tracks), i)} onRemove={(!openList.id.startsWith('yt_') && openList.id !== 'liked' && openList.id !== 'yt_liked') ? () => removeFromPlaylist(openList.id, t.id) : undefined} /></Fragment>)}</div>
             </>
           )}
         </section>
       ) : (
         <>
+          {/* YouTube Music Connection Banner */}
+          {!isYoutubeConnected ? (
+            <div className="p-5 rounded-3xl bg-gradient-to-br from-red-600/10 via-red-500/5 to-transparent border border-red-500/15 mb-8 flex flex-col md:flex-row items-center justify-between gap-6">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-red-600 flex items-center justify-center shadow-lg shadow-red-600/20 text-white shrink-0">
+                  <Youtube className="w-6 h-6 fill-current" />
+                </div>
+                <div>
+                  <h3 className="font-display font-bold text-base text-white">Sync YouTube Music</h3>
+                  <p className="text-xs text-zinc-400">Import your real playlists and liked songs from your YouTube account instantly.</p>
+                </div>
+              </div>
+              <button onClick={handleConnectYoutube} className="btn-sauti bg-red-600 hover:bg-red-500 text-white border-none shadow-[0_0_15px_rgba(220,38,38,0.25)] px-6 py-2.5 rounded-full text-xs font-black shrink-0">
+                Connect Account
+              </button>
+            </div>
+          ) : (
+            <div className="p-4 rounded-3xl bg-zinc-900/40 border border-white/5 mb-8 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                {youtubeProfile?.picture ? (
+                  <img src={youtubeProfile.picture} alt="" className="w-10 h-10 rounded-full border border-white/10" referrerPolicy="no-referrer" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-red-600/20 text-red-400 flex items-center justify-center font-bold">
+                    {youtubeProfile?.name?.charAt(0) || 'Y'}
+                  </div>
+                )}
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-black text-red-400 uppercase tracking-wider flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> Synced with YouTube
+                    </span>
+                  </div>
+                  <p className="text-sm font-bold text-white">{youtubeProfile?.name || 'YouTube Listener'}</p>
+                </div>
+              </div>
+              <button onClick={handleDisconnectYoutube} className="text-xs text-zinc-400 hover:text-red-400 px-4 py-2 rounded-full border border-white/5 hover:border-red-500/20 transition-all">
+                Disconnect
+              </button>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-10">
             <button onClick={() => setOpenId('liked')} tabIndex={0} data-tv-focusable className="card-lift flex items-center gap-3 p-4 rounded-2xl bg-gradient-to-br from-orange-500/20 to-rose-600/20 border border-rose-500/25 text-left">
               <span className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 via-orange-500 to-rose-600 flex items-center justify-center shrink-0 shadow-lg shadow-rose-600/25"><Heart className="w-6 h-6 text-white fill-current" /></span>
@@ -793,6 +1133,94 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
           {recentlyPlayed.length > 0 && (
             <section className="mb-10"><SectionHead>Recently Played</SectionHead><div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{recentlyPlayed.map((t, i) => <Fragment key={t.id}><TrackCard track={t} onPlay={() => playQueue(recentlyPlayed, i)} /></Fragment>)}</div></section>
           )}
+
+          {/* YouTube Music Playlists Section */}
+          {isYoutubeConnected && (
+            <section className="mb-10">
+              <SectionHead icon={<Youtube className="w-5 h-5 text-red-500 fill-current animate-pulse" />}>Your YouTube Music Playlists</SectionHead>
+              {youtubeLoading ? (
+                <div className="flex items-center gap-3 text-zinc-400 py-6">
+                  <Loader2 className="w-5 h-5 animate-spin text-amber-500" />
+                  <span className="text-sm font-semibold">Syncing your YouTube playlists…</span>
+                </div>
+              ) : youtubeError ? (
+                (() => {
+                  const isApiDisabledError = youtubeError.includes('YouTube Data API v3') || youtubeError.includes('disabled') || youtubeError.includes('971530348054');
+                  if (isApiDisabledError) {
+                    return (
+                      <div className="p-5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-zinc-300 flex flex-col gap-3">
+                        <div className="flex items-start gap-2.5">
+                          <div className="w-2 h-2 rounded-full bg-amber-500 mt-1.5 shrink-0 animate-pulse" />
+                          <div>
+                            <h4 className="font-bold text-amber-400 text-sm mb-1">YouTube Data API Needs to be Enabled</h4>
+                            <p className="text-xs text-zinc-300 leading-relaxed">
+                              To view your YouTube playlists, you must enable the YouTube Data API v3 in your Google Cloud Console for project <code className="bg-black/30 px-1 py-0.5 rounded text-[11px] text-amber-300 font-mono">971530348054</code>.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3 mt-1.5 pl-4.5">
+                          <a
+                            href="https://console.developers.google.com/apis/api/youtube.googleapis.com/overview?project=971530348054"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-amber-950 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5"
+                          >
+                            Enable YouTube API in Cloud Console
+                          </a>
+                          <button
+                            onClick={loadYoutubeData}
+                            className="px-4 py-2 bg-white/10 hover:bg-white/15 text-white text-xs font-bold rounded-lg transition-colors"
+                          >
+                            I Enabled It, Retry
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-300 flex items-center justify-between">
+                      <span>{youtubeError}</span>
+                      <button onClick={loadYoutubeData} className="px-3 py-1 bg-red-600/20 rounded-lg hover:bg-red-600/30 font-bold">Retry</button>
+                    </div>
+                  );
+                })()
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {/* Liked Music Special Playlist */}
+                  <button onClick={() => setOpenId('yt_liked')} tabIndex={0} data-tv-focusable className="card-lift text-left rounded-2xl overflow-hidden border border-white/10 bg-zinc-900">
+                    <div className="aspect-square relative flex items-center justify-center overflow-hidden bg-gradient-to-br from-red-600 via-rose-500 to-amber-500">
+                      <div aria-hidden className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-black/20" />
+                      <Heart className="relative w-12 h-12 text-white fill-current drop-shadow" />
+                      <Youtube className="absolute top-2 right-2 w-5 h-5 text-red-500 fill-current drop-shadow" />
+                    </div>
+                    <div className="p-2.5">
+                      <p className="text-sm font-semibold text-white truncate">YouTube Liked Music</p>
+                      <p className="text-xs text-zinc-500">Liked on YT Music</p>
+                    </div>
+                  </button>
+
+                  {/* Synced Playlists */}
+                  {youtubePlaylists.map((p) => (
+                    <button key={p.id} onClick={() => setOpenId(`yt_${p.id}`)} tabIndex={0} data-tv-focusable className="card-lift text-left rounded-2xl overflow-hidden border border-white/10 bg-zinc-900">
+                      <div className="aspect-square relative flex items-center justify-center overflow-hidden bg-zinc-800">
+                        {p.thumbnail ? (
+                          <img src={p.thumbnail} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-black/20" />
+                        )}
+                        <Youtube className="absolute top-2 right-2 w-5 h-5 text-red-500 fill-current drop-shadow" />
+                      </div>
+                      <div className="p-2.5">
+                        <p className="text-sm font-semibold text-white truncate">{p.title}</p>
+                        <p className="text-xs text-zinc-500 tabular">{p.trackCount} songs</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
           <section><SectionHead>Your Playlists</SectionHead>
             {playlists.length === 0 ? <p className="text-zinc-500 py-6">No playlists yet. Create one above, or tap + on any song.</p> : (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">{playlists.map((p) => (

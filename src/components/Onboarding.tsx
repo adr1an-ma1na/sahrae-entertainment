@@ -14,7 +14,7 @@ const GENRES: TasteGenre[] = [
 
 const PILLARS = [
   { icon: Play, title: 'Watch', desc: 'Movies, series, live TV & live sports', grad: 'from-amber-400 to-orange-600' },
-  { icon: Headphones, title: 'Listen', desc: 'Music, podcasts & radio — one hub', grad: 'from-fuchsia-500 to-rose-600' },
+  { icon: Headphones, title: 'Listen', desc: 'Music, podcasts & radio, all in one hub', grad: 'from-fuchsia-500 to-rose-600' },
   { icon: Trophy, title: 'Live Sports', desc: 'The day’s fixtures, HD, in one tap', grad: 'from-emerald-500 to-teal-700' },
   { icon: Download, title: 'Downloads', desc: 'Save to your device, watch anywhere', grad: 'from-sky-500 to-indigo-700' },
 ];
@@ -49,7 +49,7 @@ export default function Onboarding({ onDone }: { onDone: (genres: TasteGenre[]) 
           <div className="flex-1 flex flex-col items-center justify-center text-center max-w-md mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="overline mb-4">Welcome to</div>
             <h1 className="text-6xl md:text-7xl font-display font-black tracking-tighter mb-4"><span className="text-gold">SAHRAE</span></h1>
-            <p className="text-zinc-300 text-lg leading-relaxed">Everything you love to watch and listen to — movies, series, live TV, sports, music and podcasts — in one place.</p>
+            <p className="text-zinc-300 text-lg leading-relaxed">Everything you love to watch and listen to, including movies, series, live TV, sports, music and podcasts, all in one place.</p>
           </div>
         )}
 
@@ -78,7 +78,7 @@ export default function Onboarding({ onDone }: { onDone: (genres: TasteGenre[]) 
           <div className="flex-1 flex flex-col max-w-lg mx-auto w-full pt-2 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="overline mb-1.5">Personalise</div>
             <h2 className="text-3xl md:text-4xl font-display font-bold text-white mb-1.5">What do you love to watch?</h2>
-            <p className="text-zinc-400 text-sm mb-5">Pick <span className="text-sauti font-semibold">3 or more</span> — your Home starts around them.</p>
+            <p className="text-zinc-400 text-sm mb-5">Pick <span className="text-sauti font-semibold">3 or more</span> to have your Home start around them.</p>
             <div className="flex flex-wrap gap-2.5 pb-4">
               {GENRES.map((g) => {
                 const on = sel.has(g.id);

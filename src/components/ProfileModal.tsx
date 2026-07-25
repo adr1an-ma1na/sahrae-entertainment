@@ -1,7 +1,8 @@
 import { useState, FormEvent } from 'react';
-import { X, User, LogOut, Key, Camera, Check } from 'lucide-react';
+import { X, User, LogOut, Key, Camera, Check, Database, Trash2, ShieldAlert } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { updateProfile, updatePassword } from '../firebase';
+import { getCacheStats, clearMediaCache, CacheStats } from '../services/cacheManager';
 
 const AVATARS = [
   'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix',
@@ -21,13 +22,14 @@ interface ProfileModalProps {
 
 export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
   const { user, logout, reloadUser, activeProfile, updateProfileData, setActiveProfile } = useAuth();
-  const [tab, setTab] = useState<'profile' | 'security'>('profile');
+  const [tab, setTab] = useState<'profile' | 'security' | 'cache'>('profile');
   const [name, setName] = useState(activeProfile?.name || user?.displayName || '');
   const [selectedAvatar, setSelectedAvatar] = useState(activeProfile?.avatar || user?.photoURL || AVATARS[0]);
   const [newPassword, setNewPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [cacheStats, setCacheStats] = useState<CacheStats>(() => getCacheStats());
 
   if (!isOpen || !user) return null;
 
@@ -71,6 +73,22 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
     }
   };
 
+  const handleClearCache = () => {
+    setLoading(true);
+    setMessage('');
+    setError('');
+    try {
+      clearMediaCache();
+      const updated = getCacheStats();
+      setCacheStats(updated);
+      setMessage('App cache cleared successfully! Stale metadata removed, user watch progress and playlists preserved.');
+    } catch (err: any) {
+      setError(err.message || 'Failed to clear cache');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleLogout = () => {
     logout();
     onClose();
@@ -101,6 +119,12 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
           >
             <Key className="w-5 h-5" /> Security
           </button>
+          <button 
+            onClick={() => { setTab('cache'); setMessage(''); setError(''); setCacheStats(getCacheStats()); }}
+            className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${tab === 'cache' ? 'bg-amber-500/10 text-amber-500' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}
+          >
+            <Database className="w-5 h-5" /> App Cache
+          </button>
           <div className="mt-auto pt-6 flex flex-col gap-2">
             <button 
               onClick={() => { setActiveProfile(null); onClose(); }}
@@ -118,7 +142,7 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
         </div>
 
         {/* Content */}
-        <div className="p-8 flex-1">
+        <div className="p-8 flex-1 overflow-y-auto max-h-[85vh] md:max-h-none">
           {message && (
             <div className="bg-green-500/10 border border-green-500/50 text-green-500 p-3 rounded-lg mb-6 text-sm flex items-center gap-2">
               <Check className="w-4 h-4" /> {message}
@@ -168,7 +192,7 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
                 {loading ? 'Saving...' : 'Save Changes'}
               </button>
             </form>
-          ) : (
+          ) : tab === 'security' ? (
             <form onSubmit={handleUpdatePassword}>
               <h3 className="text-2xl font-bold text-white mb-6">Security</h3>
               
@@ -193,6 +217,73 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
                 {loading ? 'Updating...' : 'Update Password'}
               </button>
             </form>
+          ) : (
+            <div className="flex flex-col h-full">
+              <h3 className="text-2xl font-bold text-white mb-2">App Performance & Cache</h3>
+              <p className="text-sm text-zinc-400 mb-6">
+                Optimize app speed and free up storage by clearing temporary media metadata.
+              </p>
+
+              {/* Cache Size Stats */}
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="bg-zinc-950 p-4 rounded-xl border border-white/5">
+                  <p className="text-xs text-zinc-500 font-semibold uppercase tracking-wider mb-1">Movie/TV Metadata</p>
+                  <p className="text-xl font-bold text-amber-500">
+                    {cacheStats.tmdbCount > 0 ? `${cacheStats.tmdbCount} items` : 'No items'}
+                  </p>
+                  <p className="text-xs text-zinc-400 mt-1">({cacheStats.tmdbSizeKb} KB cached)</p>
+                </div>
+                <div className="bg-zinc-950 p-4 rounded-xl border border-white/5">
+                  <p className="text-xs text-zinc-500 font-semibold uppercase tracking-wider mb-1">Sports & HD Art</p>
+                  <p className="text-xl font-bold text-amber-500">
+                    {cacheStats.sportsFeedCached ? 'Active Cache' : 'Idle'}
+                  </p>
+                  <p className="text-xs text-zinc-400 mt-1">({cacheStats.sportsFeedSizeKb} KB cached)</p>
+                </div>
+              </div>
+
+              {/* Preserve & Clear lists */}
+              <div className="space-y-4 mb-8">
+                <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4">
+                  <h4 className="text-xs font-semibold text-emerald-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <Check className="w-4 h-4 text-emerald-500" /> Preserved User Data
+                  </h4>
+                  <ul className="text-xs text-zinc-300 space-y-1.5 list-disc list-inside">
+                    <li>Saved Playlists & Liked songs</li>
+                    <li>Movie, TV and Live TV watch progress</li>
+                    <li>Bookmarks, Watchlist and Favorite Channels</li>
+                    <li>Followed podcasts & Episode listening states</li>
+                    <li>Acount profile, avatars and theme choices</li>
+                  </ul>
+                </div>
+
+                <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4">
+                  <h4 className="text-xs font-semibold text-amber-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <Database className="w-4 h-4 text-amber-500" /> Selective Clear Items
+                  </h4>
+                  <ul className="text-xs text-zinc-300 space-y-1.5 list-disc list-inside">
+                    <li>Temporary TMDb movie and series metadata</li>
+                    <li>Edge-cached sports matches & broadcast feeds</li>
+                    <li>HD album covers in-memory search lists</li>
+                    <li>Stale YouTube Music server instances map</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-4 pt-4 border-t border-white/5 mt-auto">
+                <div className="text-xs text-zinc-500 flex items-center gap-1">
+                  <ShieldAlert className="w-4 h-4 text-amber-500/70" /> Total metadata cache: {cacheStats.totalSizeKb} KB
+                </div>
+                <button 
+                  onClick={handleClearCache}
+                  disabled={loading}
+                  className="bg-amber-500 hover:bg-amber-400 text-amber-950 font-bold px-6 py-3 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  {loading ? 'Clearing...' : 'Clear Media Cache'}
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </div>

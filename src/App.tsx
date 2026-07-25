@@ -20,6 +20,7 @@ import FlowChannelsView from './components/FlowChannelsView';
 import GlobalAudioPlayer from './components/GlobalAudioPlayer';
 import ProfileSelection from './components/ProfileSelection';
 import DiscoveryView from './components/DiscoveryView';
+import TalentExplorer from './components/TalentExplorer';
 import Sidebar from './components/Sidebar';
 import BottomTabBar from './components/BottomTabBar';
 import PodcastProgressTracker from './components/PodcastProgressTracker';
@@ -68,6 +69,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   
   // Search filters
+  const [searchCategory, setSearchCategory] = useState<'media' | 'talent'>('media');
   const [searchType, setSearchType] = useState<'all' | 'movie' | 'tv'>('all');
   const [searchYear, setSearchYear] = useState<string>('');
   const [searchGenre, setSearchGenre] = useState<number | null>(null);
@@ -422,7 +424,7 @@ export default function App() {
           <>
             <Hero item={heroItem} onPlay={handlePlay} />
             <div className="-mt-16 relative z-10 pb-12">
-              <div className="px-4 md:px-12"><Coachmark id="home" text="Press Play on any title to start — or tap a poster for details, trailers & episodes." /></div>
+              <div className="px-4 md:px-12"><Coachmark id="home" text="Press Play on any title to start, or tap a poster for details, trailers, and episodes." /></div>
               <Top10Row items={trending} onPlay={handlePlay} />
               {forYou.length > 0 && <MediaRow title={`For You · ${tasteGenres[0]?.name}`} items={forYou} onPlay={handlePlay} defaultType="movie" isLoading={loading} />}
               <Top10Row items={trendingSeries} onPlay={handlePlay} title="Top 10 Series Today" />
@@ -457,75 +459,103 @@ export default function App() {
       case 'search':
         return (
           <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto pb-12">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-              <h2 className="text-2xl font-bold text-white">
-                {searchQuery ? `Search Results for "${searchQuery}"` : 'Discover'}
-              </h2>
-              
-              <div className="flex flex-wrap items-center gap-3 bg-zinc-900/80 p-2 rounded-xl border border-white/5">
-                <select 
-                  value={searchType} 
-                  onChange={(e) => setSearchType(e.target.value as any)}
-                  className="bg-zinc-800 text-white text-sm rounded-lg px-3 py-1.5 border border-white/10 focus:outline-none focus:border-amber-500 cursor-pointer"
-                >
-                  <option value="all">All Types</option>
-                  <option value="movie">Movies</option>
-                  <option value="tv">TV Series</option>
-                </select>
-
-                <select 
-                  value={searchGenre || ''} 
-                  onChange={(e) => setSearchGenre(e.target.value ? Number(e.target.value) : null)}
-                  className="bg-zinc-800 text-white text-sm rounded-lg px-3 py-1.5 border border-white/10 focus:outline-none focus:border-amber-500 cursor-pointer"
-                >
-                  <option value="">All Genres</option>
-                  {movieGenres.map(g => (
-                    <option key={g.id} value={g.id}>{g.name}</option>
-                  ))}
-                </select>
-
-                <select 
-                  value={searchSortBy} 
-                  onChange={(e) => setSearchSortBy(e.target.value)}
-                  className="bg-zinc-800 text-white text-sm rounded-lg px-3 py-1.5 border border-white/10 focus:outline-none focus:border-amber-500 cursor-pointer"
-                >
-                  <option value="popularity.desc">Most Popular</option>
-                  <option value="vote_average.desc">Highest Rated</option>
-                  <option value="primary_release_date.desc">Newest Releases</option>
-                  <option value="revenue.desc">Highest Grossing</option>
-                </select>
-
-                <select 
-                  value={searchYear} 
-                  onChange={(e) => setSearchYear(e.target.value)}
-                  className="bg-zinc-800 text-white text-sm rounded-lg px-3 py-1.5 border border-white/10 focus:outline-none focus:border-amber-500 cursor-pointer"
-                >
-                  <option value="">Any Year</option>
-                  {Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - i).map(y => (
-                    <option key={y} value={y}>{y}</option>
-                  ))}
-                </select>
-              </div>
+            {/* Category Toggle Tabs */}
+            <div className="flex gap-6 border-b border-white/10 pb-4 mb-6">
+              <button
+                onClick={() => { haptics.tap(); setSearchCategory('media'); }}
+                className={`text-lg md:text-xl font-display font-bold pb-1 transition-all relative outline-none cursor-pointer ${
+                  searchCategory === 'media' ? 'text-amber-500' : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                Movies & Shows
+                {searchCategory === 'media' && <div className="absolute -bottom-[17px] left-0 right-0 h-0.5 bg-amber-500 rounded-full shadow-[0_0_8px_rgba(245,158,11,0.5)]" />}
+              </button>
+              <button
+                onClick={() => { haptics.tap(); setSearchCategory('talent'); }}
+                className={`text-lg md:text-xl font-display font-bold pb-1 transition-all relative outline-none cursor-pointer ${
+                  searchCategory === 'talent' ? 'text-amber-500' : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                Directors & Actors
+                {searchCategory === 'talent' && <div className="absolute -bottom-[17px] left-0 right-0 h-0.5 bg-amber-500 rounded-full shadow-[0_0_8px_rgba(245,158,11,0.5)]" />}
+              </button>
             </div>
-            
-            <MediaGrid title="" items={filteredSearchResults} onPlay={handlePlay} />
-            
-            {searchResults.length > 0 && (
-              <div className="mt-12 flex justify-center">
-                {hasMoreSearch ? (
-                  <button
-                    onClick={loadMoreSearchResults}
-                    disabled={loading}
-                    className="bg-amber-500 hover:bg-amber-400 text-amber-950 px-8 py-3 rounded-full font-bold transition-all hover:scale-105 shadow-[0_0_15px_rgba(245,158,11,0.3)] disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-2"
-                  >
-                    {loading ? (
-                      <><div className="w-5 h-5 border-2 border-amber-950 border-t-transparent rounded-full animate-spin"></div> Loading…</>
-                    ) : 'Load More'}
-                  </button>
-                ) : (
-                  <div className="text-zinc-500">No more results</div>
+
+            {searchCategory === 'talent' ? (
+              <TalentExplorer onPlay={handlePlay} />
+            ) : (
+              <>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+                  <h2 className="text-2xl font-bold text-white">
+                    {searchQuery ? `Search Results for "${searchQuery}"` : 'Discover'}
+                  </h2>
+                  
+                  <div className="flex flex-wrap items-center gap-3 bg-zinc-900/80 p-2 rounded-xl border border-white/5">
+                    <select 
+                      value={searchType} 
+                      onChange={(e) => setSearchType(e.target.value as any)}
+                      className="bg-zinc-800 text-white text-sm rounded-lg px-3 py-1.5 border border-white/10 focus:outline-none focus:border-amber-500 cursor-pointer"
+                    >
+                      <option value="all">All Types</option>
+                      <option value="movie">Movies</option>
+                      <option value="tv">TV Series</option>
+                    </select>
+
+                    <select 
+                      value={searchGenre || ''} 
+                      onChange={(e) => setSearchGenre(e.target.value ? Number(e.target.value) : null)}
+                      className="bg-zinc-800 text-white text-sm rounded-lg px-3 py-1.5 border border-white/10 focus:outline-none focus:border-amber-500 cursor-pointer"
+                    >
+                      <option value="">All Genres</option>
+                      {movieGenres.map(g => (
+                        <option key={g.id} value={g.id}>{g.name}</option>
+                      ))}
+                    </select>
+
+                    <select 
+                      value={searchSortBy} 
+                      onChange={(e) => setSearchSortBy(e.target.value)}
+                      className="bg-zinc-800 text-white text-sm rounded-lg px-3 py-1.5 border border-white/10 focus:outline-none focus:border-amber-500 cursor-pointer"
+                    >
+                      <option value="popularity.desc">Most Popular</option>
+                      <option value="vote_average.desc">Highest Rated</option>
+                      <option value="primary_release_date.desc">Newest Releases</option>
+                      <option value="revenue.desc">Highest Grossing</option>
+                    </select>
+
+                    <select 
+                      value={searchYear} 
+                      onChange={(e) => setSearchYear(e.target.value)}
+                      className="bg-zinc-800 text-white text-sm rounded-lg px-3 py-1.5 border border-white/10 focus:outline-none focus:border-amber-500 cursor-pointer"
+                    >
+                      <option value="">Any Year</option>
+                      {Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - i).map(y => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                
+                <MediaGrid title="" items={filteredSearchResults} onPlay={handlePlay} />
+                
+                {searchResults.length > 0 && (
+                  <div className="mt-12 flex justify-center">
+                    {hasMoreSearch ? (
+                      <button
+                        onClick={loadMoreSearchResults}
+                        disabled={loading}
+                        className="bg-amber-500 hover:bg-amber-400 text-amber-950 px-8 py-3 rounded-full font-bold transition-all hover:scale-105 shadow-[0_0_15px_rgba(245,158,11,0.3)] disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-2"
+                      >
+                        {loading ? (
+                          <><div className="w-5 h-5 border-2 border-amber-950 border-t-transparent rounded-full animate-spin"></div> Loading…</>
+                        ) : 'Load More'}
+                      </button>
+                    ) : (
+                      <div className="text-zinc-500">No more results</div>
+                    )}
+                  </div>
                 )}
-              </div>
+              </>
             )}
           </div>
         );
@@ -536,7 +566,7 @@ export default function App() {
       case 'podcasts':
         return <PodcastsView onNav={navigate} />;
       case 'downloads':
-        return <DownloadsView />;
+        return <DownloadsView onPlay={handlePlay} />;
       case 'tv':
         return <LiveTVView />;
       case 'sports':

@@ -101,6 +101,10 @@ const INSTANCES = [
 ];
 let working: string | null = null;
 
+export function clearWorkingInstance(): void {
+  working = null;
+}
+
 // ── Concurrency limiter ──
 // Catalog requests share the native request interceptor with YouTube playback,
 // so flooding it (e.g. many shelves resolving at once) can STARVE the player

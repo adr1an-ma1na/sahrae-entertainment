@@ -91,7 +91,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         user,
         loading,
-        login: loginWithGoogle,
+        login: async () => { await loginWithGoogle(); },
         logout,
         reloadUser,
         profiles,

@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import { X, SlidersHorizontal, Sparkles, Waves } from 'lucide-react';
+import { X, SlidersHorizontal, Sparkles, Waves, Moon, Timer } from 'lucide-react';
 import { EqSettings, EQ_FREQS, EQ_PRESETS, PRESET_EXTRAS, loadEq, saveEq } from '../services/eq';
+import { useMusic } from '../hooks/useMusic';
 
 const fmtDb = (mb: number) => `${mb > 0 ? '+' : ''}${(mb / 100).toFixed(0)} dB`;
 
 export default function EqualizerPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [eq, setEq] = useState<EqSettings>(() => loadEq());
+  const { crossfade, setCrossfade, sleepTimer, setSleepTimer } = useMusic();
 
   // Re-read on open so it reflects anything changed elsewhere.
   useEffect(() => { if (open) setEq(loadEq()); }, [open]);
@@ -100,9 +102,53 @@ export default function EqualizerPanel({ open, onClose }: { open: boolean; onClo
             </div>
           </div>
 
+          <div className="h-px bg-white/10" />
+
+          {/* Spotify Features: Crossfade + Sleep Timer */}
+          <div className="space-y-4">
+            <p className="text-xs font-bold text-sauti uppercase tracking-wider">Spotify Pro Audio Tuning</p>
+            
+            {/* Crossfade */}
+            <div className="flex items-center gap-3">
+              <span className="w-24 flex items-center gap-1.5 text-xs font-bold text-zinc-300 shrink-0"><Timer className="w-3.5 h-3.5 text-sauti" /> Crossfade</span>
+              <input type="range" min={0} max={12} step={1} value={crossfade}
+                onChange={(e) => setCrossfade(Number(e.target.value))}
+                tabIndex={0} data-tv-focusable className="flex-1 h-1.5 cursor-pointer" style={{ accentColor: '#f59e0b' }} aria-label="Crossfade duration" />
+              <span className="w-10 text-right text-[11px] font-semibold text-zinc-300 tabular shrink-0">{crossfade > 0 ? `${crossfade}s` : 'Off'}</span>
+            </div>
+
+            {/* Sleep Timer */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-xs font-bold text-zinc-300"><Moon className="w-3.5 h-3.5 text-sauti" /> Sleep Timer</span>
+                <span className="text-[11px] font-bold text-zinc-400 tabular bg-white/5 px-2 py-0.5 rounded-md">
+                  {sleepTimer > 0 ? `${Math.floor(sleepTimer / 60)}:${(sleepTimer % 60).toString().padStart(2, '0')} left` : 'Inactive'}
+                </span>
+              </div>
+              <div className="flex gap-1.5 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1">
+                {([
+                  { label: 'Off', val: 0 },
+                  { label: '5m', val: 300 },
+                  { label: '10m', val: 600 },
+                  { label: '15m', val: 900 },
+                  { label: '30m', val: 1800 },
+                  { label: '45m', val: 2700 },
+                  { label: '1h', val: 3600 }
+                ]).map((t) => {
+                  const isCurrent = (t.val === 0 && sleepTimer === 0) || (t.val > 0 && Math.abs(sleepTimer - t.val) < 15);
+                  return (
+                    <button key={t.label} onClick={() => setSleepTimer(t.val)} tabIndex={0} data-tv-focusable
+                      className={`px-3 py-1 rounded-lg text-[10px] font-black whitespace-nowrap transition-colors ${isCurrent ? 'bg-sauti text-amber-950 font-bold' : 'glass-liquid text-zinc-300 hover:text-white'}`}>
+                      {t.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
           <p className="text-[11px] text-zinc-500 leading-relaxed">
-            Tuned at the system level, so it shapes every track in Sauti. Spatial 3D widens the
-            soundstage for a more immersive, room-filling listen.
+            Tuned at the system level, so it shapes every track in Sauti. Crossfade provides seamless, gapless song transition. Sleep Timer pauses audio automatically.
           </p>
         </div>
       </div>

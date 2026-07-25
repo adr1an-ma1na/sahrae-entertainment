@@ -64,6 +64,13 @@ interface MusicCtx {
   addSheetTrack: Track | null;
   openAddSheet: (t: Track) => void;
   closeAddSheet: () => void;
+  // Spotify features
+  sleepTimer: number;
+  setSleepTimer: (sec: number) => void;
+  crossfade: number;
+  setCrossfade: (sec: number) => void;
+  reorderQueue: (startIndex: number, endIndex: number) => void;
+  clearQueue: () => void;
 }
 
 const Ctx = createContext<MusicCtx | undefined>(undefined);
@@ -127,6 +134,37 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const [tasteSeeds, setTasteSeeds] = useState<Track[]>(() => loadLS<Track[]>(SEEDS_KEY, []));
   const [onboarded, setOnboarded] = useState<boolean>(() => loadLS<boolean>(ONBOARD_KEY, false));
   const [addSheetTrack, setAddSheetTrack] = useState<Track | null>(null);
+
+  // Spotify Playback States
+  const [crossfade, setCrossfadeState] = useState<number>(() => {
+    try { return Number(localStorage.getItem('sahrae.music.crossfade') || '4'); } catch { return 4; }
+  });
+  const [sleepTimer, setSleepTimer] = useState<number>(0);
+
+  const setCrossfade = (sec: number) => {
+    setCrossfadeState(sec);
+    try { localStorage.setItem('sahrae.music.crossfade', String(sec)); } catch { /* ignore */ }
+  };
+
+  // Sleep timer countdown
+  useEffect(() => {
+    if (sleepTimer <= 0) return;
+    const interval = setInterval(() => {
+      setSleepTimer((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          try {
+            if (usingLocalRef.current) audioElRef.current?.pause();
+            else playerRef.current?.pauseVideo?.();
+            setIsPlaying(false);
+          } catch { /* ignore */ }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [sleepTimer]);
 
   const current = queue[index] || null;
 
@@ -344,22 +382,50 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id, queue.length, autoplay]);
 
+  const lastCrossfadeRef = useRef<string | null>(null);
+
+  // Reset crossfade trigger on track change
+  useEffect(() => {
+    lastCrossfadeRef.current = null;
+  }, [current?.id]);
+
   // ── poll position / duration from the player (offline audio drives its own
   //    position via timeupdate, so skip the IFrame poll when playing local) ──
   useEffect(() => {
     const iv = setInterval(() => {
-      if (usingLocalRef.current) return;
+      if (usingLocalRef.current) {
+        const a = audioElRef.current;
+        if (a && crossfade > 0 && a.duration && a.duration > crossfade) {
+          const timeLeft = a.duration - a.currentTime;
+          if (timeLeft <= crossfade && lastCrossfadeRef.current !== loadedIdRef.current && isPlaying) {
+            lastCrossfadeRef.current = loadedIdRef.current;
+            next();
+          }
+        }
+        return;
+      }
       const p = playerRef.current;
       if (p && typeof p.getCurrentTime === 'function') {
         try {
-          setPosition(p.getCurrentTime() || 0);
+          const pos = p.getCurrentTime() || 0;
+          setPosition(pos);
           const d = p.getDuration?.() || 0;
-          if (d) setDuration(d);
+          if (d) {
+            setDuration(d);
+            if (crossfade > 0 && d > crossfade) {
+              const timeLeft = d - pos;
+              if (timeLeft <= crossfade && lastCrossfadeRef.current !== loadedIdRef.current && isPlaying) {
+                lastCrossfadeRef.current = loadedIdRef.current;
+                next();
+              }
+            }
+          }
         } catch { /* player not ready */ }
       }
     }, 500);
     return () => clearInterval(iv);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [crossfade, isPlaying]);
 
   // ── cross-pause: another source (radio) claimed the speaker ──
   useEffect(() => {
@@ -494,6 +560,34 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   };
   const jumpTo = (i: number) => { haptics.tap(); setIndex(i); };
 
+  const reorderQueue = (startIndex: number, endIndex: number) => {
+    if (startIndex === endIndex || startIndex < 0 || endIndex < 0) return;
+    setQueue((prev) => {
+      const result = Array.from(prev);
+      if (startIndex >= result.length || endIndex >= result.length) return prev;
+      const [removed] = result.splice(startIndex, 1);
+      result.splice(endIndex, 0, removed);
+      
+      // Update index if the playing song moved
+      if (index === startIndex) {
+        setIndex(endIndex);
+      } else if (index > startIndex && index <= endIndex) {
+        setIndex((i) => i - 1);
+      } else if (index < startIndex && index >= endIndex) {
+        setIndex((i) => i + 1);
+      }
+      return result;
+    });
+  };
+
+  const clearQueue = () => {
+    setQueue((prev) => {
+      const active = prev[index];
+      setIndex(0);
+      return active ? [active] : [];
+    });
+  };
+
   const toggle = () => {
     if (!current) return;
     haptics.tap();
@@ -590,6 +684,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         playlists, recentlyPlayed, tasteSeeds, onboarded, addTasteSeeds, completeOnboarding,
         createPlaylist, deletePlaylist, renamePlaylist, addToPlaylist, removeFromPlaylist,
         addSheetTrack, openAddSheet, closeAddSheet,
+        sleepTimer, setSleepTimer, crossfade, setCrossfade, reorderQueue, clearQueue,
       }}
     >
       {children}

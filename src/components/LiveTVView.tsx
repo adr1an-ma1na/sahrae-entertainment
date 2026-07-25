@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import Hls from 'hls.js';
 import { X, Maximize, Search, Heart, RadioTower, Loader2, WifiOff } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 import Coachmark from './Coachmark';
 
 interface Channel { name: string; country: string; category: Category; url: string; kind?: 'hls' | 'yt' }
@@ -57,7 +58,8 @@ const CAT_STYLE: Record<Category, string> = {
   Lifestyle: 'from-pink-500 to-rose-700',
 };
 const initials = (n: string) => n.replace(/[^A-Za-z0-9 ]/g, '').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
-const proxied = (u: string) => `https://localhost/__hlsproxy?u=${encodeURIComponent(u)}`;
+const proxied = (u: string) =>
+  Capacitor.isNativePlatform() ? `https://localhost/__hlsproxy?u=${encodeURIComponent(u)}` : u;
 
 const FAV_KEY = 'sahrae.livetv.fav.v1';
 const RECENT_KEY = 'sahrae.livetv.recent.v1';
@@ -75,9 +77,8 @@ function HLSPlayer({ src, onOffline }: { src: string; onOffline: () => void }) {
     let attempt = 0;
     // Proxy FIRST — the native HLS proxy binds the CDN token to this device and
     // sidesteps CORS/mixed-content (exactly how Sports streams play). Only if the
-    // proxy fails do we try the URL direct, then report offline. (Was direct-first
-    // with a 13s wait, which made working channels look broken on https://localhost.)
-    const urls = [proxied(src), src];
+    // proxy fails do we try the URL direct, then report offline.
+    const urls = Capacitor.isNativePlatform() ? [proxied(src), src] : [src];
     let watchdog: ReturnType<typeof setTimeout>;
 
     const fail = () => {
@@ -273,7 +274,7 @@ export default function LiveTVView() {
 
       {/* Channels */}
       {visible.length === 0 ? (
-        <p className="text-zinc-500 py-12 text-center">{cat === 'Favorites' ? 'No favorites yet — tap the heart on a channel.' : 'No channels match your search.'}</p>
+        <p className="text-zinc-500 py-12 text-center">{cat === 'Favorites' ? 'No favorites yet, tap the heart on a channel.' : 'No channels match your search.'}</p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
           {visible.map(renderCard)}

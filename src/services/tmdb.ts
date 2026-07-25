@@ -109,9 +109,31 @@ export const searchMedia = async (query: string, page: number = 1): Promise<{res
 };
 
 export const fetchGenres = async (type: 'movie' | 'tv' = 'movie'): Promise<Genre[]> => {
+  const cacheKey = `sahrae_tmdb_genres_${type}`;
+  try {
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      // Valid for 7 days
+      if (Date.now() - parsed.timestamp < 7 * 24 * 60 * 60 * 1000) {
+        return parsed.data;
+      }
+    }
+  } catch (e) {
+    console.error('Error reading genres cache', e);
+  }
+
   const res = await fetch(`${BASE_URL}/genre/${type}/list?api_key=${API_KEY}&language=en-US`);
   const data = await res.json();
-  return data.genres;
+  const result = data.genres;
+
+  try {
+    localStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), data: result }));
+  } catch (e) {
+    console.error('Error saving genres cache', e);
+  }
+
+  return result;
 };
 
 export const fetchDiscover = async (type: 'movie' | 'tv' = 'movie', page: number = 1, genreId?: number, sortBy: string = 'popularity.desc', year?: string): Promise<MediaItem[]> => {
@@ -124,9 +146,31 @@ export const fetchDiscover = async (type: 'movie' | 'tv' = 'movie', page: number
 };
 
 export const fetchMediaDetails = async (id: number, type: 'movie' | 'tv' = 'movie'): Promise<MediaDetails> => {
+  const cacheKey = `sahrae_tmdb_details_${type}_${id}`;
+  try {
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      // Valid for 3 days
+      if (Date.now() - parsed.timestamp < 3 * 24 * 60 * 60 * 1000) {
+        return parsed.data;
+      }
+    }
+  } catch (e) {
+    console.error('Error reading media details cache', e);
+  }
+
   const res = await fetch(`${BASE_URL}/${type}/${id}?api_key=${API_KEY}&append_to_response=credits,videos&language=en-US&include_video_language=en,null`);
   const data = await res.json();
-  return { ...data, media_type: type };
+  const result = { ...data, media_type: type };
+
+  try {
+    localStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), data: result }));
+  } catch (e) {
+    console.error('Error saving media details cache', e);
+  }
+
+  return result;
 };
 
 export const fetchRecommendations = async (id: number, type: 'movie' | 'tv' = 'movie'): Promise<MediaItem[]> => {
@@ -146,3 +190,27 @@ export const getImageUrl = (path: string | null, size: 'w500' | 'original' | 'w7
   if (path.startsWith('http')) return path;
   return `https://image.tmdb.org/t/p/${size}${path}`;
 };
+
+export const searchPeople = async (query: string, page: number = 1): Promise<{results: any[], totalPages: number}> => {
+  const res = await fetch(`${BASE_URL}/search/person?api_key=${API_KEY}&query=${encodeURIComponent(query)}&language=en-US&page=${page}`);
+  const data = await res.json();
+  return {
+    results: data.results || [],
+    totalPages: data.total_pages || 1
+  };
+};
+
+export const fetchPopularPeople = async (page: number = 1): Promise<{results: any[], totalPages: number}> => {
+  const res = await fetch(`${BASE_URL}/person/popular?api_key=${API_KEY}&language=en-US&page=${page}`);
+  const data = await res.json();
+  return {
+    results: data.results || [],
+    totalPages: data.total_pages || 1
+  };
+};
+
+export const fetchPersonDetails = async (id: number): Promise<any> => {
+  const res = await fetch(`${BASE_URL}/person/${id}?api_key=${API_KEY}&language=en-US&append_to_response=combined_credits`);
+  return await res.json();
+};
+
