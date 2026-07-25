@@ -97,17 +97,38 @@ export default function App() {
   // Onboarding is per-ACCOUNT (keyed by uid), not per-device, so a newly
   // registered user always gets it even on a device someone else already
   // onboarded. Guests fall back to the shared device flag.
-  const onboardKey = () => { const u = user as any; return u ? `sahrae.onboarded.u.${u.uid || u.id || u.email || 'acct'}` : 'sahrae.onboarded.v1'; };
+  const DEVICE_ONBOARD_KEY = 'sahrae.onboarded.v1';
+  const onboardKey = () => { const u = user as any; return u ? `sahrae.onboarded.u.${u.uid || u.id || u.email || 'acct'}` : DEVICE_ONBOARD_KEY; };
   const [appOnboarded, setAppOnboarded] = useState<boolean>(true);
   const [tasteGenres, setTasteGenres] = useState<TasteGenre[]>(() => { try { return JSON.parse(localStorage.getItem('sahrae.taste.genres.v1') || '[]'); } catch { return []; } });
   const [forYou, setForYou] = useState<MediaItem[]>([]);
   useEffect(() => {
     if (authLoading) return; // wait until we know who (if anyone) is signed in
-    try { setAppOnboarded(localStorage.getItem(onboardKey()) === '1'); } catch { setAppOnboarded(true); }
+    try {
+      const accountKey = onboardKey();
+      if (localStorage.getItem(accountKey) === '1') { setAppOnboarded(true); return; }
+      // Signing in must NOT replay onboarding. The key switches from the device
+      // flag to a per-account one the moment `user` appears, so someone who
+      // onboarded as a guest and then signed in used to land straight back in
+      // the flow. If this device has already been through it, carry that onto
+      // the account and move on. A genuinely new device still onboards once.
+      if (localStorage.getItem(DEVICE_ONBOARD_KEY) === '1') {
+        localStorage.setItem(accountKey, '1');
+        setAppOnboarded(true);
+        return;
+      }
+      setAppOnboarded(false);
+    } catch { setAppOnboarded(true); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, authLoading]);
   const finishOnboarding = (genres: TasteGenre[]) => {
-    try { localStorage.setItem(onboardKey(), '1'); localStorage.setItem('sahrae.taste.genres.v1', JSON.stringify(genres)); } catch { /* ignore */ }
+    // Always stamp the device flag too, so a later sign-in or sign-out never
+    // resurfaces the flow on a device that has already completed it.
+    try {
+      localStorage.setItem(onboardKey(), '1');
+      localStorage.setItem(DEVICE_ONBOARD_KEY, '1');
+      localStorage.setItem('sahrae.taste.genres.v1', JSON.stringify(genres));
+    } catch { /* ignore */ }
     setTasteGenres(genres); setAppOnboarded(true);
   };
 

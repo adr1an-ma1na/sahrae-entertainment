@@ -1,6 +1,5 @@
 import { X, ExternalLink, AlertCircle, Info, Star, Calendar, Clock, Play, RefreshCw, Plus, Check, Maximize, ArrowLeft, SkipBack, SkipForward, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { Capacitor } from '@capacitor/core';
 import { fetchMediaDetails, MediaDetails, getImageUrl, fetchSimilar, MediaItem, SeasonDetails, fetchSeasonDetails } from '../services/tmdb';
 import { useWatchProgress } from '../hooks/useWatchProgress';
 import { useMyList } from '../hooks/useMyList';
@@ -573,21 +572,12 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                     allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen"
                     allowFullScreen
                     referrerPolicy="no-referrer"
-                    // Popup defence differs by platform, deliberately.
-                    //
-                    // In the Android app the native shell owns this: onCreateWindow
-                    // refuses every window.open, the top-frame whitelist blocks
-                    // `top.location = ad`, and gesture-driven frame redirects to
-                    // unknown hosts are dropped. Sandboxing there would buy nothing
-                    // and several providers run an anti-tamper check that refuses to
-                    // play inside a sandboxed frame ("remove sandbox attributes").
-                    //
-                    // On the web build there is no native shell, so the embeds could
-                    // pop and hijack the tab freely. There we sandbox: scripts and
-                    // same-origin (both required for playback) but deliberately NO
-                    // allow-popups, allow-modals or allow-top-navigation.
-                    sandbox={Capacitor.isNativePlatform() ? undefined
-                      : 'allow-scripts allow-same-origin allow-forms allow-presentation allow-orientation-lock allow-pointer-lock'}
+                    // NO sandbox attribute, on any platform. Every one of these
+                    // providers runs an anti-tamper check and refuses to play with
+                    // "Remove sandbox attributes on the iframe tag" as soon as it
+                    // sees one — a permissive sandbox granting scripts and
+                    // same-origin still trips it. Popup defence lives in the native
+                    // Android shell instead; the web build is not ad-protected.
                     // Auto-fullscreen once the embed has loaded + autostarted
                     // (media playback no longer needs a separate gesture), so a
                     // single Play tap ends up fullscreen and playing.

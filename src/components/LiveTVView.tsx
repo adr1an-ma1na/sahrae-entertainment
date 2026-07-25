@@ -11,23 +11,43 @@ type Category = 'News' | 'Regional' | 'Sports' | 'Documentary' | 'Science' | 'Mu
 // the most stable option since channel IDs never change. Everything else uses
 // broadcaster-official / FAST HLS feeds (NASA, Red Bull, DW Documentary, etc.).
 const CHANNELS: Channel[] = [
-  // News — official 24/7 YouTube live streams. Channel IDs are permanent and were
-  // each verified against the channel's real live feed, so unlike raw HLS URLs
-  // (which rotate CDN tokens and rot within weeks) these never break.
+  // News.
+  //
+  // TWO delivery kinds here, on purpose:
+  //
+  //  kind:'yt'  — YouTube's /embed/live_stream?channel=ID. Convenient, but it
+  //    only renders while that channel happens to have an active, embeddable
+  //    live stream. When it does not, the player shows "Error 153 - Video
+  //    player configuration error" rather than failing gracefully. Verified
+  //    2026-07-25: the channel IDs below are all correct, and these particular
+  //    channels do serve a working embed.
+  //
+  //  (no kind) — a direct HLS master playlist, played by HLSPlayer. Used for
+  //    every broadcaster whose YouTube embed returned Error 153 on 2026-07-25:
+  //    Sky News, GB News, ABC News, CBS News, WION, CGTN and NHK World. These
+  //    are 24/7 linear feeds, so they do not depend on someone at the
+  //    broadcaster starting a stream. Each URL below was fetched and confirmed
+  //    to return a valid #EXTM3U playlist before being committed - none were
+  //    copied from memory or documentation.
+  //
+  // NOTE on the two indirection URLs: CBS News deliberately keeps its jmp2.uk
+  // form. That endpoint re-issues Pluto's stitcher token on each request; the
+  // URL it redirects to embeds a JWT that expires within about a day, so
+  // "resolving" it to the direct link would ship a stream that dies tomorrow.
   { name: 'Al Jazeera English', country: 'Qatar', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCNye-wNBqNL5ZzHSJj3l8Bg&autoplay=1' },
-  { name: 'Sky News', country: 'UK', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCoMdktPbSTixAyNGwb-UYkQ&autoplay=1' },
+  { name: 'Sky News', country: 'UK', category: 'News', url: 'https://xumo-drct-skynews-nc91a.fast.nbcuni.com/live/master.m3u8' },
   { name: 'DW News', country: 'Germany', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCknLrEdhRCp1aegoMqRaCZg&autoplay=1' },
   { name: 'France 24 English', country: 'France', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCQfwfsi5VrQ8yKZ-UWmAEFg&autoplay=1' },
-  { name: 'GB News', country: 'UK', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UC0vn8ISa4LKMunLbzaXLnOQ&autoplay=1' },
+  { name: 'GB News', country: 'UK', category: 'News', url: 'https://live-gbnews.simplestreamcdn.com/s3/gbnews/index.m3u8' },
   { name: 'Euronews English', country: 'Europe', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCSrZ3UV4jOidv8ppoVuvW9Q&autoplay=1' },
   { name: 'TRT World', country: 'Turkey', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UC7fWeaHhqgM4Ry-RMpM2YYw&autoplay=1' },
-  { name: 'ABC News Live', country: 'USA', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCBi2mrWuNuyYy4gbM6fU18Q&autoplay=1' },
-  { name: 'CBS News', country: 'USA', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UC8p1vwvWtl6T73JiExfWs1g&autoplay=1' },
+  { name: 'ABC News Live', country: 'USA', category: 'News', url: 'https://abcnews-streams.akamaized.net/hls/live/2023560/abcnewshudson1/master.m3u8' },
+  { name: 'CBS News', country: 'USA', category: 'News', url: 'https://jmp2.uk/plu-6350fdd266e9ea0007bedec5.m3u8' },
   { name: 'NBC News NOW', country: 'USA', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCeY0bbntWzzVIaj2z3QigXg&autoplay=1' },
   { name: 'CNA', country: 'Singapore', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UC83jt4dlz1Gjl58fzQrrKZg&autoplay=1' },
-  { name: 'WION', country: 'India', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UC_gUM8rL-Lrg6O3adPW9K1g&autoplay=1' },
-  { name: 'CGTN', country: 'China', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCgrNz-aDmcr2uuto8_DL2jg&autoplay=1' },
-  { name: 'NHK World', country: 'Japan', category: 'News', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCSPEjw8F2nQDtmUKPFNF7_A&autoplay=1' },
+  { name: 'WION', country: 'India', category: 'News', url: 'https://d7x8z4yuq42qn.cloudfront.net/index_7.m3u8' },
+  { name: 'CGTN', country: 'China', category: 'News', url: 'https://amg00405-rakutentv-cgtn-rakuten-i9tar.amagi.tv/master.m3u8' },
+  { name: 'NHK World', country: 'Japan', category: 'News', url: 'https://masterpl.hls.nhkworld.jp/hls/w/live/smarttv.m3u8' },
   // Sports
   { name: 'Red Bull TV', country: 'Global', category: 'Sports', url: 'https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master.m3u8' },
   { name: 'beIN Sports XTRA', country: 'Global', category: 'Sports', url: 'https://bein-xtra-bein.amagi.tv/playlist.m3u8' },
@@ -201,14 +221,19 @@ export default function LiveTVView() {
         <div role="dialog" data-tv-layer className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center backdrop-blur-sm p-3 md:p-10">
           <div className="w-full max-w-5xl">
             <div ref={playerRef} className="w-full aspect-video bg-black rounded-xl shadow-2xl overflow-hidden relative border border-white/10">
-              <div className="absolute top-0 left-0 right-0 p-3 md:p-4 bg-gradient-to-b from-black/80 to-transparent z-10 flex justify-between items-center">
-                <div className="flex items-center gap-3 min-w-0">
+              {/* Our controls sit CENTRED, not flush right. The embedded player
+                  stacks its own volume / CC / quality buttons in the top-right
+                  corner, so edge-anchored buttons landed on top of them and you
+                  could not reach CC without hitting close. Centring separates
+                  the two clusters entirely. */}
+              <div className="absolute top-0 left-0 right-0 p-3 md:p-4 bg-gradient-to-b from-black/80 to-transparent z-10 flex items-center">
+                <div className="flex items-center gap-3 min-w-0 pr-28">
                   <div className="flex items-center gap-1.5 bg-red-500 text-white px-2.5 py-1 rounded-sm shrink-0"><div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /><span className="text-xs font-bold uppercase tracking-wider">Live</span></div>
                   <h3 className="text-white font-bold text-sm md:text-lg truncate">{active.name}</h3>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button onClick={toggleFullScreen} tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full bg-black/50 hover:bg-white/20 text-white flex items-center justify-center border border-white/10"><Maximize className="w-5 h-5" /></button>
-                  <button onClick={() => setActive(null)} tabIndex={0} data-tv-focusable data-tv-close className="w-10 h-10 rounded-full bg-red-500/80 hover:bg-red-500 text-white flex items-center justify-center"><X className="w-5 h-5" /></button>
+                <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 shrink-0">
+                  <button onClick={toggleFullScreen} tabIndex={0} data-tv-focusable aria-label="Toggle full screen" className="w-10 h-10 rounded-full bg-black/60 hover:bg-white/20 text-white flex items-center justify-center border border-white/10 backdrop-blur"><Maximize className="w-5 h-5" /></button>
+                  <button onClick={() => setActive(null)} tabIndex={0} data-tv-focusable data-tv-close aria-label="Close player" className="w-10 h-10 rounded-full bg-red-500/85 hover:bg-red-500 text-white flex items-center justify-center backdrop-blur"><X className="w-5 h-5" /></button>
                 </div>
               </div>
               {offline ? (

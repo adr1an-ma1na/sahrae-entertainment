@@ -822,13 +822,15 @@ export default function SportsView() {
                     allow="autoplay; encrypted-media; fullscreen"
                     allowFullScreen
                     referrerPolicy="no-referrer-when-downgrade"
-                    // Same split as the movie/series player: in the Android app
-                    // the native shell refuses every popup and top-frame hijack,
-                    // and sandboxing trips the embeds' anti-tamper checks. On the
-                    // web build there is no native shell, so sandbox there —
-                    // scripts and same-origin only, never allow-popups.
-                    sandbox={Capacitor.isNativePlatform() ? undefined
-                      : 'allow-scripts allow-same-origin allow-forms allow-presentation allow-orientation-lock'}
+                    // NO sandbox attribute, on any platform. These providers run
+                    // an anti-tamper check and refuse to play with the red
+                    // "Remove sandbox attributes on the iframe tag" message the
+                    // moment they detect one — even a permissive sandbox that
+                    // grants scripts and same-origin. Popup defence therefore
+                    // lives entirely in the native Android shell (onCreateWindow
+                    // refuses every window.open, the top-frame whitelist blocks
+                    // top.location hijacks). The web build is consequently NOT
+                    // ad-protected; the APK is the surface that is.
                   />
                   {isSandboxed && (
                     <div className="absolute top-0 left-0 w-full z-40 bg-amber-500/95 text-amber-950 text-xs md:text-sm font-bold px-4 py-3 flex flex-col md:flex-row items-center justify-center gap-3 md:gap-4 text-center backdrop-blur shadow-2xl border-b border-amber-400/30 animate-in slide-in-from-top-2">

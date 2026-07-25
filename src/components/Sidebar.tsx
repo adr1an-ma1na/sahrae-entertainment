@@ -45,7 +45,11 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
               ? 'text-white shadow-[inset_-3px_-3px_7px_rgba(255,255,255,0.04),inset_4px_4px_10px_rgba(0,0,0,0.5)]'
               : 'text-zinc-400 hover:text-white shadow-[-3px_-3px_6px_rgba(255,255,255,0.03),3px_3px_8px_rgba(0,0,0,0.4)] hover:shadow-[-2px_-2px_5px_rgba(255,255,255,0.05),3px_3px_9px_rgba(0,0,0,0.5)]'
           }`}>
-          <Icon className={`w-5 h-5 shrink-0 ${active ? 'text-sauti' : ''}`} />
+          {/* Active state is shown by the inset "pressed" shadow and white text
+              only. The icon used to flip to gold (text-sauti) on selection,
+              which read as the sidebar changing colour every time you clicked
+              it. The affordance stays; the hue shift does not. */}
+          <Icon className="w-5 h-5 shrink-0" />
           <span className="truncate">{t.label}</span>
         </button>
       );
@@ -59,7 +63,7 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
       <button key={t.id} onClick={() => setActiveTab(t.id)} tabIndex={0} data-tv-focusable title={t.label} aria-label={t.label}
         className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all focus:outline-none ${
           active
-            ? 'text-sauti shadow-[inset_-3px_-3px_7px_rgba(255,255,255,0.04),inset_4px_4px_10px_rgba(0,0,0,0.5)]'
+            ? 'text-white shadow-[inset_-3px_-3px_7px_rgba(255,255,255,0.04),inset_4px_4px_10px_rgba(0,0,0,0.5)]'
             : 'text-zinc-400 hover:text-white shadow-[-3px_-3px_6px_rgba(255,255,255,0.03),3px_3px_8px_rgba(0,0,0,0.4)]'
         }`}>
         <Icon className="w-5 h-5" />
