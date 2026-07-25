@@ -1,33 +1,17 @@
 import { initializeApp, getApp, getApps } from 'firebase/app';
-import { 
-  getAuth, 
-  signInAnonymously, 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword,
-  onAuthStateChanged as onFbAuthStateChanged 
-} from 'firebase/auth';
-import { 
-  getFirestore, 
-  doc, 
-  getDocFromServer 
-} from 'firebase/firestore';
+import { getAuth, signInAnonymously } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 export const db = getFirestore(app);
 export const fbAuth = getAuth(app);
 
-// Test Connection on Boot
-async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn("Firebase client offline warning.");
-    }
-  }
-}
-testConnection();
+// NOTE: a boot-time `getDocFromServer(doc(db,'test','connection'))` probe used to
+// run here on module import. It was removed: the security rules deny that path,
+// so it was a guaranteed-failing server round-trip on every cold start for every
+// user — pure latency and billed Firestore traffic that told us nothing. The
+// first real read reports connectivity just as well.
 
 export enum OperationType {
   CREATE = 'create',
@@ -56,80 +40,64 @@ export interface FirestoreErrorInfo {
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  // Deliberately does NOT log email addresses or provider identities. This runs
+  // inside a WebView whose console is readable by anything with adb access, and
+  // an operational warning never needs the user's personal details to be useful.
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
       userId: fbAuth.currentUser?.uid,
-      email: fbAuth.currentUser?.email,
-      emailVerified: fbAuth.currentUser?.emailVerified,
       isAnonymous: fbAuth.currentUser?.isAnonymous,
-      tenantId: fbAuth.currentUser?.tenantId,
-      providerInfo: fbAuth.currentUser?.providerData?.map(provider => ({
-        providerId: provider.providerId,
-        email: provider.email,
-      })) || []
     },
     operationType,
-    path
+    path,
   };
   console.warn('Firestore Operation Notice: ', JSON.stringify(errInfo));
 }
 
 /**
- * Deterministically sync active app user with real Firebase Auth.
- * If user is logged in, signs in to a unique Firebase Auth user.
- * If user is guest/local, falls back gracefully to a unique device guest account if Anonymous auth is disabled.
+ * Obtain the Firebase Auth identity used to scope this device's Firestore data.
+ *
+ * SECURITY — why this is anonymous-only now. The previous implementation signed
+ * in with an account whose credentials were *derived from the user id* by a
+ * formula that ships in the client bundle:
+ *
+ *     email    = `${uid}@sahrae.tv.internal`
+ *     password = `fb_${uid}_secure_stable`
+ *
+ * Anyone who learned a uid could therefore authenticate as that user and read or
+ * write their entire `users/{uid}` tree. The Firestore rules are written
+ * correctly against `request.auth.uid`, but rules cannot help when the client
+ * hands out the credential itself. It also minted a permanent Firebase Auth
+ * account for every guest device, which grows without bound.
+ *
+ * Anonymous auth gives Firebase-managed, unguessable credentials that persist
+ * locally. The trade-off is honest: this identity is per-device, so cloud watch
+ * progress no longer follows a signed-in user across devices. Genuine
+ * cross-device sync needs a trusted token exchange — a Supabase Edge Function
+ * that verifies the Supabase JWT and mints a Firebase custom token for the same
+ * uid. No purely client-side scheme can be both cross-device and unforgeable.
+ *
+ * Returns null when no Firebase identity is available (e.g. anonymous auth is
+ * disabled in the console). Callers must treat null as "skip cloud sync" — the
+ * localStorage path in useWatchProgress remains the source of truth on-device.
  */
-export async function syncFirebaseAuth(user: { uid: string; email: string | null } | null): Promise<string | null> {
-  if (fbAuth.currentUser) {
-    return fbAuth.currentUser.uid;
-  }
+let pendingAuth: Promise<string | null> | null = null;
 
-  // Get or generate a persistent local device guest ID for fallback auth
-  let guestId = typeof window !== 'undefined' ? localStorage.getItem('sahrae_device_guest_id') : null;
-  if (!guestId && typeof window !== 'undefined') {
-    guestId = `guest_${Math.random().toString(36).substring(2, 10)}_${Date.now()}`;
-    try {
-      localStorage.setItem('sahrae_device_guest_id', guestId);
-    } catch {
-      /* ignore storage errors */
-    }
-  }
-  if (!guestId) guestId = 'guest_default_user';
+export async function syncFirebaseAuth(
+  _user: { uid: string; email: string | null } | null,
+): Promise<string | null> {
+  if (fbAuth.currentUser) return fbAuth.currentUser.uid;
 
-  // Try anonymous auth first if no profile user is active
-  if (!user) {
-    try {
-      const cred = await signInAnonymously(fbAuth);
-      return cred.user.uid;
-    } catch {
-      // Anonymous auth may be disabled in Firebase console (auth/admin-restricted-operation).
-      // Seamlessly fall through to email/password fallback account.
-    }
+  // Single-flight: useWatchProgress can call this from several effects at once,
+  // and concurrent signInAnonymously calls create redundant auth round-trips.
+  if (!pendingAuth) {
+    pendingAuth = signInAnonymously(fbAuth)
+      .then((cred) => cred.user.uid)
+      .catch(() => null)
+      .finally(() => {
+        pendingAuth = null;
+      });
   }
-
-  const targetUid = user?.uid || guestId;
-  const fbEmail = `${targetUid}@sahrae.tv.internal`;
-  const fbPassword = `fb_${targetUid}_secure_stable`;
-
-  try {
-    const cred = await signInWithEmailAndPassword(fbAuth, fbEmail, fbPassword);
-    return cred.user.uid;
-  } catch (error: any) {
-    if (
-      error?.code === 'auth/user-not-found' || 
-      error?.code === 'auth/invalid-credential' ||
-      String(error?.message).includes('user-not-found') ||
-      String(error?.message).includes('INVALID_LOGIN_CREDENTIALS')
-    ) {
-      try {
-        const cred = await createUserWithEmailAndPassword(fbAuth, fbEmail, fbPassword);
-        return cred.user.uid;
-      } catch (createError) {
-        console.warn('Firebase Auth fallback user creation notice:', createError);
-        return fbAuth.currentUser?.uid || targetUid;
-      }
-    }
-    return fbAuth.currentUser?.uid || targetUid;
-  }
+  return pendingAuth;
 }

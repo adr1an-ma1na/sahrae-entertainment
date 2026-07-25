@@ -12,6 +12,15 @@ export default defineConfig(() => {
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['pwa-icon.svg'],
+        workbox: {
+          // The app shell is split into vendor chunks (see manualChunks below),
+          // but three.js alone still lands near the 2 MiB default. 4 MiB keeps
+          // every chunk precached instead of silently failing the build.
+          maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+          // Never precache the streaming/native bridge or third-party embeds —
+          // only our own shell assets belong in the service worker.
+          navigateFallbackDenylist: [/^\/__/],
+        },
         manifest: {
           name: 'Sahrae Entertainment',
           short_name: 'Sahrae',
@@ -44,6 +53,27 @@ export default defineConfig(() => {
       alias: {
         // shadcn-style alias → src (so `@/components/ui/...` resolves correctly).
         '@': path.resolve(__dirname, './src'),
+      },
+    },
+    build: {
+      // A single 2.45 MB chunk was being emitted, which both failed the PWA
+      // precache step and forced every user to parse the whole app — including
+      // three.js and the Firebase SDK — before the first frame. Splitting the
+      // heavy, rarely-changing vendors into their own chunks lets the browser
+      // cache them across releases and lets the shell paint sooner. This matters
+      // most on the low-end Android TV boxes the app targets.
+      chunkSizeWarningLimit: 1200,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom'],
+            'vendor-firebase': ['firebase/app', 'firebase/auth', 'firebase/firestore'],
+            'vendor-supabase': ['@supabase/supabase-js'],
+            'vendor-three': ['three'],
+            'vendor-media': ['hls.js'],
+            'vendor-motion': ['motion'],
+          },
+        },
       },
     },
     server: {

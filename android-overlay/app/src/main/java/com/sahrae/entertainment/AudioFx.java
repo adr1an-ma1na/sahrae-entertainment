@@ -43,7 +43,7 @@ final class AudioFx {
 
     static WebResourceResponse ok() {
         Map<String, String> h = new HashMap<>();
-        h.put("Access-Control-Allow-Origin", "*");
+        h.put("Access-Control-Allow-Origin", "https://localhost");
         h.put("Cache-Control", "no-cache");
         return new WebResourceResponse("application/json", "utf-8", 200, "OK", h,
             new ByteArrayInputStream("{\"ok\":true}".getBytes(StandardCharsets.UTF_8)));

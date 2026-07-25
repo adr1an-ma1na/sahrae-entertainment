@@ -20,6 +20,8 @@ export interface User {
 }
 
 interface StoredUser extends User {
+  /** Random per-account PBKDF2 salt (hex). Absent on pre-PBKDF2 records. */
+  passwordSalt?: string;
   passwordHash: string;
 }
 
@@ -41,11 +43,52 @@ function saveAccounts(accounts: Record<string, StoredUser>) {
 function toPublic(u: StoredUser): User {
   return { uid: u.uid, email: u.email, displayName: u.displayName, photoURL: u.photoURL };
 }
-function hashPassword(s: string): string {
-  // djb2 — not cryptographic, just so the raw password isn't stored verbatim.
-  let h = 5381;
-  for (let i = 0; i < s.length; i++) h = (h * 33) ^ s.charCodeAt(i);
-  return (h >>> 0).toString(16);
+/**
+ * Password verifier for the offline shim.
+ *
+ * This used to be djb2 folded to 32 bits. That is not a password hash: the whole
+ * output space is 4 billion values, so any password collides in seconds on a
+ * phone, and the digests sit in localStorage where anything with device access
+ * can read them. Since people reuse passwords, a weak local digest leaks their
+ * credentials for other services, not just this app.
+ *
+ * PBKDF2-SHA256 with a per-account random salt and 210,000 iterations (the
+ * OWASP 2023 floor for PBKDF2-HMAC-SHA256). WebCrypto is always available here:
+ * the app is served over https://localhost in the WebView and https on the web,
+ * both secure contexts.
+ */
+const PBKDF2_ITERATIONS = 210_000;
+
+function toHex(buf: ArrayBuffer): string {
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+async function derivePasswordHash(password: string, saltHex: string): Promise<string> {
+  const enc = new TextEncoder();
+  const salt = Uint8Array.from(saltHex.match(/.{2}/g)!.map((b) => parseInt(b, 16)));
+  const key = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, [
+    'deriveBits',
+  ]);
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+    key,
+    256,
+  );
+  return toHex(bits);
+}
+
+function newSalt(): string {
+  return toHex(crypto.getRandomValues(new Uint8Array(16)).buffer);
+}
+
+/** Constant-time compare so verification cannot be timed character by character. */
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
 }
 function genId(prefix: string): string {
   return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -139,12 +182,14 @@ export async function createUserWithEmailAndPassword(_auth: unknown, email: stri
 
   const accounts = loadAccounts();
   if (accounts[e]) throw new Error('An account with this email already exists. Try signing in instead.');
+  const passwordSalt = newSalt();
   const user: StoredUser = {
     uid: genId('u_'),
     email: e,
     displayName: null,
     photoURL: null,
-    passwordHash: hashPassword(password),
+    passwordSalt,
+    passwordHash: await derivePasswordHash(password, passwordSalt),
   };
   accounts[e] = user;
   saveAccounts(accounts);
@@ -166,7 +211,16 @@ export async function signInWithEmailAndPassword(_auth: unknown, email: string, 
 
   const accounts = loadAccounts();
   const u = accounts[e];
-  if (!u || u.passwordHash !== hashPassword(password)) {
+  // Accounts created before salted PBKDF2 have no salt. They cannot be verified
+  // any more (by design — the old digest was not a safe credential store), so
+  // they are treated as unknown and the person signs up again. The shim only
+  // runs when no Supabase backend is configured, so this affects offline-only
+  // installs, and their data is local anyway.
+  if (!u || !u.passwordSalt) {
+    throw new Error('Incorrect email or password.');
+  }
+  const candidate = await derivePasswordHash(password, u.passwordSalt);
+  if (!safeEqual(candidate, u.passwordHash)) {
     throw new Error('Incorrect email or password.');
   }
   const p = toPublic(u);
@@ -223,7 +277,9 @@ export async function updatePassword(user: User, newPassword: string) {
   const found = findByUid(user.uid);
   if (!found) throw new Error('Account not found. Please sign in again.');
   const accounts = loadAccounts();
-  accounts[found.key].passwordHash = hashPassword(newPassword);
+  const salt = newSalt();
+  accounts[found.key].passwordSalt = salt;
+  accounts[found.key].passwordHash = await derivePasswordHash(newPassword, salt);
   saveAccounts(accounts);
 }
 
@@ -241,7 +297,9 @@ export async function loginWithGoogle() {
 
   const user: User = { uid: genId('guest_'), email: null, displayName: 'Guest', photoURL: null };
   const accounts = loadAccounts();
-  accounts['guest:' + user.uid] = { ...user, passwordHash: '' };
+  // Guest sessions have no password, so no salt either — signInWithEmailAndPassword
+  // rejects any record without a salt, which is the correct outcome here.
+  accounts['guest:' + user.uid] = { ...user, passwordSalt: '', passwordHash: '' };
   saveAccounts(accounts);
   auth.setUser(user);
   return { user };

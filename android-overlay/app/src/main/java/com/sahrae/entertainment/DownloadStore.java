@@ -138,7 +138,7 @@ final class DownloadStore {
 
     static WebResourceResponse json(String body) {
         Map<String, String> h = new HashMap<>();
-        h.put("Access-Control-Allow-Origin", "*");
+        h.put("Access-Control-Allow-Origin", "https://localhost");
         h.put("Cache-Control", "no-cache");
         return new WebResourceResponse("application/json", "utf-8", 200, "OK", h,
             new ByteArrayInputStream((body == null ? "[]" : body).getBytes(StandardCharsets.UTF_8)));

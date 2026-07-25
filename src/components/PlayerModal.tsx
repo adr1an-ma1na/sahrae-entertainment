@@ -1,6 +1,6 @@
 import { X, ExternalLink, AlertCircle, Info, Star, Calendar, Clock, Play, RefreshCw, Plus, Check, Maximize, ArrowLeft, SkipBack, SkipForward, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { useEffect, useState, useRef, useCallback } from 'react';
-import ReactPlayer from 'react-player';
+import { Capacitor } from '@capacitor/core';
 import { fetchMediaDetails, MediaDetails, getImageUrl, fetchSimilar, MediaItem, SeasonDetails, fetchSeasonDetails } from '../services/tmdb';
 import { useWatchProgress } from '../hooks/useWatchProgress';
 import { useMyList } from '../hooks/useMyList';
@@ -562,21 +562,32 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       onEnded={() => handleSkipEpisode('next')}
                     />
                   </div>
-                ) : ['m3u8', 'youtube'].includes(currentServerObj?.type || '') ? (
-                  <div className="w-full h-full absolute inset-0">
-                    {(() => {
-                      const Player = ReactPlayer as any;
-                      return <Player key={`player-${refreshKey}`} url={src} width="100%" height="100%" controls playing onEnded={() => handleSkipEpisode('next')} />
-                    })()}
-                  </div>
                 ) : (
                   <iframe
                     key={`player-${refreshKey}`}
                     src={src}
                     frameBorder="0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                    // `clipboard-write` was granted to the embeds and is now gone:
+                    // it let a hostile ad script silently replace the contents of
+                    // the user's clipboard, and no player needs it.
+                    allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen"
                     allowFullScreen
                     referrerPolicy="no-referrer"
+                    // Popup defence differs by platform, deliberately.
+                    //
+                    // In the Android app the native shell owns this: onCreateWindow
+                    // refuses every window.open, the top-frame whitelist blocks
+                    // `top.location = ad`, and gesture-driven frame redirects to
+                    // unknown hosts are dropped. Sandboxing there would buy nothing
+                    // and several providers run an anti-tamper check that refuses to
+                    // play inside a sandboxed frame ("remove sandbox attributes").
+                    //
+                    // On the web build there is no native shell, so the embeds could
+                    // pop and hijack the tab freely. There we sandbox: scripts and
+                    // same-origin (both required for playback) but deliberately NO
+                    // allow-popups, allow-modals or allow-top-navigation.
+                    sandbox={Capacitor.isNativePlatform() ? undefined
+                      : 'allow-scripts allow-same-origin allow-forms allow-presentation allow-orientation-lock allow-pointer-lock'}
                     // Auto-fullscreen once the embed has loaded + autostarted
                     // (media playback no longer needs a separate gesture), so a
                     // single Play tap ends up fullscreen and playing.
@@ -586,7 +597,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                   />
                 )}
                 {/* Netflix-style loading ring + slow-load recovery (Reload / Next server) */}
-                {!videoLoaded && !['m3u8', 'youtube'].includes(currentServerObj?.type || '') && !localVideoUrl && (
+                {!videoLoaded && !localVideoUrl && (
                   <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/85 pointer-events-none">
                     <div className="relative w-20 h-20">
                       <svg viewBox="0 0 48 48" className="w-20 h-20 -rotate-90">

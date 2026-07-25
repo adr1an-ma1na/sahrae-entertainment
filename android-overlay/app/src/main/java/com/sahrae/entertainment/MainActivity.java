@@ -178,9 +178,24 @@ public class MainActivity extends BridgeActivity {
      * on-click popunder/redirect and refused.
      */
     private static final Set<String> EMBED_HOSTS = new HashSet<>(Arrays.asList(
-        // Movie / TV embed providers
-        "vidrock.ru","vidzee.wtf","vidlink.pro","vidsrc.to","vidsrc.pm",
-        "autoembed.co","vidsrc.icu","vidvault.ru",
+        // ─────────────────────────────────────────────────────────────────
+        // KEEP IN SYNC WITH THE `SERVERS` ARRAY IN src/components/PlayerModal.tsx.
+        //
+        // A provider missing from this set is punished twice: L1.5 rewrites its
+        // HTML (tripping the "remove sandbox attributes" anti-tamper check so it
+        // refuses to play), and L2.5 refuses its gesture-driven frame loads. That
+        // is precisely how 10 of the 14 servers silently stopped working when the
+        // JS list was rewritten and this one was not. Nested player CDNs do NOT
+        // need to be listed — L2.5 only refuses *gesture-driven* frame loads, and
+        // a player wiring up its own CDN iframe during page load is not one.
+        // ─────────────────────────────────────────────────────────────────
+        // Movie / TV embed providers — current PlayerModal list
+        "vidvault.ru","multiembed.mov","vidsrc.cc","smashystream.com",
+        "vidsrc.to","vidbinge.com","moviesapi.club","autoembed.co",
+        "vidsrc.pro","2embed.cc","vidsrc.net","vidsrc.me","embed.su",
+        // Retired providers — harmless to keep, users may still have one saved
+        // as their preferred server from an earlier build.
+        "vidrock.ru","vidzee.wtf","vidlink.pro","vidsrc.pm","vidsrc.icu",
         "youtube-nocookie.com","youtube.com","ytimg.com",   // trailer player
         // Live Sports (Streamed API + its stream embed hosts)
         "streamed.pk","streamed.su","streamed.st",
@@ -306,6 +321,50 @@ public class MainActivity extends BridgeActivity {
         if (host == null) return false;
         String h = host.toLowerCase();
         return h.equals("localhost") || h.endsWith(".localhost");
+    }
+
+    /**
+     * L0 — FIRST-PARTY GATE on the private {@code /__*} bridge.
+     *
+     * {@link WebView#shouldInterceptRequest} fires for EVERY frame, including the
+     * hostile third-party streaming embeds we deliberately load. Without this
+     * check any ad script inside vidsrc/multiembed/etc. could simply
+     * {@code fetch("https://localhost/__ddfetch?u=…")} and use the device as an
+     * open proxy on the user's home network (SSRF from a residential IP), read
+     * their download list, or trigger side effects — the bridge was reachable by
+     * anything that could reach the URL.
+     *
+     * Our own code always calls the bridge from the top document at
+     * {@code https://localhost}. A same-origin GET sends either no Origin header
+     * or {@code Origin: https://localhost}; a call from an embed always carries
+     * that embed's origin. Referer is checked the same way as a second signal.
+     * So: allow only requests that prove they came from our own origin.
+     */
+    private static boolean isFirstPartyBridgeCall(WebResourceRequest request) {
+        Map<String, String> h = request.getRequestHeaders();
+        if (h == null) return true; // no headers to inspect — same-origin navigation
+        String origin = h.get("Origin");
+        if (origin == null) origin = h.get("origin");
+        if (origin != null && !origin.isEmpty() && !"null".equalsIgnoreCase(origin)) {
+            String o = origin.trim().toLowerCase();
+            if (!o.equals("https://localhost") && !o.equals("http://localhost")) return false;
+        }
+        String referer = h.get("Referer");
+        if (referer == null) referer = h.get("referer");
+        if (referer != null && !referer.isEmpty()) {
+            String host = uriHost(referer);
+            if (!isLocalAppHost(host)) return false;
+        }
+        return true;
+    }
+
+    /** 403 for a {@code /__*} bridge call that did not come from our own origin. */
+    private static WebResourceResponse bridgeForbidden() {
+        Map<String, String> h = new HashMap<>();
+        h.put("Access-Control-Allow-Origin", "https://localhost");
+        h.put("Cache-Control", "no-store");
+        return new WebResourceResponse("application/json", "utf-8", 403, "Forbidden", h,
+            new ByteArrayInputStream("{\"error\":\"forbidden\"}".getBytes(StandardCharsets.UTF_8)));
     }
 
     /**
@@ -437,7 +496,7 @@ public class MainActivity extends BridgeActivity {
             String urlLower = finalUrl.toLowerCase();
 
             Map<String, String> headers = new HashMap<>();
-            headers.put("Access-Control-Allow-Origin", "*");
+            headers.put("Access-Control-Allow-Origin", "https://localhost");
             headers.put("Cache-Control", "no-cache");
 
             // Fast classification from metadata, no body read.
@@ -603,7 +662,7 @@ public class MainActivity extends BridgeActivity {
 
     private static WebResourceResponse jsonResponse(String body) {
         Map<String, String> h = new HashMap<>();
-        h.put("Access-Control-Allow-Origin", "*");
+        h.put("Access-Control-Allow-Origin", "https://localhost");
         h.put("Cache-Control", "no-cache");
         return new WebResourceResponse("application/json", "utf-8", 200, "OK", h,
             new ByteArrayInputStream(body.getBytes(StandardCharsets.UTF_8)));
@@ -838,7 +897,7 @@ public class MainActivity extends BridgeActivity {
             String ct = conn.getContentType();
             String mime = (ct != null) ? ct.split(";")[0].trim() : "application/json";
             Map<String, String> h = new HashMap<>();
-            h.put("Access-Control-Allow-Origin", "*");
+            h.put("Access-Control-Allow-Origin", "https://localhost");
             h.put("Cache-Control", "no-cache");
             return new WebResourceResponse(mime, "utf-8", 200, "OK", h, new ByteArrayInputStream(body));
         } catch (Exception e) {
@@ -977,21 +1036,6 @@ public class MainActivity extends BridgeActivity {
      * and hand the rewritten document back to the WebView. Returns null to fall
      * back to normal loading for anything that isn't a plain HTML document.
      */
-    /** Open a URL in the external browser (Chrome), where downloads work
-     *  reliably and land in the device's public Downloads. */
-    private void openExternalUrl(String url) {
-        if (url == null) return;
-        final String u = url.trim();
-        if (!(u.startsWith("http://") || u.startsWith("https://"))) return;
-        runOnUiThread(() -> {
-            try {
-                android.content.Intent i = new android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(u));
-                i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(i);
-            } catch (Throwable ignore) {}
-        });
-    }
-
     private WebResourceResponse maybeRewriteEmbedHtml(WebResourceRequest request, String host) {
         HttpURLConnection conn = null;
         try {
@@ -1242,6 +1286,12 @@ public class MainActivity extends BridgeActivity {
                     // from the device's own (residential) IP, then serve the
                     // stream same-origin so the player can play it.
                     String path = request.getUrl().getPath();
+                    if (path != null && "localhost".equals(host) && path.startsWith("/__")) {
+                        // L0 — the bridge is private to our own top document. An
+                        // embed iframe reaching it would be an open proxy on the
+                        // user's network, so refuse anything cross-origin.
+                        if (!isFirstPartyBridgeCall(request)) return bridgeForbidden();
+                    }
                     if (path != null && "localhost".equals(host)) {
                         if (path.startsWith("/__hlsproxy")) {
                             WebResourceResponse r = hlsProxy(request.getUrl());
@@ -1284,13 +1334,13 @@ public class MainActivity extends BridgeActivity {
                         } else if (path.startsWith("/__dltitle")) {
                             DownloadStore.setPendingTitle(request.getUrl().getQueryParameter("t"));
                             return DownloadStore.json("{\"ok\":true}");
-                        } else if (path.startsWith("/__openext")) {
-                            // Open a URL in the EXTERNAL browser (Chrome) — the download
-                            // screen + in-app download popups use this, since Chrome
-                            // handles every download mechanism and saves to Downloads.
-                            openExternalUrl(request.getUrl().getQueryParameter("url"));
-                            return AudioFx.ok();
                         }
+                        // NOTE: /__openext (open an arbitrary URL in the external
+                        // browser) was REMOVED. Its only caller, MovieDownloadModal,
+                        // no longer exists, and an endpoint that launches any URL in
+                        // Chrome is exactly the popup escape hatch the six blocking
+                        // layers exist to prevent. Do not reintroduce it without a
+                        // strict allow-list of destinations.
                     }
 
                     // L1 — network blocklist
@@ -1362,12 +1412,12 @@ public class MainActivity extends BridgeActivity {
             @Override
             public boolean onCreateWindow(WebView view, boolean isDialog,
                                           boolean isUserGesture, Message resultMsg) {
-                // Refuse EVERY popup. Streaming embeds (vidlink/vidsrc/etc.) fire ad
-                // popunders on the user's PLAY tap (a user gesture) — a previous
+                // Refuse EVERY popup. Streaming embeds (vidsrc/multiembed/etc.) fire
+                // ad popunders on the user's PLAY tap (a user gesture) — a previous
                 // download tweak routed user-gesture popups to the browser, which let
-                // those ads back in. So block them all. Downloads use the explicit
-                // "Open in browser" button in MovieDownloadModal (native /__openext
-                // intent — not a popup), so they still work with popups fully off.
+                // those ads back in. So block them all, with no escape hatch: video
+                // downloads are captured natively (DownloadStore), and the /__openext
+                // intent that used to reopen this hole has been removed.
                 return false;
             }
 

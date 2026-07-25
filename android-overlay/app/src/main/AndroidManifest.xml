@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- allowBackup=false: the WebView's localStorage holds Supabase session
+         tokens, a Google OAuth access token and account records. With backup on,
+         `adb backup` (and cloud backup) can extract all of it off an unlocked
+         device. Nothing stored here is worth restoring across installs. -->
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"

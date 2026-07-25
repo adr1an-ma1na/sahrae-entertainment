@@ -60,10 +60,6 @@ class YoutubeService {
     return this.getToken() !== null;
   }
 
-  getOAuthClientId(): string {
-    return firebaseConfig.oAuthClientId || '';
-  }
-
   // Trigger Google Auth via Firebase SDK Popup (this bypasses redirect_uri_mismatch)
   async signInWithGoogle(): Promise<string> {
     const provider = new GoogleAuthProvider();
