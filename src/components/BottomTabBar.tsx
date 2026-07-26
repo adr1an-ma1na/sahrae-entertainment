@@ -10,10 +10,10 @@ import { Home, Search, Headphones, Radio, Grid3x3, X, Film, Tv2, Clapperboard, T
 const PRIMARY = [
   { id: 'home', label: 'Home', icon: Home },
   { id: 'search', label: 'Search', icon: Search },
-  { id: 'music', label: 'Listen', icon: Headphones },
+  { id: 'audio', label: 'Listen', icon: Headphones },
 ] as const;
-// The single "Listen" tab stays active for any audio destination.
-const AUDIO_TABS = ['music', 'podcasts', 'audio'];
+// "Listen" is Radio-only now (Music/Sauti and Podcasts were removed from it).
+const AUDIO_TABS = ['audio'];
 
 const MORE = [
   { id: 'movies', label: 'Movies', icon: Film },
@@ -62,7 +62,7 @@ export default function BottomTabBar({ activeTab, setActiveTab }: { activeTab: s
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-[90] glass border-t border-white/10 pb-[env(safe-area-inset-bottom)]">
         <div className="flex items-stretch">
           {PRIMARY.map((t) => {
-            const Icon = t.icon; const on = t.id === 'music' ? AUDIO_TABS.includes(activeTab) : activeTab === t.id;
+            const Icon = t.icon; const on = t.id === 'audio' ? AUDIO_TABS.includes(activeTab) : activeTab === t.id;
             return (
               <button key={t.id} onClick={() => go(t.id)} tabIndex={0} data-tv-focusable
                 className={`flex-1 flex flex-col items-center gap-1 py-2 transition-colors ${on ? 'text-sauti' : 'text-zinc-400 hover:text-zinc-200'}`}>

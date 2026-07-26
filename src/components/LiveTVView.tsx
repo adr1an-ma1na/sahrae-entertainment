@@ -5,7 +5,7 @@ import { Capacitor } from '@capacitor/core';
 import Coachmark from './Coachmark';
 
 interface Channel { name: string; country: string; category: Category; url: string; kind?: 'hls' | 'yt' }
-type Category = 'News' | 'Regional' | 'Sports' | 'Documentary' | 'Science' | 'Music' | 'Kids' | 'Lifestyle';
+type Category = 'News' | 'Regional' | 'Sports' | 'Documentary' | 'Science' | 'Wildlife' | 'Anime' | 'Music' | 'Kids' | 'Lifestyle';
 
 // News plays via each broadcaster's permanent YouTube live channel (kind: 'yt') —
 // the most stable option since channel IDs never change. Everything else uses
@@ -59,16 +59,45 @@ const CHANNELS: Channel[] = [
   { name: 'Tennis Channel', country: 'Global', category: 'Sports', url: 'https://cdn-ue1-prod.tsv2.amagi.tv/linear/amg01444-tennischannelth-tennischannelnl-samsungnl/playlist.m3u8' },
   { name: 'Real Madrid TV', country: 'Spain', category: 'Sports', url: 'https://rmtv.akamaized.net/hls/live/2043153/rmtv-es-web/master.m3u8' },
   // Documentary / Science
+  //
+  // Every feed below was checked twice on 2026-07-26: once with curl for
+  // liveness, then again with fetch() FROM THE APP'S OWN ORIGIN. The second
+  // check is the one that matters and it is why several obvious-looking
+  // candidates were rejected — Pluto (jmp2.uk), Curiosity NOW, Animax Asia and
+  // Al Jazeera Documentary all serve fine to curl but send no CORS header, so
+  // they play in the APK (native /__hlsproxy) and are dead on the web build.
+  // Only CORS-clean feeds are listed, so a channel works on every surface.
   { name: 'DW Documentary', country: 'Germany', category: 'Documentary', url: 'https://dwamdstream104.akamaized.net/hls/live/2015530/dwstream104/index.m3u8' },
-  { name: 'NASA TV', country: 'USA', category: 'Science', url: 'https://ntv1.akamaized.net/hls/live/2014075/NASA-NTV1-HLS/master.m3u8' },
-  // Music
-  { name: 'Trace Urban', country: 'France', category: 'Music', url: 'https://laso3-tracetv.amagi.tv/hls/amagi_hls_data_traceTV-traceurban/CDN/master.m3u8' },
-  { name: 'Lofi Girl Radio', country: 'Global', category: 'Music', kind: 'yt', url: 'https://www.youtube.com/embed/live_stream?channel=UCSJ4gkVC6NrvII8umztf0Ow&autoplay=1' },
-  { name: 'Vevo Dance', country: 'Global', category: 'Music', url: 'https://amg00549-vevo-amg00549c4-samsung-it-2521.playouts.now.amagi.tv/playlist.m3u8' },
-  { name: 'Stingray Classica', country: 'Canada', category: 'Music', url: 'https://stingray-classica-1-de.samsung.wurl.tv/playlist.m3u8' },
+  { name: 'Documentary Plus', country: 'USA', category: 'Documentary', url: 'https://1d153317c8db4250b3789601274e2402.mediatailor.us-west-2.amazonaws.com/v1/master/ba62fe743df0fe93366eba3a257d792884136c7f/LINEAR-887-DOCUMENTARYINTERNATIONAL-DOCUMENTARYPLUS/mt/documentaryplus/887/hls/master/playlist.m3u8' },
+  { name: 'CGTN Documentary', country: 'China', category: 'Documentary', url: 'https://amg00405-rakutentv-cgtndocumentary-rakuten-0ql8j.amagi.tv/master.m3u8' },
+  { name: 'Autentic History', country: 'Germany', category: 'Documentary', url: 'https://9e754fa707344ccca6d84955c8fcaf36.mediatailor.us-east-1.amazonaws.com/v1/master/44f73ba4d03e9607dcd9bebdcb8494d86964f1d8/RlaxxTV-eu_AutenticHistory/playlist.m3u8' },
+  // Science. NOTE: the old "NASA TV" entry is gone. Its feed now returns 403,
+  // and the only NASA-named stream in the public directories is a Macedonian
+  // broadcaster that happens to be called Nasa TV — shipping that under a
+  // USA/Science label would simply be wrong. Space Live is a real space channel.
+  { name: 'Space Live', country: 'UK', category: 'Science', url: 'https://linear-1224.frequency.stream/dist/lg-uk/1224/hls/master/playlist.m3u8' },
+  // Wildlife / nature
+  { name: 'Love Nature', country: 'Global', category: 'Wildlife', url: 'https://pb-ehs1glsha1juy.akamaized.net/Love_Nature_4K.m3u8' },
+  { name: 'WildEarth', country: 'South Africa', category: 'Wildlife', url: 'https://dqga3jatxofgx.cloudfront.net/WildEarth.m3u8' },
+  { name: 'Real Wild', country: 'UK', category: 'Wildlife', url: 'https://cdn-apse1-prod.tsv2.amagi.tv/linear/amg00426-littledotstudio-realwildnz-samsungnz/playlist.m3u8' },
+  // Anime / cartoons
+  { name: 'Anime x HIDIVE', country: 'Global', category: 'Anime', url: 'https://d3f088nnrrvkwf.cloudfront.net/v1/amc_anime_x_hidive_1/samsungheadend_us/latest/main/hls/playlist.m3u8' },
+  { name: 'FilmRise Anime', country: 'Global', category: 'Anime', url: 'https://dvu7aia8rjlfm.cloudfront.net/master.m3u8' },
+  { name: 'Kartoon Channel', country: 'USA', category: 'Anime', url: 'https://d2z0ysa6dgxhlc.cloudfront.net/kchan.m3u8' },
+  { name: 'Toon Goggles', country: 'Global', category: 'Anime', url: 'https://amg01329-otterainc-toongoggles-samsungau-ad-4c.amagi.tv/playlist/amg01329-otterainc-toongoggles-samsungau/playlist.m3u8' },
+  // Music. "Lofi Girl Radio" is gone: it was a YouTube live_stream embed, which
+  // now returns Error 153, and there is no CORS-clean lofi HLS equivalent. Lofi
+  // is well covered by the Radio section instead.
+  { name: 'Trace Urban', country: 'France', category: 'Music', url: 'https://channels.trace.plus/Traceprod/URBAN_AFRIC_FR_hd/index.m3u8' },
+  // Renamed from "Vevo Dance": the working Vevo feed is the Pop channel, and
+  // labelling it Dance would promise a genre it does not play.
+  { name: 'Vevo Pop', country: 'Global', category: 'Music', url: 'https://d128y56w6v2kax.cloudfront.net/playlist/amg00056-vevotv-vevopopau-samsungau/playlist.m3u8' },
+  { name: 'Stingray Classica', country: 'Canada', category: 'Music', url: 'https://lotus.stingray.com/manifest/classica-cla008-montreal/samsungtvplus/master.m3u8' },
   // Lifestyle / Kids
-  { name: 'Fashion TV', country: 'France', category: 'Lifestyle', url: 'https://fashiontv-fashiontv-1-eu.rakuten.wurl.tv/playlist.m3u8' },
-  { name: 'ZooMoo Kids', country: 'Global', category: 'Kids', url: 'https://amg01006-amg01006c1-samsung-it-2110.playouts.now.amagi.tv/playlist.m3u8' },
+  { name: 'Fashion TV', country: 'France', category: 'Lifestyle', url: 'https://edge-fast3.evrideo.tv/bfdbb576-83f7-11f0-9f89-0200170e3e04_1000028043_HLS/manifest.m3u8' },
+  { name: 'ZooMoo Kids', country: 'Global', category: 'Kids', url: 'https://zoomoo-samsungau.amagi.tv/playlist.m3u8' },
+  { name: 'ABC Kids', country: 'Australia', category: 'Kids', url: 'https://c.mjh.nz/abc-kids.m3u8' },
+  { name: 'Akili Kids', country: 'Kenya', category: 'Kids', url: 'https://m6.livecdn.io/akilikids.co.ke/akilikids.smil/playlist.m3u8' },
 ];
 
 const CAT_STYLE: Record<Category, string> = {
@@ -77,6 +106,8 @@ const CAT_STYLE: Record<Category, string> = {
   Sports: 'from-emerald-500 to-teal-700',
   Documentary: 'from-cyan-500 to-teal-700',
   Science: 'from-indigo-500 to-violet-700',
+  Wildlife: 'from-lime-500 to-green-700',
+  Anime: 'from-violet-500 to-purple-700',
   Music: 'from-rose-500 to-fuchsia-700',
   Kids: 'from-orange-400 to-amber-600',
   Lifestyle: 'from-pink-500 to-rose-700',

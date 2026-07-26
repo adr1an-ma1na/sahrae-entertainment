@@ -411,7 +411,7 @@ export default function App() {
   };
 
   const renderContent = () => {
-    if (loading && activeTab !== 'home' && activeTab !== 'radio' && activeTab !== 'tv' && activeTab !== 'sports' && activeTab !== 'podcasts' && activeTab !== 'continue') {
+    if (loading && activeTab !== 'home' && activeTab !== 'radio' && activeTab !== 'audio' && activeTab !== 'tv' && activeTab !== 'sports' && activeTab !== 'podcasts' && activeTab !== 'continue') {
       return (
         <div className="min-h-screen flex items-center justify-center">
           <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>

@@ -20,11 +20,11 @@ const WATCH = [
   { id: 'channels', label: 'Flow Channels', icon: Clapperboard },
 ];
 const LISTEN = [
-  { id: 'music', label: 'Listen', icon: Headphones },
+  // "Listen" is Radio-only now (Sauti/Music and Podcasts were removed from the
+  // hub), so it points straight at the radio view rather than a sub-tab shell.
+  { id: 'audio', label: 'Listen', icon: Headphones },
 ];
-// The single "Listen" entry stays highlighted for any audio destination
-// (Music / Podcasts / Radio all live inside the Listen hub).
-const AUDIO_TABS = ['music', 'podcasts', 'audio'];
+const AUDIO_TABS = ['audio'];
 const LIBRARY = [
   { id: 'mylist', label: 'My List', icon: Heart },
   { id: 'continue', label: 'Continue Watching', icon: Clock },
@@ -37,7 +37,7 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
   const renderNav = (items: NavItem[]) =>
     items.map((t) => {
       const Icon = t.icon;
-      const active = t.id === 'music' ? AUDIO_TABS.includes(activeTab) : activeTab === t.id;
+      const active = t.id === 'audio' ? AUDIO_TABS.includes(activeTab) : activeTab === t.id;
       return (
         <button key={t.id} onClick={() => setActiveTab(t.id)} tabIndex={0} data-tv-focusable
           className={`w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all focus:outline-none ${
