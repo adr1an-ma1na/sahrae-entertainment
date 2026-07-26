@@ -116,7 +116,9 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
         episodeTitle: ep?.name || (currentMediaType === 'tv' ? `Episode ${selectedEpisode}` : undefined),
         posterPath: details.poster_path || '',
         backdropPath: details.backdrop_path || '',
-        overview: details.overview || ''
+        overview: details.overview || '',
+        // Download source = VidVault (kept out of the play servers on purpose).
+        sourceUrl: vidvaultDownloadUrl(currentMediaType, currentMediaId, selectedSeason, selectedEpisode),
       });
     }
   };
@@ -300,10 +302,12 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     };
   }, [isOpen, isPlaying]);
 
-  // Server priority per user: restore the highly reliable older embed servers that work best.
+  // Streaming servers. NOTE: vidvault.ru is deliberately NOT here — it is a
+  // download portal ("Download movies and TV shows"), not a stream. It now lives
+  // only behind the Download button (see DOWNLOAD_SOURCE below), per the request
+  // that it stop being the default play server.
   const SERVERS = [
-    { id: 'vidvault', name: 'Ultra HD (VidVault)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidvault.ru/movie/${id}` : `https://vidvault.ru/tv/${id}/${s}/${e}`, type: 'iframe' },
-    { id: 'multiembed', name: 'Ultra HD 2 (MultiEmbed)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://multiembed.mov/?video_id=${id}&tmdb=1` : `https://multiembed.mov/?video_id=${id}&tmdb=1&s=${s}&e=${e}`, type: 'iframe' },
+    { id: 'multiembed', name: 'Ultra HD (MultiEmbed)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://multiembed.mov/?video_id=${id}&tmdb=1` : `https://multiembed.mov/?video_id=${id}&tmdb=1&s=${s}&e=${e}`, type: 'iframe' },
     { id: 'vidsrccc', name: 'Ultra HD V3 (VidSrc.cc)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.cc/v3/embed/movie/${id}` : `https://vidsrc.cc/v3/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
     { id: 'smashystream', name: 'Multi-Source HQ (SmashyStream)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://embed.smashystream.com/playere.php?tmdb=${id}` : `https://embed.smashystream.com/playere.php?tmdb=${id}&season=${s}&episode=${e}`, type: 'iframe' },
     { id: 'vidsrcto', name: 'Premium 4K CDN (VidSrc.to)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.to/embed/movie/${id}` : `https://vidsrc.to/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
@@ -317,6 +321,12 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     { id: 'vidsrcme', name: 'Fast Stream 2 (VidSrc.me)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.me/embed/movie?tmdb=${id}` : `https://vidsrc.me/embed/tv?tmdb=${id}&season=${s}&episode=${e}`, type: 'iframe' },
     { id: 'embedsu', name: 'Backup (Embed.su)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://embed.su/embed/movie/${id}` : `https://embed.su/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
   ];
+
+  // VidVault is the DOWNLOAD source only (never a play server). Downloads are
+  // saved into the app's own private storage (IndexedDB via videoDownloads),
+  // not the device's public Downloads folder, as requested.
+  const vidvaultDownloadUrl = (type: string, id: number, s: number, e: number) =>
+    type === 'movie' ? `https://vidvault.ru/movie/${id}` : `https://vidvault.ru/tv/${id}/${s}/${e}`;
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -780,14 +790,6 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                         </>
                       )}
                     </button>
-                    {/* Server picker — right in the action row. If a title won't play, switch here. */}
-                    <div className="relative flex items-center gap-2 px-4 md:px-5 py-2 md:py-3 bg-zinc-900/90 border border-zinc-600/60 rounded text-white shadow-lg hover:bg-zinc-800 transition-colors ml-2" title="Pick a server if it won't play">
-                      <Server className="w-5 h-5 shrink-0" />
-                      <select value={selectedServer} onChange={e => setSelectedServer(Number(e.target.value))} data-tv-focusable aria-label="Choose server"
-                        className="bg-transparent text-white font-bold text-sm outline-none cursor-pointer appearance-none pr-1">
-                        {dynamicServers.map((server, idx) => <option key={server.id} value={idx} className="bg-zinc-900 text-white">{server.name}</option>)}
-                      </select>
-                    </div>
                   </div>
                 </div>
               </>
@@ -795,17 +797,31 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
           </div>
 
             <div className="p-8 md:p-10 pb-16">
-              {currentMediaType === 'movie' && (
-                <div className="mb-8 p-4 bg-zinc-900/40 border border-zinc-800 rounded-lg flex flex-col sm:flex-row justify-between items-center gap-4">
-                  <div>
-                    <h4 className="text-white font-bold">Server Selection</h4>
-                    <p className="text-sm text-zinc-400">Try a different server if you experience playback issues.</p>
-                  </div>
-                  <select value={selectedServer} onChange={e => setSelectedServer(Number(e.target.value))} className="bg-zinc-950 text-white font-bold outline-none cursor-pointer rounded px-4 py-2 border border-zinc-800 text-sm w-full sm:w-auto shrink-0">
-                    {dynamicServers.map((server, idx) => <option key={server.id} value={idx}>{server.name}</option>)}
-                  </select>
+              {/* Pick-a-server-before-you-play. Shown for BOTH movies and series
+                  (the old prominent picker was movies-only, and the series one
+                  was a small dropdown that appeared only after playback began).
+                  Chips are far more discoverable than a <select> on TV + touch,
+                  and the choice is made here, before Play is ever pressed. */}
+              <div className="mb-8">
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
+                  <Server className="w-4 h-4 text-amber-400 shrink-0" />
+                  <h4 className="text-white font-bold text-sm">Choose your server</h4>
+                  <span className="text-xs text-zinc-500">Pick one before you play — switch anytime if a title won't load</span>
                 </div>
-              )}
+                <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar snap-x">
+                  {dynamicServers.map((server, idx) => (
+                    <button key={server.id} onClick={() => setSelectedServer(idx)} data-tv-focusable
+                      aria-pressed={selectedServer === idx}
+                      className={`shrink-0 snap-start px-4 py-2 rounded-full text-sm font-semibold border transition-colors ${
+                        selectedServer === idx
+                          ? 'bg-amber-500 text-amber-950 border-amber-400'
+                          : 'bg-zinc-900/80 text-zinc-300 border-zinc-700 hover:bg-zinc-800 hover:text-white'
+                      }`}>
+                      {server.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="flex flex-col lg:flex-row gap-10">
                 <div className="lg:w-2/3 space-y-5">
                   <div className="flex items-center gap-3 text-sm font-semibold text-zinc-400">

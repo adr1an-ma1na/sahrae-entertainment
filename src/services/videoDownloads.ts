@@ -11,6 +11,10 @@ export interface VideoDownloadItem {
   posterPath: string;
   backdropPath: string;
   overview: string;
+  /** The download portal (VidVault) this title came from. Recorded for
+   *  traceability; the bytes are stored in-app (IndexedDB), never in the
+   *  device's public Downloads. */
+  sourceUrl?: string;
   size: number; // bytes
   mime: string;
   status: 'downloading' | 'done' | 'error';
@@ -346,9 +350,10 @@ export const videoDownloads = {
     posterPath: string;
     backdropPath: string;
     overview: string;
+    sourceUrl?: string;
   }): Promise<void> => {
-    const id = params.type === 'movie' 
-      ? `movie_${params.mediaId}` 
+    const id = params.type === 'movie'
+      ? `movie_${params.mediaId}`
       : `tv_${params.mediaId}_s${params.season}_e${params.episode}`;
 
     const existing = await videoDownloads.get(id);
@@ -371,6 +376,7 @@ export const videoDownloads = {
       posterPath: params.posterPath,
       backdropPath: params.backdropPath,
       overview: params.overview,
+      sourceUrl: params.sourceUrl,
       size: 0,
       mime: 'video/mp4',
       status: 'downloading',
