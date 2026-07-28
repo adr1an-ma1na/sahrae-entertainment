@@ -324,6 +324,44 @@ public class MainActivity extends BridgeActivity {
     }
 
     /**
+     * Hosts /__openext is allowed to hand to the external browser. Deliberately
+     * tiny: only the download portal the Download button uses. Anything else is
+     * refused, so the endpoint cannot be turned back into an arbitrary-URL popup.
+     */
+    private static final Set<String> DOWNLOAD_HOSTS = new HashSet<>(Arrays.asList(
+        "vidvault.ru"
+    ));
+
+    private static boolean isAllowedDownloadHost(String host) {
+        if (host == null) return false;
+        String h = host.toLowerCase();
+        if (DOWNLOAD_HOSTS.contains(h)) return true;
+        for (String d : DOWNLOAD_HOSTS) if (h.endsWith("." + d)) return true;
+        return false;
+    }
+
+    /**
+     * Open an allow-listed download page in the external browser, where the
+     * provider's real file download completes. Any non-allow-listed or malformed
+     * URL is dropped — this is the strict-allow-list gate the earlier, removed
+     * /__openext lacked.
+     */
+    private void openDownloadUrl(String url) {
+        if (url == null) return;
+        final String u = url.trim();
+        if (!(u.startsWith("http://") || u.startsWith("https://"))) return;
+        if (!isAllowedDownloadHost(uriHost(u))) return;
+        runOnUiThread(() -> {
+            try {
+                android.content.Intent i = new android.content.Intent(
+                    android.content.Intent.ACTION_VIEW, android.net.Uri.parse(u));
+                i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(i);
+            } catch (Throwable ignore) {}
+        });
+    }
+
+    /**
      * L0 — FIRST-PARTY GATE on the private {@code /__*} bridge.
      *
      * {@link WebView#shouldInterceptRequest} fires for EVERY frame, including the
@@ -1241,23 +1279,19 @@ public class MainActivity extends BridgeActivity {
         // into the app's OWN private storage + Downloads section, instead of the
         // device's public Downloads / file manager.
         webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
-            // Hand movie/series downloads to the Android system DownloadManager so the
-            // file lands in the device's public Downloads (file manager), like a normal
-            // browser download — not managed inside the app.
+            // Route through DownloadStore, which saves into the app's OWN directory
+            // (Android/data/<pkg>/files/Download) and records the file so it shows
+            // up on the in-app Downloads screen via /__dllist.
+            //
+            // This listener used to build its own DownloadManager request with
+            // setDestinationInExternalPublicDir(), so every captured movie went to
+            // the device's public Downloads and never appeared in the app at all —
+            // directly contradicting the comment above it. DownloadStore.enqueue()
+            // already existed and did the right thing; nothing ever called it.
             try {
-                String name = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimetype);
-                android.app.DownloadManager.Request req = new android.app.DownloadManager.Request(android.net.Uri.parse(url));
-                req.setMimeType(mimetype);
-                if (userAgent != null && !userAgent.isEmpty()) req.addRequestHeader("User-Agent", userAgent);
-                try { String ck = android.webkit.CookieManager.getInstance().getCookie(url); if (ck != null && !ck.isEmpty()) req.addRequestHeader("Cookie", ck); } catch (Throwable ignore) {}
-                req.setTitle(name);
-                req.setDescription("Sahrae");
-                req.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-                req.setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, name);
-                android.app.DownloadManager dm = (android.app.DownloadManager) getSystemService(DOWNLOAD_SERVICE);
-                if (dm != null) dm.enqueue(req);
+                DownloadStore.enqueue(getApplicationContext(), url, userAgent, contentDisposition, mimetype);
                 runOnUiThread(() -> android.widget.Toast.makeText(
-                    getApplicationContext(), "Saving to your device's Downloads…", android.widget.Toast.LENGTH_SHORT).show());
+                    getApplicationContext(), "Saving to your in-app Downloads…", android.widget.Toast.LENGTH_SHORT).show());
             } catch (Throwable t) {
                 runOnUiThread(() -> android.widget.Toast.makeText(
                     getApplicationContext(), "Couldn't start the download.", android.widget.Toast.LENGTH_SHORT).show());
@@ -1334,13 +1368,19 @@ public class MainActivity extends BridgeActivity {
                         } else if (path.startsWith("/__dltitle")) {
                             DownloadStore.setPendingTitle(request.getUrl().getQueryParameter("t"));
                             return DownloadStore.json("{\"ok\":true}");
+                        } else if (path.startsWith("/__openext")) {
+                            // Open the download provider page in the external browser
+                            // so its real file download completes and the file lands
+                            // in the device's Downloads.
+                            //
+                            // HARDENED vs the version that was removed: this now
+                            // opens ONLY an allow-listed download host (VidVault),
+                            // never an arbitrary URL. Combined with the L0 first-party
+                            // gate above (this bridge is unreachable from the embeds),
+                            // it can no longer be abused as a popup escape hatch.
+                            openDownloadUrl(request.getUrl().getQueryParameter("url"));
+                            return AudioFx.ok();
                         }
-                        // NOTE: /__openext (open an arbitrary URL in the external
-                        // browser) was REMOVED. Its only caller, MovieDownloadModal,
-                        // no longer exists, and an endpoint that launches any URL in
-                        // Chrome is exactly the popup escape hatch the six blocking
-                        // layers exist to prevent. Do not reintroduce it without a
-                        // strict allow-list of destinations.
                     }
 
                     // L1 — network blocklist

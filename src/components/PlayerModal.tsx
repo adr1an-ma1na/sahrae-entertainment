@@ -5,7 +5,7 @@ import { useWatchProgress } from '../hooks/useWatchProgress';
 import { useMyList } from '../hooks/useMyList';
 import { loadEq, saveEq, EQ_PRESETS, PRESET_EXTRAS } from '../services/eq';
 import { haptics } from '../services/haptics';
-import { videoDownloads, VideoDownloadItem } from '../services/videoDownloads';
+import MovieDownloadModal from './MovieDownloadModal';
 
 interface PlayerModalProps {
   isOpen: boolean;
@@ -37,91 +37,24 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const [rating, setRating] = useState<'up' | 'down' | null>(null);
   const [offlineBlobUrl, setOfflineBlobUrl] = useState<string | null>(null);
   const [showDownload, setShowDownload] = useState(false);
-  const [localVideoUrl, setLocalVideoUrl] = useState<string | null>(null);
-  const [downloadItem, setDownloadItem] = useState<VideoDownloadItem | null>(null);
 
-  // Check if this video (movie or TV episode) is downloaded offline
-  useEffect(() => {
-    let active = true;
-    const checkOffline = async () => {
-      if (!currentMediaId || !currentMediaType) {
-        if (active) setLocalVideoUrl(null);
-        return;
-      }
-      const id = currentMediaType === 'movie' 
-        ? `movie_${currentMediaId}` 
-        : `tv_${currentMediaId}_s${selectedSeason}_e${selectedEpisode}`;
-      
-      const item = await videoDownloads.get(id);
-      if (item && item.status === 'done') {
-        const url = await videoDownloads.localUrl(id);
-        if (active) {
-          setLocalVideoUrl(url);
-          console.log('Playing downloaded local media file!', url);
-        }
-      } else {
-        if (active) setLocalVideoUrl(null);
-      }
-    };
-    checkOffline();
-    // Subscribe to download events to refresh localUrl if it finishes while the modal is open
-    const unsubscribe = videoDownloads.subscribe(checkOffline);
-    return () => {
-      active = false;
-      unsubscribe();
-    };
-  }, [currentMediaId, currentMediaType, selectedSeason, selectedEpisode, isOpen]);
-
-  // Check download progress/status
-  useEffect(() => {
-    let active = true;
-    const fetchStatus = async () => {
-      if (!currentMediaId || !currentMediaType) return;
-      const id = currentMediaType === 'movie' 
-        ? `movie_${currentMediaId}` 
-        : `tv_${currentMediaId}_s${selectedSeason}_e${selectedEpisode}`;
-      const item = await videoDownloads.get(id);
-      if (active) setDownloadItem(item);
-    };
-    fetchStatus();
-    const unsubscribe = videoDownloads.subscribe(fetchStatus);
-    return () => {
-      active = false;
-      unsubscribe();
-    };
-  }, [currentMediaId, currentMediaType, selectedSeason, selectedEpisode, isOpen]);
-
-  const handleToggleDownload = async () => {
+  // Download = open the REAL VidVault provider page (MovieDownloadModal). The
+  // previous build faked this by generating a canvas "offline player" clip and
+  // storing it in IndexedDB, so every download played a placeholder instead of
+  // the movie. That whole fake path (videoDownloads.download / localUrl / the
+  // IndexedDB status polling) is gone; the actual file now comes from VidVault
+  // and, in the Android app, is captured by the native DownloadListener into the
+  // app's own storage.
+  const handleOpenDownload = () => {
     if (!currentMediaId || !currentMediaType || !details) return;
-    const id = currentMediaType === 'movie' 
-      ? `movie_${currentMediaId}` 
-      : `tv_${currentMediaId}_s${selectedSeason}_e${selectedEpisode}`;
-
-    if (downloadItem) {
-      if (downloadItem.status === 'downloading') {
-        videoDownloads.cancel(id);
-      } else {
-        if (confirm('Delete this download from the app?')) {
-          await videoDownloads.remove(id);
-        }
-      }
-    } else {
-      const ep = currentMediaType === 'tv' ? (seasonDetails?.episodes?.find(e => e.episode_number === selectedEpisode)) : undefined;
-      await videoDownloads.download({
-        mediaId: currentMediaId,
-        type: currentMediaType,
-        title: details.title || details.name,
-        season: currentMediaType === 'tv' ? selectedSeason : undefined,
-        episode: currentMediaType === 'tv' ? selectedEpisode : undefined,
-        episodeTitle: ep?.name || (currentMediaType === 'tv' ? `Episode ${selectedEpisode}` : undefined),
-        posterPath: details.poster_path || '',
-        backdropPath: details.backdrop_path || '',
-        overview: details.overview || '',
-        // Download source = VidVault (kept out of the play servers on purpose).
-        sourceUrl: vidvaultDownloadUrl(currentMediaType, currentMediaId, selectedSeason, selectedEpisode),
-      });
-    }
+    setShowDownload(true);
   };
+  // VidVault is the download provider only — deliberately not in SERVERS.
+  const downloadUrl = currentMediaId && currentMediaType
+    ? (currentMediaType === 'movie'
+        ? `https://vidvault.ru/movie/${currentMediaId}`
+        : `https://vidvault.ru/tv/${currentMediaId}/${selectedSeason}/${selectedEpisode}`)
+    : '';
   const [showXRay, setShowXRay] = useState(false);
   // Loading indicator + slow-load recovery for the video embed.
   const [videoLoaded, setVideoLoaded] = useState(false);
@@ -321,12 +254,6 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     { id: 'vidsrcme', name: 'Fast Stream 2 (VidSrc.me)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.me/embed/movie?tmdb=${id}` : `https://vidsrc.me/embed/tv?tmdb=${id}&season=${s}&episode=${e}`, type: 'iframe' },
     { id: 'embedsu', name: 'Backup (Embed.su)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://embed.su/embed/movie/${id}` : `https://embed.su/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
   ];
-
-  // VidVault is the DOWNLOAD source only (never a play server). Downloads are
-  // saved into the app's own private storage (IndexedDB via videoDownloads),
-  // not the device's public Downloads folder, as requested.
-  const vidvaultDownloadUrl = (type: string, id: number, s: number, e: number) =>
-    type === 'movie' ? `https://vidvault.ru/movie/${id}` : `https://vidvault.ru/tv/${id}/${s}/${e}`;
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -560,18 +487,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                   title="Back to details">
                   <ArrowLeft className="w-4 h-4" /> Back
                 </button>
-                {localVideoUrl ? (
-                  <div className="w-full h-full absolute inset-0 bg-black flex items-center justify-center">
-                    <video 
-                      src={localVideoUrl}
-                      controls
-                      autoPlay
-                      className="w-full h-full object-contain"
-                      onPlay={() => setVideoLoaded(true)}
-                      onEnded={() => handleSkipEpisode('next')}
-                    />
-                  </div>
-                ) : (
+                {(
                   <iframe
                     key={`player-${refreshKey}`}
                     src={src}
@@ -597,7 +513,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                   />
                 )}
                 {/* Netflix-style loading ring + slow-load recovery (Reload / Next server) */}
-                {!videoLoaded && !localVideoUrl && (
+                {!videoLoaded && (
                   <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/85 pointer-events-none">
                     <div className="relative w-20 h-20">
                       <svg viewBox="0 0 48 48" className="w-20 h-20 -rotate-90">
@@ -763,32 +679,12 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       <ThumbsDown className="w-4 h-4 md:w-5 md:h-5"/>
                     </button>
                     <button
-                      onClick={handleToggleDownload}
-                      className={`group px-6 md:px-8 py-2 md:py-3 font-bold flex items-center justify-center gap-2 border rounded transition-colors shadow-lg ml-2 ${
-                        downloadItem?.status === 'done'
-                          ? 'border-emerald-500/50 bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/40'
-                          : downloadItem?.status === 'downloading'
-                          ? 'border-amber-500/50 bg-amber-950/40 text-amber-400 hover:bg-amber-900/40'
-                          : 'border-zinc-600/60 bg-zinc-900/90 text-white hover:bg-zinc-800'
-                      }`}
-                      title={downloadItem?.status === 'done' ? 'Downloaded (Click to delete)' : downloadItem?.status === 'downloading' ? 'Downloading (Click to cancel)' : 'Download inside the app'}
+                      onClick={handleOpenDownload}
+                      className="group px-6 md:px-8 py-2 md:py-3 font-bold flex items-center justify-center gap-2 border rounded transition-colors shadow-lg ml-2 border-zinc-600/60 bg-zinc-900/90 text-white hover:bg-zinc-800"
+                      title="Download this title from VidVault"
                     >
-                      {downloadItem?.status === 'done' ? (
-                        <>
-                          <Check className="w-5 h-5 text-emerald-400" />
-                          <span className="text-sm">Downloaded</span>
-                        </>
-                      ) : downloadItem?.status === 'downloading' ? (
-                        <>
-                          <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin shrink-0"></div>
-                          <span className="text-sm">Downloading {Math.round((downloadItem.progress || 0) * 100)}%</span>
-                        </>
-                      ) : (
-                        <>
-                          <Download className="w-5 h-5 group-hover:animate-bounce"/>
-                          <span className="text-sm">Download</span>
-                        </>
-                      )}
+                      <Download className="w-5 h-5 group-hover:animate-bounce"/>
+                      <span className="text-sm">Download</span>
                     </button>
                   </div>
                 </div>
@@ -964,6 +860,13 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
             </div>
           </div>
         </div>
+        {showDownload && downloadUrl && (
+          <MovieDownloadModal
+            url={downloadUrl}
+            title={(details?.title || details?.name || 'Title') + (currentMediaType === 'tv' ? ` · S${selectedSeason} E${selectedEpisode}` : '')}
+            onClose={() => setShowDownload(false)}
+          />
+        )}
     </>
   );
 }

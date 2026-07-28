@@ -13,10 +13,12 @@ interface DownloadsViewProps {
 export default function DownloadsView({ onPlay }: DownloadsViewProps) {
   const tracks = useDownloads();
   const { current, isPlaying, toggle, playQueue } = useMusic();
-  const { downloadedVideos, totalUsedBytes, removeDownload } = useVideoDownloads();
+  const { downloadedVideos, removeDownload, localSrc, supported } = useVideoDownloads();
   const [activeTab, setActiveTab] = useState<'videos' | 'audio'>('videos');
+  // Saved files play right here, from the app's own storage.
+  const [playingFile, setPlayingFile] = useState<{ src: string; title: string } | null>(null);
 
-  const usedBytes = downloads.bytesUsed() + totalUsedBytes;
+  const usedBytes = downloads.bytesUsed();
   const fmtSize = (b: number) => (b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : b >= 1e6 ? `${Math.round(b / 1e6)} MB` : `${Math.round(b / 1e3)} KB`);
 
   return (
@@ -64,86 +66,59 @@ export default function DownloadsView({ onPlay }: DownloadsViewProps) {
       {/* ── Movies & Series Tab ── */}
       {activeTab === 'videos' && (
         <div className="space-y-4 animate-in fade-in duration-200">
+          {playingFile && (
+            <div className="rounded-xl overflow-hidden border border-white/10 bg-black mb-2">
+              <video src={playingFile.src} controls autoPlay className="w-full aspect-video bg-black" />
+              <div className="flex items-center justify-between gap-3 px-3 py-2">
+                <p className="text-sm text-white font-semibold truncate">{playingFile.title}</p>
+                <button onClick={() => setPlayingFile(null)} className="text-xs font-bold text-zinc-400 hover:text-white shrink-0">Close</button>
+              </div>
+            </div>
+          )}
+
           {downloadedVideos.length > 0 ? (
             <div className="grid gap-3">
               {downloadedVideos.map((video) => {
-                const isTv = video.type === 'tv';
+                const src = localSrc(video);
                 return (
                   <div key={video.id} tabIndex={0} data-tv-focusable role="button"
-                    onClick={() => video.status === 'done' && onPlay?.(video.mediaId, video.type, false, false, video.season, video.episode)}
-                    className={`card-lift group flex flex-col md:flex-row items-start md:items-center gap-4 p-3 rounded-xl border border-white/5 bg-zinc-900/40 focus:outline-none ${video.status === 'done' ? 'cursor-pointer' : 'cursor-default'}`}>
-                    
-                    {/* Poster/Backdrop */}
+                    onClick={() => { if (src) setPlayingFile({ src, title: video.title }); }}
+                    className={`card-lift group flex flex-col md:flex-row items-start md:items-center gap-4 p-3 rounded-xl border border-white/5 bg-zinc-900/40 focus:outline-none ${src ? 'cursor-pointer' : 'cursor-default'}`}>
+
                     <div className="relative w-full md:w-32 aspect-video rounded-lg overflow-hidden bg-zinc-800 shrink-0 shadow-inner">
-                      {video.backdropPath ? (
-                        <img src={getImageUrl(video.backdropPath, 'w300')} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
-                      ) : (
-                        <div className="absolute inset-0 flex items-center justify-center bg-zinc-900">
-                          <Film className="w-6 h-6 text-zinc-600" />
-                        </div>
-                      )}
-                      {video.status === 'done' && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-zinc-900">
+                        <Film className="w-6 h-6 text-zinc-600" />
+                      </div>
+                      {src && (
                         <div className="absolute inset-0 bg-black/45 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                           <Play className="w-8 h-8 text-white fill-current" />
                         </div>
                       )}
                     </div>
 
-                    {/* Meta details */}
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="px-1.5 py-0.5 bg-amber-500/15 text-amber-500 rounded text-[9px] font-bold uppercase tracking-wider">
-                          {isTv ? 'TV Series' : 'Movie'}
-                        </span>
-                        {isTv && (
-                          <span className="text-zinc-400 text-xs font-semibold">
-                            Season {video.season} · Episode {video.episode}
+                      <p className="text-base font-bold text-white truncate">{video.title}</p>
+                      <p className="text-xs text-zinc-500 mt-1 truncate">
+                        {video.done ? 'Saved in the app' : 'Downloading…'}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end shrink-0 border-t border-white/5 md:border-0 pt-3 md:pt-0 mt-1 md:mt-0">
+                      <div className="flex flex-col items-end text-right">
+                        {video.done ? (
+                          <span className="text-[10px] font-bold text-emerald-400 flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Ready Offline
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold text-amber-500 flex items-center gap-1.5 animate-pulse">
+                            <div className="w-3 h-3 border border-amber-500 border-t-transparent rounded-full animate-spin shrink-0"></div>
+                            Downloading
                           </span>
                         )}
                       </div>
-                      <p className="text-base font-bold text-white mt-1 truncate">{video.title}</p>
-                      {isTv && video.episodeTitle && (
-                        <p className="text-xs text-amber-500/90 font-medium truncate mt-0.5">"{video.episodeTitle}"</p>
-                      )}
-                      <p className="text-xs text-zinc-400 line-clamp-1 mt-1">{video.overview}</p>
-                    </div>
-
-                    {/* Status & Size */}
-                    <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end shrink-0 border-t border-white/5 md:border-0 pt-3 md:pt-0 mt-1 md:mt-0">
-                      <div className="flex flex-col items-end text-right">
-                        {video.status === 'done' ? (
-                          <>
-                            <span className="text-[10px] font-bold text-emerald-400 flex items-center gap-1">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Ready Offline
-                            </span>
-                            <span className="text-[10px] text-zinc-500 font-semibold mt-0.5">
-                              {fmtSize(video.size || 0)}
-                            </span>
-                          </>
-                        ) : video.status === 'downloading' ? (
-                          <>
-                            <span className="text-[10px] font-bold text-amber-500 flex items-center gap-1.5 animate-pulse">
-                              <div className="w-3 h-3 border border-amber-500 border-t-transparent rounded-full animate-spin shrink-0"></div>
-                              Downloading {Math.round((video.progress || 0) * 100)}%
-                            </span>
-                            <span className="text-[10px] text-zinc-500 font-semibold mt-0.5">
-                              {fmtSize(video.size || 0)}
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <span className="text-[10px] font-bold text-red-500 flex items-center gap-1">
-                              <AlertCircle className="w-3.5 h-3.5" /> Error
-                            </span>
-                            <span className="text-[9px] text-red-400 font-medium mt-0.5">
-                              Tap delete &amp; retry
-                            </span>
-                          </>
-                        )}
-                      </div>
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); removeDownload(video.id); }} 
-                        className="p-2.5 rounded-full text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors" 
+                      <button
+                        onClick={(e) => { e.stopPropagation(); removeDownload(video.id); }}
+                        className="p-2.5 rounded-full text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                         aria-label="Remove download"
                       >
                         <Trash2 className="w-4.5 h-4.5" />
@@ -156,10 +131,21 @@ export default function DownloadsView({ onPlay }: DownloadsViewProps) {
           ) : (
             <div className="glass rounded-2xl p-6 text-sm text-zinc-400 leading-relaxed text-center sm:text-left">
               <Film className="w-10 h-10 text-amber-500/50 mb-3 mx-auto sm:mx-0" />
-              <h4 className="text-white font-bold text-base mb-1">No Movie or TV Downloads yet</h4>
-              <p className="text-xs text-zinc-400 max-w-md">
-                Browse movies and series, select any title, and tap the <span className="text-amber-500 font-bold">Download</span> button to save media for high-speed offline viewing directly in the app.
-              </p>
+              {supported ? (
+                <>
+                  <h4 className="text-white font-bold text-base mb-1">No movie or TV downloads yet</h4>
+                  <p className="text-xs text-zinc-400 max-w-md">
+                    Open any title and tap <span className="text-amber-500 font-bold">Download</span>. The file is saved inside the app and appears here when it finishes.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h4 className="text-white font-bold text-base mb-1">Downloads need the Android app</h4>
+                  <p className="text-xs text-zinc-400 max-w-md">
+                    A browser can't save a video into the app's own storage, so in-app downloads only work in the Sahrae Android app. On the web, the Download button opens the provider and the file saves to this device instead.
+                  </p>
+                </>
+              )}
             </div>
           )}
         </div>

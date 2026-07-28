@@ -1,35 +1,36 @@
 import { useEffect, useState } from 'react';
-import { videoDownloads, VideoDownloadItem } from '../services/videoDownloads';
+import { videoDownloads, VideoDownloadItem, isNativeDownloadSupported } from '../services/videoDownloads';
 
 export function useVideoDownloads() {
   const [downloadedVideos, setDownloadedVideos] = useState<VideoDownloadItem[]>([]);
-  const [totalUsedBytes, setTotalUsedBytes] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const refresh = async () => {
-    const list = await videoDownloads.list();
-    const bytes = await videoDownloads.totalBytesUsed();
-    setDownloadedVideos(list);
-    setTotalUsedBytes(bytes);
+    setDownloadedVideos(await videoDownloads.list());
     setLoading(false);
   };
 
   useEffect(() => {
-    refresh();
-    const unsubscribe = videoDownloads.subscribe(() => {
-      refresh();
-    });
-    return unsubscribe;
+    let alive = true;
+    const run = () => { if (alive) refresh(); };
+    run();
+    const unsubscribe = videoDownloads.subscribe(run);
+    // DownloadManager progresses outside the WebView, so poll while the screen is
+    // open to move items from "downloading" to "ready" without a manual refresh.
+    const timer = isNativeDownloadSupported() ? setInterval(run, 4000) : null;
+    return () => {
+      alive = false;
+      unsubscribe();
+      if (timer) clearInterval(timer);
+    };
   }, []);
 
   return {
     downloadedVideos,
-    totalUsedBytes,
     loading,
-    startDownload: videoDownloads.download,
-    cancelDownload: videoDownloads.cancel,
+    supported: isNativeDownloadSupported(),
     removeDownload: videoDownloads.remove,
-    getLocalPlayableUrl: videoDownloads.localUrl,
-    refresh
+    localSrc: videoDownloads.localSrc,
+    refresh,
   };
 }

@@ -70,6 +70,12 @@ final class DownloadStore {
             req.setDescription("Sahrae · saving to your in-app Downloads");
             req.setMimeType(mimeType);
             if (userAgent != null) req.addRequestHeader("User-Agent", userAgent);
+            // Carry the WebView's cookies: some providers hand out a session-bound
+            // download URL that 403s without them.
+            try {
+                String ck = android.webkit.CookieManager.getInstance().getCookie(url);
+                if (ck != null && !ck.isEmpty()) req.addRequestHeader("Cookie", ck);
+            } catch (Throwable ignore) {}
             req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
             req.setDestinationInExternalFilesDir(ctx, Environment.DIRECTORY_DOWNLOADS, fileName);
 
