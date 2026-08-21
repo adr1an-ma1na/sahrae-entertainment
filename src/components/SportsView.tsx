@@ -3,6 +3,7 @@ import { Trophy, Play, X, Maximize, Loader2, Radio, Tv, Clapperboard, CalendarCl
 import Hls from 'hls.js';
 import { Capacitor } from '@capacitor/core';
 import { haptics } from '../services/haptics';
+import { playerSandbox, isShieldOn, setShieldOn as persistShield, shieldAppliesHere } from '../services/adShield';
 import Coachmark from './Coachmark';
 
 /**
@@ -303,6 +304,8 @@ export default function SportsView() {
   const [isSandboxed, setIsSandboxed] = useState(false);
   const [showAdNotice, setShowAdNotice] = useState(false);
   const [showServerDeadNotice, setShowServerDeadNotice] = useState(false);
+  // Ad Shield: sandboxes the sports embed on web (see services/adShield.ts).
+  const [shieldOn, setShieldOn] = useState<boolean>(() => isShieldOn());
   // Held so the auto-dismiss can be cancelled: without this, leaving Sports
   // within four seconds left a timer running that set state on a gone component,
   // and rapid taps stacked one timer per tap.
@@ -794,11 +797,32 @@ export default function SportsView() {
                   <h3 className="text-white font-bold text-sm md:text-lg drop-shadow-md truncate">{playing.title}</h3>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  {isEmbedUrl && (
+                  {/* Reflects the REAL state. This used to read "Ad Shield
+                      Protected" unconditionally, including on the web where
+                      nothing was blocking anything — a badge claiming
+                      protection the build did not have. It is now a live
+                      toggle on web and a plain status on Android. */}
+                  {isEmbedUrl && (shieldAppliesHere() ? (
+                    <button
+                      onClick={() => { const n = !shieldOn; setShieldOn(n); persistShield(n); haptics.tap(); }}
+                      role="switch"
+                      aria-checked={shieldOn}
+                      title={shieldOn
+                        ? "Ad Shield on — pop-ups blocked. If this stream won't start, turn it off or try another server."
+                        : 'Ad Shield off — provider pop-ups are NOT blocked.'}
+                      className={`text-xs font-bold px-3 py-1.5 rounded-lg border flex items-center gap-1.5 shadow-sm transition-colors ${
+                        shieldOn
+                          ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20'
+                          : 'text-zinc-400 bg-zinc-900/80 border-white/10 hover:text-white'
+                      }`}
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5" /> Ad Shield {shieldOn ? 'On' : 'Off'}
+                    </button>
+                  ) : (
                     <div className="text-xs font-bold text-emerald-400 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-1.5 shadow-sm">
                       <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Ad Shield Protected
                     </div>
-                  )}
+                  ))}
                   {activeSrc?.kind === 'server' && (
                     <button
                       onClick={reportCurrentSportsServerDead}
@@ -817,20 +841,22 @@ export default function SportsView() {
               ) : activeUrl && isEmbedUrl ? (
                 <div className="absolute inset-0 w-full h-full">
                   <iframe
+                    // Re-mount when the shield flips: sandbox only applies at
+                    // frame creation, so toggling has to rebuild the iframe.
+                    key={`sports-${shieldOn ? 'shield' : 'open'}`}
                     src={activeUrl}
                     className="absolute inset-0 w-full h-full border-0 bg-black"
                     allow="autoplay; encrypted-media; fullscreen"
                     allowFullScreen
                     referrerPolicy="no-referrer-when-downgrade"
-                    // NO sandbox attribute, on any platform. These providers run
-                    // an anti-tamper check and refuse to play with the red
-                    // "Remove sandbox attributes on the iframe tag" message the
-                    // moment they detect one — even a permissive sandbox that
-                    // grants scripts and same-origin. Popup defence therefore
-                    // lives entirely in the native Android shell (onCreateWindow
-                    // refuses every window.open, the top-frame whitelist blocks
-                    // top.location hijacks). The web build is consequently NOT
-                    // ad-protected; the APK is the surface that is.
+                    // Ad Shield (web only). Sandboxing is the sole way a page can
+                    // stop a cross-origin embed popping windows. Some providers
+                    // refuse to run sandboxed and show the red "Remove sandbox
+                    // attributes on the iframe tag" message — hence the toggle in
+                    // the header and the server list as the escape hatch. On
+                    // Android this is undefined: the native shell blocks popups
+                    // already, without breaking any provider.
+                    sandbox={playerSandbox(shieldOn)}
                   />
                   {isSandboxed && (
                     <div className="absolute top-0 left-0 w-full z-40 bg-amber-500/95 text-amber-950 text-xs md:text-sm font-bold px-4 py-3 flex flex-col md:flex-row items-center justify-center gap-3 md:gap-4 text-center backdrop-blur shadow-2xl border-b border-amber-400/30 animate-in slide-in-from-top-2">

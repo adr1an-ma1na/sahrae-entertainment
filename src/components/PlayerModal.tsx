@@ -6,6 +6,7 @@ import { useMyList } from '../hooks/useMyList';
 import { loadEq, saveEq, EQ_PRESETS, PRESET_EXTRAS } from '../services/eq';
 import { haptics } from '../services/haptics';
 import MovieDownloadModal from './MovieDownloadModal';
+import { playerSandbox, isShieldOn, setShieldOn as persistShield, shieldAppliesHere } from '../services/adShield';
 
 interface PlayerModalProps {
   isOpen: boolean;
@@ -37,6 +38,9 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const [rating, setRating] = useState<'up' | 'down' | null>(null);
   const [offlineBlobUrl, setOfflineBlobUrl] = useState<string | null>(null);
   const [showDownload, setShowDownload] = useState(false);
+  // Ad Shield: sandboxes the embed on web (the only real popup block a page
+  // has). Re-keys the iframe so toggling it takes effect immediately.
+  const [shieldOn, setShieldOn] = useState<boolean>(() => isShieldOn());
 
   // Download = open the REAL VidVault provider page (MovieDownloadModal). The
   // previous build faked this by generating a canvas "offline player" clip and
@@ -125,12 +129,18 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     };
   }, [isOpen, isPlaying]);
 
-  // Ad Shield: Intercept window.open popup attempts globally while playing
+  // Catch popups opened by OUR OWN page while the player is up.
+  //
+  // Scope note, because the previous version of this was branded "Ad Shield" and
+  // oversold: overriding window.open here only affects code running in THIS
+  // document. An ad inside the embed calls the iframe's own window.open, which
+  // this cannot see or touch — cross-origin, by design. The thing that actually
+  // blocks those is the iframe `sandbox` attribute (see services/adShield.ts).
   useEffect(() => {
     if (!isOpen || !isPlaying) return;
     const originalOpen = window.open;
     window.open = function (...args: any[]) {
-      console.warn('[Ad Shield] Intercepted and blocked popup attempt:', args);
+      console.warn('[Sahrae] Blocked a popup from the app document:', args);
       setShowAdNotice(true);
       setTimeout(() => setShowAdNotice(false), 6000);
       return null;
@@ -489,7 +499,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                 </button>
                 {(
                   <iframe
-                    key={`player-${refreshKey}`}
+                    key={`player-${refreshKey}-${shieldOn ? 'shield' : 'open'}`}
                     src={src}
                     frameBorder="0"
                     // `clipboard-write` was granted to the embeds and is now gone:
@@ -498,12 +508,15 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                     allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen"
                     allowFullScreen
                     referrerPolicy="no-referrer"
-                    // NO sandbox attribute, on any platform. Every one of these
-                    // providers runs an anti-tamper check and refuses to play with
-                    // "Remove sandbox attributes on the iframe tag" as soon as it
-                    // sees one — a permissive sandbox granting scripts and
-                    // same-origin still trips it. Popup defence lives in the native
-                    // Android shell instead; the web build is not ad-protected.
+                    // Ad Shield. On the WEB this sandbox is the only thing that
+                    // can actually stop a cross-origin embed popping windows or
+                    // hijacking the tab — no parent-page JS can reach inside it.
+                    // On ANDROID it is left off: the native shell already blocks
+                    // popups properly, and sandboxing there only trips the
+                    // providers' anti-tamper check for no gain. Some providers
+                    // refuse to play when sandboxed, which is why this is a
+                    // toggle and why the server picker sits right below.
+                    sandbox={playerSandbox(shieldOn)}
                     // Auto-fullscreen once the embed has loaded + autostarted
                     // (media playback no longer needs a separate gesture), so a
                     // single Play tap ends up fullscreen and playing.
@@ -717,6 +730,34 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                     </button>
                   ))}
                 </div>
+
+                {/* Ad Shield toggle — web only. On Android the native shell
+                    already blocks ads, so there is no trade to offer. */}
+                {shieldAppliesHere() && (
+                  <div className="mt-4 flex items-start gap-3 p-3 rounded-xl border border-white/10 bg-zinc-900/50">
+                    <ShieldCheck className={`w-5 h-5 shrink-0 mt-0.5 ${shieldOn ? 'text-emerald-400' : 'text-zinc-500'}`} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-white">
+                        Ad Shield {shieldOn ? 'on' : 'off'}
+                      </p>
+                      <p className="text-xs text-zinc-400 leading-snug mt-0.5">
+                        {shieldOn
+                          ? "Blocks this player's pop-ups and tab hijacks. A few servers refuse to run with it on — if a title won't start, pick another server above, or switch the shield off for it."
+                          : 'Pop-ups from the streaming provider are NOT blocked. Turn this back on unless a server needs it off.'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => { const n = !shieldOn; setShieldOn(n); persistShield(n); haptics.tap(); }}
+                      role="switch"
+                      aria-checked={shieldOn}
+                      aria-label="Toggle Ad Shield"
+                      data-tv-focusable
+                      className={`shrink-0 w-12 h-7 rounded-full p-0.5 transition-colors ${shieldOn ? 'bg-emerald-500' : 'bg-zinc-700'}`}
+                    >
+                      <span className={`block w-6 h-6 rounded-full bg-white transition-transform ${shieldOn ? 'translate-x-5' : 'translate-x-0'}`} />
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="flex flex-col lg:flex-row gap-10">
                 <div className="lg:w-2/3 space-y-5">
