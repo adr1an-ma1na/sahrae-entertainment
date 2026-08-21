@@ -63,6 +63,15 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Global audio effects (equalizer / bass / spatial) -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Voice assistant. RECORD_AUDIO is only ever requested when the user taps
+         the mic — the assistant is push-to-talk, never an open hot mic. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Lets the WebView reach the speech recogniser service. -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
 
     <!-- Run on phones, tablets, laptops (Chromebook) AND Android TV.
          Declaring these as NOT required keeps the app installable everywhere. -->

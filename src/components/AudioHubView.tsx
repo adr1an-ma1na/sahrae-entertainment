@@ -28,7 +28,7 @@ const COUNTRIES = [
  * 75 candidates tested, 5 were dead and were dropped rather than shipped, and
  * duplicates that appeared under several genre queries were removed.
  */
-const STATIONS = [
+export const STATIONS = [
   // ── Kenya ──
   { name: 'Capital FM', country: 'Kenya', category: 'Kenyan', frequency: '98.4', url: 'https://capitalfm.cloudrad.io/stream' },
   { name: 'Kiss 100', country: 'Kenya', category: 'Kenyan', frequency: '100.3', url: 'https://kiss100fm-atunwadigital.streamguys1.com/kiss100fm' },

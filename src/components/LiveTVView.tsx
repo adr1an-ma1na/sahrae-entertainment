@@ -3,6 +3,7 @@ import Hls from 'hls.js';
 import { X, Maximize, Search, Heart, RadioTower, Loader2, WifiOff } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import Coachmark from './Coachmark';
+import { onChannelRequest } from '../services/voiceBus';
 
 interface Channel { name: string; country: string; category: Category; url: string; kind?: 'hls' | 'yt' }
 type Category = 'News' | 'Regional' | 'Sports' | 'Documentary' | 'Science' | 'Wildlife' | 'Anime' | 'Music' | 'Kids' | 'Lifestyle';
@@ -10,7 +11,7 @@ type Category = 'News' | 'Regional' | 'Sports' | 'Documentary' | 'Science' | 'Wi
 // News plays via each broadcaster's permanent YouTube live channel (kind: 'yt') —
 // the most stable option since channel IDs never change. Everything else uses
 // broadcaster-official / FAST HLS feeds (NASA, Red Bull, DW Documentary, etc.).
-const CHANNELS: Channel[] = [
+export const CHANNELS: Channel[] = [
   // News.
   //
   // TWO delivery kinds here, on purpose:
@@ -205,6 +206,15 @@ export default function LiveTVView() {
     setActive(ch); setOffline(false);
     setRecent((prev) => { const n = [ch.name, ...prev.filter((x) => x !== ch.name)].slice(0, 8); try { localStorage.setItem(RECENT_KEY, JSON.stringify(n)); } catch { /* */ } return n; });
   };
+
+  // "Watch Sky News" opens that channel here. Subscribing (rather than reading
+  // once on mount) means it works whether the command arrived before this view
+  // existed or while the user was already looking at it.
+  useEffect(() => onChannelRequest((wanted) => {
+    const ch = CHANNELS.find((c) => c.name === wanted);
+    if (ch) open(ch);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), []);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();

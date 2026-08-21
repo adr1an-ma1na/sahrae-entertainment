@@ -1450,6 +1450,37 @@ public class MainActivity extends BridgeActivity {
         // permission prompts, etc. A bare client silently breaks fullscreen.
         webView.setWebChromeClient(new BridgeWebChromeClient(bridge) {
             @Override
+            /**
+             * Grant the microphone to OUR OWN page only, so the voice assistant
+             * can capture audio. Any other origin (i.e. a streaming embed) is
+             * denied outright — an ad frame must never be able to open the mic.
+             */
+            @Override
+            public void onPermissionRequest(final android.webkit.PermissionRequest request) {
+                runOnUiThread(() -> {
+                    try {
+                        String host = request.getOrigin() != null ? request.getOrigin().getHost() : null;
+                        boolean wantsMic = false;
+                        for (String r : request.getResources()) {
+                            if (android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(r)) wantsMic = true;
+                        }
+                        if (wantsMic && isLocalAppHost(host)
+                            && checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+                                == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                            request.grant(new String[]{ android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE });
+                        } else {
+                            request.deny();
+                            if (wantsMic && isLocalAppHost(host)) {
+                                requestPermissions(new String[]{ android.Manifest.permission.RECORD_AUDIO }, 9912);
+                            }
+                        }
+                    } catch (Throwable t) {
+                        try { request.deny(); } catch (Throwable ignore) {}
+                    }
+                });
+            }
+
+            @Override
             public boolean onCreateWindow(WebView view, boolean isDialog,
                                           boolean isUserGesture, Message resultMsg) {
                 // Refuse EVERY popup. Streaming embeds (vidsrc/multiembed/etc.) fire

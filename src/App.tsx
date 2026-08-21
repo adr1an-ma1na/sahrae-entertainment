@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
@@ -28,6 +28,12 @@ import MusicView from './components/MusicView';
 import DownloadsView from './components/DownloadsView';
 import MusicPlayer from './components/MusicPlayer';
 import AddToPlaylistSheet from './components/AddToPlaylistSheet';
+import VoiceAssistant from './components/VoiceAssistant';
+import { STATIONS } from './components/AudioHubView';
+import { CHANNELS } from './components/LiveTVView';
+import { VoiceIntent } from './services/voiceIntents';
+import { requestChannel } from './services/voiceBus';
+import { useRadio } from './hooks/useRadio';
 import { ChevronDown, AlertCircle, RefreshCw, Heart } from 'lucide-react';
 import { fetchTrending, fetchDiscover, searchMedia, fetchGenres, fetchRecommendations, MediaItem, Genre } from './services/tmdb';
 import { useMyList } from './hooks/useMyList';
@@ -43,6 +49,7 @@ import { applyEq, loadEq } from './services/eq';
 
 export default function App() {
   const { user, activeProfile, loading: authLoading } = useAuth();
+  const radio = useRadio(); // voice commands drive radio playback
   const [activeTab, setActiveTab] = useState('home');
   const [searchQuery, setSearchQuery] = useState('');
   // Desktop/TV sidebar can be hidden to reclaim the full width; the CSS class
@@ -604,6 +611,73 @@ export default function App() {
     if (tab !== 'search') setSearchQuery('');
   };
 
+  // ── Voice assistant ──────────────────────────────────────────────────────
+  // Names the parser matches spoken words against.
+  const voiceCatalog = useMemo(() => ({
+    stations: STATIONS.map((s) => s.name),
+    channels: CHANNELS.map((c) => c.name),
+  }), []);
+
+  /** Execute a parsed voice command. Returns the line shown/spoken back. */
+  const runVoiceCommand = useCallback(async (intent: VoiceIntent): Promise<string> => {
+    switch (intent.kind) {
+      case 'navigate':
+        navigate(intent.tab);
+        return intent.say;
+
+      case 'search':
+        await handleSearch(intent.query);
+        return intent.say;
+
+      case 'playTitle': {
+        // Look the title up and open the best match straight into playback, so
+        // "play Inception" actually plays rather than dumping you in a results
+        // list. If nothing matches we fall back to showing the search.
+        try {
+          const { results } = await searchMedia(intent.query);
+          const hit = results.find((r) => r.media_type === 'movie' || r.media_type === 'tv');
+          if (hit) {
+            handlePlay(hit.id, (hit.media_type as 'movie' | 'tv') || 'movie', false);
+            return `Playing ${hit.title || hit.name}.`;
+          }
+        } catch { /* fall through to search */ }
+        await handleSearch(intent.query);
+        return `I couldn't find ${intent.query} to play — here's what I found.`;
+      }
+
+      case 'playRadio': {
+        const station = STATIONS.find((s) => s.name === intent.station);
+        if (!station) return `I couldn't find ${intent.station}.`;
+        navigate('audio');
+        radio.togglePlay(station.url, station.name);
+        return `Playing ${station.name}.`;
+      }
+
+      case 'watchChannel': {
+        const channel = CHANNELS.find((c) => c.name === intent.channel);
+        if (!channel) return `I couldn't find ${intent.channel}.`;
+        requestChannel(channel.name); // LiveTVView claims this on mount
+        navigate('tv');
+        return `Opening ${channel.name}.`;
+      }
+
+      case 'stop':
+        radio.stop();
+        handleClosePlayer();
+        return 'Stopped.';
+
+      case 'back':
+        handleClosePlayer();
+        navigate('home');
+        return 'Back home.';
+
+      case 'help':
+      case 'unknown':
+      default:
+        return intent.say;
+    }
+  }, [radio]);
+
   const renderAppLayout = () => {
     if (authLoading) {
       return (
@@ -671,6 +745,7 @@ export default function App() {
         <MusicPlayer />
         <PodcastProgressTracker />
         <AddToPlaylistSheet />
+        <VoiceAssistant catalog={voiceCatalog} onCommand={runVoiceCommand} />
       </div>
     );
   };
