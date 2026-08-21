@@ -1535,7 +1535,6 @@ public class MainActivity extends BridgeActivity {
         // onShowCustomView/onHideCustomView (HTML5 fullscreen), the file chooser,
         // permission prompts, etc. A bare client silently breaks fullscreen.
         webView.setWebChromeClient(new BridgeWebChromeClient(bridge) {
-            @Override
             /**
              * Grant the microphone to OUR OWN page only, so the voice assistant
              * can capture audio. Any other origin (i.e. a streaming embed) is
