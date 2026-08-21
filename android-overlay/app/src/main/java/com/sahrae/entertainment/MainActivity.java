@@ -283,7 +283,87 @@ public class MainActivity extends BridgeActivity {
             } catch (Exception ignore) {
                 // No bundled list (e.g. local build) — core set stays in effect.
             }
+            // Then the EasyList rule engine (see AdFilter). Loaded on the same
+            // background thread because parsing tens of thousands of rules must
+            // never touch the UI thread. Until it is ready, adFilter.isReady()
+            // is false and only hostname blocking applies.
+            try {
+                AdFilter f = new AdFilter();
+                f.loadFromAsset(getApplicationContext(), "easylist.txt");
+                if (f.size() > 0 || !f.domainRules().isEmpty()) {
+                    // Fold EasyList's plain domain rules into the hostname set —
+                    // they are the same thing, and matching a HashSet is far
+                    // cheaper than carrying ~88k rule objects.
+                    Set<String> merged = new HashSet<>(adHosts);
+                    merged.addAll(f.domainRules());
+                    adHosts = merged;
+                    adFilter = f;
+                }
+            } catch (Throwable ignore) {
+                // Rule engine unavailable — hostname blocking continues alone.
+            }
         }, "adhosts-loader").start();
+    }
+
+    /** Does an EasyList {@code @@} exception protect this request? */
+    private static boolean isExceptedByRule(WebResourceRequest request, String host) {
+        AdFilter f = adFilter;
+        if (f == null || !f.isReady() || host == null) return false;
+        try {
+            Uri uri = request.getUrl();
+            String docHost = null;
+            Map<String, String> h = request.getRequestHeaders();
+            if (h != null) {
+                String ref = h.get("Referer");
+                if (ref == null) ref = h.get("referer");
+                if (ref != null) docHost = uriHost(ref);
+            }
+            return f.isExcepted(uri.toString(), host.toLowerCase(),
+                                docHost, AdFilter.typeOf(request, uri));
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /**
+     * EasyList rule engine. Volatile so the background loader can publish it
+     * atomically; null until (and unless) a list is successfully parsed.
+     */
+    private static volatile AdFilter adFilter = null;
+
+    /**
+     * Rule-based ad check, layered on top of the hostname blocklist.
+     *
+     * Guarded hard against breaking playback, because an over-blocking rule is
+     * indistinguishable from a dead player:
+     *   • our own app origin is never filtered;
+     *   • main-frame and sub-frame DOCUMENTS are never blocked, so an embed can
+     *     always load — popups are stopped by onCreateWindow and the navigation
+     *     guards, not by refusing the page;
+     *   • MEDIA (the actual video segments and playlists) is never blocked.
+     */
+    private static boolean isAdByRule(WebResourceRequest request, String host) {
+        AdFilter f = adFilter;
+        if (f == null || !f.isReady() || host == null) return false;
+        try {
+            Uri uri = request.getUrl();
+            if (isLocalAppHost(host)) return false;
+
+            int type = AdFilter.typeOf(request, uri);
+            if (type == AdFilter.TYPE_DOCUMENT || type == AdFilter.TYPE_SUBDOCUMENT) return false;
+            if (type == AdFilter.TYPE_MEDIA) return false;
+
+            String docHost = null;
+            Map<String, String> h = request.getRequestHeaders();
+            if (h != null) {
+                String ref = h.get("Referer");
+                if (ref == null) ref = h.get("referer");
+                if (ref != null) docHost = uriHost(ref);
+            }
+            return f.shouldBlock(uri.toString(), host.toLowerCase(), docHost, type);
+        } catch (Throwable t) {
+            return false; // never let the filter itself break a request
+        }
     }
 
     private static boolean isTrustedMainFrameHost(String host) {
@@ -1383,8 +1463,14 @@ public class MainActivity extends BridgeActivity {
                         }
                     }
 
-                    // L1 — network blocklist
-                    if (isAdHost(host)) return blockedResponse();
+                    // L1 — network blocklist (hostname), now also fed by
+                    // EasyList's plain domain rules. An @@ exception still wins.
+                    if (isAdHost(host) && !isExceptedByRule(request, host)) return blockedResponse();
+                    // … and L1.2 — EasyList RULE matching, the mechanism Brave and
+                    // uBlock use. This is what catches an ad or popunder script
+                    // served from the streaming provider's OWN domain, which a
+                    // hostname list can never block without killing the player.
+                    if (isAdByRule(request, host)) return blockedResponse();
 
                     // L1.5 — DOM-level eradication: rewrite embed HTML documents,
                     // injecting the anti-popup shim inside the hostile iframe.

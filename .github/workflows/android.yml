@@ -63,6 +63,27 @@ jobs:
           touch "$OUT"
           echo "Bundled blocklist size: $(wc -l < "$OUT") domains"
 
+      - name: Fetch EasyList filter rules (Brave/uBlock-style, bundled)
+        run: |
+          mkdir -p android-overlay/app/src/main/assets
+          OUT=android-overlay/app/src/main/assets/easylist.txt
+          : > "$OUT"
+          # EasyList + EasyPrivacy are the same lists Brave and uBlock ship.
+          # AdFilter.java parses the NETWORK rules and ignores the rest, so we
+          # strip cosmetic rules here to keep the asset (and parse time) small.
+          for URL in \
+            https://easylist.to/easylist/easylist.txt \
+            https://easylist.to/easylist/easyprivacy.txt ; do
+            if curl -fsSL --retry 3 --max-time 120 "$URL" -o /tmp/list.txt; then
+              # Drop comments, cosmetic rules (##, #@#, #?#) and blank lines.
+              grep -vE '^[!\[]' /tmp/list.txt \
+                | grep -vE '#(#|@#|\?#)' \
+                | grep -vE '^[[:space:]]*$' >> "$OUT" || true
+            fi
+          done
+          sort -u -o "$OUT" "$OUT" || true
+          echo "Bundled EasyList network rules: $(wc -l < "$OUT")"
+
       - name: Apply Android overlay (ad-blocking MainActivity, etc.)
         run: |
           if [ -d android-overlay ]; then
