@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Mic, X, Volume2, VolumeX, Loader2, AlertCircle } from 'lucide-react';
+import { Mic, X, Volume2, VolumeX, Loader2, AlertCircle, CornerDownLeft } from 'lucide-react';
 import { listen, speak, shutUp, stopListening, voiceSupported } from '../services/voice';
 import { parseVoiceCommand, VoiceIntent, VoiceCatalog } from '../services/voiceIntents';
 import { haptics } from '../services/haptics';
@@ -31,6 +31,7 @@ export default function VoiceAssistant({ catalog, onCommand }: VoiceAssistantPro
   const [speakBack, setSpeakBack] = useState<boolean>(() => {
     try { return localStorage.getItem(SPEAK_KEY) !== '0'; } catch { return true; }
   });
+  const [typed, setTyped] = useState('');
   const supported = voiceSupported();
   const stopRef = useRef<(() => void) | null>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -139,12 +140,12 @@ export default function VoiceAssistant({ catalog, onCommand }: VoiceAssistantPro
             </div>
 
             {!supported ? (
-              <div className="text-center py-4">
+              <div className="text-center py-2">
                 <AlertCircle className="w-9 h-9 text-amber-500/70 mx-auto mb-3" />
-                <p className="text-white font-bold mb-1">Voice isn't available here</p>
+                <p className="text-white font-bold mb-1">Voice isn't available in this browser</p>
                 <p className="text-sm text-zinc-400">
-                  This browser doesn't support speech recognition — that includes Safari on iPhone and iPad.
-                  Try Chrome on Android, a laptop, or the Sahrae Android app.
+                  Speech recognition isn't supported here — that includes Safari on iPhone and iPad.
+                  You can still type your command below, or use Chrome for voice.
                 </p>
               </div>
             ) : (
@@ -179,12 +180,43 @@ export default function VoiceAssistant({ catalog, onCommand }: VoiceAssistantPro
                   </button>
                 )}
 
-                {!heard && phase !== 'done' && (
-                  <p className="mt-4 text-[11px] text-zinc-500 text-center leading-relaxed">
-                    Try “play Inception” · “open live sports” · “play Capital FM” · “watch Sky News” · “search for comedies” · “stop”
-                  </p>
-                )}
               </>
+            )}
+
+            {/* Typed fallback. The parser and the executor are the same either
+                way — the microphone is only one way of getting words in. This
+                keeps the assistant fully usable when the speech service is
+                unreachable (Brave/Chromium/blocked networks) or absent
+                entirely (Safari on iOS), rather than leaving a dead end. */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const q = typed.trim();
+                if (!q) return;
+                setTyped('');
+                stopListening();
+                finish(q);
+              }}
+              className="mt-4 flex items-center gap-2"
+            >
+              <input
+                value={typed}
+                onChange={(e) => setTyped(e.target.value)}
+                placeholder={supported ? '…or type a command' : 'Type a command'}
+                aria-label="Type a command"
+                data-tv-focusable
+                className="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-zinc-500 outline-none focus:border-amber-500/60"
+              />
+              <button type="submit" aria-label="Run command"
+                className="shrink-0 w-11 h-11 rounded-xl bg-amber-500 text-amber-950 font-bold flex items-center justify-center hover:bg-amber-400 transition-colors">
+                <CornerDownLeft className="w-4 h-4" />
+              </button>
+            </form>
+
+            {!heard && phase !== 'done' && (
+              <p className="mt-3 text-[11px] text-zinc-500 text-center leading-relaxed">
+                Try “play Inception” · “open live sports” · “play Capital FM” · “watch Sky News” · “search for comedies” · “stop”
+              </p>
             )}
           </div>
         </div>

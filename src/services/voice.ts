@@ -89,7 +89,19 @@ export function listen(handlers: ListenHandlers): () => void {
     } else if (code === 'no-speech') {
       handlers.onError?.('no-speech', "I didn't catch that.");
     } else if (code === 'network') {
-      handlers.onError?.('network', 'Speech recognition needs a network connection.');
+      // Chrome does speech recognition IN THE CLOUD — audio goes to Google's
+      // speech service. So "network" almost never means the user is offline
+      // (they just loaded the app); it means that service was unreachable.
+      // In practice that is a Chromium build without Google's speech API key
+      // (Brave, Vivaldi, plain Chromium, many Linux packages), or a network that
+      // blocks it. Saying "check your connection" sends people chasing the wrong
+      // thing, so name the real cause and offer the typed fallback instead.
+      handlers.onError?.(
+        'network',
+        navigator.onLine
+          ? "This browser can't reach its speech service. Chrome sends audio to Google to transcribe it, and Brave/Vivaldi/Chromium builds ship without that key. Type your command below, or try Google Chrome."
+          : "You're offline — speech recognition needs a connection. Type your command below instead.",
+      );
     } else if (code !== 'aborted') {
       handlers.onError?.('unknown', `Voice error: ${code}`);
     }
