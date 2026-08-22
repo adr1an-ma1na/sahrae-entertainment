@@ -4,6 +4,11 @@ import Hls from 'hls.js';
 import { Capacitor } from '@capacitor/core';
 import { haptics } from '../services/haptics';
 import { playerSandbox, isShieldOn, setShieldOn as persistShield, shieldAppliesHere } from '../services/adShield';
+import {
+  DEFAULT_CONFIG, markFailure, needsCheck, nextStream,
+  type FailureReason, type Stream,
+} from '../services/sportsStreams';
+import { buildStreams, validateStream, metrics, canValidateDeeply } from '../services/streamValidation';
 import Coachmark from './Coachmark';
 
 /**
@@ -34,47 +39,9 @@ const proxied = (m3u8: string, referer?: string) =>
     ? `https://localhost/__hlsproxy?u=${encodeURIComponent(m3u8)}${referer ? `&r=${encodeURIComponent(referer)}` : ''}`
     : m3u8;
 
-/**
- * Resolve an embed URL → playable .m3u8 ON THIS DEVICE.
- * The native layer (/__embed2m3u8) loads the embed in a hidden WebView, lets its
- * player JS run, and captures the stream URL — so the CDN token binds to *this*
- * device's IP and actually plays (server-resolved tokens are IP-locked → 403).
- */
-async function resolveEmbed(embed: string): Promise<string | null> {
-  try {
-    const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 16000);
-    const r = await fetch(`https://localhost/__embed2m3u8?u=${encodeURIComponent(embed)}`, {
-      cache: 'no-store',
-      signal: ctrl.signal,
-    });
-    clearTimeout(to);
-    if (!r.ok) return null;
-    const j = await r.json();
-    return j && typeof j.m3u8 === 'string' && j.m3u8 ? j.m3u8 : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Confirm a resolved stream actually serves a live playlist (filters dead /
- * 403 / slate sources before we ever show them) — fetched through the same
- * device-side proxy the player uses, so "it validated" means "it will play".
- */
-async function validateStream(proxiedUrl: string): Promise<boolean> {
-  try {
-    const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 9000);
-    const r = await fetch(proxiedUrl, { cache: 'no-store', signal: ctrl.signal });
-    clearTimeout(to);
-    if (!r.ok) return false;
-    const txt = await r.text();
-    return txt.includes('#EXTM3U') && txt.length > 40;
-  } catch {
-    return false;
-  }
-}
+// NOTE: resolveEmbed() and validateStream() used to live here. Both now live in
+// services/streamValidation.ts, where resolution and manifest validation feed the
+// health engine instead of returning a bare boolean.
 
 const MATCH_STOP = new Set(['vs', 'the', 'and', 'live', 'stream', 'hd', 'sd', 'match', 'game', 'full', 'fc', 'sc', 'afc', 'cf']);
 /** Significant lowercase tokens identifying an event (title + team names). */
@@ -287,9 +254,19 @@ const HLSPlayer = ({ src, onUnplayable }: { src: string; onUnplayable?: () => vo
 // channel plays instantly while match servers resolve in the background; the
 // user can switch to any server at any time, and a dead source is marked (not
 // removed) so the list never collapses to nothing.
-type SrcStatus = 'ready' | 'idle' | 'loading' | 'failed';
-interface Source { id: string; label: string; kind: 'channel' | 'server'; embed?: string; url?: string; status: SrcStatus }
-interface Playing { title: string; tokens: string[]; sources: Source[]; idx: number }
+/**
+ * The player now holds engine `Stream` objects (services/sportsStreams.ts):
+ * validated, health-scored and deterministically ranked, instead of a bare list
+ * of URLs with a four-state flag. `failed` is the per-session loop guard that
+ * stops failover bouncing between the same two dead sources.
+ */
+interface Playing {
+  title: string;
+  tokens: string[];
+  sources: Stream[];
+  idx: number;
+  failed: Set<string>;
+}
 
 export default function SportsView() {
   const [tab, setTab] = useState<'events' | 'channels'>('events');
@@ -300,6 +277,11 @@ export default function SportsView() {
   const [sport, setSport] = useState('all');
   const [search, setSearch] = useState('');
   const [playing, setPlaying] = useState<Playing | null>(null);
+  // Mirror of `playing` for callbacks that must read current state WITHOUT
+  // doing so inside a setState updater (React may run those more than once,
+  // which duplicates network probes).
+  const playingRef = useRef<Playing | null>(null);
+  playingRef.current = playing;
   const playerRef = useRef<HTMLDivElement>(null);
   const [isSandboxed, setIsSandboxed] = useState(false);
   const [showAdNotice, setShowAdNotice] = useState(false);
@@ -473,40 +455,35 @@ export default function SportsView() {
     return `${srv}${num}`;
   };
 
-  const patchSource = (id: string, patch: Partial<Source>) =>
+  const patchSource = (id: string, patch: Partial<Stream>) =>
     setPlaying((p) => (p ? { ...p, sources: p.sources.map((s) => (s.id === id ? { ...s, ...patch } : s)) } : p));
 
-  // Resolve a server's embed → playable stream (on-device, so the token binds to
-  // this IP). `autoSwitch` upgrades from the channel to the FIRST matching server
-  // on its own, but never pulls the user off a server they picked.
-  const resolveServer = useCallback(async (id: string, embed: string, tokens: string[], autoSwitch: boolean) => {
-    if (!Capacitor.isNativePlatform()) {
-      // On web, direct stream parsing is not supported due to CORS & local proxy limits.
-      // We directly set the source as ready using the iframe embed URL so it plays beautifully in an iframe!
-      setPlaying((p) => {
-        if (!p) return p;
-        const sources = p.sources.map((s) => (s.id === id ? { ...s, status: 'ready' as SrcStatus, url: embed } : s));
-        const onChannel = p.sources[p.idx]?.kind === 'channel';
-        // Auto switch on web if this is a premium server feed
-        const idx = autoSwitch && onChannel ? sources.findIndex((s) => s.id === id) : p.idx;
-        return { ...p, sources, idx };
-      });
-      return;
-    }
-    patchSource(id, { status: 'loading' });
-    const m3u8 = await resolveEmbed(embed);
-    let url: string | null = null;
-    if (m3u8) {
-      const u = proxied(m3u8, 'https://embed.st/');
-      if (await validateStream(u)) url = u;
-    }
-    if (!url) { patchSource(id, { status: 'failed' }); return; }
-    const matched = m3u8 ? streamMatchesEvent(m3u8, tokens) : false;
+  /**
+   * Validate one stream and fold the verdict back in, re-ranking as results
+   * land so the best-known option floats up while the rest are still checking.
+   *
+   * `autoSwitch` promotes a freshly verified match server over the placeholder
+   * channel — but only once, and never off a server the user chose themselves.
+   */
+  const checkStream = useCallback(async (id: string, autoSwitch: boolean) => {
+    const target = playingRef.current?.sources.find((s) => s.id === id);
+    if (!target) return;
+    if (target.status === 'checking') return; // already in flight
+    setPlaying((p) => (p
+      ? { ...p, sources: p.sources.map((s) => (s.id === id ? { ...s, status: 'checking' } : s)) }
+      : p));
+
+    const updated = await validateStream(target);
+
     setPlaying((p) => {
       if (!p) return p;
-      const sources = p.sources.map((s) => (s.id === id ? { ...s, status: 'ready' as SrcStatus, url: url!, label: matched && !s.label.endsWith('✓') ? `${s.label} ✓` : s.label } : s));
-      const onChannel = p.sources[p.idx]?.kind === 'channel';
-      const idx = autoSwitch && onChannel && matched ? sources.findIndex((s) => s.id === id) : p.idx;
+      const sources = p.sources.map((s) => (s.id === id ? updated : s));
+      const current = p.sources[p.idx];
+      const onChannel = current?.kind === 'channel';
+      // Promote a verified match feed over a filler channel automatically (§7).
+      const promote = autoSwitch && onChannel && updated.kind === 'server'
+        && (updated.status === 'working' || updated.status === 'unverified');
+      const idx = promote ? sources.findIndex((s) => s.id === id) : p.idx;
       return { ...p, sources, idx };
     });
   }, []);
@@ -525,95 +502,113 @@ export default function SportsView() {
     // embeds, we say so instead — the real fallback channels below still play.
     const rawEmbeds = m.embeds && m.embeds.length > 0 ? [...m.embeds] : [];
 
-    const servers: Source[] = rawEmbeds.slice(0, 8).map((embed, i) => ({
-      id: `srv-${i}`, label: `Server ${i + 1} (${sourceLabel(embed)})`, kind: 'server', embed, status: 'idle',
-    }));
-    // MULTIPLE guaranteed channels so a live event NEVER opens with nothing to
-    // watch — and if one channel is down it cascades to the next.
-    const channels: Source[] = fallbackChannels(m.category).map((ch, i) => ({
-      id: `ch-${i}`, label: `📺 ${ch.name}`, kind: 'channel', url: ch.url, status: 'ready',
-    }));
-    const sources = [...servers, ...channels];
+    // Build the normalised stream set: the feed's real servers plus this sport's
+    // verified always-on channels, so an event never opens with nothing at all.
+    const sources = buildStreams(
+      m.id,
+      rawEmbeds.slice(0, 8),
+      fallbackChannels(m.category).map((ch) => ({ name: `📺 ${ch.name}`, url: ch.url })),
+    );
 
-    // Default to Server 1 (idx 0) if servers exist, or fallback channel if not
-    const defaultIdx = servers.length > 0 ? 0 : 0;
-    const idx = initialServerIdx !== undefined && initialServerIdx < sources.length ? initialServerIdx : defaultIdx;
+    const idx = initialServerIdx !== undefined && initialServerIdx < sources.length ? initialServerIdx : 0;
+    setPlaying({ title: matchTitle(m), tokens, sources, idx, failed: new Set() });
 
-    setPlaying({ title: matchTitle(m), tokens, sources, idx });
-    
-    if (initialServerIdx !== undefined && initialServerIdx < servers.length) {
-      resolveServer(servers[initialServerIdx].id, servers[initialServerIdx].embed!, tokens, false);
-    }
-    servers.slice(0, 3).forEach((s, sIdx) => {
-      if (sIdx !== initialServerIdx) {
-        resolveServer(s.id, s.embed!, tokens, sIdx === 0);
-      }
+    // Pre-flight validation, in parallel with a bounded pool (§8, §14). Results
+    // fold in as they land rather than after the slowest one, so the picker
+    // fills in progressively instead of blocking on a dead server's timeout.
+    const servers = sources.filter((s) => s.kind === 'server');
+    servers.forEach((s, sIdx) => {
+      // The first server may auto-promote over the filler channel; a server the
+      // user explicitly picked must not be yanked away from them.
+      void checkStream(s.id, sIdx === 0 && initialServerIdx === undefined);
     });
   };
 
-  // Tap a server → switch to it; resolve on demand if it isn't ready yet (and
-  // retry a previously-failed one). The list itself never changes.
+  // Tap a server → switch to it, and (re)validate on demand if its health is
+  // stale or it previously failed. The list itself never reorders under the user.
   const selectSource = (i: number) => {
     haptics.tap();
     setPlaying((p) => (p ? { ...p, idx: i } : p));
     const s = playing?.sources[i];
-    if (s && s.kind === 'server' && !s.url && (s.status === 'idle' || s.status === 'failed') && s.embed) {
-      resolveServer(s.id, s.embed, playing!.tokens, false);
-    }
+    if (!s) return;
+    if (needsCheck(s, DEFAULT_CONFIG, Date.now())) void checkStream(s.id, false);
   };
 
-  const reportCurrentSportsServerDead = () => {
-    haptics.tap();
-    if (!playing) return;
-    const { idx: currentIdx, sources: currentSources, tokens } = playing;
-    // Guard: `% 0` is NaN, and sources[NaN].status would throw. An event should
-    // always carry at least one fallback channel, but a crash in the middle of a
-    // live match is not the place to rely on "should".
-    if (currentSources.length === 0) return;
+  /**
+   * Move off the current stream because it is not delivering (§7).
+   *
+   * Shared by the manual "Dead server?" button and the player's own failure
+   * detection. Health is recorded through the engine so the choice of successor
+   * is deterministic — highest health, then proven successes, then latency —
+   * and the failed id joins this session's guard set so failover cannot ping-pong
+   * between the same two dead sources (§17).
+   */
+  const failoverFrom = useCallback((reason: FailureReason, announce: boolean) => {
+    // Read from the ref, not inside a state updater. React may invoke an
+    // updater more than once, so scheduling validation from inside one fires
+    // duplicate probes — the same class of bug fixed earlier in this file.
+    const p = playingRef.current;
+    if (p && p.sources.length > 0 && p.sources[p.idx]) {
+      const current = p.sources[p.idx];
+      const now = Date.now();
+      const sources = p.sources.map((s) =>
+        s.id === current.id ? { ...markFailure(s, reason, DEFAULT_CONFIG, now), url: undefined } : s,
+      );
+      const failed = new Set(p.failed);
+      failed.add(current.id);
 
-    const sources = currentSources.map((s, i) =>
-      i === currentIdx ? { ...s, status: 'failed' as SrcStatus, url: undefined } : s,
-    );
-
-    // Next source in sequence that is not already failed; if every source is
-    // dead we stay put rather than silently landing on another dead one.
-    let nextIdx = currentIdx;
-    for (let step = 1; step <= sources.length; step++) {
-      const candidate = (currentIdx + step) % sources.length;
-      if (sources[candidate].status !== 'failed') {
-        nextIdx = candidate;
-        break;
+      metrics.failovers++;
+      const next = nextStream(sources, current.id, failed, now);
+      if (!next) {
+        setPlaying((prev) => (prev ? { ...prev, sources, failed } : prev)); // nothing left; stay put
+      } else {
+        metrics.failoversSucceeded++;
+        const idx = sources.findIndex((s) => s.id === next.id);
+        setPlaying((prev) => (prev ? { ...prev, sources, idx: idx >= 0 ? idx : prev.idx, failed } : prev));
+        if (needsCheck(next, DEFAULT_CONFIG, now)) void checkStream(next.id, false);
       }
     }
 
-    setPlaying((p) => (p ? { ...p, sources, idx: nextIdx } : p));
-
-    // Resolve OUTSIDE the state updater. Scheduling work from inside one is a
-    // side effect in a function React may call more than once, which fired
-    // duplicate resolves for the same server.
-    const nextS = sources[nextIdx];
-    if (nextS && nextS.kind === 'server' && !nextS.url && nextS.embed) {
-      resolveServer(nextS.id, nextS.embed, tokens, false);
+    if (announce) {
+      setShowServerDeadNotice(true);
+      if (deadNoticeTimerRef.current) clearTimeout(deadNoticeTimerRef.current);
+      deadNoticeTimerRef.current = setTimeout(() => setShowServerDeadNotice(false), 4000);
     }
+  }, [checkStream]);
 
-    setShowServerDeadNotice(true);
-    if (deadNoticeTimerRef.current) clearTimeout(deadNoticeTimerRef.current);
-    deadNoticeTimerRef.current = setTimeout(() => setShowServerDeadNotice(false), 4000);
+  const reportCurrentSportsServerDead = () => {
+    haptics.tap();
+    failoverFrom('PLAYBACK_STALL', true);
   };
 
-  // A playing source died → mark it failed (keep it in the list for retry) and
-  // fall back to the always-reliable channel. Never collapses to nothing.
+  /** The player could not get media out of the current source. */
   const onUnplayable = useCallback(() => {
-    setPlaying((p) => {
-      if (!p) return p;
-      const sources = p.sources.map((s, i) => (i === p.idx ? { ...s, status: 'failed' as SrcStatus, url: undefined } : s));
-      // Cascade to the next working channel after the current one (or the first
-      // working channel) so we never strand the viewer on a dead source.
-      const chans = sources.map((s, i) => ({ s, i })).filter((x) => x.s.kind === 'channel' && x.s.status !== 'failed');
-      const next = chans.find((x) => x.i > p.idx) || chans[0];
-      return { ...p, sources, idx: next ? next.i : p.idx };
-    });
-  }, []);
+    failoverFrom('PLAYBACK_STALL', false);
+  }, [failoverFrom]);
+
+  /**
+   * Background health monitoring (§9), scoped to the open event.
+   *
+   * Availability changes mid-match: a server dies, a dead one comes back. This
+   * re-checks whatever is stale or out of cooldown on a fixed cadence so the
+   * picker reflects reality rather than a snapshot from when the event opened,
+   * and a recovered stream can climb back out of `offline` (§18). Monitoring
+   * stops the moment the player closes — there is no reason to keep probing an
+   * event nobody is watching, and no server here to do it anyway.
+   */
+  useEffect(() => {
+    if (!playing) return;
+    const timer = setInterval(() => {
+      const p = playingRef.current; // read from the ref; never probe from inside an updater
+      if (!p) return;
+      const now = Date.now();
+      const due = p.sources.filter((s) => needsCheck(s, DEFAULT_CONFIG, now));
+      // Bounded: only re-check a couple per tick so a long source list never
+      // turns into a burst of parallel requests on a phone.
+      due.slice(0, 2).forEach((s) => void checkStream(s.id, false));
+    }, DEFAULT_CONFIG.healthCheckIntervalMs);
+    return () => clearInterval(timer);
+  }, [playing !== null, checkStream]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const events = feed?.events || [];
   // Only show what's live, in progress, or still to come — drop events that are
@@ -908,7 +903,7 @@ export default function SportsView() {
                 </div>
               ) : (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center px-6">
-                  {activeSrc?.status === 'failed' ? (
+                  {activeSrc?.status === 'offline' ? (
                     <>
                       <Radio className="w-9 h-9 text-zinc-500" />
                       <p className="text-white font-semibold">This server isn't responding</p>
@@ -991,21 +986,44 @@ export default function SportsView() {
               <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mr-1">Servers:</span>
               {playing.sources.map((s, i) => {
                 const activeBtn = i === playing.idx;
+                // Status shown as measured, never assumed (§11/§15/§23):
+                // green = validated working, amber = degraded, grey dot =
+                // reachable but unverifiable here, ↻ = failed and re-checkable.
+                const dot =
+                  s.status === 'working' ? 'bg-emerald-400'
+                  : s.status === 'degraded' ? 'bg-amber-400'
+                  : s.status === 'unverified' ? 'bg-zinc-400'
+                  : null;
                 return (
                   <button key={s.id} onClick={() => selectSource(i)} tabIndex={0} data-tv-focusable
+                    title={
+                      s.status === 'working' ? `Verified · ${s.healthScore}/100${s.latencyMs ? ` · ${s.latencyMs}ms` : ''}`
+                      : s.status === 'degraded' ? 'Reachable but slow or unstable'
+                      : s.status === 'unverified' ? 'Cannot be verified in a browser — may still play'
+                      : s.status === 'offline' ? `Failed${s.lastFailure ? ` (${s.lastFailure.reason})` : ''} — tap to re-check`
+                      : 'Not checked yet'
+                    }
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors flex items-center gap-1.5 ${
                       activeBtn ? 'bg-amber-500 text-amber-950 border-amber-500'
-                      : s.status === 'failed' ? 'bg-zinc-900/60 text-zinc-500 border-white/5 hover:bg-zinc-800'
+                      : s.status === 'offline' ? 'bg-zinc-900/60 text-zinc-500 border-white/5 hover:bg-zinc-800'
                       : 'bg-zinc-800/80 text-zinc-300 border-white/10 hover:bg-zinc-700'}`}>
-                    {s.status === 'loading' && <Loader2 className="w-3 h-3 animate-spin" />}
-                    {s.status === 'ready' && s.kind === 'server' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+                    {s.status === 'checking' && <Loader2 className="w-3 h-3 animate-spin" />}
+                    {dot && !activeBtn && <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />}
                     {s.label}
-                    {s.status === 'failed' && <span className="opacity-70">↻</span>}
+                    {/* Quality is only ever shown when it was read from the
+                        manifest — never inferred from a label (§11). */}
+                    {s.quality && <span className="opacity-70 font-normal">{s.quality}</span>}
+                    {s.status === 'offline' && <span className="opacity-70">↻</span>}
                   </button>
                 );
               })}
             </div>
-            <p className="text-[11px] text-zinc-500 flex items-center gap-2"><Radio className="w-3.5 h-3.5" /> The 📺 channel plays instantly. Tap a server for the exact match feed, and feel free to switch any time.</p>
+            <p className="text-[11px] text-zinc-500 flex items-center gap-2">
+              <Radio className="w-3.5 h-3.5" />
+              {canValidateDeeply()
+                ? 'Servers are checked before they are offered, and the healthiest plays first. A dot means verified; the app switches automatically if one drops.'
+                : 'A browser cannot verify these streams (cross-origin), so they are offered unverified. The Android app validates each one before playing it.'}
+            </p>
           </div>
         </div>
       )}
@@ -1034,7 +1052,13 @@ export default function SportsView() {
       {tab === 'channels' ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {CHANNELS.map((ch) => (
-            <div key={ch.name} onClick={() => setPlaying({ title: ch.name, tokens: [], sources: [{ id: ch.name, label: 'HD', kind: 'channel', url: ch.url, status: 'ready' }], idx: 0 })} tabIndex={0} data-tv-focusable role="button" aria-label={ch.name}
+            <div key={ch.name} onClick={() => setPlaying({
+              title: ch.name,
+              tokens: [],
+              sources: buildStreams(ch.name, [], [{ name: ch.name, url: ch.url }]),
+              idx: 0,
+              failed: new Set(),
+            })} tabIndex={0} data-tv-focusable role="button" aria-label={ch.name}
               className="card-lift tier-card group relative rounded-3xl p-5 cursor-pointer flex flex-col focus:outline-none">
               <div className="flex items-center justify-between mb-4">
                 <div className="w-10 h-10 rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center group-hover:scale-110 transition-transform"><Tv className="w-5 h-5 text-zinc-400 group-hover:text-amber-500 transition-colors" /></div>
