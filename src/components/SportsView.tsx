@@ -514,20 +514,16 @@ export default function SportsView() {
   const openEvent = (m: FeedEvent, initialServerIdx?: number) => {
     const tokens = eventTokens(m);
     
-    // Build or augment embeds list so every live event has active servers
+    // ONLY the embeds the feed actually published.
+    //
+    // This used to pad the list with URLs invented from the event id
+    // (embed.st/embed/echo/<id>/1 and friends). For a fixture the feed had no
+    // streams for, every one of those five "servers" was a guess, so the user
+    // tapped Watch, saw Server 1..5, and none of them ever opened. That is the
+    // "the event says it starts at 8 but nothing plays" complaint: the app was
+    // manufacturing links it had no reason to believe in. If there are no
+    // embeds, we say so instead — the real fallback channels below still play.
     const rawEmbeds = m.embeds && m.embeds.length > 0 ? [...m.embeds] : [];
-    if (rawEmbeds.length < 4) {
-      const fallbackEmbeds = [
-        `https://embed.st/embed/echo/${m.id}/1`,
-        `https://embed.st/embed/admin/${m.id}/1`,
-        `https://embed.st/embed/streamed/${m.id}/1`,
-        `https://streamed.su/embed/${m.id}/1`,
-        `https://vidsrc.cc/v3/embed/sports/${m.id}`
-      ];
-      for (const fe of fallbackEmbeds) {
-        if (!rawEmbeds.includes(fe)) rawEmbeds.push(fe);
-      }
-    }
 
     const servers: Source[] = rawEmbeds.slice(0, 8).map((embed, i) => ({
       id: `srv-${i}`, label: `Server ${i + 1} (${sourceLabel(embed)})`, kind: 'server', embed, status: 'idle',
@@ -624,9 +620,27 @@ export default function SportsView() {
   // clearly finished (not live and started more than ~3.5h ago).
   // If a match is in the past, has no live flag, and started more than 20 minutes ago,
   // we assume it ended/was canceled and drop it promptly to avoid user frustration.
+  /**
+   * Identity of a fixture, independent of which feed row it came from.
+   *
+   * The upstream feed lists the same match several times under different ids,
+   * which is why users saw "two events with the same name, one works and one
+   * doesn't" — the working copy had embeds, the duplicate had none. Teams (order
+   * -independent) plus a 30-minute bucket around kick-off identifies a fixture
+   * without merging genuinely different matches between the same clubs.
+   */
+  const fixtureKey = (m: FeedEvent): string => {
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const home = m.teams?.home?.name ? norm(m.teams.home.name) : '';
+    const away = m.teams?.away?.name ? norm(m.teams.away.name) : '';
+    const who = home && away ? [home, away].sort().join('~') : norm(m.title || '');
+    const bucket = m.date ? Math.round(m.date / (30 * 60_000)) : 0;
+    return `${m.category}|${who}|${bucket}`;
+  };
+
   const activeEvents = useMemo(() => {
     const now = Date.now();
-    return events.filter((m) => {
+    const kept = events.filter((m) => {
       if (!m.date) return true;          // no time → keep (always-on / unknown)
       if (m.date > now) return true;     // upcoming
       
@@ -643,6 +657,19 @@ export default function SportsView() {
 
       return true;
     });
+
+    // Collapse duplicate listings of the same fixture, keeping the richest one
+    // (most embeds, then feed-confirmed live). Showing both is what produced the
+    // "one works, the other doesn't" confusion.
+    const best = new Map<string, FeedEvent>();
+    for (const m of kept) {
+      const key = fixtureKey(m);
+      const prev = best.get(key);
+      if (!prev) { best.set(key, m); continue; }
+      const score = (x: FeedEvent) => (x.embeds?.length || 0) * 10 + (x.live ? 1 : 0);
+      if (score(m) > score(prev)) best.set(key, m);
+    }
+    return Array.from(best.values());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feed]);
 
@@ -764,14 +791,25 @@ export default function SportsView() {
             </div>
           )}
 
-          <button className="mt-4 w-full py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-bold bg-white/5 text-zinc-300 group-hover:bg-amber-500 group-hover:text-amber-950 hover:bg-white/10 transition-all duration-300 pointer-events-none">
-            <Play className="w-4 h-4 fill-current" /> Watch Main
-            {(m.embeds?.length || 0) > 0 && (
+          {/* Say which of the two situations this is, instead of promising
+              "Watch Main" for a fixture with no streams. A card that offers a
+              match feed it does not have is how users end up staring at dead
+              servers. */}
+          {(m.embeds?.length || 0) > 0 ? (
+            <button className="mt-4 w-full py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-bold bg-white/5 text-zinc-300 group-hover:bg-amber-500 group-hover:text-amber-950 hover:bg-white/10 transition-all duration-300 pointer-events-none">
+              <Play className="w-4 h-4 fill-current" /> Watch Main
               <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 group-hover:bg-amber-900/20 group-hover:text-amber-950/80 font-bold tracking-wider">
                 HD
               </span>
-            )}
-          </button>
+            </button>
+          ) : (
+            <button className="mt-4 w-full py-2.5 rounded-xl flex flex-col items-center justify-center gap-0.5 text-sm font-bold bg-white/5 text-zinc-400 group-hover:bg-white/10 transition-all duration-300 pointer-events-none">
+              <span className="flex items-center gap-2"><Tv className="w-4 h-4" /> Sports channels</span>
+              <span className="text-[9px] font-medium text-zinc-500 tracking-wide">
+                {eventIsLive(m) ? 'No match feed for this one yet' : 'Match feed appears near kick-off'}
+              </span>
+            </button>
+          )}
         </div>
       </div>
     );

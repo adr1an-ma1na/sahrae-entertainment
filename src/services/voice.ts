@@ -48,27 +48,53 @@ function getCtor(): Ctor | null {
  *
  * Probed ONCE at module load, not per tap, because `start()` needs the user's
  * gesture and an `await` in the click handler can spend that activation.
+ *
+ * The probe records WHICH language the local model actually has. An earlier
+ * version forced processLocally on retry without checking, which just traded a
+ * `network` error for `language-not-supported`: the device's model may only
+ * cover en-US while navigator.language is en-GB (or sw-KE, fr-FR…). We now try
+ * the user's exact locale, then its base language, then en-US, and only use the
+ * local path for a language it confirmed.
  */
 let preferLocal = false;
+let localLang: string | null = null;
+
+function candidateLangs(): string[] {
+  const nav = (typeof navigator !== 'undefined' && navigator.language) || 'en-US';
+  const base = nav.split('-')[0];
+  const out = [nav];
+  // "en" often resolves where "en-GB" does not.
+  if (base && base !== nav) out.push(base);
+  for (const fallback of ['en-US', 'en']) {
+    if (!out.includes(fallback)) out.push(fallback);
+  }
+  return out;
+}
 
 (function probeLocalRecognition() {
   try {
     const SR = getCtor() as any;
     if (!SR || typeof SR.available !== 'function') return;
-    const langs = [navigator.language || 'en-US'];
-    Promise.resolve(SR.available({ langs, processLocally: true }))
-      .then((state: string) => {
-        if (state === 'available') { preferLocal = true; return; }
-        // The model exists but needs fetching — ask for it in the background so
-        // the next session gets local recognition. Never blocks this one.
-        if ((state === 'downloadable' || state === 'downloading')
-            && typeof SR.installOnDevice === 'function') {
-          Promise.resolve(SR.installOnDevice({ langs }))
-            .then((ok: boolean) => { if (ok) preferLocal = true; })
-            .catch(() => {});
-        }
-      })
-      .catch(() => {});
+
+    const tryNext = (langs: string[], i: number): void => {
+      if (i >= langs.length) return;
+      const lang = langs[i];
+      Promise.resolve(SR.available({ langs: [lang], processLocally: true }))
+        .then((state: string) => {
+          if (state === 'available') { preferLocal = true; localLang = lang; return; }
+          if ((state === 'downloadable' || state === 'downloading')
+              && typeof SR.installOnDevice === 'function') {
+            // Fetch in the background so a later session gets local recognition;
+            // never blocks this one, and never claims support before it lands.
+            Promise.resolve(SR.installOnDevice({ langs: [lang] }))
+              .then((ok: boolean) => { if (ok && !preferLocal) { preferLocal = true; localLang = lang; } })
+              .catch(() => {});
+          }
+          tryNext(langs, i + 1);
+        })
+        .catch(() => tryNext(langs, i + 1));
+    };
+    tryNext(candidateLangs(), 0);
   } catch { /* API absent — cloud path, then the typed fallback */ }
 })();
 
@@ -100,12 +126,13 @@ export function listen(handlers: ListenHandlers, forceLocal = false): () => void
   stopListening(); // never run two recognisers at once
 
   const rec = new Ctor();
-  // Prefer on-device when we know it works, and honour an explicit retry.
-  const useLocal = forceLocal || preferLocal;
+  // Only go local for a language the probe CONFIRMED, otherwise we swap one
+  // failure for another (`language-not-supported`).
+  const useLocal = (forceLocal || preferLocal) && !!localLang;
   if (useLocal) {
     try { (rec as any).processLocally = true; } catch { /* older engine */ }
   }
-  rec.lang = navigator.language || 'en-US';
+  rec.lang = useLocal && localLang ? localLang : (navigator.language || 'en-US');
   // Single-shot: we want one command per tap, not an always-on hot mic. That is
   // also why there is no wake word — a page cannot listen in the background
   // without holding the microphone open, which is a privacy problem, not a
@@ -143,15 +170,18 @@ export function listen(handlers: ListenHandlers, forceLocal = false): () => void
       // Classic Brave/Chromium symptom: no Google speech key, so the cloud path
       // dies immediately. Retry once forcing on-device before giving up — that
       // route needs no key and no server.
-      active = null;
-      superseded = true;
-      try {
-        listen(handlers, true);
-        return;
-      } catch {
-        superseded = false; // retry never started — report the failure honestly
+      // Only worth retrying if a local model was actually confirmed.
+      if (localLang) {
+        active = null;
+        superseded = true;
+        try {
+          listen(handlers, true);
+          return;
+        } catch {
+          superseded = false; // retry never started — report honestly
+        }
       }
-      handlers.onError?.('network', "This browser can't reach a speech service and has no on-device model. Type your command below instead.");
+      handlers.onError?.('network', "This browser can't reach a speech service and has no on-device model for your language. Type your command below instead.");
     } else if (code === 'network') {
       // Chrome does speech recognition IN THE CLOUD — audio goes to Google's
       // speech service. So "network" almost never means the user is offline
@@ -165,6 +195,13 @@ export function listen(handlers: ListenHandlers, forceLocal = false): () => void
         navigator.onLine
           ? "This browser can't reach its speech service. Chrome sends audio to Google to transcribe it, and Brave/Vivaldi/Chromium builds ship without that key. Type your command below, or try Google Chrome."
           : "You're offline — speech recognition needs a connection. Type your command below instead.",
+      );
+    } else if (code === 'language-not-supported' || code === 'bad-grammar') {
+      // Neither the cloud nor the local model covers this locale. Nothing left
+      // to try, so say so in plain words rather than leaking the error code.
+      handlers.onError?.(
+        'unknown',
+        `Speech recognition here doesn't support ${navigator.language || 'your language'}. Type your command below instead.`,
       );
     } else if (code !== 'aborted') {
       handlers.onError?.('unknown', `Voice error: ${code}`);
