@@ -569,8 +569,13 @@ export default function SportsView() {
     if (p && p.sources.length > 0 && p.sources[p.idx]) {
       const current = p.sources[p.idx];
       const now = Date.now();
+      // Mark it failed but KEEP the url. Clearing it meant that when no healthy
+      // successor existed we stayed on this stream with nothing to render, and
+      // the player sat on "Loading…" forever. A failed stream is excluded from
+      // ranking anyway, so the url costs nothing and keeps the last resort
+      // playable.
       const sources = p.sources.map((s) =>
-        s.id === current.id ? { ...markFailure(s, reason, DEFAULT_CONFIG, now), url: undefined } : s,
+        s.id === current.id ? markFailure(s, reason, DEFAULT_CONFIG, now) : s,
       );
       const failed = new Set(p.failed);
       failed.add(current.id);

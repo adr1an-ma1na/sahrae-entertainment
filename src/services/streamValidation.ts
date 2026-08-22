@@ -184,6 +184,18 @@ export async function validateStream(s: Stream, cfg: StreamConfig = DEFAULT_CONF
     return applyScore(markFailure(s, 'UNKNOWN', cfg, now));
   }
 
+  // The playable target IS the embed page (web, or a native resolve that could
+  // not extract a manifest). An embed page is HTML by definition, so fetching
+  // it here would parse a player page as a playlist, classify it
+  // HTML_ERROR_PAGE, and mark a perfectly good feed as failing — which is
+  // precisely what turned working streams into "Reachable but slow" on every
+  // background re-check. There is nothing to validate; report it honestly as
+  // unverified and leave it playable.
+  if (s.embed && target === s.embed) {
+    metrics.validationsIndeterminate++;
+    return applyScore({ ...markUnverified(s, now), url: s.embed });
+  }
+
   const verdict = await validateHls(target, cfg, s.embed);
 
   if (verdict.indeterminate) {
