@@ -59,6 +59,32 @@ function getCtor(): Ctor | null {
 let preferLocal = false;
 let localLang: string | null = null;
 
+/**
+ * What the browser actually reported, so a failure can be diagnosed from the
+ * device instead of guessed at from here. Two fixes for Brave missed because I
+ * was inferring its behaviour rather than reading it.
+ */
+const diag: {
+  hasSR: boolean;
+  hasAvailableApi: boolean;
+  hasInstallApi: boolean;
+  probes: Record<string, string>;
+  lastError: string | null;
+  lastMode: 'local' | 'cloud' | null;
+} = { hasSR: false, hasAvailableApi: false, hasInstallApi: false, probes: {}, lastError: null, lastMode: null };
+
+export function voiceDiagnostics() {
+  return {
+    ...diag,
+    probes: { ...diag.probes },
+    chosenLocalLang: localLang,
+    preferLocal,
+    lang: (typeof navigator !== 'undefined' && navigator.language) || 'unknown',
+    online: typeof navigator !== 'undefined' ? navigator.onLine : null,
+    ua: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+  };
+}
+
 function candidateLangs(): string[] {
   const nav = (typeof navigator !== 'undefined' && navigator.language) || 'en-US';
   const base = nav.split('-')[0];
@@ -74,6 +100,9 @@ function candidateLangs(): string[] {
 (function probeLocalRecognition() {
   try {
     const SR = getCtor() as any;
+    diag.hasSR = !!SR;
+    diag.hasAvailableApi = !!(SR && typeof SR.available === 'function');
+    diag.hasInstallApi = !!(SR && typeof SR.installOnDevice === 'function');
     if (!SR || typeof SR.available !== 'function') return;
 
     const tryNext = (langs: string[], i: number): void => {
@@ -81,6 +110,7 @@ function candidateLangs(): string[] {
       const lang = langs[i];
       Promise.resolve(SR.available({ langs: [lang], processLocally: true }))
         .then((state: string) => {
+          diag.probes[lang] = String(state);
           if (state === 'available') { preferLocal = true; localLang = lang; return; }
           if ((state === 'downloadable' || state === 'downloading')
               && typeof SR.installOnDevice === 'function') {
@@ -92,7 +122,7 @@ function candidateLangs(): string[] {
           }
           tryNext(langs, i + 1);
         })
-        .catch(() => tryNext(langs, i + 1));
+        .catch((e: any) => { diag.probes[lang] = 'threw: ' + (e?.message || e); tryNext(langs, i + 1); });
     };
     tryNext(candidateLangs(), 0);
   } catch { /* API absent — cloud path, then the typed fallback */ }
@@ -129,6 +159,8 @@ export function listen(handlers: ListenHandlers, forceLocal = false): () => void
   // Only go local for a language the probe CONFIRMED, otherwise we swap one
   // failure for another (`language-not-supported`).
   const useLocal = (forceLocal || preferLocal) && !!localLang;
+  diag.lastMode = useLocal ? 'local' : 'cloud';
+  diag.lastError = null;
   if (useLocal) {
     try { (rec as any).processLocally = true; } catch { /* older engine */ }
   }
@@ -162,6 +194,7 @@ export function listen(handlers: ListenHandlers, forceLocal = false): () => void
 
   rec.onerror = (e: any) => {
     const code = e?.error || 'unknown';
+    diag.lastError = `${code} (${useLocal ? 'on-device' : 'cloud'})`;
     if (code === 'not-allowed' || code === 'service-not-allowed') {
       handlers.onError?.('no-permission', 'Microphone permission was denied.');
     } else if (code === 'no-speech') {

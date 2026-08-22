@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Mic, X, Volume2, VolumeX, Loader2, AlertCircle, CornerDownLeft } from 'lucide-react';
-import { listen, speak, shutUp, stopListening, voiceSupported } from '../services/voice';
+import { listen, speak, shutUp, stopListening, voiceSupported, voiceDiagnostics } from '../services/voice';
 import { parseVoiceCommand, VoiceIntent, VoiceCatalog } from '../services/voiceIntents';
 import { haptics } from '../services/haptics';
 
@@ -170,6 +170,20 @@ export default function VoiceAssistant({ catalog, onCommand }: VoiceAssistantPro
                     <p className={`mt-2 text-sm text-center ${phase === 'error' ? 'text-red-400' : 'text-amber-300'}`}>
                       {reply}
                     </p>
+                  )}
+
+                  {/* Shown only when voice failed. Reports what the browser
+                      actually said, so a failure can be diagnosed from the
+                      device rather than guessed at remotely. */}
+                  {phase === 'error' && (
+                    <details className="mt-3 w-full">
+                      <summary className="text-[11px] text-zinc-500 cursor-pointer hover:text-zinc-300 text-center">
+                        Show technical details
+                      </summary>
+                      <pre className="mt-2 p-2 rounded-lg bg-black/50 border border-white/10 text-[10px] leading-relaxed text-zinc-400 whitespace-pre-wrap break-all max-h-40 overflow-auto">
+{JSON.stringify(voiceDiagnostics(), null, 1)}
+                      </pre>
+                    </details>
                   )}
                 </div>
 
