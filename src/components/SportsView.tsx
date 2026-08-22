@@ -176,6 +176,12 @@ const HLSPlayer = ({ src, onUnplayable }: { src: string; onUnplayable?: () => vo
   const videoRef = useRef<HTMLVideoElement>(null);
   const deadRef = useRef(onUnplayable);
   deadRef.current = onUnplayable;
+  // Renditions the stream offers, plus which one is pinned (-1 = automatic).
+  // Exposed so the viewer can force max quality instead of trusting ABR.
+  const hlsRef = useRef<Hls | null>(null);
+  const [levels, setLevels] = useState<{ height: number; index: number }[]>([]);
+  const [pinnedLevel, setPinnedLevel] = useState(-1);
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -201,11 +207,19 @@ const HLSPlayer = ({ src, onUnplayable }: { src: string; onUnplayable?: () => vo
         levelLoadingTimeOut: 15000, levelLoadingMaxRetry: 4,
         fragLoadingTimeOut: 30000, fragLoadingMaxRetry: 8,
         nudgeMaxRetry: 10,
+        // ── Quality-first tuning ──
+        // Sport is the worst case for conservative ABR: fast motion on a low
+        // rendition looks terrible, and the default ramp spends the first
+        // minute climbing. So we open on the SHARPEST rendition (startLevel is
+        // overridden to the top level on MANIFEST_PARSED below) and let ABR
+        // step down only if the connection genuinely cannot hold it.
         startLevel: -1,
-        // Prefer higher quality: don't cap the level to the (small) player box, and
-        // assume a healthy pipe up front so ABR opens on a sharp rendition for sport.
-        capLevelToPlayerSize: false,
-        abrEwmaDefaultEstimate: 2_500_000,
+        capLevelToPlayerSize: false,      // never pick by the small player box
+        abrEwmaDefaultEstimate: 6_000_000, // assume a healthy pipe until measured
+        abrBandWidthFactor: 0.95,          // use more of the measured bandwidth
+        abrBandWidthUpFactor: 0.9,         // and climb back up quickly
+        maxStarvationDelay: 4,
+        maxLoadingDelay: 4,
       });
       let started = false;
       let netRetries = 0;
@@ -213,7 +227,22 @@ const HLSPlayer = ({ src, onUnplayable }: { src: string; onUnplayable?: () => vo
       const watchdog = setTimeout(() => { if (!started) { hls.destroy(); giveUp(); } }, 14000);
       hls.loadSource(src);
       hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        // Start on the highest rendition the stream offers, then hand control
+        // back to ABR. Without this hls.js begins low and takes a while to
+        // climb, which is exactly the "picture is soft" complaint on live sport.
+        try {
+          if (hls.levels && hls.levels.length > 1) {
+            hls.startLevel = hls.levels.length - 1;
+            hls.nextLevel = hls.levels.length - 1;
+            // Re-enable adaptation shortly after, so a weak connection can still
+            // step down rather than stalling on a bitrate it cannot sustain.
+            setTimeout(() => { try { if (hls.autoLevelEnabled !== false) hls.nextLevel = -1; } catch { /* destroyed */ } }, 8000);
+          }
+          setLevels((hls.levels || []).map((l, i) => ({ height: l.height || 0, index: i })));
+        } catch { /* level control is best-effort */ }
+        video.play().catch(() => {});
+      });
       hls.on(Hls.Events.FRAG_BUFFERED, () => { started = true; });
       hls.on(Hls.Events.ERROR, (_e, data) => {
         if (!data.fatal) return;
@@ -229,7 +258,8 @@ const HLSPlayer = ({ src, onUnplayable }: { src: string; onUnplayable?: () => vo
           giveUp();
         }
       });
-      return () => { clearTimeout(watchdog); hls.destroy(); };
+      hlsRef.current = hls;
+      return () => { clearTimeout(watchdog); hlsRef.current = null; setLevels([]); hls.destroy(); };
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = src;
       const onMeta = () => video.play().catch(() => {});
@@ -240,7 +270,52 @@ const HLSPlayer = ({ src, onUnplayable }: { src: string; onUnplayable?: () => vo
       return () => { clearTimeout(watchdog); video.removeEventListener('loadedmetadata', onMeta); video.removeEventListener('error', onErr); };
     }
   }, [src]);
-  return <video ref={videoRef} className="absolute inset-0 w-full h-full object-contain bg-black" controls autoPlay playsInline />;
+  /** Pin a rendition, or -1 to hand control back to ABR. */
+  const pick = (index: number) => {
+    const hls = hlsRef.current;
+    if (!hls) return;
+    try {
+      hls.nextLevel = index;
+      // currentLevel switches immediately rather than at the next segment
+      // boundary, which is what makes the change feel instant.
+      if (index >= 0) hls.currentLevel = index;
+      setPinnedLevel(index);
+    } catch { /* player torn down mid-click */ }
+  };
+
+  return (
+    <>
+      <video ref={videoRef} className="absolute inset-0 w-full h-full object-contain bg-black" controls autoPlay playsInline />
+      {/* Quality picker. Only rendered when the stream genuinely offers more
+          than one rendition — listing "1080p" for a single-variant stream would
+          be claiming a quality that is not there. */}
+      {levels.length > 1 && (
+        <div className="absolute top-3 right-3 z-30 flex items-center gap-1 rounded-full bg-black/70 backdrop-blur px-1.5 py-1 border border-white/10">
+          <button
+            onClick={() => pick(-1)}
+            className={`px-2 py-0.5 rounded-full text-[11px] font-bold transition-colors ${
+              pinnedLevel === -1 ? 'bg-amber-500 text-amber-950' : 'text-zinc-300 hover:text-white'
+            }`}
+            title="Adapt to your connection"
+          >
+            Auto
+          </button>
+          {[...levels].sort((a, b) => b.height - a.height).map((l) => (
+            <button
+              key={l.index}
+              onClick={() => pick(l.index)}
+              className={`px-2 py-0.5 rounded-full text-[11px] font-bold transition-colors ${
+                pinnedLevel === l.index ? 'bg-amber-500 text-amber-950' : 'text-zinc-300 hover:text-white'
+              }`}
+              title={`Lock to ${l.height}p`}
+            >
+              {l.height}p
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  );
 };
 
 // Cricfy-style: every server is listed up-front and stays put. A reliable
@@ -470,11 +545,15 @@ export default function SportsView() {
     // embeds, we say so instead — the real fallback channels below still play.
     const rawEmbeds = m.embeds && m.embeds.length > 0 ? [...m.embeds] : [];
 
-    // Build the normalised stream set: the feed's real servers plus this sport's
-    // verified always-on channels, so an event never opens with nothing at all.
+    // When the API can give us the real per-stream list, do NOT also seed a
+    // server from the feed's constructed URL. That placeholder is what showed up
+    // as a dead "Server 1" alongside the properly named feeds: it is a guessed
+    // `/1` URL for a source whose real streams are about to arrive, and it is
+    // not always the same stream the provider actually serves.
+    const hasApiDetail = (sourcesById.get(m.id)?.length || 0) > 0;
     const sources = buildStreams(
       m.id,
-      rawEmbeds.slice(0, 8),
+      hasApiDetail ? [] : rawEmbeds.slice(0, 8),
       fallbackChannels(m.category).map((ch) => ({ name: `📺 ${ch.name}`, url: ch.url })),
     );
 

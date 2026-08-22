@@ -11,7 +11,7 @@
 import {
   DEFAULT_CONFIG, analyseManifest, scoreStream, rankStreams, selectableStreams,
   nextStream, markSuccess, markFailure, markUnverified, needsCheck,
-  reliabilityOf, mapWithLimit, emptyMetrics, summarise,
+  reliabilityOf, mapWithLimit, emptyMetrics, summarise, qualityScore,
 } from './src/services/sportsStreams.ts';
 
 let pass = 0, fail = 0;
@@ -82,6 +82,26 @@ const unver = markUnverified(mk('unverified'), T0);
 unver.healthScore = scoreStream(unver, 0.9);
 ok('unverified never outranks working (§23)',
   rankStreams([unver, proven])[0].id === 'proven');
+
+// ───────────────────────────────────────────────────── quality preference ──
+console.log('\n[quality preference §11 — only what the provider reported]');
+ok('no quality reported scores 0', qualityScore(undefined) === 0);
+ok('HD flag counts', qualityScore('HD') === 8);
+ok('1080p outranks 720p', qualityScore('1080p') > qualityScore('720p'));
+ok('720p outranks 480p', qualityScore('720p') > qualityScore('480p'));
+{
+  const sd = markSuccess(mk('sd'), 400, cfg, T0);
+  const hd = markSuccess(mk('hd', { quality: 'HD' }), 400, cfg, T0);
+  sd.healthScore = scoreStream(sd, 0.8);
+  hd.healthScore = scoreStream(hd, 0.8);
+  ok('HD feed outranks an otherwise-identical SD feed',
+    rankStreams([sd, hd])[0].id === 'hd', `${hd.healthScore} vs ${sd.healthScore}`);
+  // Quality must not beat actually working.
+  const hdBroken = markFailure(markFailure(mk('hdBroken', { quality: '1080p' }), 'HTTP_ERROR', cfg, T0), 'HTTP_ERROR', cfg, T0);
+  hdBroken.healthScore = scoreStream(hdBroken, 0.8);
+  ok('a dead 1080p never outranks a working SD',
+    rankStreams([hdBroken, sd])[0].id === 'sd');
+}
 
 // ─────────────────────────────────────────────────── failover behaviour ──
 console.log('\n[failover, cooldown, loop prevention]');

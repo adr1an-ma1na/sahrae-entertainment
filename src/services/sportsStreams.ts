@@ -212,11 +212,29 @@ export function analyseManifest(body: string, contentType?: string): ValidationR
  * The governing principle from §6: a stream that has repeatedly worked outranks
  * one that has never been tested.
  */
+/**
+ * Quality contribution, 0-10. Only ever applied to a quality the PROVIDER
+ * reported (an API `hd` flag or a RESOLUTION read from the manifest) — never
+ * inferred from a name, per §11. Weighted enough that a verified HD feed beats
+ * an otherwise-equal SD one, but not enough to outrank actually working.
+ */
+export function qualityScore(q?: string): number {
+  if (!q) return 0;
+  if (/^hd$/i.test(q)) return 8;
+  const n = parseInt(q, 10);
+  if (!Number.isFinite(n)) return 0;
+  if (n >= 1080) return 10;
+  if (n >= 720) return 8;
+  if (n >= 480) return 3;
+  return 0;
+}
+
 export function scoreStream(s: Stream, sourceReliability = 0.5): number {
   if (s.status === 'offline') return 0;
 
   let score = 50;
   score += Math.min(s.consecutiveSuccesses, 5) * 6;
+  score += qualityScore(s.quality);
 
   if (typeof s.latencyMs === 'number') {
     if (s.latencyMs < 500) score += 12;
