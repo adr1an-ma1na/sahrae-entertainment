@@ -157,16 +157,25 @@ export async function validateStream(s: Stream, cfg: StreamConfig = DEFAULT_CONF
   const now = Date.now();
 
   let target = s.url;
-  // A server that is still just an embed page has to be resolved first.
+  // A server that is still just an embed page: try to pull a direct manifest out
+  // of it so the native player can take over and we can really validate it.
   if (!target && s.embed) {
     const resolved = await resolveEmbedToStream(s.embed, cfg);
-    if (!resolved) {
-      metrics.validationsFailed++;
-      note('RESOLVE_FAILED');
-      recordSourceResult(s.source, false);
-      return applyScore(markFailure(s, 'RESOLVE_FAILED', cfg, now));
+    if (resolved) {
+      target = resolved;
+    } else {
+      // No manifest — either we are in a browser (the resolver is native-only)
+      // or the resolver could not extract one. THE EMBED PAGE ITSELF STILL
+      // PLAYS: it is a player page loaded in an iframe, which is exactly how
+      // this worked before the engine landed. Offer it, marked unverified,
+      // rather than calling a perfectly good source dead.
+      //
+      // Getting this wrong left every web user staring at "Loading…" forever,
+      // because a server with no `url` renders neither the HLS player nor the
+      // iframe.
+      metrics.validationsIndeterminate++;
+      return applyScore({ ...markUnverified(s, now), url: s.embed });
     }
-    target = resolved;
   }
 
   if (!target) {

@@ -491,37 +491,45 @@ export default function SportsView() {
           apiSources.slice(0, 4).map((src) => fetchStreamsFor(src.source, src.id)),
         )).flat().filter(Boolean) as NonNullable<FeedEvent['streamMeta']>;
         if (!metas.length) return;
-        setPlaying((p) => {
-          if (!p) return p;
-          const channels = p.sources.filter((s) => s.kind === 'channel');
-          const servers = metas.slice(0, 8).map((meta, i) => {
-            const existing = p.sources.find((s) => s.embed === meta.embedUrl);
-            return existing ?? {
-              id: `srv-${i}-${meta.source}-${meta.streamNo}`,
-              eventId: m.id,
-              source: hostOf(meta.embedUrl),
-              embed: meta.embedUrl,
-              kind: 'server' as const,
-              type: 'hls' as const,
-              label: meta.language
-                ? `${meta.source} · ${meta.language.split(' - ')[0]}`
-                : `${meta.source} ${meta.streamNo}`,
-              quality: meta.hd ? 'HD' : undefined,
-              status: 'unknown' as const,
-              healthScore: 50,
-              consecutiveFailures: 0,
-              consecutiveSuccesses: 0,
-            };
-          });
-          const merged = [...servers, ...channels];
-          const activeId = p.sources[p.idx]?.id;
-          const idx = Math.max(0, merged.findIndex((s) => s.id === activeId));
-          return { ...p, sources: merged, idx };
+        // Build the merged list from the ref, not inside a state updater, so the
+        // ids we then validate are the SAME objects that land in state. Deriving
+        // ids separately silently validated streams that did not exist.
+        const p = playingRef.current;
+        if (!p) return;
+        const channels = p.sources.filter((s) => s.kind === 'channel');
+        const servers: Stream[] = metas.slice(0, 8).map((meta, i) => {
+          const label = meta.language
+            ? `${meta.source} · ${meta.language.split(' - ')[0]}`
+            : `${meta.source} ${meta.streamNo}`;
+          const existing = p.sources.find((s) => s.embed === meta.embedUrl);
+          // Keep any health already measured, but take the API's label and
+          // quality — otherwise the pre-expansion "Server 1" name lingers
+          // beside properly named feeds.
+          return existing
+            ? { ...existing, label, quality: meta.hd ? 'HD' : existing.quality }
+            : {
+                id: `srv-${i}-${meta.source}-${meta.streamNo}`,
+                eventId: m.id,
+                source: hostOf(meta.embedUrl),
+                embed: meta.embedUrl,
+                kind: 'server' as const,
+                type: 'hls' as const,
+                label,
+                quality: meta.hd ? 'HD' : undefined,
+                status: 'unknown' as const,
+                healthScore: 50,
+                consecutiveFailures: 0,
+                consecutiveSuccesses: 0,
+              };
         });
-        // Validate the expanded set; the first may promote over the channel.
-        metas.slice(0, 4).forEach((meta, i) => {
-          const id = `srv-${i}-${meta.source}-${meta.streamNo}`;
-          void checkStream(id, i === 0 && initialServerIdx === undefined);
+        const merged = [...servers, ...channels];
+        const activeId = p.sources[p.idx]?.id;
+        const idx = Math.max(0, merged.findIndex((s) => s.id === activeId));
+        setPlaying((prev) => (prev ? { ...prev, sources: merged, idx } : prev));
+
+        // Validate the expanded set by its REAL ids; the first may promote.
+        servers.slice(0, 4).forEach((s, i) => {
+          void checkStream(s.id, i === 0 && initialServerIdx === undefined);
         });
       })();
       return;
