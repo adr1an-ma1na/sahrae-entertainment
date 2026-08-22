@@ -9,6 +9,8 @@ import {
   type FailureReason, type Stream,
 } from '../services/sportsStreams';
 import { buildStreams, validateStream, metrics, canValidateDeeply } from '../services/streamValidation';
+import { loadSportsFeed, sourcesById, fetchStreamsFor, type Feed, type FeedEvent } from '../services/sportsFeed';
+import { hostOf } from '../services/sportsStreams';
 import Coachmark from './Coachmark';
 
 /**
@@ -117,18 +119,9 @@ function TeamLogo({ name, src }: { name: string; src?: string }) {
   return <div className="w-10 h-10 rounded-full bg-gradient-to-br from-zinc-700 to-zinc-800 border border-white/10 flex items-center justify-center text-[11px] font-extrabold text-white">{initials(name) || '?'}</div>;
 }
 
-interface FeedEvent {
-  id: string;
-  title: string;
-  category: string;
-  date: number;
-  popular?: boolean;
-  live?: boolean;
-  teams?: { home?: { name?: string; badge?: string }; away?: { name?: string; badge?: string } } | null;
-  /** Embed URLs (streamed.su/embed.st) — resolved to a playable stream on-device. */
-  embeds?: string[];
-}
-interface Feed { updated: number; base?: string; count: number; resolved?: number; events: FeedEvent[] }
+// FeedEvent / Feed now come from services/sportsFeed.ts, which loads fixtures
+// from the live API (100% stream coverage) rather than the committed snapshot
+// that only carried streams for 10% of events.
 
 const SPORT_LABELS: Record<string, string> = {
   football: 'Football', 'american-football': 'NFL', basketball: 'Basketball', baseball: 'Baseball',
@@ -359,47 +352,18 @@ export default function SportsView() {
     };
   }, [playing]);
 
+  /**
+   * Load fixtures from the LIVE API (services/sportsFeed.ts), which carries a
+   * stream for essentially every match, instead of the committed snapshot that
+   * only had one for 10% of them. Caching, the snapshot fallback and the
+   * last-known-good behaviour all live in that module now.
+   */
   const load = useCallback(async () => {
     setLoading(true);
     setError(false);
-
-    const tryFetch = async (): Promise<Feed | null> => {
-      for (const url of FEED_URLS) {
-        try {
-          const ctrl = new AbortController();
-          const to = setTimeout(() => ctrl.abort(), 11000);
-          const res = await fetch(`${url}?t=${Date.now()}`, { cache: 'no-store', signal: ctrl.signal });
-          clearTimeout(to);
-          if (res.ok) {
-            const data = (await res.json()) as Feed;
-            if (data && Array.isArray(data.events)) return data;
-          }
-        } catch {
-          /* try the next mirror */
-        }
-      }
-      return null;
-    };
-
-    let data = await tryFetch();
-    if (!data) {
-      await new Promise((r) => setTimeout(r, 1500));
-      data = await tryFetch();
-    }
-
-    if (data) {
-      try { localStorage.setItem(FEED_CACHE_KEY, JSON.stringify(data)); } catch { /* ignore */ }
-      setFeed(data);
-    } else {
-      // Never strand the user on an error if we've ever loaded a feed before.
-      let cached: Feed | null = null;
-      try {
-        const s = localStorage.getItem(FEED_CACHE_KEY);
-        cached = s ? (JSON.parse(s) as Feed) : null;
-      } catch { /* ignore */ }
-      if (cached) setFeed(cached);
-      else setError(true);
-    }
+    const data = await loadSportsFeed();
+    if (data.events.length) setFeed(data);
+    else setError(true);
     setLoading(false);
   }, []);
 
@@ -419,7 +383,8 @@ export default function SportsView() {
     else document.exitFullscreen?.().catch(() => {});
   };
 
-  const base = feed?.base || 'https://streamed.pk';
+  // Badge host. The live API serves team badges from its own origin.
+  const base = 'https://streamed.pk';
   const badge = (b?: string) => (b ? `${base}/api/images/badge/${b}.webp` : '');
   const eventTime = (d: number) => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   
@@ -516,13 +481,55 @@ export default function SportsView() {
     const idx = initialServerIdx !== undefined && initialServerIdx < sources.length ? initialServerIdx : 0;
     setPlaying({ title: matchTitle(m), tokens, sources, idx, failed: new Set() });
 
-    // Pre-flight validation, in parallel with a bounded pool (§8, §14). Results
-    // fold in as they land rather than after the slowest one, so the picker
-    // fills in progressively instead of blocking on a dead server's timeout.
+    // Expand the API's per-stream detail for this match: exact embed URLs plus
+    // REAL hd/language flags. Quality is only ever labelled from what the
+    // provider reports, never inferred from a name.
+    const apiSources = sourcesById.get(m.id);
+    if (apiSources?.length) {
+      void (async () => {
+        const metas = (await Promise.all(
+          apiSources.slice(0, 4).map((src) => fetchStreamsFor(src.source, src.id)),
+        )).flat().filter(Boolean) as NonNullable<FeedEvent['streamMeta']>;
+        if (!metas.length) return;
+        setPlaying((p) => {
+          if (!p) return p;
+          const channels = p.sources.filter((s) => s.kind === 'channel');
+          const servers = metas.slice(0, 8).map((meta, i) => {
+            const existing = p.sources.find((s) => s.embed === meta.embedUrl);
+            return existing ?? {
+              id: `srv-${i}-${meta.source}-${meta.streamNo}`,
+              eventId: m.id,
+              source: hostOf(meta.embedUrl),
+              embed: meta.embedUrl,
+              kind: 'server' as const,
+              type: 'hls' as const,
+              label: meta.language
+                ? `${meta.source} · ${meta.language.split(' - ')[0]}`
+                : `${meta.source} ${meta.streamNo}`,
+              quality: meta.hd ? 'HD' : undefined,
+              status: 'unknown' as const,
+              healthScore: 50,
+              consecutiveFailures: 0,
+              consecutiveSuccesses: 0,
+            };
+          });
+          const merged = [...servers, ...channels];
+          const activeId = p.sources[p.idx]?.id;
+          const idx = Math.max(0, merged.findIndex((s) => s.id === activeId));
+          return { ...p, sources: merged, idx };
+        });
+        // Validate the expanded set; the first may promote over the channel.
+        metas.slice(0, 4).forEach((meta, i) => {
+          const id = `srv-${i}-${meta.source}-${meta.streamNo}`;
+          void checkStream(id, i === 0 && initialServerIdx === undefined);
+        });
+      })();
+      return;
+    }
+
+    // No API detail (offline snapshot) — validate what the feed gave us (§8, §14).
     const servers = sources.filter((s) => s.kind === 'server');
     servers.forEach((s, sIdx) => {
-      // The first server may auto-promote over the filler channel; a server the
-      // user explicitly picked must not be yanked away from them.
       void checkStream(s.id, sIdx === 0 && initialServerIdx === undefined);
     });
   };
@@ -975,30 +982,87 @@ export default function SportsView() {
               )}
             </div>
 
-            {/* Stream Error / Quick Switcher Helper Banner */}
-            <div className="bg-zinc-900/90 border border-amber-500/30 rounded-xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs shadow-lg">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 shrink-0">
-                  <AlertCircle className="w-4 h-4 animate-pulse" />
+            {/* ── Now playing ───────────────────────────────────────────────
+                Replaces a permanent amber "Seeing an error?" banner that
+                shouted at everyone even when playback was perfect. This states
+                what is actually playing and how healthy it is, and only turns
+                into a call to action when something is genuinely wrong. */}
+            {activeSrc && (() => {
+              const bad = activeSrc.status === 'offline' || activeSrc.status === 'degraded';
+              return (
+                <div className={`rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-lg border ${
+                  bad ? 'bg-zinc-900/90 border-amber-500/30' : 'bg-zinc-900/70 border-white/10'
+                }`}>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className={`p-1.5 rounded-lg shrink-0 ${
+                      bad ? 'bg-amber-500/20 text-amber-400'
+                      : activeSrc.status === 'working' ? 'bg-emerald-500/15 text-emerald-400'
+                      : 'bg-white/5 text-zinc-400'
+                    }`}>
+                      {activeSrc.status === 'checking'
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : bad ? <AlertCircle className="w-4 h-4" /> : <Radio className="w-4 h-4" />}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-zinc-200 font-semibold truncate">
+                        {activeSrc.kind === 'channel' ? 'Channel' : 'Match feed'} · {activeSrc.label}
+                      </p>
+                      <p className="text-[11px] text-zinc-500">
+                        {activeSrc.status === 'working' && `Verified${activeSrc.quality ? ` · ${activeSrc.quality}` : ''}${activeSrc.latencyMs ? ` · ${activeSrc.latencyMs}ms` : ''} · health ${activeSrc.healthScore}/100`}
+                        {activeSrc.status === 'degraded' && 'Reachable but slow — a better feed may be available below'}
+                        {activeSrc.status === 'unverified' && 'Not verifiable in a browser — playing unchecked'}
+                        {activeSrc.status === 'offline' && `Not responding${activeSrc.lastFailure ? ` (${activeSrc.lastFailure.reason})` : ''}`}
+                        {activeSrc.status === 'checking' && 'Checking this feed…'}
+                        {activeSrc.status === 'unknown' && 'Not checked yet'}
+                      </p>
+                    </div>
+                  </div>
+                  {activeSrc.kind === 'server' && (
+                    <button
+                      onClick={reportCurrentSportsServerDead}
+                      className={`font-bold px-3.5 py-1.5 rounded-lg shadow-md text-xs flex items-center gap-1.5 shrink-0 transition-transform active:scale-95 whitespace-nowrap ${
+                        bad ? 'bg-amber-500 hover:bg-amber-400 text-amber-950'
+                            : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-white/10'
+                      }`}
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      <span>{bad ? 'Switch feed' : 'Not playing?'}</span>
+                    </button>
+                  )}
                 </div>
-                <div className="text-zinc-200 text-xs">
-                  <span className="font-semibold text-amber-300">Seeing "Could not play video" or manifest load error?</span>
-                  <span className="text-zinc-400 ml-1.5 hidden sm:inline">The stream server might be starting or offline. Tap Next Server or select a 📺 Live HD Channel!</span>
-                </div>
-              </div>
-              <button
-                onClick={reportCurrentSportsServerDead}
-                className="bg-amber-500 hover:bg-amber-400 text-amber-950 font-bold px-3.5 py-1.5 rounded-lg shadow-md text-xs flex items-center gap-1.5 shrink-0 transition-transform active:scale-95 whitespace-nowrap"
-              >
-                <span>Try Next Server</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </button>
-            </div>
+              );
+            })()}
 
-            {/* Server picker — every source is always here; tap to switch. */}
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mr-1">Servers:</span>
-              {playing.sources.map((s, i) => {
+            {/* ── Sources, grouped ──────────────────────────────────────────
+                Match feeds and always-on channels are two different things and
+                were previously one undifferentiated row distinguished only by a
+                📺 in the label. Splitting them makes the choice obvious: the
+                match itself, or a channel that is guaranteed to play. Within
+                each group the engine's ranking order is preserved, so the
+                healthiest sits first. */}
+            {(() => {
+              const groups: { key: string; title: string; hint: string; items: { s: Stream; i: number }[] }[] = [
+                {
+                  key: 'match',
+                  title: 'Match feeds',
+                  hint: 'The actual game',
+                  items: playing.sources.map((s, i) => ({ s, i })).filter((x) => x.s.kind === 'server'),
+                },
+                {
+                  key: 'channel',
+                  title: 'Sports channels',
+                  hint: 'Always on',
+                  items: playing.sources.map((s, i) => ({ s, i })).filter((x) => x.s.kind === 'channel'),
+                },
+              ].filter((g) => g.items.length > 0);
+
+              return groups.map((g) => (
+                <div key={g.key} className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mr-1 flex items-baseline gap-1.5">
+                    {g.title}
+                    <span className="text-[10px] font-medium normal-case tracking-normal text-zinc-600">{g.hint}</span>
+                  </span>
+                  {g.items.map(({ s, i }) => {
                 const activeBtn = i === playing.idx;
                 // Status shown as measured, never assumed (§11/§15/§23):
                 // green = validated working, amber = degraded, grey dot =
@@ -1030,12 +1094,14 @@ export default function SportsView() {
                     {s.status === 'offline' && <span className="opacity-70">↻</span>}
                   </button>
                 );
-              })}
-            </div>
+                  })}
+                </div>
+              ));
+            })()}
             <p className="text-[11px] text-zinc-500 flex items-center gap-2">
               <Radio className="w-3.5 h-3.5" />
               {canValidateDeeply()
-                ? 'Servers are checked before they are offered, and the healthiest plays first. A dot means verified; the app switches automatically if one drops.'
+                ? 'Feeds are checked before they are offered, and the healthiest plays first. A dot means verified; the app switches automatically if one drops.'
                 : 'A browser cannot verify these streams (cross-origin), so they are offered unverified. The Android app validates each one before playing it.'}
             </p>
           </div>
