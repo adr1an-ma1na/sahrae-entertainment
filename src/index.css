@@ -298,6 +298,12 @@
 }
 
 @keyframes sahrae-shimmer { 100% { transform: translateX(100%); } }
+/* Boot bar: a lozenge that sweeps the full track. The shimmer keyframe above
+   only travels its own width, which on a one-third-width bar barely moves. */
+@keyframes sahrae-boot-sweep {
+  0%   { transform: translateX(-110%); }
+  100% { transform: translateX(310%); }
+}
 @keyframes sahrae-kenburns {
   from { transform: scale(1.04) translate(0, 0); }
   to   { transform: scale(1.14) translate(0, -2%); }

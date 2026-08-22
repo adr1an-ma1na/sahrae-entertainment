@@ -29,6 +29,7 @@ import DownloadsView from './components/DownloadsView';
 import MusicPlayer from './components/MusicPlayer';
 import AddToPlaylistSheet from './components/AddToPlaylistSheet';
 import VoiceAssistant from './components/VoiceAssistant';
+import { BrowseSkeleton, GridSkeleton, ListSkeleton } from './components/PageSkeleton';
 import { STATIONS } from './components/AudioHubView';
 import { CHANNELS } from './components/LiveTVView';
 import { VoiceIntent } from './services/voiceIntents';
@@ -419,11 +420,12 @@ export default function App() {
 
   const renderContent = () => {
     if (loading && activeTab !== 'home' && activeTab !== 'radio' && activeTab !== 'audio' && activeTab !== 'tv' && activeTab !== 'sports' && activeTab !== 'podcasts' && activeTab !== 'continue') {
-      return (
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-        </div>
-      );
+      // A skeleton in the shape of the destination, not a spinner over a blank
+      // screen: the layout stays still, and the wait reads as "loading this"
+      // rather than "loading something".
+      if (activeTab === 'search') return <GridSkeleton />;
+      if (activeTab === 'mylist' || activeTab === 'downloads') return <ListSkeleton />;
+      return <BrowseSkeleton hero={false} rails={4} />;
     }
 
     switch (activeTab) {
@@ -680,9 +682,16 @@ export default function App() {
 
   const renderAppLayout = () => {
     if (authLoading) {
+      // The very first thing anyone sees. A branded wordmark reads as "the app
+      // is starting" where a bare spinner reads as "something is stuck".
       return (
-        <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-          <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+        <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center gap-6">
+          <h1 className="text-3xl font-display font-black tracking-tighter animate-in fade-in zoom-in-95 duration-500">
+            <span className="text-gold">SAHRAE</span>
+          </h1>
+          <div className="w-40 h-0.5 rounded-full bg-white/10 overflow-hidden">
+            <div className="h-full w-1/3 rounded-full bg-gradient-to-r from-amber-300 to-amber-600 animate-[sahrae-boot-sweep_1.3s_ease-in-out_infinite]" />
+          </div>
         </div>
       );
     }
