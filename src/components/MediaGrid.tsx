@@ -1,3 +1,5 @@
+import EmptyState from './EmptyState';
+import { SearchX } from 'lucide-react';
 import { Fragment } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { MediaItem, Genre } from '../services/tmdb';
@@ -71,11 +73,14 @@ const pillVariants = {
 
 export default function MediaGrid({ title, items, onPlay, defaultType = 'movie', genres, selectedGenre, onGenreSelect, showRanking = false, onRemove }: MediaGridProps) {
   if (!items || items.length === 0) {
+    // A guided empty state rather than a line of grey text — it says what
+    // happened and what to do next, in the same shape used elsewhere.
     return (
-      <div className="pt-32 px-4 md:px-12 text-center">
-        <h2 className="text-2xl font-bold text-white mb-4">{title}</h2>
-        <p className="text-zinc-400">No results found.</p>
-      </div>
+      <EmptyState
+        icon={SearchX}
+        title="Nothing here yet"
+        message={`We couldn't find anything for ${title}. Try a different spelling, a broader filter, or browse what's trending.`}
+      />
     );
   }
 

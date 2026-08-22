@@ -30,6 +30,8 @@ import MusicPlayer from './components/MusicPlayer';
 import AddToPlaylistSheet from './components/AddToPlaylistSheet';
 import VoiceAssistant from './components/VoiceAssistant';
 import { BrowseSkeleton, GridSkeleton, ListSkeleton } from './components/PageSkeleton';
+import SpotlightBand from './components/SpotlightBand';
+import ContinueRow from './components/ContinueRow';
 import { STATIONS } from './components/AudioHubView';
 import { CHANNELS } from './components/LiveTVView';
 import { VoiceIntent } from './services/voiceIntents';
@@ -110,6 +112,14 @@ export default function App() {
   const [appOnboarded, setAppOnboarded] = useState<boolean>(true);
   const [tasteGenres, setTasteGenres] = useState<TasteGenre[]>(() => { try { return JSON.parse(localStorage.getItem('sahrae.taste.genres.v1') || '[]'); } catch { return []; } });
   const [forYou, setForYou] = useState<MediaItem[]>([]);
+  const spotlightItem = useMemo(() => {
+    const pool = [...awardDramas, ...sciFi, ...bingeShows, ...movies]
+      .filter((m) => m && m.backdrop_path && m.id !== heroItem?.id);
+    if (!pool.length) return null;
+    // Stable for the day so the page does not reshuffle on every render.
+    const dayKey = Math.floor(Date.now() / 86400000);
+    return pool[dayKey % pool.length];
+  }, [awardDramas, sciFi, bingeShows, movies, heroItem?.id]);
   useEffect(() => {
     if (authLoading) return; // wait until we know who (if anyone) is signed in
     try {
@@ -455,6 +465,13 @@ export default function App() {
             <Hero item={heroItem} onPlay={handlePlay} />
             <div className="-mt-16 relative z-10 pb-12">
               <div className="px-4 md:px-12"><Coachmark id="home" text="Press Play on any title to start, or tap a poster for details, trailers, and episodes." /></div>
+              {/* Somewhere to return to, before anything to discover. */}
+              <ContinueRow
+                entries={progress.slice(0, 12).map((p) => ({
+                  mediaId: p.mediaId, mediaType: p.mediaType, season: p.season, episode: p.episode, item: p.item,
+                }))}
+                onPlay={handlePlay}
+              />
               <Top10Row items={trending} onPlay={handlePlay} />
               {forYou.length > 0 && <MediaRow title={`For You · ${tasteGenres[0]?.name}`} items={forYou} onPlay={handlePlay} defaultType="movie" isLoading={loading} />}
               <Top10Row items={trendingSeries} onPlay={handlePlay} title="Top 10 Series Today" />
@@ -462,6 +479,9 @@ export default function App() {
                 <MediaRow title={`Because you watched ${recommendations.basedOn}`} items={recommendations.items} onPlay={handlePlay} isLoading={loading} />
               )}
               {awardDramas.length > 0 && <MediaRow title="Award-Winning Dramas" items={awardDramas} onPlay={handlePlay} defaultType="movie" isLoading={loading} />}
+              {/* A moment of scale partway down, so the page has a cadence
+                  instead of nine identically-shaped rails in a row. */}
+              {spotlightItem && <SpotlightBand item={spotlightItem} onPlay={handlePlay} />}
               <MediaRow title="Trending Now" items={trending} onPlay={handlePlay} isLoading={loading} />
               {sciFi.length > 0 && <MediaRow title="Sci-Fi Masterpieces" items={sciFi} onPlay={handlePlay} defaultType="movie" isLoading={loading} />}
               <MediaRow title="Popular Movies" items={movies} onPlay={handlePlay} defaultType="movie" isLoading={loading} />

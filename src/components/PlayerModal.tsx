@@ -6,6 +6,7 @@ import { useMyList } from '../hooks/useMyList';
 import { loadEq, saveEq, EQ_PRESETS, PRESET_EXTRAS } from '../services/eq';
 import { haptics } from '../services/haptics';
 import MovieDownloadModal from './MovieDownloadModal';
+import { posterColor, cachedPosterColor } from '../services/posterColor';
 import { playerSandbox, isShieldOn, setShieldOn as persistShield, shieldAppliesHere } from '../services/adShield';
 
 interface PlayerModalProps {
@@ -59,6 +60,18 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
         ? `https://vidvault.ru/movie/${currentMediaId}`
         : `https://vidvault.ru/tv/${currentMediaId}/${selectedSeason}/${selectedEpisode}`)
     : '';
+  // Colour lifted from this title's own poster, used to tint the detail header.
+  const [headerTint, setHeaderTint] = useState<string | null>(null);
+  useEffect(() => {
+    const art = details?.poster_path || details?.backdrop_path;
+    if (!art) { setHeaderTint(null); return; }
+    const url = getImageUrl(art, 'w185'); // small file — fast to fetch and decode
+    setHeaderTint(cachedPosterColor(url));
+    let alive = true;
+    posterColor(url).then((c) => { if (alive) setHeaderTint(c); });
+    return () => { alive = false; };
+  }, [details?.poster_path, details?.backdrop_path]);
+
   const [showXRay, setShowXRay] = useState(false);
   // Loading indicator + slow-load recovery for the video embed.
   const [videoLoaded, setVideoLoaded] = useState(false);
@@ -665,6 +678,22 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
             ) : (
               <>
                 <img src={getImageUrl(details.backdrop_path, 'original')} className="w-full h-full object-cover opacity-80" />
+                {/* Tint drawn from the artwork itself, so every title feels
+                    like its own page instead of the same grey chrome. Fades in
+                    only once the colour resolves, and stays absent entirely if
+                    the image can't be read — no flash of arbitrary colour. */}
+                {headerTint && (
+                  <div
+                    className="absolute inset-0 pointer-events-none transition-opacity duration-700"
+                    style={{
+                      // Single hue fading upward. (An alpha suffix cannot be
+                      // appended to an hsl() string — the gradient's own
+                      // transparent stop does the fade.)
+                      background: `linear-gradient(to top, ${headerTint} 0%, transparent 70%)`,
+                      opacity: 0.85,
+                    }}
+                  />
+                )}
                 <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 md:via-zinc-950/20 to-transparent" />
                 <div className="absolute inset-0 bg-gradient-to-r from-zinc-950/80 via-zinc-950/40 md:via-transparent to-transparent" />
                 

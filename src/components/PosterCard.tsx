@@ -24,12 +24,19 @@ export default function PosterCard({ item, type, onPlay, onRemove }: {
       onClick={onPlay}
       className="poster-card group flex-none w-[120px] md:w-[140px] lg:w-[160px] xl:w-[180px] snap-start cursor-pointer focus:outline-none"
     >
-      <div className="relative w-full aspect-[2/3] rounded-lg overflow-hidden bg-zinc-900 border border-white/10 transition-all duration-200 group-hover:scale-[1.05] group-hover:border-amber-400/60 group-focus-visible:scale-[1.05] group-focus-visible:ring-2 group-focus-visible:ring-amber-400">
+      {/* Lift + shadow, not just scale: a card that rises off the page reads as
+          physical, and the shadow separates it from the poster behind it in a
+          dense rail. The easing matches the app's --ease-premium curve. */}
+      <div className="relative w-full aspect-[2/3] rounded-lg overflow-hidden bg-zinc-900 border border-white/10 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.06] group-hover:-translate-y-1 group-hover:border-amber-400/60 group-hover:shadow-[0_18px_38px_rgba(0,0,0,0.6)] group-focus-visible:scale-[1.06] group-focus-visible:-translate-y-1 group-focus-visible:ring-2 group-focus-visible:ring-amber-400">
         <img
           src={getImageUrl(item.poster_path)}
           alt={item.title || item.name}
-          className="w-full h-full object-cover"
+          // Fade in once decoded. Posters used to pop in one by one as they
+          // arrived, which makes a scrolling rail feel jumpy.
+          className="w-full h-full object-cover opacity-0 transition-opacity duration-500"
           loading="lazy"
+          onLoad={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = '1'; }}
+          onError={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = '1'; }}
         />
         {item.vote_average ? (
           <div className="absolute top-1.5 right-1.5 bg-black/60 backdrop-blur-md px-1.5 py-0.5 rounded text-[9px] font-bold text-amber-400 border border-white/10 flex items-center gap-0.5">
@@ -45,11 +52,13 @@ export default function PosterCard({ item, type, onPlay, onRemove }: {
             <Trash2 className="w-3 h-3" />
           </button>
         )}
-        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-          <span className="btn-gold w-9 h-9 rounded-full flex items-center justify-center"><Play className="w-4 h-4 fill-current ml-0.5" /></span>
+        {/* A gradient from the foot of the card rather than a flat wash — it
+            keeps the artwork readable while still seating the play button. */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+          <span className="btn-gold w-9 h-9 rounded-full flex items-center justify-center shadow-lg scale-90 group-hover:scale-100 group-focus-visible:scale-100 transition-transform duration-300"><Play className="w-4 h-4 fill-current ml-0.5" /></span>
         </div>
       </div>
-      <p className="mt-1.5 text-[13px] font-semibold text-white truncate leading-tight">{item.title || item.name}</p>
+      <p className="mt-1.5 text-[13px] font-semibold text-white truncate leading-tight group-hover:text-amber-300 transition-colors">{item.title || item.name}</p>
       {year ? <p className="text-[11px] text-zinc-400 truncate">{year}</p> : null}
     </div>
   );

@@ -1,3 +1,6 @@
+import EmptyState from './EmptyState';
+import { GridSkeleton } from './PageSkeleton';
+import { SlidersHorizontal } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Filter, ChevronDown } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -135,13 +138,13 @@ export default function DiscoveryView({ type, genres, onPlay }: DiscoveryViewPro
           </div>
         </>
       ) : loading ? (
-        <div className="flex justify-center py-20">
-          <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-        </div>
+        <GridSkeleton tiles={12} title={false} />
       ) : (
-        <div className="text-center py-20 text-zinc-500 animate-pulse">
-          No results found for these filters.
-        </div>
+        <EmptyState
+          icon={SlidersHorizontal}
+          title="No titles match those filters"
+          message="Nothing lines up with this combination. Widening the year range or clearing a genre usually brings plenty back."
+        />
       )}
     </motion.div>
   );
