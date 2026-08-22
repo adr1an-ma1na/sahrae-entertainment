@@ -59,6 +59,27 @@ export const CHANNELS: Channel[] = [
   { name: 'FIFA+', country: 'Global', category: 'Sports', url: 'https://a62dad94.wurl.com/master/f36d25e7e52f1ba8d7e56eb859c636563214f541/UmFrdXRlblRWLWV1X0ZJRkFQbHVzRW5nbGlzaF9ITFM/playlist.m3u8' },
   { name: 'Tennis Channel', country: 'Global', category: 'Sports', url: 'https://cdn-ue1-prod.tsv2.amagi.tv/linear/amg01444-tennischannelth-tennischannelnl-samsungnl/playlist.m3u8' },
   { name: 'Real Madrid TV', country: 'Spain', category: 'Sports', url: 'https://rmtv.akamaized.net/hls/live/2043153/rmtv-es-web/master.m3u8' },
+  // Added 2026-08-21. Every one is a legitimately FREE ad-supported (FAST)
+  // channel on a real distribution platform — amagi, wurl, ottera, frequency,
+  // or the broadcaster's own CDN. Each was fetched with curl AND re-tested with
+  // fetch() from the app's own origin; three that passed curl were CORS-blocked
+  // in the browser (Fubo Sports, SportsGrid, Trace Sport Stars) and were left
+  // out rather than shipped as dead tiles.
+  //
+  // Motorsport / racing
+  { name: 'Motorvision', country: 'Germany', category: 'Sports', url: 'https://stream.ads.ottera.tv/playlist.m3u8?network_id=535' },
+  { name: 'FloRacing', country: 'USA', category: 'Sports', url: 'https://amg02278-amg02278c1-flosports-worldwide-7592.playouts.now.amagi.tv/playlist.m3u8' },
+  { name: 'FUEL TV', country: 'Portugal', category: 'Sports', url: 'https://amg01074-fueltv-fueltvau-samsungau-g09kq.amagi.tv/playlist/amg01074-fueltv-fueltvau-samsungau/playlist.m3u8' },
+  // Football
+  { name: 'FIFA+ Women', country: 'Global', category: 'Sports', url: 'https://cffda8ff.wurl.com/master/f36d25e7e52f1ba8d7e56eb859c636563214f541/U2Ftc3VuZy1nYl9GSUZBUGx1c3dvbWVuX0hMUw/playlist.m3u8' },
+  { name: 'Sportitalia Solocalcio', country: 'Italy', category: 'Sports', url: 'https://italiansport-solocalcio-samsung.amagi.tv/playlist.m3u8' },
+  { name: 'beIN Sports XTRA Español', country: 'Global', category: 'Sports', url: 'https://dc1644a9jazgj.cloudfront.net/beIN_Sports_Xtra_Espanol.m3u8' },
+  // Multi-sport / combat / cricket
+  { name: 'Swerve Sports', country: 'USA', category: 'Sports', url: 'https://linear-253.frequency.stream/mt/roku/253/hls/master/playlist.m3u8' },
+  { name: "Women's Sports Network", country: 'USA', category: 'Sports', url: 'https://d39accvx65hq9o.cloudfront.net/Womens_Sports_Network.m3u8' },
+  { name: 'Glory Kickboxing', country: 'Netherlands', category: 'Sports', url: 'https://6f972d29.wurl.com/master/f36d25e7e52f1ba8d7e56eb859c636563214f541/UmFrdXRlblRWLWV1X0dsb3J5S2lja2JveGluZ19ITFM/playlist.m3u8' },
+  { name: 'Willow Sports', country: 'USA', category: 'Sports', url: 'https://d36r8jifhgsk5j.cloudfront.net/Willow_TV1080p.m3u8' },
+  { name: 'DD Sports', country: 'India', category: 'Sports', url: 'https://d3qs3d2rkhfqrt.cloudfront.net/out/v1/b17adfe543354fdd8d189b110617cddd/index.m3u8' },
   // Documentary / Science
   //
   // Every feed below was checked twice on 2026-07-26: once with curl for

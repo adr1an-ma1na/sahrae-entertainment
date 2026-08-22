@@ -286,6 +286,9 @@ export default function SportsView() {
   const [isSandboxed, setIsSandboxed] = useState(false);
   const [showAdNotice, setShowAdNotice] = useState(false);
   const [showServerDeadNotice, setShowServerDeadNotice] = useState(false);
+  // Off by default: the events list shows only fixtures that actually have a
+  // match feed, so nothing on screen is a dead end.
+  const [showAllFixtures, setShowAllFixtures] = useState(false);
   // Ad Shield: sandboxes the sports embed on web (see services/adShield.ts).
   const [shieldOn, setShieldOn] = useState<boolean>(() => isShieldOn());
   // Held so the auto-dismiss can be cancelled: without this, leaving Sports
@@ -681,6 +684,11 @@ export default function SportsView() {
     const sportOrder = ['football', 'basketball', 'fight', 'motor-sports', 'tennis', 'cricket', 'american-football', 'baseball', 'hockey', 'golf', 'rugby'];
     
     return activeEvents
+      // "Every match listed has a stream" is delivered by changing WHAT IS
+      // LISTED, not by inventing links. 90% of feed rows publish no streams at
+      // all, so by default only fixtures that actually carry a match feed are
+      // shown; `showAllFixtures` opens it up for schedule browsing.
+      .filter((m) => showAllFixtures || (m.embeds?.length || 0) > 0)
       .filter((m) => (sport === 'live' ? eventIsLive(m) : sport === 'all' ? true : m.category === sport))
       .filter((m) => !q || matchTitle(m).toLowerCase().includes(q))
       .sort((a, b) => {
@@ -698,7 +706,13 @@ export default function SportsView() {
         return a.date - b.date;
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeEvents, sport, search]);
+  }, [activeEvents, sport, search, showAllFixtures]);
+
+  /** Fixtures hidden because the feed publishes no stream for them. */
+  const withoutStreams = useMemo(
+    () => activeEvents.filter((m) => (m.embeds?.length || 0) === 0).length,
+    [activeEvents],
+  );
 
   // Organised into shelves: Live Now first (grouped internally by sport), then grouped by sport.
   const eventGroups = useMemo(() => {
@@ -1098,8 +1112,30 @@ export default function SportsView() {
             ))}
           </div>
 
+          {/* Honest account of what is on screen and what is being held back. */}
+          {withoutStreams > 0 && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-4 text-[11px] text-zinc-500">
+              <span>
+                {showAllFixtures
+                  ? `Showing the full schedule — ${withoutStreams} fixture${withoutStreams === 1 ? '' : 's'} have no match feed published yet.`
+                  : `Showing only fixtures with a match feed. ${withoutStreams} more ${withoutStreams === 1 ? 'is' : 'are'} scheduled but have no stream yet.`}
+              </span>
+              <button
+                onClick={() => { haptics.tap(); setShowAllFixtures((v) => !v); }}
+                tabIndex={0} data-tv-focusable
+                className="px-2.5 py-1 rounded-full bg-zinc-800/70 text-zinc-300 font-bold hover:bg-zinc-700 hover:text-white transition-colors border border-white/10"
+              >
+                {showAllFixtures ? 'Only with streams' : 'Show full schedule'}
+              </button>
+            </div>
+          )}
+
           {visible.length === 0 ? (
-            <p className="text-zinc-500 py-10 text-center">No events match. Try another sport or the Channels tab.</p>
+            <p className="text-zinc-500 py-10 text-center">
+              {showAllFixtures
+                ? 'No events match. Try another sport or the Channels tab.'
+                : 'No fixtures currently have a match feed. Tap “Show full schedule” to see what’s coming, or use the Channels tab for live sports channels.'}
+            </p>
           ) : (
             <div className="space-y-8">
               {eventGroups.map((g) => (
