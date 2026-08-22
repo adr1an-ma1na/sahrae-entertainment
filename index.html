@@ -16,7 +16,49 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Sahrae" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <title>Sahrae Entertainment</title>
+
+    <title>Sahrae Entertainment — Movies, Series, Live TV, Sports &amp; Radio</title>
+
+    <!-- Discoverability. A single-page app gives a crawler one document to work
+         with, so that document has to carry the whole story: what this is, what
+         it shows, and a card worth sharing. Without a description Google
+         invents one from whatever text it finds first. -->
+    <meta name="description" content="Sahrae Entertainment streams movies, series, live TV channels, live sports and 45 radio stations in one app. Install it on your phone, laptop or TV — no sign-up needed to start watching." />
+    <meta name="keywords" content="Sahrae, streaming, movies, series, live TV, live sports, radio, Kenya, free streaming app" />
+    <meta name="author" content="Sahrae Entertainment" />
+    <link rel="canonical" href="https://adr1an-ma1na.github.io/sahrae-entertainment/" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+
+    <!-- Link preview card (WhatsApp, X, Facebook, Slack, iMessage). Sharing the
+         link is how most people will find this, so the card matters more than
+         the search snippet. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Sahrae Entertainment" />
+    <meta property="og:title" content="Sahrae Entertainment — Movies, Series, Live TV, Sports &amp; Radio" />
+    <meta property="og:description" content="Movies, series, live TV, live sports and 45 radio stations in one app. Works on phone, laptop and TV." />
+    <meta property="og:url" content="https://adr1an-ma1na.github.io/sahrae-entertainment/" />
+    <meta property="og:image" content="https://adr1an-ma1na.github.io/sahrae-entertainment/pwa-icon.svg" />
+    <meta property="og:locale" content="en_KE" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Sahrae Entertainment" />
+    <meta name="twitter:description" content="Movies, series, live TV, live sports and 45 radio stations in one app." />
+    <meta name="twitter:image" content="https://adr1an-ma1na.github.io/sahrae-entertainment/pwa-icon.svg" />
+
+    <!-- Structured data: tells Google this is an installable application rather
+         than an article, which is what earns the app-style result. -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Sahrae Entertainment",
+      "url": "https://adr1an-ma1na.github.io/sahrae-entertainment/",
+      "applicationCategory": "EntertainmentApplication",
+      "operatingSystem": "Android, Windows, macOS, ChromeOS",
+      "browserRequirements": "Requires a modern browser with JavaScript enabled",
+      "description": "Movies, series, live TV channels, live sports and 45 radio stations in one installable app.",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+    }
+    </script>
   </head>
   <body>
     <div id="root"></div>

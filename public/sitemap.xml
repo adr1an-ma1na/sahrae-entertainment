@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Sahrae is a single-page app: every section is a client-side view, not its own
+  URL, so there is exactly one document for a crawler to index. Submit this file
+  in Google Search Console (Sitemaps → add sitemap.xml) — that is what actually
+  gets the site crawled; a sitemap sitting on the server does nothing on its own.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://adr1an-ma1na.github.io/sahrae-entertainment/</loc>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>

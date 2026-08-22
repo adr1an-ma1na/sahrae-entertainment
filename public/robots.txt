@@ -1,0 +1,11 @@
+# Sahrae Entertainment
+#
+# NOTE: on a GitHub Pages *project* site the crawler reads robots.txt from the
+# domain root (adr1an-ma1na.github.io/robots.txt), which belongs to the user
+# account, not this repo. So this file is advisory only. What actually gets the
+# site indexed is submitting it in Google Search Console — see SEO notes in the
+# README.
+User-agent: *
+Allow: /
+
+Sitemap: https://adr1an-ma1na.github.io/sahrae-entertainment/sitemap.xml
