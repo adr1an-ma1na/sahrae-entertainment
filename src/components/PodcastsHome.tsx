@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, type MouseEvent as RMouseEvent } from 'rea
 import { Search, Loader2, Heart, Play, ChevronLeft, ChevronRight, Check, Circle, Video, X, ListTree, Download, Trash2, Sparkles } from 'lucide-react';
 import { Track, ytmusic } from '../services/ytmusic';
 import { searchPodcastShows, getPodcastEpisodes, fetchChapters, getShowsLatest, PodShow } from '../services/podcastRss';
+import { getEpisodesById, mergeEpisodes } from '../services/itunesPodcasts';
 import { downloads, useDownloads } from '../services/downloads';
 import { useMusic } from '../hooks/useMusic';
 import { CoverArt } from './ui/CoverArt';
@@ -163,25 +164,43 @@ export default function PodcastsHome() {
     return () => window.clearTimeout(tRef.current);
   }, [query]);
 
-  // Show page — load the feed's episodes (real MP3s). Old follows without a feed
-  // are looked up by name first.
+  // Show page — load episodes (real MP3s), iTunes first then RSS on top.
+  //
+  // iTunes' lookup is CORS-open, so it resolves on web AND in the APK; podcast
+  // RSS feeds send no CORS headers at all, so the feed-only path used to come
+  // back empty in the PWA and the page just sat there saying nothing. iTunes
+  // renders the show immediately; the feed then fills in the back-catalogue past
+  // iTunes' 200-episode cap plus chapters and fuller notes, wherever it is
+  // actually reachable. Old follows without a feed are looked up by name first.
   useEffect(() => {
     if (!showView) return;
     let cancelled = false; setShowLoading(true); setShowEpisodes([]);
+
+    const seen = (eps: Track[]) => {
+      const newest = eps.reduce((mx, e) => Math.max(mx, e.uploaded || 0), 0) || Date.now();
+      markShowSeen(showView.id, newest);
+      setNewShows((prev) => { if (!prev.has(showView.id)) return prev; const n = new Set(prev); n.delete(showView.id); return n; });
+    };
+
     (async () => {
+      const primary = await getEpisodesById(showView.id).catch(() => [] as Track[]);
+      if (cancelled) return;
+      if (primary.length) { setShowEpisodes(primary); setShowLoading(false); seen(primary); }
+
       let feed = showView.feedUrl;
       if (!feed) {
         const found = await searchPodcastShows(showView.title || showView.artist, 1).catch(() => [] as PodShow[]);
         feed = found[0]?.feedUrl;
       }
-      if (!feed) { if (!cancelled) { setShowEpisodes([]); setShowLoading(false); } return; }
-      const eps = await getPodcastEpisodes(feed, { title: showView.title, artwork: showView.artwork }).catch(() => [] as Track[]);
-      if (!cancelled) {
-        setShowEpisodes(eps); setShowLoading(false);
-        const newest = eps.reduce((mx, e) => Math.max(mx, e.uploaded || 0), 0) || Date.now();
-        markShowSeen(showView.id, newest);
-        setNewShows((prev) => { if (!prev.has(showView.id)) return prev; const n = new Set(prev); n.delete(showView.id); return n; });
-      }
+      const extra = feed
+        ? await getPodcastEpisodes(feed, { title: showView.title, artwork: showView.artwork }).catch(() => [] as Track[])
+        : [];
+      if (cancelled) return;
+
+      const merged = mergeEpisodes(primary, extra);
+      setShowEpisodes(merged);
+      setShowLoading(false);
+      if (!primary.length) seen(merged);
     })();
     return () => { cancelled = true; };
   }, [showView]);

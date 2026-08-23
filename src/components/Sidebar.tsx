@@ -1,4 +1,4 @@
-import { Home, Search, Headphones, Radio, Film, Tv2, Clapperboard, Trophy, Heart, Clock, Download, Library, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Home, Search, Headphones, Radio, Film, Tv2, Clapperboard, Trophy, Heart, Clock, Download, Library, PanelLeftClose, PanelLeftOpen, Music2, Mic2 } from 'lucide-react';
 
 /**
  * Left navigation, grouped Watch / Listen / Library.
@@ -20,11 +20,10 @@ const WATCH = [
   { id: 'channels', label: 'Flow Channels', icon: Clapperboard },
 ];
 const LISTEN = [
-  // "Listen" is Radio-only now (Sauti/Music and Podcasts were removed from the
-  // hub), so it points straight at the radio view rather than a sub-tab shell.
-  { id: 'audio', label: 'Listen', icon: Headphones },
+  { id: 'music', label: 'Music', icon: Music2 },
+  { id: 'podcasts', label: 'Podcasts', icon: Mic2 },
+  { id: 'audio', label: 'Radio', icon: Headphones },
 ];
-const AUDIO_TABS = ['audio'];
 const LIBRARY = [
   { id: 'mylist', label: 'My List', icon: Heart },
   { id: 'continue', label: 'Continue Watching', icon: Clock },
@@ -37,7 +36,9 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
   const renderNav = (items: NavItem[]) =>
     items.map((t) => {
       const Icon = t.icon;
-      const active = t.id === 'audio' ? AUDIO_TABS.includes(activeTab) : activeTab === t.id;
+      // Each Listen destination is its own row now, so each matches only itself.
+      // (It used to light "Listen" for any audio tab, because there was only one.)
+      const active = activeTab === t.id;
       return (
         <button key={t.id} onClick={() => setActiveTab(t.id)} tabIndex={0} data-tv-focusable
           className={`w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all focus:outline-none ${

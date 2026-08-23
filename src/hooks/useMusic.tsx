@@ -56,6 +56,7 @@ interface MusicCtx {
   addTasteSeeds: (tracks: Track[]) => void;
   completeOnboarding: () => void;
   createPlaylist: (name: string) => string;
+  importPlaylist: (name: string, tracks: Track[]) => string;
   deletePlaylist: (id: string) => void;
   renamePlaylist: (id: string, name: string) => void;
   addToPlaylist: (id: string, track: Track) => void;
@@ -184,6 +185,20 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const createPlaylist = (name: string): string => {
     const p: Playlist = { id: `pl_${Date.now()}`, name: name.trim() || 'New Playlist', createdAt: Date.now(), tracks: [] };
     setPlaylists((prev) => { const n = [p, ...prev]; saveLS(PL_KEY, n); return n; });
+    return p.id;
+  };
+  /**
+   * Create a playlist with its tracks in one shot — used by the YouTube import.
+   * Doing this via createPlaylist + addToPlaylist per track would fire a haptic
+   * buzz and a localStorage write for every one of them, which on a 200-song
+   * playlist is 200 of each. Dedupes on the way in and returns the new id.
+   */
+  const importPlaylist = (name: string, tracks: Track[]): string => {
+    const seen = new Set<string>();
+    const unique = tracks.filter((t) => t.id && !seen.has(t.id) && seen.add(t.id));
+    const p: Playlist = { id: `pl_${Date.now()}`, name: name.trim() || 'Imported Playlist', createdAt: Date.now(), tracks: unique };
+    setPlaylists((prev) => { const n = [p, ...prev]; saveLS(PL_KEY, n); return n; });
+    haptics.tap();
     return p.id;
   };
   const deletePlaylist = (id: string) => setPlaylists((prev) => { const n = prev.filter((p) => p.id !== id); saveLS(PL_KEY, n); return n; });
@@ -682,7 +697,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         toggle, stop, next, prev, seek, setRate, toggleShuffle, cycleRepeat, toggleLike, isLiked,
         likedTracks, setExpanded,
         playlists, recentlyPlayed, tasteSeeds, onboarded, addTasteSeeds, completeOnboarding,
-        createPlaylist, deletePlaylist, renamePlaylist, addToPlaylist, removeFromPlaylist,
+        createPlaylist, importPlaylist, deletePlaylist, renamePlaylist, addToPlaylist, removeFromPlaylist,
         addSheetTrack, openAddSheet, closeAddSheet,
         sleepTimer, setSleepTimer, crossfade, setCrossfade, reorderQueue, clearQueue,
       }}

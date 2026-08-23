@@ -429,7 +429,11 @@ export default function App() {
   };
 
   const renderContent = () => {
-    if (loading && activeTab !== 'home' && activeTab !== 'radio' && activeTab !== 'audio' && activeTab !== 'tv' && activeTab !== 'sports' && activeTab !== 'podcasts' && activeTab !== 'continue') {
+    // `loading` tracks the TMDB catalog fetch. Destinations that don't read TMDB
+    // must be listed here or they sit behind a skeleton waiting on data they
+    // never use — 'music' was missing, so Sauti stalled on a cold start.
+    const NEEDS_TMDB = !['home', 'radio', 'audio', 'music', 'podcasts', 'tv', 'sports', 'continue'].includes(activeTab);
+    if (loading && NEEDS_TMDB) {
       // A skeleton in the shape of the destination, not a spinner over a blank
       // screen: the layout stays still, and the wait reads as "loading this"
       // rather than "loading something".

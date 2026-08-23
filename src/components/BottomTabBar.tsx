@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Home, Search, Headphones, Radio, Grid3x3, X, Film, Tv2, Clapperboard, Trophy, Heart, Clock, Download } from 'lucide-react';
+import { Home, Search, Headphones, Radio, Grid3x3, X, Film, Tv2, Clapperboard, Trophy, Heart, Clock, Download, Music2, Mic2 } from 'lucide-react';
 
 /**
  * Mobile bottom navigation (Spotify-style). Replaces the top scrolling strip on
@@ -12,10 +12,14 @@ const PRIMARY = [
   { id: 'search', label: 'Search', icon: Search },
   { id: 'audio', label: 'Listen', icon: Headphones },
 ] as const;
-// "Listen" is Radio-only now (Music/Sauti and Podcasts were removed from it).
-const AUDIO_TABS = ['audio'];
+// The Listen hub's three destinations. The primary tab stays lit for any of
+// them, because from the phone bar they are all "Listen" — ListenTabs does the
+// switching once you are inside.
+const AUDIO_TABS = ['audio', 'music', 'podcasts'];
 
 const MORE = [
+  { id: 'music', label: 'Music', icon: Music2 },
+  { id: 'podcasts', label: 'Podcasts', icon: Mic2 },
   { id: 'movies', label: 'Movies', icon: Film },
   { id: 'series', label: 'Series', icon: Tv2 },
   { id: 'tv', label: 'Live TV', icon: Radio },
@@ -29,7 +33,9 @@ const MORE = [
 export default function BottomTabBar({ activeTab, setActiveTab }: { activeTab: string; setActiveTab: (t: string) => void }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const go = (id: string) => { setMoreOpen(false); setActiveTab(id); };
-  const moreActive = MORE.some((m) => m.id === activeTab);
+  // Music and Podcasts sit in the More sheet but already light the Listen tab,
+  // so exclude them here — otherwise two tabs go gold at once.
+  const moreActive = MORE.some((m) => m.id === activeTab) && !AUDIO_TABS.includes(activeTab);
 
   return (
     <>

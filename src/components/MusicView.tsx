@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, Fragment, ReactNode, type MouseEvent as RMouseEvent } from 'react';
-import { Search, Play, Pause, Heart, Loader2, Music2, Plus, X, ListMusic, Shuffle, Trash2, ChevronLeft, Library, Sparkles, Disc3, User, Youtube } from 'lucide-react';
+import { Search, Play, Pause, Heart, Loader2, Music2, Plus, X, ListMusic, Shuffle, Trash2, ChevronLeft, Library, Sparkles, Disc3, User, Youtube, Link2 as LinkIcon } from 'lucide-react';
 import { ytmusic, Track, Artist, Album, GENRES, SECTIONS } from '../services/ytmusic';
 import { buildMix, diverseSample } from '../services/recommend';
 import { useMusic } from '../hooks/useMusic';
@@ -193,7 +193,7 @@ function greeting(): string {
 }
 
 export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) {
-  const { playQueue, likedTracks, playlists, recentlyPlayed: rawRecent, tasteSeeds, onboarded, addTasteSeeds, completeOnboarding, createPlaylist, deletePlaylist, removeFromPlaylist, openAddSheet } = useMusic();
+  const { playQueue, likedTracks, playlists, recentlyPlayed: rawRecent, tasteSeeds, onboarded, addTasteSeeds, completeOnboarding, createPlaylist, importPlaylist, deletePlaylist, removeFromPlaylist, openAddSheet } = useMusic();
   // Sauti is music only — podcasts play through the shared engine, so strip them
   // from every recently-played-derived shelf, pill, mix, and the header gradient.
   const recentlyPlayed = rawRecent.filter((t) => !t.id.startsWith('pod:') && !t.feedUrl);
@@ -279,6 +279,11 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   const [ytTracks, setYtTracks] = useState<Track[]>([]);
   const [ytTracksLoading, setYtTracksLoading] = useState(false);
 
+  // Import-by-link state (public playlists, no sign-in).
+  const [importUrl, setImportUrl] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
   const loadYoutubeData = async () => {
     if (!youtubeService.isConnected()) return;
     setYoutubeLoading(true);
@@ -349,6 +354,28 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
       setYoutubeError(err.message || 'Failed to connect your YouTube Music account.');
     } finally {
       setYoutubeLoading(false);
+    }
+  };
+
+  // Import a public/unlisted playlist by link — no sign-in required.
+  const handleImportPlaylist = async () => {
+    const url = importUrl.trim();
+    if (!url || importing) return;
+    setImporting(true); setImportMsg(null);
+    try {
+      const { playlist, tracks } = await youtubeService.importPublicPlaylist(url);
+      if (!tracks.length) {
+        setImportMsg({ ok: false, text: 'That playlist resolved but had no playable tracks in it.' });
+        return;
+      }
+      const id = importPlaylist(playlist.title, tracks);
+      setImportUrl('');
+      setImportMsg({ ok: true, text: `Imported “${playlist.title}” — ${tracks.length} track${tracks.length === 1 ? '' : 's'}.` });
+      setOpenId(id);
+    } catch (err) {
+      setImportMsg({ ok: false, text: err instanceof Error ? err.message : 'Could not import that playlist.' });
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -1111,6 +1138,41 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
               </button>
             </div>
           )}
+
+          {/* Import a playlist by link.
+              Signing in covers your own library, but a YouTube Music playlist is
+              usually SHARED as a link — and that path needs no account, no
+              consent screen and no permissions. Kept visible whether or not the
+              account is connected, since the two do different jobs. */}
+          <div className="p-4 rounded-3xl bg-zinc-900/40 border border-white/10 mb-8">
+            <div className="flex items-center gap-2 mb-2">
+              <LinkIcon className="w-4 h-4 text-sauti shrink-0" />
+              <h3 className="font-display font-bold text-sm text-white">Import a YouTube Music playlist</h3>
+            </div>
+            <p className="text-xs text-zinc-400 mb-3">
+              Paste a playlist link and it lands in your library — same order, same artwork. The playlist has to be Public or Unlisted for Sahrae to read it.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                value={importUrl}
+                onChange={(e) => { setImportUrl(e.target.value); setImportMsg(null); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleImportPlaylist(); }}
+                placeholder="https://music.youtube.com/playlist?list=..."
+                aria-label="YouTube Music playlist link"
+                className="flex-1 min-w-0 bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-sauti/60"
+              />
+              <button
+                onClick={handleImportPlaylist}
+                disabled={importing || !importUrl.trim()}
+                className="btn-sauti px-5 py-2.5 rounded-xl text-xs font-black shrink-0 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {importing ? <><Loader2 className="w-4 h-4 animate-spin" /> Importing…</> : 'Import'}
+              </button>
+            </div>
+            {importMsg && (
+              <p className={`text-xs mt-2.5 ${importMsg.ok ? 'text-emerald-400' : 'text-red-400'}`} role="status">{importMsg.text}</p>
+            )}
+          </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-10">
             <button onClick={() => setOpenId('liked')} tabIndex={0} data-tv-focusable className="card-lift flex items-center gap-3 p-4 rounded-2xl bg-gradient-to-br from-orange-500/20 to-rose-600/20 border border-rose-500/25 text-left">
