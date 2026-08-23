@@ -1,3 +1,5 @@
+import { ytDataApi } from './ytDataApi';
+
 /**
  * Sahrae Music — YouTube Music engine (Piped-backed, key-less).
  *
@@ -239,13 +241,37 @@ async function searchRaw(q: string, filter: string): Promise<any[]> {
   return j && Array.isArray(j.items) ? j.items : [];
 }
 
+/**
+ * Every method below asks the official YouTube Data API first and only falls
+ * back to Piped when the official route is unavailable — the key is missing, the
+ * API is switched off for the project, or the day's search budget is spent.
+ *
+ * Doing the routing here rather than at the call sites means the whole Music
+ * section upgrades at once, and Piped stops being the thing users actually hit.
+ * `null` from ytDataApi means "I could not answer"; `[]` means "answered, no
+ * results" — only the former should fall through, or an empty search would
+ * pointlessly retry against dead proxies.
+ */
+async function official<T>(
+  primary: () => Promise<T[] | null>,
+  fallback: () => Promise<T[]>,
+): Promise<T[]> {
+  try {
+    const r = await primary();
+    if (r !== null) return r;
+  } catch { /* fall through to Piped */ }
+  return fallback().catch(() => [] as T[]);
+}
+
 export const ytmusic = {
-  search: (q: string): Promise<Track[]> => searchRaw(q, 'music_songs').then(mapItems),
+  search: (q: string): Promise<Track[]> =>
+    official(() => ytDataApi.search(q, 'song'), () => searchRaw(q, 'music_songs').then(mapItems)),
 
   // Video search — used for Podcasts (which live as videos on YouTube). Returns
   // the same Track shape (id = videoId) so it plays through the music engine for
   // audio, or via a YouTube embed for video.
-  searchVideos: (q: string): Promise<Track[]> => searchRaw(q, 'videos').then(mapItems),
+  searchVideos: (q: string): Promise<Track[]> =>
+    official(() => ytDataApi.search(q, 'video'), () => searchRaw(q, 'videos').then(mapItems)),
 
   // A podcast SHOW's full episode feed (the channel's uploads), newest first,
   // with a nextpage token for "load more".
@@ -258,7 +284,7 @@ export const ytmusic = {
     return { items: mapItems(j?.relatedStreams || []), nextpage: (j && j.nextpage) || null };
   },
 
-  searchArtists: async (q: string): Promise<Artist[]> => {
+  searchArtists: async (q: string): Promise<Artist[]> => official(() => ytDataApi.searchArtists(q), async () => {
     const items = await searchRaw(q, 'music_artists');
     const out: Artist[] = []; const seen = new Set<string>();
     for (const it of items) {
@@ -266,27 +292,29 @@ export const ytmusic = {
       if (id && !seen.has(id)) { seen.add(id); out.push({ id, name: it.name || it.title || 'Unknown', thumbnail: it.thumbnail }); }
     }
     return out;
-  },
+  }),
 
-  searchAlbums: async (q: string, filter: 'music_albums' | 'music_playlists' = 'music_albums'): Promise<Album[]> => {
-    const items = await searchRaw(q, filter);
-    const out: Album[] = []; const seen = new Set<string>();
-    for (const it of items) {
-      const id = listId(it.url || '');
-      if (id && !seen.has(id)) { seen.add(id); out.push({ id, name: it.name || it.title || 'Album', thumbnail: it.thumbnail, artist: it.uploaderName }); }
-    }
-    return out;
-  },
+  searchAlbums: async (q: string, filter: 'music_albums' | 'music_playlists' = 'music_albums'): Promise<Album[]> =>
+    official(() => ytDataApi.searchAlbums(q), async () => {
+      const items = await searchRaw(q, filter);
+      const out: Album[] = []; const seen = new Set<string>();
+      for (const it of items) {
+        const id = listId(it.url || '');
+        if (id && !seen.has(id)) { seen.add(id); out.push({ id, name: it.name || it.title || 'Album', thumbnail: it.thumbnail, artist: it.uploaderName }); }
+      }
+      return out;
+    }),
 
-  playlistTracks: async (id: string): Promise<Track[]> => {
-    const j = await pipedGet(`/playlists/${id}`);
-    return mapItems(j?.relatedStreams || []);
-  },
+  playlistTracks: async (id: string): Promise<Track[]> =>
+    official(() => ytDataApi.playlistTracks(id), async () => {
+      const j = await pipedGet(`/playlists/${id}`);
+      return mapItems(j?.relatedStreams || []);
+    }),
 
   // Related songs ("up next" radio) for a video — powers autoplay + mixes.
   // NEVER returns empty: if the source has no relatedStreams, backfill from the
   // track's own artist, then a popular fallback (so "Related" is always full).
-  related: async (videoId: string): Promise<Track[]> => {
+  related: async (videoId: string): Promise<Track[]> => official(() => ytDataApi.radio(videoId), async () => {
     const j = await pipedGet(`/streams/${videoId}`);
     const out = mapItems(j?.relatedStreams || []);
     if (out.length >= 5) return out;
@@ -298,16 +326,15 @@ export const ytmusic = {
     if (seed) push(await ytmusic.search(`${seed} songs`).catch(() => [] as Track[]));
     if (out.length < 5) push(await ytmusic.search('top hits 2026').catch(() => [] as Track[]));
     return out;
-  },
+  }),
 
-  // Real, auto-updated YouTube trending feed for a country (region = ISO-2:
-  // US, KE, NG, GB, ZA…). Song-length items only. Powers the country/region
-  // charts so they reflect what's ACTUALLY trending now, not a static search.
-  trending: async (region: string): Promise<Track[]> => {
+  // Real, auto-updated YouTube music chart for a country (region = ISO-2:
+  // US, KE, NG, GB, ZA…). Song-length items only.
+  trending: async (region: string): Promise<Track[]> => official(() => ytDataApi.chart(region), async () => {
     const j = await pipedGet(`/trending?region=${encodeURIComponent(region)}`);
     const arr = Array.isArray(j) ? j : (j && Array.isArray(j.items) ? j.items : []);
     return mapItems(arr).filter((t) => t.duration >= 60 && t.duration <= 600);
-  },
+  }),
 
   // Best directly-playable AUDIO stream for a video (used for offline downloads).
   // Prefers m4a/mp4 (broadest <audio> support) at a sane bitrate, then anything.

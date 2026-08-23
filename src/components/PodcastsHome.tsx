@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type MouseEvent as RMouseEvent } from 'react';
-import { Search, Loader2, Heart, Play, ChevronLeft, ChevronRight, Check, Circle, Video, X, ListTree, Download, Trash2, Sparkles } from 'lucide-react';
+import { Search, Loader2, Heart, Play, ChevronLeft, ChevronRight, Check, Circle, Video, X, ListTree, Download, Trash2, Sparkles, TrendingUp } from 'lucide-react';
 import { Track, ytmusic } from '../services/ytmusic';
 import { searchPodcastShows, getPodcastEpisodes, fetchChapters, getShowsLatest, PodShow } from '../services/podcastRss';
 import { getEpisodesById, mergeEpisodes } from '../services/itunesPodcasts';
@@ -8,8 +8,33 @@ import { useMusic } from '../hooks/useMusic';
 import { CoverArt } from './ui/CoverArt';
 import { getFollows, isFollowed, toggleFollow, listInProgress, getProgress, getMany, getSeen, markShowSeen, markPlayed, markUnplayed, EpisodeProgress } from '../services/podcasts';
 
-const CATEGORIES = ['Top', 'News', 'Comedy', 'Business', 'Technology', 'True Crime', 'Sports', 'Health', 'Education'];
-const catQuery = (c: string) => (c === 'Top' ? 'podcasts' : c);
+// 'Top' is deliberately absent — the Top Podcasts chart covers it, and fetching
+// a shelf nothing renders was a wasted request on every page load.
+const CATEGORIES = ['News', 'Comedy', 'Business', 'Technology', 'True Crime', 'Sports', 'Health', 'Education'];
+
+// Time windows people actually have: a commute, a walk, a gym session, a drive.
+// Labelled by the occasion rather than the number, because "the commute" is how
+// someone thinks about it — the minutes are the supporting detail.
+const TIME_BUCKETS = [
+  { id: 'quick', label: 'Quick hit', hint: 'Under 15 min', min: 0, max: 900, grad: 'from-emerald-500/25 to-teal-600/20', ring: 'border-emerald-400/40' },
+  { id: 'commute', label: 'The commute', hint: '15 – 30 min', min: 900, max: 1800, grad: 'from-sky-500/25 to-indigo-600/20', ring: 'border-sky-400/40' },
+  { id: 'deep', label: 'Deep dive', hint: '30 – 60 min', min: 1800, max: 3600, grad: 'from-amber-500/25 to-orange-600/20', ring: 'border-amber-400/40' },
+  { id: 'long', label: 'The long haul', hint: 'Over an hour', min: 3600, max: Infinity, grad: 'from-fuchsia-500/25 to-violet-600/20', ring: 'border-fuchsia-400/40' },
+];
+
+// Category tiles. A colour per category so the grid reads as a place you can
+// navigate by memory, instead of nine identical rails of square artwork.
+const CAT_TILES: { name: string; grad: string }[] = [
+  { name: 'News', grad: 'from-rose-500/30 to-red-700/20' },
+  { name: 'Comedy', grad: 'from-amber-400/30 to-orange-600/20' },
+  { name: 'True Crime', grad: 'from-zinc-400/25 to-zinc-700/20' },
+  { name: 'Business', grad: 'from-emerald-500/30 to-green-700/20' },
+  { name: 'Technology', grad: 'from-sky-500/30 to-blue-700/20' },
+  { name: 'Sports', grad: 'from-lime-500/30 to-emerald-700/20' },
+  { name: 'Health', grad: 'from-teal-500/30 to-cyan-700/20' },
+  { name: 'Education', grad: 'from-violet-500/30 to-purple-700/20' },
+];
+
 // Country charts (spec §2.2.4 numbered list). iTunes storefront codes.
 const CHART_MARKETS = [
   { cc: 'us', name: 'USA', flag: '\u{1F1FA}\u{1F1F8}' },
@@ -86,6 +111,44 @@ export default function PodcastsHome() {
   const [suggested, setSuggested] = useState<Track[]>([]);
   const [newShows, setNewShows] = useState<Set<string>>(new Set());
 
+  // Which category tile is expanded in the Browse grid.
+  const [openCat, setOpenCat] = useState<string | null>(null);
+
+  // ── "How long have you got?" ──
+  // The real question when choosing an episode is how much time you have, and
+  // nothing in podcast apps is organised that way — you pick a show, then hunt
+  // for something that fits. These buckets invert that: pick the window, get
+  // episodes that actually fit it, drawn from the shows you follow (falling back
+  // to the chart when you follow nothing yet).
+  const [bucket, setBucket] = useState<string | null>(null);
+  const [bucketEps, setBucketEps] = useState<Track[]>([]);
+  const [bucketLoading, setBucketLoading] = useState(false);
+
+  useEffect(() => {
+    if (!bucket) { setBucketEps([]); return; }
+    const band = TIME_BUCKETS.find((b) => b.id === bucket);
+    if (!band) return;
+    let cancelled = false;
+    setBucketLoading(true); setBucketEps([]);
+    (async () => {
+      // Follows first — they are what someone actually wants to listen to.
+      // Chart shows only fill in when there aren't enough sources.
+      const sources = [...follows, ...(charts[chartCountry] || [])]
+        .filter((s, i, arr) => arr.findIndex((x) => x.id === s.id) === i)
+        .slice(0, 8);
+      const lists = await Promise.all(sources.map((s) => getEpisodesById(s.id, 25).catch(() => [] as Track[])));
+      if (cancelled) return;
+      const fits = lists.flat()
+        .filter((e) => e.duration > 0 && e.duration >= band.min && e.duration < band.max)
+        .sort((a, b) => (b.uploaded || 0) - (a.uploaded || 0))
+        .slice(0, 24);
+      setBucketEps(fits);
+      setBucketLoading(false);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bucket]);
+
   // Top Podcasts chart for the selected country — numbered list (spec §2.2.4).
   useEffect(() => {
     if (query.trim() || charts[chartCountry]) return;
@@ -142,7 +205,7 @@ export default function PodcastsHome() {
     let cancelled = false; setLoadingHome(true);
     (async () => {
       for (const c of CATEGORIES) {
-        const shows = await searchPodcastShows(catQuery(c), 12).catch(() => [] as PodShow[]);
+        const shows = await searchPodcastShows(c, 12).catch(() => [] as PodShow[]);
         if (cancelled) return;
         if (shows.length) setShelves((prev) => [...prev, { title: c, items: shows.map(showToTrack) }]);
         setLoadingHome(false);
@@ -430,76 +493,235 @@ export default function PodcastsHome() {
         ) : <p className="text-zinc-500 py-10 text-center">No podcasts found.</p>
       ) : (
         <>
-          {/* Continue listening */}
-          {cont.length > 0 && (
-            <section className="mb-9">
-              <h3 className="text-xl font-display font-bold text-white tracking-tight mb-4">Continue listening</h3>
-              <div className="flex overflow-x-auto gap-3 pb-3 scrollbar-hide">
-                {cont.map((p) => (
-                  <button key={p.track.id} onClick={() => resume(p)} tabIndex={0} data-tv-focusable className="card-lift tier-card rounded-xl p-3 flex items-center gap-3 w-[300px] shrink-0 text-left">
-                    <div className="w-14 h-14 rounded-lg overflow-hidden bg-zinc-800 shrink-0 relative"><CoverArt imageUrl={p.track.artwork} dominantColor={p.track.dominantColor} rounded="" className="absolute inset-0 w-full h-full" /></div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-white truncate">{p.track.title}</p>
-                      <p className="text-xs text-zinc-500 truncate mb-1.5">{p.track.artist}{p.durationMs ? ` · ${fmt((p.durationMs - p.positionMs) / 1000)} left` : ''}</p>
-                      <div className="h-1 rounded-full bg-white/10 overflow-hidden"><div className="h-full bg-sauti" style={{ width: `${p.durationMs ? Math.min(100, (p.positionMs / p.durationMs) * 100) : 10}%` }} /></div>
+          {/* ── 1. Pick up where you left off ───────────────────────────────
+              The one thing a returning listener wants is the episode they were
+              already in. It used to be a card in a rail like everything else;
+              now it leads, at a size that says "press this". */}
+          {cont.length > 0 && (() => {
+            const [top, ...rest] = cont;
+            const left = top.durationMs ? (top.durationMs - top.positionMs) / 1000 : 0;
+            const pct = top.durationMs ? Math.min(100, (top.positionMs / top.durationMs) * 100) : 8;
+            return (
+              <section className="mb-10">
+                <button onClick={() => resume(top)} tabIndex={0} data-tv-focusable
+                  aria-label={`Resume ${top.track.title}${left ? `, ${fmt(left)} left` : ''}`}
+                  className="group card-lift w-full text-left rounded-3xl overflow-hidden relative border border-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400">
+                  {/* Artwork bled behind the panel, heavily blurred — the episode's
+                      own colour becomes the backdrop, so this block looks
+                      different every time you open the page. */}
+                  <div aria-hidden className="absolute inset-0 -z-10">
+                    <CoverArt imageUrl={top.track.artworkLarge || top.track.artwork} dominantColor={top.track.dominantColor} rounded="" className="absolute inset-0 w-full h-full scale-125 blur-2xl opacity-45" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-zinc-950 via-zinc-950/85 to-zinc-950/50" />
+                  </div>
+                  <div className="flex items-center gap-4 md:gap-5 p-4 md:p-5">
+                    <div className="w-20 h-20 md:w-28 md:h-28 rounded-2xl overflow-hidden bg-zinc-800 shrink-0 relative shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+                      <CoverArt imageUrl={top.track.artwork} dominantColor={top.track.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
                     </div>
-                    <span className="btn-sauti w-9 h-9 rounded-full flex items-center justify-center shrink-0"><Play className="w-4 h-4 fill-current ml-0.5" /></span>
+                    <div className="min-w-0 flex-1">
+                      <div className="overline mb-1">Pick up where you left off</div>
+                      <p className="text-base md:text-xl font-display font-bold text-white line-clamp-2 leading-snug">{top.track.title}</p>
+                      <p className="text-xs md:text-sm text-zinc-400 truncate mt-0.5">{top.track.artist}</p>
+                      <div className="flex items-center gap-3 mt-3">
+                        <div className="h-1.5 flex-1 rounded-full bg-white/15 overflow-hidden">
+                          <div className="h-full bg-sauti rounded-full transition-[width] duration-300" style={{ width: `${pct}%` }} />
+                        </div>
+                        {left > 0 && <span className="text-[11px] font-bold text-zinc-300 tabular shrink-0">{fmt(left)} left</span>}
+                      </div>
+                    </div>
+                    <span className="btn-sauti w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center shrink-0 shadow-lg transition-transform duration-200 group-hover:scale-105">
+                      <Play className="w-5 h-5 md:w-6 md:h-6 fill-current ml-0.5" />
+                    </span>
+                  </div>
+                </button>
+
+                {rest.length > 0 && (
+                  <div className="flex overflow-x-auto gap-2.5 pt-3 pb-1 scrollbar-hide">
+                    {rest.map((p) => (
+                      <button key={p.track.id} onClick={() => resume(p)} tabIndex={0} data-tv-focusable
+                        aria-label={`Resume ${p.track.title}`}
+                        className="card-lift tier-card rounded-xl p-2.5 flex items-center gap-2.5 w-[260px] shrink-0 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400">
+                        <div className="w-11 h-11 rounded-lg overflow-hidden bg-zinc-800 shrink-0 relative"><CoverArt imageUrl={p.track.artwork} dominantColor={p.track.dominantColor} rounded="" className="absolute inset-0 w-full h-full" /></div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold text-white truncate">{p.track.title}</p>
+                          <div className="h-1 rounded-full bg-white/10 overflow-hidden mt-1.5"><div className="h-full bg-sauti" style={{ width: `${p.durationMs ? Math.min(100, (p.positionMs / p.durationMs) * 100) : 10}%` }} /></div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </section>
+            );
+          })()}
+
+          {/* ── 2. How long have you got? ────────────────────────────────────
+              The organising idea of this page. Every other podcast app makes you
+              choose a show and then hope something fits the time you have; this
+              starts from the time. */}
+          <section className="mb-10">
+            <h3 className="text-xl font-display font-bold text-white tracking-tight mb-1">How long have you got?</h3>
+            <p className="text-xs text-zinc-500 mb-4">Episodes that actually fit the time — from the shows you follow.</p>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+              {TIME_BUCKETS.map((b) => {
+                const on = bucket === b.id;
+                return (
+                  <button key={b.id} onClick={() => setBucket(on ? null : b.id)} tabIndex={0} data-tv-focusable
+                    aria-pressed={on}
+                    className={`card-lift relative overflow-hidden rounded-2xl border p-4 min-h-[88px] text-left transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${
+                      on ? `${b.ring} bg-gradient-to-br ${b.grad}` : 'border-white/10 bg-zinc-900/50 hover:border-white/20'
+                    }`}>
+                    {/* A waveform, not a clock icon — it reads as audio at a
+                        glance and gives each tile a bit of character. */}
+                    <span aria-hidden className="absolute right-3 bottom-3 flex items-end gap-[3px] h-6 opacity-40">
+                      {[9, 16, 22, 13, 19, 8].map((h, i) => (
+                        <span key={i} className={`w-[3px] rounded-full ${on ? 'bg-white' : 'bg-zinc-500'}`} style={{ height: `${h}px` }} />
+                      ))}
+                    </span>
+                    <span className="block font-display font-bold text-white text-sm md:text-base">{b.label}</span>
+                    <span className="block text-[11px] text-zinc-400 mt-0.5 tabular">{b.hint}</span>
                   </button>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Your shows */}
-          {follows.length > 0 && (
-            <section className="mb-9">
-              <h3 className="text-xl font-display font-bold text-white tracking-tight mb-4">Your shows</h3>
-              <div className="flex overflow-x-auto gap-4 pb-3 scrollbar-hide">{follows.map(card)}</div>
-            </section>
-          )}
-
-          {/* Top Podcasts — numbered chart, per country (spec §2.2.4) */}
-          <section className="mb-9">
-            <h3 className="text-xl font-display font-bold text-white tracking-tight mb-3">Top Podcasts</h3>
-            <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2 mb-1">
-              {CHART_MARKETS.map((m) => (
-                <button key={m.cc} onClick={() => { setChartCountry(m.cc); setChartAll(false); }} className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap border transition-colors ${chartCountry === m.cc ? 'bg-sauti text-amber-950 border-transparent' : 'glass-liquid text-white border-transparent'}`}>{m.flag} {m.name}</button>
-              ))}
+                );
+              })}
             </div>
-            {chartLoading && !charts[chartCountry]?.length ? (
-              <div className="flex items-center gap-2 text-zinc-400 py-6"><Loader2 className="w-5 h-5 animate-spin text-amber-500" /> Loading chart…</div>
-            ) : (
-              <div className="space-y-1">
-                {(charts[chartCountry] || []).slice(0, chartAll ? 20 : 10).map((t, i) => (
-                  <button key={t.id} onClick={() => setShowView(t)} tabIndex={0} data-tv-focusable className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 text-left transition-colors">
-                    <span className="w-7 text-center text-lg font-display font-extrabold text-zinc-500 tabular shrink-0">{i + 1}</span>
-                    <div className="w-12 h-12 rounded-lg overflow-hidden bg-zinc-800 shrink-0 relative"><CoverArt imageUrl={t.artwork} dominantColor={t.dominantColor} rounded="" className="absolute inset-0 w-full h-full" /></div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-bold text-white truncate">{t.title}</p>
-                      <p className="text-xs text-zinc-500 truncate">{t.artist}</p>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-zinc-600 shrink-0" />
-                  </button>
-                ))}
-                {(charts[chartCountry]?.length || 0) > 10 && (
-                  <button onClick={() => setChartAll((v) => !v)} className="text-xs font-bold text-sauti px-2 py-2 hover:underline">{chartAll ? 'Show less' : 'Show all'}</button>
+
+            {bucket && (
+              <div className="mt-4">
+                {bucketLoading ? (
+                  <div className="flex items-center gap-2 text-zinc-400 py-6"><Loader2 className="w-5 h-5 animate-spin text-amber-500" /> Finding episodes that fit…</div>
+                ) : bucketEps.length ? (
+                  <div className="grid sm:grid-cols-2 gap-2">
+                    {bucketEps.map((e) => (
+                      <button key={e.id} onClick={() => onListen(e)} tabIndex={0} data-tv-focusable
+                        aria-label={`Play ${e.title}`}
+                        className="card-lift tier-card rounded-xl p-2.5 flex items-center gap-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400">
+                        <div className="w-12 h-12 rounded-lg overflow-hidden bg-zinc-800 shrink-0 relative"><CoverArt imageUrl={e.artwork} dominantColor={e.dominantColor} rounded="" className="absolute inset-0 w-full h-full" /></div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-white truncate">{e.title}</p>
+                          <p className="text-[11px] text-zinc-500 truncate">{e.artist}</p>
+                        </div>
+                        <span className="text-[11px] font-bold text-sauti tabular shrink-0 px-2 py-1 rounded-md bg-sauti/10">{fmt(e.duration)}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-zinc-500 py-6">
+                    Nothing in that length right now. {follows.length ? 'Try a different window.' : 'Follow a few shows and this fills up.'}
+                  </p>
                 )}
               </div>
             )}
           </section>
 
-          {/* Curated category shelves */}
-          {shelves.map((s) => (
-            <section key={s.title} className="mb-9">
-              <h3 className="text-xl font-display font-bold text-white tracking-tight mb-4">{s.title}</h3>
-              <div className="flex overflow-x-auto gap-4 pb-3 scrollbar-hide">{s.items.map(card)}</div>
+          {/* ── 3. Your shows ─────────────────────────────────────────────── */}
+          {follows.length > 0 && (
+            <section className="mb-10">
+              <h3 className="text-xl font-display font-bold text-white tracking-tight mb-4">Your shows</h3>
+              <div className="flex overflow-x-auto gap-4 pb-3 scrollbar-hide">{follows.map(card)}</div>
             </section>
-          ))}
+          )}
 
-          {/* Shows you might like (spec §2.6.1) */}
+          {/* ── 4. Top Podcasts — podium + list ──────────────────────────────
+              The top three get artwork you can actually see; 4–10 stay a tight
+              list. A flat 1–20 rundown gave the number one the same weight as
+              number nineteen. */}
+          <section className="mb-10">
+            <div className="flex items-baseline justify-between gap-3 mb-3">
+              <h3 className="text-xl font-display font-bold text-white tracking-tight">Top Podcasts</h3>
+              <TrendingUp className="w-4 h-4 text-sauti shrink-0" aria-hidden />
+            </div>
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2 mb-3">
+              {CHART_MARKETS.map((m) => (
+                <button key={m.cc} onClick={() => { setChartCountry(m.cc); setChartAll(false); }} tabIndex={0} data-tv-focusable
+                  aria-pressed={chartCountry === m.cc}
+                  className={`px-3.5 py-2 rounded-full text-xs font-bold whitespace-nowrap border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${chartCountry === m.cc ? 'bg-sauti text-amber-950 border-transparent' : 'glass-liquid text-white border-transparent'}`}>{m.flag} {m.name}</button>
+              ))}
+            </div>
+            {chartLoading && !charts[chartCountry]?.length ? (
+              <div className="flex items-center gap-2 text-zinc-400 py-6"><Loader2 className="w-5 h-5 animate-spin text-amber-500" /> Loading chart…</div>
+            ) : (
+              <>
+                <div className="grid grid-cols-3 gap-2.5 mb-3">
+                  {(charts[chartCountry] || []).slice(0, 3).map((t, i) => (
+                    <button key={t.id} onClick={() => setShowView(t)} tabIndex={0} data-tv-focusable
+                      aria-label={`${t.title}, number ${i + 1}`}
+                      className="card-lift group relative rounded-2xl overflow-hidden border border-white/10 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400">
+                      <div className="aspect-square relative bg-zinc-800">
+                        <CoverArt imageUrl={t.artworkLarge || t.artwork} dominantColor={t.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+                        <span className="absolute top-2 left-2 w-7 h-7 rounded-full bg-sauti text-amber-950 font-display font-extrabold text-sm flex items-center justify-center tabular shadow-lg">{i + 1}</span>
+                        <div className="absolute inset-x-0 bottom-0 p-2.5">
+                          <p className="text-xs md:text-sm font-bold text-white line-clamp-2 leading-tight">{t.title}</p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <div className="space-y-0.5">
+                  {(charts[chartCountry] || []).slice(3, chartAll ? 20 : 10).map((t, i) => (
+                    <button key={t.id} onClick={() => setShowView(t)} tabIndex={0} data-tv-focusable
+                      className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400">
+                      <span className="w-7 text-center text-sm font-display font-extrabold text-zinc-500 tabular shrink-0">{i + 4}</span>
+                      <div className="w-11 h-11 rounded-lg overflow-hidden bg-zinc-800 shrink-0 relative"><CoverArt imageUrl={t.artwork} dominantColor={t.dominantColor} rounded="" className="absolute inset-0 w-full h-full" /></div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-white truncate">{t.title}</p>
+                        <p className="text-xs text-zinc-500 truncate">{t.artist}</p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-zinc-600 shrink-0" aria-hidden />
+                    </button>
+                  ))}
+                  {(charts[chartCountry]?.length || 0) > 10 && (
+                    <button onClick={() => setChartAll((v) => !v)} tabIndex={0} data-tv-focusable className="text-xs font-bold text-sauti px-2 py-2.5 hover:underline">{chartAll ? 'Show less' : `Show all ${Math.min(20, charts[chartCountry]?.length || 0)}`}</button>
+                  )}
+                </div>
+              </>
+            )}
+          </section>
+
+          {/* ── 5. Browse by category — a grid, not nine more rails ──────────
+              The old page stacked one horizontal shelf per category, so the
+              whole screen was the same rail repeated and nothing stood out.
+              These tiles collapse that into one glanceable block; picking one
+              expands its shows underneath. */}
+          <section className="mb-10">
+            <h3 className="text-xl font-display font-bold text-white tracking-tight mb-4">Browse</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+              {CAT_TILES.map((c) => {
+                const shelf = shelves.find((s) => s.title === c.name);
+                const on = openCat === c.name;
+                return (
+                  <button key={c.name} onClick={() => setOpenCat(on ? null : c.name)} tabIndex={0} data-tv-focusable
+                    aria-pressed={on} aria-label={`Browse ${c.name} podcasts`}
+                    className={`card-lift relative overflow-hidden rounded-2xl border p-4 min-h-[84px] text-left transition-all duration-200 bg-gradient-to-br ${c.grad} focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${on ? 'border-white/40' : 'border-white/10'}`}>
+                    <span className="block font-display font-bold text-white text-sm md:text-base leading-tight">{c.name}</span>
+                    <span className="block text-[11px] text-zinc-300/80 mt-0.5">{shelf ? `${shelf.items.length} shows` : 'Loading…'}</span>
+                    {/* The category's own top show peeking out of the corner —
+                        gives each tile a face instead of being a colour swatch. */}
+                    {shelf?.items[0] && (
+                      <span aria-hidden className="absolute -right-3 -bottom-3 w-16 h-16 rounded-xl overflow-hidden opacity-70 rotate-6 shadow-lg">
+                        <CoverArt imageUrl={shelf.items[0].artwork} dominantColor={shelf.items[0].dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            {openCat && (() => {
+              const shelf = shelves.find((s) => s.title === openCat);
+              return (
+                <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                  {shelf?.items.length ? (
+                    <div className="flex overflow-x-auto gap-4 pb-3 scrollbar-hide">{shelf.items.map(card)}</div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-zinc-400 py-6"><Loader2 className="w-5 h-5 animate-spin text-amber-500" /> Loading {openCat}…</div>
+                  )}
+                </div>
+              );
+            })()}
+          </section>
+
+          {/* ── 6. Shows you might like ─────────────────────────────────────── */}
           {suggested.length >= 4 && (
-            <section className="mb-9">
-              <h3 className="text-xl font-display font-bold text-white tracking-tight mb-4 flex items-center gap-2"><Sparkles className="w-5 h-5 text-sauti" /> Shows you might like</h3>
+            <section className="mb-10">
+              <h3 className="text-xl font-display font-bold text-white tracking-tight mb-4 flex items-center gap-2"><Sparkles className="w-5 h-5 text-sauti" aria-hidden /> Shows you might like</h3>
               <div className="flex overflow-x-auto gap-4 pb-3 scrollbar-hide">{suggested.map(card)}</div>
             </section>
           )}

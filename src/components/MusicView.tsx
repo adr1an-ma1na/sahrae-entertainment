@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, Fragment, ReactNode, type MouseEvent as RMouseEvent } from 'react';
 import { Search, Play, Pause, Heart, Loader2, Music2, Plus, X, ListMusic, Shuffle, Trash2, ChevronLeft, Library, Sparkles, Disc3, User, Youtube, Link2 as LinkIcon } from 'lucide-react';
 import { ytmusic, Track, Artist, Album, GENRES, SECTIONS } from '../services/ytmusic';
+import { getApiState, ENABLE_URL, type ApiState } from '../services/ytDataApi';
 import { buildMix, diverseSample } from '../services/recommend';
 import { useMusic } from '../hooks/useMusic';
 import { youtubeService, YoutubePlaylist, YoutubeUserProfile } from '../services/youtube';
@@ -278,6 +279,14 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
 
   const [ytTracks, setYtTracks] = useState<Track[]>([]);
   const [ytTracksLoading, setYtTracksLoading] = useState(false);
+
+  // Catalog connector state, polled because it is learned from the first real
+  // API response rather than known up front.
+  const [catalogState, setCatalogState] = useState<ApiState>(getApiState());
+  useEffect(() => {
+    const id = window.setInterval(() => setCatalogState(getApiState()), 1500);
+    return () => window.clearInterval(id);
+  }, []);
 
   // Import-by-link state (public playlists, no sign-in).
   const [importUrl, setImportUrl] = useState('');
@@ -1136,6 +1145,40 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
               <button onClick={handleDisconnectYoutube} className="text-xs text-zinc-400 hover:text-red-400 px-4 py-2 rounded-full border border-white/5 hover:border-red-500/20 transition-all">
                 Disconnect
               </button>
+            </div>
+          )}
+
+          {/* Catalog connector status.
+              Everything in Sauti — charts, shelves, search, radio — is served by
+              the official YouTube Data API. When that is unreachable the app
+              still works off the old proxy network, but quietly degraded, and a
+              silent degrade is exactly what made Music feel broken before. So
+              the state is shown rather than hidden. */}
+          {catalogState !== 'ok' && (
+            <div className={`p-4 rounded-3xl border mb-6 flex flex-col sm:flex-row sm:items-center gap-3 ${
+              catalogState === 'disabled' ? 'bg-amber-500/10 border-amber-500/30' : 'bg-zinc-900/40 border-white/10'
+            }`}>
+              <div className="flex items-start gap-3 flex-1 min-w-0">
+                <Youtube className={`w-5 h-5 shrink-0 mt-0.5 ${catalogState === 'disabled' ? 'text-amber-400' : 'text-zinc-500'}`} />
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-white">
+                    {catalogState === 'disabled' ? 'YouTube Music catalog is switched off' : 'Running on the backup catalog'}
+                  </p>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    {catalogState === 'disabled'
+                      ? 'Enable YouTube Data API v3 on this app’s Google project and charts, search and radio all come straight from YouTube.'
+                      : catalogState === 'quota'
+                        ? 'Today’s YouTube search allowance is used up. Browsing still works; search resets at midnight Pacific.'
+                        : 'Connecting to YouTube…'}
+                  </p>
+                </div>
+              </div>
+              {catalogState === 'disabled' && (
+                <a href={ENABLE_URL} target="_blank" rel="noreferrer"
+                  className="btn-sauti px-4 py-2 rounded-xl text-xs font-black shrink-0 text-center">
+                  Enable it
+                </a>
+              )}
             </div>
           )}
 
