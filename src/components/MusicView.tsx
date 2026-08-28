@@ -6,6 +6,7 @@ import { buildMix, diverseSample } from '../services/recommend';
 import { useMusic } from '../hooks/useMusic';
 import { youtubeService, YoutubePlaylist, YoutubeUserProfile } from '../services/youtube';
 import { CoverArt } from './ui/CoverArt';
+import { ArtCard, QuickTile } from './ui/Shelf';
 import SautiOnboarding from './SautiOnboarding';
 import ListenTabs from './ListenTabs';
 import Coachmark from './Coachmark';
@@ -149,21 +150,32 @@ function TrackRow({ track, onPlay, onRemove, index }: { track: Track; onPlay: ()
   );
 }
 
+/**
+ * Shelf card. Built on the shared ArtCard so a rail of songs, a rail of albums
+ * and a rail of podcast shows are the same object in three places: square art
+ * with a shadow, title and artist below it, and a round play button that lifts
+ * out of the artwork on hover.
+ */
 function TrackCard({ track, onPlay }: { track: Track; onPlay: () => void }) {
-  const { current, isPlaying, openAddSheet } = useMusic();
+  const { current, isPlaying, toggle, openAddSheet } = useMusic();
   const active = current?.id === track.id;
   const { handlers, consumed } = useLongPress(() => openAddSheet(track));
   return (
-    <div tabIndex={0} data-tv-focusable role="button" {...handlers} onClick={() => { if (consumed()) return; onPlay(); }} className="card-lift group relative flex-none w-[150px] rounded-2xl overflow-hidden border border-white/10 bg-zinc-900 cursor-pointer focus:outline-none">
-      <div className="aspect-square bg-zinc-800 relative">
-        <CoverArt imageUrl={track.artworkLarge || track.artwork} fallbackUrl={track.artwork} dominantColor={track.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
-        {!track.artwork && <Music2 className="w-8 h-8 text-zinc-600 absolute inset-0 m-auto" />}
-        <button onClick={(e) => { e.stopPropagation(); openAddSheet(track); }} className="absolute top-2 left-2 z-10 w-8 h-8 rounded-full bg-black/55 backdrop-blur-sm text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" aria-label="Add"><Plus className="w-4 h-4" /></button>
-        <div className={`absolute inset-0 bg-gradient-to-t from-black/80 to-transparent transition-opacity flex items-end justify-end p-2 ${active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-          <span className="btn-sauti w-9 h-9 rounded-full flex items-center justify-center">{active && isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}</span>
-        </div>
-      </div>
-      <div className="p-2.5"><p className={`text-sm font-semibold truncate ${active ? 'text-sauti' : 'text-white'}`}>{track.title}</p><p className="text-xs text-zinc-500 truncate">{track.artist}</p></div>
+    <div {...handlers} className="relative shrink-0 group/card">
+      <ArtCard
+        title={track.title}
+        subtitle={track.artist}
+        artwork={track.artworkLarge || track.artwork}
+        dominantColor={track.dominantColor}
+        playing={active && isPlaying}
+        onClick={() => { if (consumed()) return; onPlay(); }}
+        onPlay={() => { if (active) toggle(); else onPlay(); }}
+      />
+      <button onClick={(e) => { e.stopPropagation(); openAddSheet(track); }}
+        className="absolute top-5 left-5 z-10 w-8 h-8 rounded-full bg-black/55 backdrop-blur-sm text-white flex items-center justify-center opacity-0 group-hover/card:opacity-100 focus:opacity-100 transition-opacity"
+        aria-label={`Add ${track.title} to a playlist`}>
+        <Plus className="w-4 h-4" />
+      </button>
     </div>
   );
 }
@@ -196,10 +208,18 @@ function QuickRow({ track, onPlay }: { track: Track; onPlay: () => void }) {
   );
 }
 
+/**
+ * Shelf heading. Matches ShelfHeader on the Podcasts page so the two Listen
+ * destinations read as one product: bold title, no decorative rule. The gold bar
+ * that used to prefix every heading is gone — with a heading above every shelf
+ * it became visual noise rather than an accent. An explicit `icon` still shows,
+ * because those carry meaning (Sparkles for generated mixes, YouTube for synced
+ * playlists) rather than being decoration.
+ */
 const SectionHead = ({ children, icon }: { children: ReactNode; icon?: ReactNode }) => (
-  <div className="flex items-center gap-3 mb-4">
-    {icon ?? <span className="w-1 h-6 rounded-full bg-gradient-to-b from-amber-400 to-amber-500" />}
-    <h3 className="text-xl font-display font-bold text-white tracking-tight">{children}</h3>
+  <div className="flex items-center gap-2.5 mb-4">
+    {icon}
+    <h3 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">{children}</h3>
   </div>
 );
 
@@ -930,19 +950,25 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
             </div>
           ) : (
             <>
-              {/* Quick-access pills — jump straight back into recent plays (spec §1.2.5) */}
-              {recentlyPlayed.length >= 2 && (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-7">
-                  {recentlyPlayed.slice(0, 6).map((t, i) => (
-                    <button key={t.id} onClick={() => playQueue(recentlyPlayed, i, 'Recently played')} tabIndex={0} data-tv-focusable
-                      className="group flex items-center gap-3 rounded-lg overflow-hidden bg-white/5 hover:bg-white/10 transition-colors h-14 pr-3 text-left">
-                      <div className="w-14 h-14 shrink-0 relative"><CoverArt imageUrl={t.artwork} dominantColor={t.dominantColor} rounded="" className="absolute inset-0 w-full h-full" /></div>
-                      <span className="text-sm font-bold text-white truncate flex-1 min-w-0">{t.title}</span>
-                      <span className="opacity-0 group-hover:opacity-100 transition-opacity btn-sauti w-8 h-8 rounded-full flex items-center justify-center shrink-0"><Play className="w-4 h-4 fill-current ml-0.5" /></span>
-                    </button>
-                  ))}
-                </div>
-              )}
+              {/* ── Quick access ───────────────────────────────────────────
+                  Spotify's home opens with a grid of short wide tiles: the
+                  shortest path back to what you were already playing. Liked
+                  Songs is pinned first because it is the one destination
+                  everybody uses; recent plays fill the rest. (The greeting
+                  itself is already in the page header above.) */}
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 mb-8">
+                <QuickTile
+                  title="Liked Songs"
+                  artwork={likedTracks[0]?.artwork}
+                  dominantColor={likedTracks[0]?.dominantColor}
+                  icon={<Heart className="w-6 h-6 text-white fill-current" />}
+                  onClick={() => setOpenId('liked')}
+                />
+                {recentlyPlayed.slice(0, 5).map((t, i) => (
+                  <QuickTile key={t.id} title={t.title} artwork={t.artwork} dominantColor={t.dominantColor}
+                    onClick={() => playQueue(recentlyPlayed, i, 'Recently played')} />
+                ))}
+              </div>
 
               {/* ── Quick picks — YouTube-Music's signature 4-row tap-to-play grid ── */}
               {quickPicks.length > 0 && (

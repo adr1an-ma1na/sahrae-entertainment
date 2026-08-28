@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type MouseEvent as RMouseEvent } from 'react';
-import { Search, Loader2, Heart, Play, ChevronLeft, ChevronRight, Check, Circle, Video, X, ListTree, Download, Trash2, Sparkles, TrendingUp } from 'lucide-react';
+import { Search, Loader2, Heart, Play, ChevronLeft, ChevronRight, Check, Circle, Video, X, ListTree, Download, Trash2, TrendingUp } from 'lucide-react';
 import { Track, ytmusic } from '../services/ytmusic';
 import { searchPodcastShows, getPodcastEpisodes, fetchChapters, getShowsLatest, PodShow } from '../services/podcastRss';
 import { getEpisodesById, mergeEpisodes } from '../services/itunesPodcasts';
@@ -7,6 +7,7 @@ import { matchEpisodeVideo } from '../services/episodeVideo';
 import { downloads, useDownloads } from '../services/downloads';
 import { useMusic } from '../hooks/useMusic';
 import { CoverArt } from './ui/CoverArt';
+import { Shelf, ShelfHeader, ArtCard, WideRow, QuickTile, greeting } from './ui/Shelf';
 import { getFollows, isFollowed, toggleFollow, listInProgress, getProgress, getMany, getSeen, markShowSeen, markPlayed, markUnplayed, EpisodeProgress } from '../services/podcasts';
 
 // 'Top' is deliberately absent — the Top Podcasts chart covers it, and fetching
@@ -324,6 +325,26 @@ export default function PodcastsHome() {
     if (isFinite(s)) seekTo(episodeView, s);
   };
 
+  // The quick-access grid: resume-able episodes first (that is what someone
+  // came back for), topped up with followed shows so the grid is never a lonely
+  // single tile. Six is Spotify's count and it stays a tidy 2×3 / 3×2.
+  const quickTiles = [
+    ...cont.slice(0, 4).map((p) => ({
+      key: `c-${p.track.id}`,
+      title: p.track.title,
+      artwork: p.track.artwork,
+      dominantColor: p.track.dominantColor,
+      onClick: () => resume(p),
+    })),
+    ...follows.map((f) => ({
+      key: `f-${f.id}`,
+      title: f.title,
+      artwork: f.artwork,
+      dominantColor: f.dominantColor,
+      onClick: () => setShowView(f),
+    })),
+  ].slice(0, 6);
+
   // Watch the episode on YouTube.
   //
   // This used to take the first search hit, which meant it played SOMETHING for
@@ -340,17 +361,24 @@ export default function PodcastsHome() {
     setWatchId(hit ? hit.track.id : '');
   };
 
-  // Show card (tap to open the show; heart to follow).
+  // Show card — the same square-art card Music uses, so a shelf of podcasts and
+  // a shelf of albums read identically. The follow heart and the new-episode dot
+  // sit over the artwork as overlays.
   const card = (t: Track) => (
-    <div key={t.id} onClick={() => setShowView(t)} tabIndex={0} data-tv-focusable role="button"
-      className="card-lift tier-card rounded-2xl p-3 group flex flex-col w-[170px] shrink-0 cursor-pointer focus:outline-none">
-      <div className="aspect-square rounded-xl overflow-hidden mb-3 relative bg-zinc-800">
-        <CoverArt imageUrl={t.artworkLarge || t.artwork} dominantColor={t.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
-        <button onClick={(e) => { e.stopPropagation(); onFollow(t); }} className={`absolute top-2 right-2 w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-sm ${isFollowed(t.id) ? 'bg-sauti text-amber-950' : 'bg-black/55 text-white'}`} aria-label="Follow"><Heart className={`w-4 h-4 ${isFollowed(t.id) ? 'fill-current' : ''}`} /></button>
-        {newShows.has(t.id) && <span className="absolute top-2 left-2 w-3 h-3 rounded-full bg-sky-400 ring-2 ring-black/50 shadow" title="New episode" />}
-      </div>
-      <h3 className="text-sm font-bold text-white line-clamp-2 mb-0.5 group-hover:text-sauti transition-colors">{t.title}</h3>
-      <p className="text-xs text-zinc-500 truncate">{t.artist}</p>
+    <div key={t.id} className="relative shrink-0 group/card">
+      <ArtCard
+        title={t.title}
+        subtitle={t.artist}
+        artwork={t.artworkLarge || t.artwork}
+        dominantColor={t.dominantColor}
+        onClick={() => setShowView(t)}
+      />
+      <button onClick={(e) => { e.stopPropagation(); onFollow(t); }}
+        className={`absolute top-5 right-5 z-10 w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-sm transition-opacity ${isFollowed(t.id) ? 'bg-sauti text-amber-950 opacity-100' : 'bg-black/55 text-white opacity-0 group-hover/card:opacity-100 focus:opacity-100'}`}
+        aria-label={isFollowed(t.id) ? `Unfollow ${t.title}` : `Follow ${t.title}`}>
+        <Heart className={`w-4 h-4 ${isFollowed(t.id) ? 'fill-current' : ''}`} />
+      </button>
+      {newShows.has(t.id) && <span className="absolute top-5 left-5 z-10 w-3 h-3 rounded-full bg-sky-400 ring-2 ring-black/50 shadow" title="New episode" />}
     </div>
   );
 
@@ -543,65 +571,23 @@ export default function PodcastsHome() {
         ) : <p className="text-zinc-500 py-10 text-center">No podcasts found.</p>
       ) : (
         <>
-          {/* ── 1. Pick up where you left off ───────────────────────────────
-              The one thing a returning listener wants is the episode they were
-              already in. It used to be a card in a rail like everything else;
-              now it leads, at a size that says "press this". */}
-          {cont.length > 0 && (() => {
-            const [top, ...rest] = cont;
-            const left = top.durationMs ? (top.durationMs - top.positionMs) / 1000 : 0;
-            const pct = top.durationMs ? Math.min(100, (top.positionMs / top.durationMs) * 100) : 8;
-            return (
-              <section className="mb-10">
-                <button onClick={() => resume(top)} tabIndex={0} data-tv-focusable
-                  aria-label={`Resume ${top.track.title}${left ? `, ${fmt(left)} left` : ''}`}
-                  className="group card-lift w-full text-left rounded-3xl overflow-hidden relative border border-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400">
-                  {/* Artwork bled behind the panel, heavily blurred — the episode's
-                      own colour becomes the backdrop, so this block looks
-                      different every time you open the page. */}
-                  <div aria-hidden className="absolute inset-0 -z-10">
-                    <CoverArt imageUrl={top.track.artworkLarge || top.track.artwork} dominantColor={top.track.dominantColor} rounded="" className="absolute inset-0 w-full h-full scale-125 blur-2xl opacity-45" />
-                    <div className="absolute inset-0 bg-gradient-to-r from-zinc-950 via-zinc-950/85 to-zinc-950/50" />
-                  </div>
-                  <div className="flex items-center gap-4 md:gap-5 p-4 md:p-5">
-                    <div className="w-20 h-20 md:w-28 md:h-28 rounded-2xl overflow-hidden bg-zinc-800 shrink-0 relative shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
-                      <CoverArt imageUrl={top.track.artwork} dominantColor={top.track.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="overline mb-1">Pick up where you left off</div>
-                      <p className="text-base md:text-xl font-display font-bold text-white line-clamp-2 leading-snug">{top.track.title}</p>
-                      <p className="text-xs md:text-sm text-zinc-400 truncate mt-0.5">{top.track.artist}</p>
-                      <div className="flex items-center gap-3 mt-3">
-                        <div className="h-1.5 flex-1 rounded-full bg-white/15 overflow-hidden">
-                          <div className="h-full bg-sauti rounded-full transition-[width] duration-300" style={{ width: `${pct}%` }} />
-                        </div>
-                        {left > 0 && <span className="text-[11px] font-bold text-zinc-300 tabular shrink-0">{fmt(left)} left</span>}
-                      </div>
-                    </div>
-                    <span className="btn-sauti w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center shrink-0 shadow-lg transition-transform duration-200 group-hover:scale-105">
-                      <Play className="w-5 h-5 md:w-6 md:h-6 fill-current ml-0.5" />
-                    </span>
-                  </div>
-                </button>
-
-                {rest.length > 0 && (
-                  <div className="flex overflow-x-auto gap-2.5 pt-3 pb-1 scrollbar-hide">
-                    {rest.map((p) => (
-                      <button key={p.track.id} onClick={() => resume(p)} tabIndex={0} data-tv-focusable
-                        aria-label={`Resume ${p.track.title}`}
-                        className="card-lift tier-card rounded-xl p-2.5 flex items-center gap-2.5 w-[260px] shrink-0 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400">
-                        <div className="w-11 h-11 rounded-lg overflow-hidden bg-zinc-800 shrink-0 relative"><CoverArt imageUrl={p.track.artwork} dominantColor={p.track.dominantColor} rounded="" className="absolute inset-0 w-full h-full" /></div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-semibold text-white truncate">{p.track.title}</p>
-                          <div className="h-1 rounded-full bg-white/10 overflow-hidden mt-1.5"><div className="h-full bg-sauti" style={{ width: `${p.durationMs ? Math.min(100, (p.positionMs / p.durationMs) * 100) : 10}%` }} /></div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </section>
-            );
-          })()}
+          {/* ── 1. Greeting + quick access ──────────────────────────────────
+              Spotify's home opens with a time-of-day greeting and a two-column
+              grid of short wide tiles: artwork flush left, one bold line, and a
+              play button that appears on hover. It's the fastest route back to
+              what you were already listening to, so it goes first — in-progress
+              episodes, then your shows to fill the grid out. */}
+          <section className="mb-10">
+            <h2 className="text-2xl md:text-3xl font-display font-bold text-white tracking-tight mb-5">{greeting()}</h2>
+            {quickTiles.length > 0 && (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                {quickTiles.map((q) => (
+                  <QuickTile key={q.key} title={q.title} artwork={q.artwork} dominantColor={q.dominantColor}
+                    onClick={q.onClick} />
+                ))}
+              </div>
+            )}
+          </section>
 
           {/* ── 2. How long have you got? ────────────────────────────────────
               The organising idea of this page. Every other podcast app makes you
@@ -682,31 +668,21 @@ export default function PodcastsHome() {
                   ))}
                 </div>
               ) : (
-                <div className="grid sm:grid-cols-2 gap-2">
+                <div className="grid sm:grid-cols-2 gap-x-4">
                   {fresh.map((e) => {
                     const pr = getProgress(e.id);
-                    const pct = pr?.durationMs ? Math.min(100, (pr.positionMs / pr.durationMs) * 100) : 0;
                     return (
-                      <div key={e.id} onClick={() => setEpisodeView(e)} tabIndex={0} data-tv-focusable role="button"
-                        className="card-lift tier-card rounded-xl p-3 flex items-center gap-3 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400">
-                        <div className="w-14 h-14 rounded-lg overflow-hidden bg-zinc-800 shrink-0 relative">
-                          <CoverArt imageUrl={e.artwork} dominantColor={e.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-white line-clamp-2 leading-snug">{e.title}</p>
-                          <p className="text-[11px] text-zinc-500 truncate mt-0.5">
-                            {e.artist}{e.date ? ` · ${e.date}` : ''}{e.duration ? ` · ${fmt(e.duration)}` : ''}
-                          </p>
-                          {pct > 0 && (
-                            <div className="h-1 rounded-full bg-white/10 overflow-hidden mt-1.5"><div className="h-full bg-sauti" style={{ width: `${pct}%` }} /></div>
-                          )}
-                        </div>
-                        <button onClick={(ev) => { ev.stopPropagation(); onListen(e); }}
-                          aria-label={`Play ${e.title}`}
-                          className="btn-sauti w-10 h-10 rounded-full flex items-center justify-center shrink-0">
-                          <Play className="w-4 h-4 fill-current ml-0.5" />
-                        </button>
-                      </div>
+                      <WideRow key={e.id}
+                        title={e.title}
+                        subtitle={e.artist}
+                        meta={[e.date, e.duration ? fmt(e.duration) : ''].filter(Boolean).join(' · ')}
+                        artwork={e.artwork}
+                        dominantColor={e.dominantColor}
+                        progress={pr?.durationMs ? (pr.positionMs / pr.durationMs) * 100 : 0}
+                        onClick={() => setEpisodeView(e)}
+                        onPlay={() => onListen(e)}
+                        playing={current?.id === e.id}
+                      />
                     );
                   })}
                 </div>
@@ -717,8 +693,8 @@ export default function PodcastsHome() {
           {/* ── 4. Your shows ─────────────────────────────────────────────── */}
           {follows.length > 0 && (
             <section className="mb-10">
-              <h3 className="text-xl font-display font-bold text-white tracking-tight mb-4">Your shows</h3>
-              <div className="flex overflow-x-auto gap-4 pb-3 scrollbar-hide">{follows.map(card)}</div>
+              <ShelfHeader>Your shows</ShelfHeader>
+              <Shelf>{follows.map(card)}</Shelf>
             </section>
           )}
 
@@ -824,8 +800,8 @@ export default function PodcastsHome() {
           {/* ── 7. Shows you might like ─────────────────────────────────────── */}
           {suggested.length >= 4 && (
             <section className="mb-10">
-              <h3 className="text-xl font-display font-bold text-white tracking-tight mb-4 flex items-center gap-2"><Sparkles className="w-5 h-5 text-sauti" aria-hidden /> Shows you might like</h3>
-              <div className="flex overflow-x-auto gap-4 pb-3 scrollbar-hide">{suggested.map(card)}</div>
+              <ShelfHeader>Shows you might like</ShelfHeader>
+              <Shelf>{suggested.map(card)}</Shelf>
             </section>
           )}
           {loadingHome && shelves.length === 0 && <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3 text-zinc-400"><Loader2 className="w-9 h-9 animate-spin text-amber-500" /><span>Loading podcasts…</span></div>}
