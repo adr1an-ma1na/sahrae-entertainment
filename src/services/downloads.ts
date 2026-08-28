@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Capacitor } from '@capacitor/core';
 import { Track, ytmusic } from './ytmusic';
+import { blobStore, objectUrlFor, releaseUrl, freeBytes } from './blobStore';
 
 /**
  * Real, in-app offline downloads (Netflix-style).
@@ -15,7 +16,7 @@ import { Track, ytmusic } from './ytmusic';
  * download can never affect normal playback.
  */
 interface Entry { track: Track; uri: string; mime: string; ts: number; size?: number }
-type DState = { status: 'downloading' | 'done' | 'error'; progress: number };
+type DState = { status: 'downloading' | 'done' | 'error'; progress: number; error?: string };
 type Listener = () => void;
 
 const KEY = 'sahrae.downloads.v2';
@@ -54,10 +55,17 @@ export const downloads = {
   bytesUsed: (): number => read().reduce((s, e) => s + (e.size || 0), 0),
   state: (id: string): DState | undefined => states.get(id),
 
-  /** A locally-playable src for a downloaded track, else null. */
-  localSrc: (id: string): string | null => {
+  /**
+   * A locally-playable src for a downloaded track, else null.
+   *
+   * Async because a web download lives as a Blob in IndexedDB and its object URL
+   * has to be read out. Native still resolves synchronously underneath — the
+   * promise just settles immediately there.
+   */
+  localSrcAsync: async (id: string): Promise<string | null> => {
     const e = read().find((x) => x.track.id === id);
     if (!e) return null;
+    if (e.uri.startsWith('idb:')) return objectUrlFor(id);
     try { return Capacitor.convertFileSrc(e.uri); } catch { return e.uri; }
   },
 
@@ -73,8 +81,26 @@ export const downloads = {
       else { const a = await ytmusic.audioStream(track.id); if (!a) throw new Error('no audio stream'); url = a.url; mime = a.mime; }
 
       const resp = await openStream(url);
-      if (!resp) throw new Error('audio fetch failed');
+      if (!resp) throw new Error("This show's server won't allow downloads from the browser. The Android app can still download it.");
       const total = Number(resp.headers.get('content-length') || 0);
+
+      // ── WEB: store the Blob whole ──
+      // Capacitor's web Filesystem keeps files as base64 text in IndexedDB and
+      // this path used to append to it thousands of times, which blew the origin
+      // quota on anything podcast-length and left Downloads mysteriously empty.
+      if (!Capacitor.isNativePlatform()) {
+        const room = await freeBytes();
+        if (room !== null && total > 0 && total > room) {
+          throw new Error(`Not enough space in the browser for this one (needs ${Math.round(total / 1e6)} MB, ${Math.round(room / 1e6)} MB free). Remove a download and try again.`);
+        }
+        const blob = await resp.blob();
+        if (blob.size < 10000) throw new Error('The file came back empty.');
+        await blobStore.put(track.id, blob);
+        write([{ track, uri: `idb:${track.id}`, mime: blob.type || mime, ts: Date.now(), size: blob.size }, ...read().filter((e) => e.track.id !== track.id)]);
+        states.set(track.id, { status: 'done', progress: 1 }); emit();
+        return true;
+      }
+
       const path = `downloads/${safeName(track.id)}.dat`;
       await Filesystem.writeFile({ path, data: '', directory: Directory.Data, recursive: true });
       let size = 0;
@@ -116,10 +142,15 @@ export const downloads = {
       write([{ track, uri, mime, ts: Date.now(), size }, ...read().filter((e) => e.track.id !== track.id)]);
       states.set(track.id, { status: 'done', progress: 1 }); emit();
       return true;
-    } catch {
+    } catch (err) {
+      // Keep WHY. This used to be a bare catch, so a download that failed for a
+      // real, explainable reason (no space, server blocks it) looked identical
+      // to one that never started, and the Downloads screen just stayed empty.
+      const message = err instanceof Error ? err.message : 'Download failed.';
+      try { await blobStore.del(track.id); } catch { /* nothing stored */ }
       try { await Filesystem.deleteFile({ path: `downloads/${safeName(track.id)}.dat`, directory: Directory.Data }); } catch { /* ignore partial cleanup */ }
-      states.set(track.id, { status: 'error', progress: 0 }); emit();
-      setTimeout(() => { states.delete(track.id); emit(); }, 4000);
+      states.set(track.id, { status: 'error', progress: 0, error: message }); emit();
+      setTimeout(() => { states.delete(track.id); emit(); }, 8000);
       return false;
     }
   },
@@ -127,6 +158,8 @@ export const downloads = {
   async remove(id: string): Promise<void> {
     write(read().filter((x) => x.track.id !== id));
     states.delete(id);
+    releaseUrl(id);
+    try { await blobStore.del(id); } catch { /* not a web download */ }
     try { await Filesystem.deleteFile({ path: `downloads/${safeName(id)}.dat`, directory: Directory.Data }); } catch { /* ignore */ }
   },
 

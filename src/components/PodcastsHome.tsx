@@ -3,6 +3,7 @@ import { Search, Loader2, Heart, Play, ChevronLeft, ChevronRight, Check, Circle,
 import { Track, ytmusic } from '../services/ytmusic';
 import { searchPodcastShows, getPodcastEpisodes, fetchChapters, getShowsLatest, PodShow } from '../services/podcastRss';
 import { getEpisodesById, mergeEpisodes } from '../services/itunesPodcasts';
+import { matchEpisodeVideo } from '../services/episodeVideo';
 import { downloads, useDownloads } from '../services/downloads';
 import { useMusic } from '../hooks/useMusic';
 import { CoverArt } from './ui/CoverArt';
@@ -123,6 +124,34 @@ export default function PodcastsHome() {
   const [bucket, setBucket] = useState<string | null>(null);
   const [bucketEps, setBucketEps] = useState<Track[]>([]);
   const [bucketLoading, setBucketLoading] = useState(false);
+
+  // ── Fresh episodes ──
+  // The page used to show nothing playable until you tapped a tile — all art and
+  // no content, which is what made it feel thin. This pulls the newest episodes
+  // from your shows (or the chart, before you follow anything) so there is
+  // something to press the moment the page opens.
+  const [fresh, setFresh] = useState<Track[]>([]);
+  const [freshLoading, setFreshLoading] = useState(true);
+
+  useEffect(() => {
+    const sources = [...follows, ...(charts[chartCountry] || [])]
+      .filter((s, i, arr) => arr.findIndex((x) => x.id === s.id) === i)
+      .slice(0, 6);
+    if (!sources.length) return;
+    let cancelled = false;
+    setFreshLoading(true);
+    (async () => {
+      const lists = await Promise.all(sources.map((s) => getEpisodesById(s.id, 6).catch(() => [] as Track[])));
+      if (cancelled) return;
+      // One per show, so a single prolific podcast can't fill the whole rail.
+      const perShow = lists.map((l) => l[0]).filter(Boolean) as Track[];
+      const rest = lists.flatMap((l) => l.slice(1));
+      setFresh([...perShow, ...rest].sort((a, b) => (b.uploaded || 0) - (a.uploaded || 0)).slice(0, 12));
+      setFreshLoading(false);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [follows.length, charts[chartCountry]?.length]);
 
   useEffect(() => {
     if (!bucket) { setBucketEps([]); return; }
@@ -295,13 +324,20 @@ export default function PodcastsHome() {
     if (isFinite(s)) seekTo(episodeView, s);
   };
 
-  // Watch the episode on YouTube — pause audio, find the video on demand, embed it.
+  // Watch the episode on YouTube.
+  //
+  // This used to take the first search hit, which meant it played SOMETHING for
+  // every episode — and since most podcasts never publish to YouTube, that
+  // something was usually a different show entirely. Now a candidate has to
+  // actually look like this episode (matching runtime, or a near-identical
+  // title) or we say there is no video, which is the honest answer.
   const onWatch = async (t: Track) => {
     stop();
     setWatchTitle(t.title); setWatchId(null); setWatchOpen(true);
     const q = `${t.artist} ${t.title}`.replace(/\s+/g, ' ').trim().slice(0, 110);
     const r = await ytmusic.searchVideos(q).catch(() => [] as Track[]);
-    setWatchId(r[0]?.id || '');
+    const hit = matchEpisodeVideo(t, r);
+    setWatchId(hit ? hit.track.id : '');
   };
 
   // Show card (tap to open the show; heart to follow).
@@ -330,7 +366,11 @@ export default function PodcastsHome() {
       ) : watchId ? (
         <iframe src={`https://www.youtube.com/embed/${watchId}?autoplay=1&playsinline=1`} title="Watch" className="flex-1 w-full bg-black border-0" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />
       ) : (
-        <div className="flex-1 flex items-center justify-center text-zinc-400 px-8 text-center">No video found for this episode on YouTube.</div>
+        <div className="flex-1 flex flex-col items-center justify-center text-zinc-400 px-8 text-center gap-2">
+          <Video className="w-8 h-8 text-zinc-600" aria-hidden />
+          <p className="text-sm font-semibold text-zinc-300">This episode isn’t on YouTube</p>
+          <p className="text-xs max-w-xs">Most podcasts publish audio only. Close this and press play to listen instead.</p>
+        </div>
       )}
     </div>
   );
@@ -359,12 +399,22 @@ export default function PodcastsHome() {
           <button onClick={() => onListen(ep)} className="btn-sauti px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Play className="w-4 h-4 fill-current" /> Play episode</button>
           <button onClick={() => onWatch(ep)} className="btn-glass px-5 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Video className="w-4 h-4" /> Watch</button>
           <button onClick={() => togglePlayed(ep)} className="btn-glass px-5 py-2.5 rounded-full text-sm font-bold flex items-center gap-2">{played ? <Check className="w-4 h-4 text-sauti" /> : <Circle className="w-4 h-4" />} {played ? 'Played' : 'Mark played'}</button>
-          {(() => { const dl = downloaded.some((d) => d.id === ep.id); const st = downloads.state(ep.id)?.status; return (
+          {(() => { const dl = downloaded.some((d) => d.id === ep.id); const dstate = downloads.state(ep.id); const st = dstate?.status; return (
             <button onClick={() => (dl ? downloads.remove(ep.id) : downloads.download(ep))} disabled={st === 'downloading'} className="btn-glass px-5 py-2.5 rounded-full text-sm font-bold flex items-center gap-2 disabled:opacity-50">
-              {st === 'downloading' ? <><Loader2 className="w-4 h-4 animate-spin" /> Downloading</> : dl ? <><Trash2 className="w-4 h-4 text-sauti" /> Downloaded</> : <><Download className="w-4 h-4" /> Download</>}
+              {st === 'downloading'
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> {Math.round((dstate?.progress || 0) * 100)}%</>
+                : dl ? <><Trash2 className="w-4 h-4 text-sauti" /> Downloaded</> : <><Download className="w-4 h-4" /> Download</>}
             </button>
           ); })()}
         </div>
+
+        {/* A failed download used to leave the button looking untouched, so it
+            read as "nothing happened". Say what went wrong instead. */}
+        {downloads.state(ep.id)?.status === 'error' && (
+          <p role="alert" className="text-xs text-red-400 -mt-5 mb-6 max-w-xl">
+            {downloads.state(ep.id)?.error || 'Download failed.'}
+          </p>
+        )}
 
         {chapters.length > 0 && (
           <section className="mb-7">
@@ -611,7 +661,60 @@ export default function PodcastsHome() {
             )}
           </section>
 
-          {/* ── 3. Your shows ─────────────────────────────────────────────── */}
+          {/* ── 3. Fresh episodes ────────────────────────────────────────────
+              Real, playable episodes on arrival — with date and runtime, the
+              way a podcast list is meant to read. Without this the page was all
+              artwork and no substance until you tapped something. */}
+          {(freshLoading || fresh.length > 0) && (
+            <section className="mb-10">
+              <div className="flex items-baseline justify-between gap-3 mb-4">
+                <h3 className="text-xl font-display font-bold text-white tracking-tight">
+                  {follows.length ? 'New from your shows' : 'Fresh episodes'}
+                </h3>
+              </div>
+              {freshLoading && !fresh.length ? (
+                <div className="grid sm:grid-cols-2 gap-2">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="tier-card rounded-xl p-3 flex items-center gap-3 animate-pulse">
+                      <div className="w-14 h-14 rounded-lg bg-white/5 shrink-0" />
+                      <div className="flex-1 space-y-2"><div className="h-3 rounded bg-white/5 w-4/5" /><div className="h-2.5 rounded bg-white/5 w-2/5" /></div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid sm:grid-cols-2 gap-2">
+                  {fresh.map((e) => {
+                    const pr = getProgress(e.id);
+                    const pct = pr?.durationMs ? Math.min(100, (pr.positionMs / pr.durationMs) * 100) : 0;
+                    return (
+                      <div key={e.id} onClick={() => setEpisodeView(e)} tabIndex={0} data-tv-focusable role="button"
+                        className="card-lift tier-card rounded-xl p-3 flex items-center gap-3 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400">
+                        <div className="w-14 h-14 rounded-lg overflow-hidden bg-zinc-800 shrink-0 relative">
+                          <CoverArt imageUrl={e.artwork} dominantColor={e.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-white line-clamp-2 leading-snug">{e.title}</p>
+                          <p className="text-[11px] text-zinc-500 truncate mt-0.5">
+                            {e.artist}{e.date ? ` · ${e.date}` : ''}{e.duration ? ` · ${fmt(e.duration)}` : ''}
+                          </p>
+                          {pct > 0 && (
+                            <div className="h-1 rounded-full bg-white/10 overflow-hidden mt-1.5"><div className="h-full bg-sauti" style={{ width: `${pct}%` }} /></div>
+                          )}
+                        </div>
+                        <button onClick={(ev) => { ev.stopPropagation(); onListen(e); }}
+                          aria-label={`Play ${e.title}`}
+                          className="btn-sauti w-10 h-10 rounded-full flex items-center justify-center shrink-0">
+                          <Play className="w-4 h-4 fill-current ml-0.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* ── 4. Your shows ─────────────────────────────────────────────── */}
           {follows.length > 0 && (
             <section className="mb-10">
               <h3 className="text-xl font-display font-bold text-white tracking-tight mb-4">Your shows</h3>
@@ -619,7 +722,7 @@ export default function PodcastsHome() {
             </section>
           )}
 
-          {/* ── 4. Top Podcasts — podium + list ──────────────────────────────
+          {/* ── 5. Top Podcasts — podium + list ──────────────────────────────
               The top three get artwork you can actually see; 4–10 stay a tight
               list. A flat 1–20 rundown gave the number one the same weight as
               number nineteen. */}
@@ -676,7 +779,7 @@ export default function PodcastsHome() {
             )}
           </section>
 
-          {/* ── 5. Browse by category — a grid, not nine more rails ──────────
+          {/* ── 6. Browse by category — a grid, not nine more rails ──────────
               The old page stacked one horizontal shelf per category, so the
               whole screen was the same rail repeated and nothing stood out.
               These tiles collapse that into one glanceable block; picking one
@@ -718,7 +821,7 @@ export default function PodcastsHome() {
             })()}
           </section>
 
-          {/* ── 6. Shows you might like ─────────────────────────────────────── */}
+          {/* ── 7. Shows you might like ─────────────────────────────────────── */}
           {suggested.length >= 4 && (
             <section className="mb-10">
               <h3 className="text-xl font-display font-bold text-white tracking-tight mb-4 flex items-center gap-2"><Sparkles className="w-5 h-5 text-sauti" aria-hidden /> Shows you might like</h3>

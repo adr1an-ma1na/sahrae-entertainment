@@ -323,18 +323,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── load the active track whenever it actually changes (guarded so that
-  //    appending radio tracks to the queue never restarts the current song) ──
-  useEffect(() => {
-    const c = queue[index];
-    if (!c || loadedIdRef.current === c.id) return;
-    loadedIdRef.current = c.id;
-    setPosition(0); setDuration(0);
-    // Real-file lane: a downloaded file, OR a direct audio URL (podcast RSS /
-    // owned catalog). Both play through the <audio> element, which keeps playing
-    // in the BACKGROUND (the YouTube iframe can't). YouTube tracks have no
-    // audioUrl → fall through to the unchanged iframe path.
-    const local = downloads.localSrc(c.id) || c.audioUrl || null;
+  // Route a resolved source to the right lane: the <audio> element for a real
+  // file, otherwise the YouTube iframe. Split out of the effect below so the
+  // effect can await the source without nesting all of this inside a callback.
+  const applyLocal = (local: string | null, c: Track) => {
     const a = audioElRef.current;
     if (local && a) {
       usingLocalRef.current = true;
@@ -353,6 +345,28 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         pendingRef.current = c.id;
       }
     }
+  };
+
+  // ── load the active track whenever it actually changes (guarded so that
+  //    appending radio tracks to the queue never restarts the current song) ──
+  useEffect(() => {
+    const c = queue[index];
+    if (!c || loadedIdRef.current === c.id) return;
+    loadedIdRef.current = c.id;
+    setPosition(0); setDuration(0);
+    // Real-file lane: a downloaded file, OR a direct audio URL (podcast RSS /
+    // owned catalog). Both play through the <audio> element, which keeps playing
+    // in the BACKGROUND (the YouTube iframe can't). YouTube tracks have no
+    // audioUrl → fall through to the unchanged iframe path.
+    //
+    // A web download is a Blob in IndexedDB, so resolving it is async. Await it,
+    // then re-check the track hasn't changed underneath — skipping quickly
+    // between tracks must not start the previous one's file.
+    void (async () => {
+      const local = (await downloads.localSrcAsync(c.id).catch(() => null)) || c.audioUrl || null;
+      if (loadedIdRef.current !== c.id) return; // superseded while we were reading
+      applyLocal(local, c);
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, queue]);
 

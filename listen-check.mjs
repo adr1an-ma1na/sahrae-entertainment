@@ -11,6 +11,7 @@
  */
 import { parsePlaylistId, parseISODuration } from './src/services/youtubeParse.ts';
 import { mergeEpisodes } from './src/services/itunesPodcasts.ts';
+import { matchEpisodeVideo, tokenize, tokenOverlap, durationScore } from './src/services/episodeVideo.ts';
 
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = '') => {
@@ -99,6 +100,49 @@ ok('a longer existing description is NOT replaced by a shorter one',
 
 const appendOrder = mergeEpisodes([], [ep('x', 'ux', { uploaded: 1 }), ep('y', 'uy', { uploaded: 9 })]);
 ok('extra-only path preserves the caller order', appendOrder.length === 2);
+
+// ── matchEpisodeVideo: showing nothing beats showing the wrong video ───────
+console.log('\nmatchEpisodeVideo');
+const vid = (title, duration, artist = 'Some Channel') => ({ id: title, title, duration, artist });
+const EPISODE = { title: 'The Trouble With Sea Level Rise', artist: 'Science Weekly', duration: 1800 };
+
+ok('no candidates → null', matchEpisodeVideo(EPISODE, []) === null);
+
+// The real-world failure: a search always returns something, and the old code
+// played whatever was first.
+ok('unrelated music video is rejected',
+  matchEpisodeVideo(EPISODE, [vid('Rihanna - Diamonds', 253, 'RihannaVEVO')]) === null);
+ok('a short clip of the right show is rejected',
+  matchEpisodeVideo(EPISODE, [vid('Science Weekly clip', 95, 'Science Weekly')]) === null);
+ok('a different episode of the same show is rejected',
+  matchEpisodeVideo(EPISODE, [vid('The Trouble With Antibiotics', 1795, 'Science Weekly')]) === null);
+
+const exact = matchEpisodeVideo(EPISODE, [vid('The Trouble With Sea Level Rise', 1800, 'Science Weekly')]);
+ok('the genuine episode is accepted', !!exact);
+ok('  and it is the right one', exact?.track.title === 'The Trouble With Sea Level Rise');
+ok('  reason mentions runtime', /runtime/.test(exact?.reason || ''));
+
+ok('runtime within 20% still matches',
+  !!matchEpisodeVideo(EPISODE, [vid('The Trouble With Sea Level Rise', 1900, 'Science Weekly')]));
+ok('runtime beyond 20% does not',
+  matchEpisodeVideo({ ...EPISODE, title: 'Sea Level' }, [vid('Sea Level', 3600, 'Other')]) === null);
+
+// A show that titles its uploads identically, where YouTube gave no duration.
+ok('near-identical title matches without a duration',
+  !!matchEpisodeVideo(EPISODE, [vid('The Trouble With Sea Level Rise', 0, 'Science Weekly')]));
+
+const best = matchEpisodeVideo(EPISODE, [
+  vid('The Trouble With Sea Level Rise (clip)', 1500, 'Random Reuploads'),
+  vid('The Trouble With Sea Level Rise', 1800, 'Science Weekly'),
+]);
+ok('picks the better of two plausible matches', best?.track.artist === 'Science Weekly');
+
+ok('tokenize drops filler words', !tokenize('The Official Full Episode Video').includes('the'));
+ok('tokenOverlap is 1 for identical titles', tokenOverlap('sea level rise', 'sea level rise') === 1);
+ok('tokenOverlap is 0 for disjoint titles', tokenOverlap('sea level rise', 'chocolate cake') === 0);
+ok('durationScore peaks at an exact match', durationScore(1800, 1800) === 1);
+ok('durationScore is 0 past the 20% band', durationScore(1800, 2400) === 0);
+ok('durationScore handles a missing duration', durationScore(1800, 0) === 0);
 
 // ── LIVE: the assumption that broke the old implementation ────────────────
 if (!process.argv.includes('--offline')) {

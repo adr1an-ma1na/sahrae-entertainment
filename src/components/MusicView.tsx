@@ -102,13 +102,28 @@ function useLongPress(onTrigger: () => void) {
   return { handlers, consumed };
 }
 
-function TrackRow({ track, onPlay, onRemove }: { track: Track; onPlay: () => void; onRemove?: () => void }) {
+/**
+ * m:ss, the way every music app shows a track length. Blank when we don't know
+ * it — the catalog used to report a flat 180s for everything, and a confident
+ * wrong number is worse than an honest gap.
+ */
+const fmtDur = (s?: number): string => {
+  if (!s || !isFinite(s) || s <= 0) return '';
+  const m = Math.floor(s / 60);
+  const ss = Math.floor(s % 60);
+  return `${m}:${String(ss).padStart(2, '0')}`;
+};
+
+function TrackRow({ track, onPlay, onRemove, index }: { track: Track; onPlay: () => void; onRemove?: () => void; index?: number }) {
   const { current, isPlaying, toggle, toggleLike, isLiked, openAddSheet } = useMusic();
   const active = current?.id === track.id;
   const { handlers, consumed } = useLongPress(() => openAddSheet(track));
   return (
     <div tabIndex={0} data-tv-focusable role="button" {...handlers} onClick={() => { if (consumed()) return; active ? toggle() : onPlay(); }}
       className="card-lift group flex items-center gap-3 p-2 pr-2 rounded-xl border border-white/5 bg-zinc-900/40 cursor-pointer focus:outline-none">
+      {typeof index === 'number' && (
+        <span className="w-6 text-center text-xs font-semibold text-zinc-500 tabular shrink-0 hidden sm:block">{index + 1}</span>
+      )}
       <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-zinc-800 shrink-0">
         <CoverArt imageUrl={track.artworkLarge || track.artwork} fallbackUrl={track.artwork} dominantColor={track.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
         {!track.artwork && <Music2 className="w-5 h-5 text-zinc-600 absolute inset-0 m-auto" />}
@@ -121,6 +136,9 @@ function TrackRow({ track, onPlay, onRemove }: { track: Track; onPlay: () => voi
         <p className="text-xs text-zinc-400 truncate">{track.artist}</p>
       </div>
       {active && isPlaying && <Equalizer />}
+      {fmtDur(track.duration) && (
+        <span className="text-xs text-zinc-500 tabular shrink-0 hidden sm:block">{fmtDur(track.duration)}</span>
+      )}
       <button onClick={(e) => { e.stopPropagation(); toggleLike(track); }} className={`p-2 rounded-full ${isLiked(track.id) ? 'text-sauti' : 'text-zinc-500 hover:text-white'}`} aria-label="Like"><Heart className={`w-4 h-4 ${isLiked(track.id) ? 'fill-current' : ''}`} /></button>
       {onRemove ? (
         <button onClick={(e) => { e.stopPropagation(); onRemove(); }} className="p-2 rounded-full text-zinc-500 hover:text-red-400" aria-label="Remove"><X className="w-4 h-4" /></button>
@@ -170,6 +188,9 @@ function QuickRow({ track, onPlay }: { track: Track; onPlay: () => void }) {
         <p className="text-xs text-zinc-400 truncate">{track.artist}</p>
       </div>
       {active && isPlaying && <Equalizer />}
+      {fmtDur(track.duration) && (
+        <span className="text-xs text-zinc-500 tabular shrink-0">{fmtDur(track.duration)}</span>
+      )}
       <button onClick={(e) => { e.stopPropagation(); openAddSheet(track); }} className="p-2 rounded-full text-zinc-500 hover:text-white opacity-0 group-hover:opacity-100 shrink-0" aria-label="Add to playlist"><Plus className="w-4 h-4" /></button>
     </div>
   );
@@ -1101,7 +1122,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
           ) : (
             <>
               <div className="flex justify-end mb-3">{sortSelect}</div>
-              <div className="grid sm:grid-cols-2 gap-2">{sortTracks(openList.tracks).map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(sortTracks(openList.tracks), i)} onRemove={(!openList.id.startsWith('yt_') && openList.id !== 'liked' && openList.id !== 'yt_liked') ? () => removeFromPlaylist(openList.id, t.id) : undefined} /></Fragment>)}</div>
+              <div className="grid sm:grid-cols-2 gap-2">{sortTracks(openList.tracks).map((t, i) => <Fragment key={t.id}><TrackRow track={t} index={i} onPlay={() => playQueue(sortTracks(openList.tracks), i)} onRemove={(!openList.id.startsWith('yt_') && openList.id !== 'liked' && openList.id !== 'yt_liked') ? () => removeFromPlaylist(openList.id, t.id) : undefined} /></Fragment>)}</div>
             </>
           )}
         </section>
