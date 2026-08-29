@@ -199,6 +199,10 @@ expensive to get wrong:
   two rows unless a caller explicitly asks to collapse by ISRC
 - **Tier 1** — that the fallback fires when no app responds, does *not* fire when
   one does, and cannot double-open if the timer lands late
+- **Configuration guards** — that the Android misconfiguration is detected on
+  native, stays quiet on web, and does not throw without a `window`. This one
+  exists because the guard shipped once as dead code: defined, called by
+  nothing, while the docs claimed it ran at startup
 - **Tier selection** — the licensing boundary: that a hidden page never starts an
   embed, that a provider without a sanctioned embed falls to Tier 1, and that
   Tier 3 is unreachable without a Sahrae-owned `streamUrl` no adapter can produce
@@ -214,7 +218,7 @@ with real `Request` objects. All three are offline, verified by stubbing
 missing parameters 400, unconfigured providers 500 naming the variable to set,
 and a disallowed `Origin` is refused 403 with no CORS header granting access.
 
-`npm test` runs all four suites: 135 + 43 + 16 + 21.
+`npm test` runs all four suites: 141 + 43 + 16 + 21.
 
 ---
 
@@ -264,10 +268,23 @@ read at runtime, so changing one without rebuilding changes nothing.
 ### Android
 
 `VITE_CONNECTOR_BACKEND` **must** be the absolute deployment URL for the APK.
-Capacitor serves the app from `https://localhost`, so an empty value would
-resolve `/oauth/…` against that and hit nothing. `backendMisconfigured()` in
-`src/auth/config.ts` detects this case at startup rather than leaving it to fail
-as a confusing network error on first use.
+Capacitor serves the app from `https://localhost`, so the same-origin default
+used on the web would resolve `/oauth/…` against that and hit nothing.
+
+```bash
+VITE_CONNECTOR_BACKEND=https://your-app.vercel.app npm run build:android
+```
+
+This is enforced twice, at different costs of being wrong:
+
+- **`build:android` refuses to run** without it. `scripts/check-android-env.mjs`
+  rejects an unset value, a non-https URL, a localhost host, a trailing slash
+  (which would produce `//oauth/…` and miss the rewrite), and anything that is
+  not a URL. A broken APK is never produced, which beats discovering it after
+  shipping.
+- **`backendMisconfigured()` reports it at runtime** for a bundle built some
+  other way — shown as a banner, with the Connect buttons disabled, because
+  starting a sign-in that cannot complete strands the user mid-redirect.
 
 ### Token exchange runs same-origin
 

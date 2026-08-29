@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { completeFromUrl, OAuthError } from '../auth/oauthClient.ts';
 import { subscribe } from '../auth/tokenStore.ts';
+import { backendMisconfigured } from '../auth/config.ts';
 import { launch } from '../playback/tier1.ts';
 import { adapterFor, allAdapters, mergeTracks } from '../providers/registry.ts';
 import type { ProviderAdapter } from '../providers/types.ts';
@@ -58,6 +59,14 @@ export default function ConnectorScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [tokenVersion],
   );
+
+  /**
+   * A build that cannot reach its backend is unrecoverable from inside the app,
+   * so say so instead of letting every Connect button fail with a network error.
+   * build:android refuses to produce this configuration; this covers a bundle
+   * built some other way.
+   */
+  const configError = useMemo(() => backendMisconfigured(), []);
 
   // ── Finish an OAuth redirect, if this load is one ──
   useEffect(() => {
@@ -207,6 +216,13 @@ export default function ConnectorScreen() {
         </p>
       </header>
 
+      {configError && (
+        <div role="alert" className="mb-6 rounded-xl px-4 py-3 text-sm border bg-red-500/10 border-red-500/40 text-red-200">
+          <p className="font-semibold mb-1">This build cannot reach its sign-in service.</p>
+          <p className="text-red-200/80 text-xs leading-relaxed">{configError}</p>
+        </div>
+      )}
+
       {notice && (
         <div role="status"
           className={`mb-6 rounded-xl px-4 py-3 text-sm border flex items-start justify-between gap-3 ${
@@ -253,8 +269,9 @@ export default function ConnectorScreen() {
                       Disconnect
                     </button>
                   ) : (
-                    <button onClick={() => onConnect(a)}
-                      className="text-xs font-bold px-3 py-2 rounded-lg bg-amber-500 text-amber-950 hover:bg-amber-400 transition-colors">
+                    <button onClick={() => onConnect(a)} disabled={!!configError}
+                      title={configError || undefined}
+                      className="text-xs font-bold px-3 py-2 rounded-lg bg-amber-500 text-amber-950 hover:bg-amber-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                       Connect
                     </button>
                   )

@@ -26,6 +26,7 @@ import {
   spotifyEmbedUrl, youtubeEmbedUrl,
 } from './src/playback/tierPolicy.ts';
 import { checkEmbedVisible, ForegroundGuard } from './src/playback/foregroundGuard.ts';
+import { backendMisconfigured } from './src/auth/config.ts';
 
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = '') => {
@@ -379,6 +380,38 @@ function guardHarness() {
 console.log('\ncheckEmbedVisible');
 ok('an unmounted element is reported', /not mounted/.test(checkEmbedVisible(null)));
 ok('no-ops safely without a DOM', checkEmbedVisible({}) === null);
+
+// ── The guard is wired, not decorative ────────────────────────────────────
+// backendMisconfigured() shipped once as dead code: defined, exported by
+// nothing, called by nothing, while the README claimed it caught the problem at
+// startup. These assert the behaviour so it cannot quietly rot again.
+console.log('\nbackendMisconfigured');
+{
+  const g = globalThis;
+  const hadWindow = 'window' in g;
+  const prevWindow = g.window;
+
+  // Web with the same-origin default: correct, so no complaint.
+  g.window = {};
+  ok('web + empty backend -> no error', backendMisconfigured() === null);
+
+  // Native with the same-origin default: the broken case.
+  g.window = { Capacitor: { isNativePlatform: () => true } };
+  const msg = backendMisconfigured();
+  ok('native + empty backend -> reports the problem', typeof msg === 'string' && msg.length > 0);
+  ok('  naming the variable to set', /VITE_CONNECTOR_BACKEND/.test(msg || ''));
+  ok('  and explaining why (https://localhost)', /localhost/.test(msg || ''));
+
+  // A Capacitor build reporting non-native must not be flagged.
+  g.window = { Capacitor: { isNativePlatform: () => false } };
+  ok('capacitor present but not native -> no error', backendMisconfigured() === null);
+
+  // Absent window (SSR / plain node) must not throw.
+  delete g.window;
+  ok('no window -> no error and no throw', backendMisconfigured() === null);
+
+  if (hadWindow) g.window = prevWindow; else delete g.window;
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail > 0 ? 1 : 0);

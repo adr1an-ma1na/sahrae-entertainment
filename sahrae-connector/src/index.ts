@@ -24,7 +24,7 @@ export { spotifyAdapter } from './providers/spotify.ts';
 export { youtubeAdapter } from './providers/youtube.ts';
 
 // Auth
-export { BACKEND_URL, PROVIDERS, REDIRECT_URI } from './auth/config.ts';
+export { BACKEND_URL, PROVIDERS, REDIRECT_URI, backendMisconfigured } from './auth/config.ts';
 export {
   beginAuth, completeFromUrl, disconnect, getAccessToken,
   OAuthError, providerFetch, refresh,

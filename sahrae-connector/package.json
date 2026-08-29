@@ -10,7 +10,7 @@
     "test": "node --experimental-strip-types connector-check.mjs && cd backend && node core-check.mjs && node api-check.mjs && node worker-check.mjs",
     "build": "tsc --noEmit && vite build",
     "build:pwa": "npm run build",
-    "build:android": "npm run build && cap sync android",
+    "build:android": "node scripts/check-android-env.mjs && npm run build && cap sync android",
     "android:add": "cap add android",
     "android:open": "cap open android",
     "android:apk": "cd android && gradlew.bat assembleRelease",
