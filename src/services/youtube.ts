@@ -54,6 +54,10 @@ export interface YoutubePlaylist {
  *  They carry no playable video, so they'd render as tracks that do nothing. */
 const TOMBSTONES = new Set(['Deleted video', 'Private video', 'Unavailable video']);
 
+/** YouTube's category id for Music. The only reliable way to tell a liked song
+ *  from a liked anything-else — there is one Liked list, not two. */
+const MUSIC_CATEGORY_ID = '10';
+
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -195,20 +199,41 @@ class YoutubeService {
    * this is close to free.
    */
   private async attachDurations(tracks: Track[], authed: boolean): Promise<Track[]> {
+    return (await this.attachDetails(tracks, authed)).map(({ categoryId: _c, ...t }) => t);
+  }
+
+  /**
+   * Duration AND category, in batches of 50.
+   *
+   * videos.list costs 1 quota unit per call regardless of how many ids it
+   * carries, so asking for `snippet` alongside `contentDetails` is free and
+   * gives us `categoryId` — the only reliable signal for whether a liked item is
+   * music. Everything below depends on it.
+   */
+  private async attachDetails(tracks: Track[], authed: boolean): Promise<(Track & { categoryId?: string })[]> {
     const ids = tracks.map((t) => t.id).filter(Boolean);
-    const byId = new Map<string, number>();
+    const byId = new Map<string, { duration: number; categoryId?: string }>();
     for (let i = 0; i < ids.length; i += 50) {
       const chunk = ids.slice(i, i + 50).join(',');
-      const ep = `youtube/v3/videos?part=contentDetails&id=${chunk}`;
+      const ep = `youtube/v3/videos?part=contentDetails,snippet&id=${chunk}`;
       try {
         const d: any = authed ? await this.authed(ep) : await this.publicGet(ep);
-        for (const v of d.items || []) byId.set(v.id, parseISODuration(v.contentDetails?.duration || ''));
-      } catch { /* durations are a nicety — never fail the whole playlist for them */ }
+        for (const v of d.items || []) {
+          byId.set(v.id, {
+            duration: parseISODuration(v.contentDetails?.duration || ''),
+            categoryId: v.snippet?.categoryId,
+          });
+        }
+      } catch { /* details are a nicety — never fail the whole playlist for them */ }
     }
     // Leave duration 0 rather than inventing one when the lookup missed: the
     // player reads the true length off the media once it starts, and 0 renders
     // as "--:--" instead of a confident wrong number.
-    return tracks.map((t) => ({ ...t, duration: byId.get(t.id) ?? 0 }));
+    return tracks.map((t) => ({
+      ...t,
+      duration: byId.get(t.id)?.duration ?? 0,
+      categoryId: byId.get(t.id)?.categoryId,
+    }));
   }
 
   private mapItems(items: any[]): Track[] {
@@ -243,24 +268,50 @@ class YoutubeService {
   }
 
   /**
-   * Liked Music.
+   * The account's Liked playlist id.
    *
-   * The old code asked for playlist "LM", then "LL". Neither is a playlist id
-   * the Data API accepts: LM (YouTube Music's Liked Music) is not exposed by the
-   * API at all, and LL is an alias the API does not resolve. The real id comes
-   * from channels.list → contentDetails.relatedPlaylists.likes, which is what
-   * this does. Cached, because it never changes for a given account.
+   * "LM" (YouTube Music's own Liked Music) is not exposed by the Data API at
+   * all, and "LL" is an alias the API does not resolve — both were tried by an
+   * earlier version and neither works. The real id comes from channels.list.
+   * Cached, because it never changes for an account.
    */
-  async fetchLikedMusic(): Promise<Track[]> {
-    let likesId = localStorage.getItem('sahrae.youtube.likes_playlist') || '';
-    if (!likesId) {
-      const d = await this.authed<any>('youtube/v3/channels?part=contentDetails&mine=true');
-      likesId = d.items?.[0]?.contentDetails?.relatedPlaylists?.likes || '';
-      if (!likesId) throw new Error('This Google account has no YouTube channel, so it has no Liked list. Open YouTube once to create one.');
-      localStorage.setItem('sahrae.youtube.likes_playlist', likesId);
-    }
-    return this.fetchPlaylistTracks(likesId);
+  private async likesPlaylistId(): Promise<string> {
+    const cached = localStorage.getItem('sahrae.youtube.likes_playlist') || '';
+    if (cached) return cached;
+    const d = await this.authed<any>('youtube/v3/channels?part=contentDetails&mine=true');
+    const id = d.items?.[0]?.contentDetails?.relatedPlaylists?.likes || '';
+    if (!id) throw new Error('This Google account has no YouTube channel, so it has no Liked list. Open YouTube once to create one.');
+    localStorage.setItem('sahrae.youtube.likes_playlist', id);
+    return id;
   }
+
+  /**
+   * Liked items, optionally narrowed to music.
+   *
+   * There is one Liked list on a Google account — YouTube and YouTube Music both
+   * write to it. So "Liked Music" is not a separate list to fetch; it is this
+   * list filtered to category 10 (Music). Without that filter, a liked cat video
+   * shows up in the music library, which is what the previous version did.
+   *
+   * Category is the primary signal; the length window is a backstop for items
+   * the details lookup missed, since a 3-second clip or a 2-hour stream is not a
+   * song whatever it is tagged.
+   */
+  async fetchLiked(kind: 'music' | 'all' = 'all'): Promise<Track[]> {
+    const items = await this.paged(`youtube/v3/playlistItems?part=snippet&playlistId=${await this.likesPlaylistId()}`, true);
+    const detailed = await this.attachDetails(this.mapItems(items), true);
+    const filtered = kind === 'music'
+      ? detailed.filter((t) => t.categoryId === MUSIC_CATEGORY_ID
+        && (t.duration === 0 || (t.duration >= 30 && t.duration <= 1800)))
+      : detailed;
+    return filtered.map(({ categoryId: _c, ...t }) => t);
+  }
+
+  /** Liked music only. */
+  fetchLikedMusic(): Promise<Track[]> { return this.fetchLiked('music'); }
+
+  /** Everything liked, unfiltered — the YouTube (videos) surface. */
+  fetchLikedVideos(): Promise<Track[]> { return this.fetchLiked('all'); }
 
   /**
    * Import a public or unlisted playlist from a pasted link — no sign-in.

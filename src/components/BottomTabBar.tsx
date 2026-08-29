@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Home, Search, Headphones, Radio, Grid3x3, X, Film, Tv2, Clapperboard, Trophy, Heart, Clock, Download, Music2, Mic2 } from 'lucide-react';
+import { Home, Search, Headphones, Radio, Grid3x3, X, Film, Tv2, Clapperboard, Trophy, Heart, Clock, Download, Music2, Mic2, Youtube } from 'lucide-react';
 
 /**
  * Mobile bottom navigation (Spotify-style). Replaces the top scrolling strip on
@@ -15,11 +15,12 @@ const PRIMARY = [
 // The Listen hub's three destinations. The primary tab stays lit for any of
 // them, because from the phone bar they are all "Listen" — ListenTabs does the
 // switching once you are inside.
-const AUDIO_TABS = ['audio', 'music', 'podcasts'];
+const AUDIO_TABS = ['audio', 'music', 'podcasts', 'connect'];
 
 const MORE = [
   { id: 'music', label: 'Music', icon: Music2 },
   { id: 'podcasts', label: 'Podcasts', icon: Mic2 },
+  { id: 'connect', label: 'Connect', icon: Youtube },
   { id: 'movies', label: 'Movies', icon: Film },
   { id: 'series', label: 'Series', icon: Tv2 },
   { id: 'tv', label: 'Live TV', icon: Radio },

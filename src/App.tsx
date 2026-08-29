@@ -13,6 +13,7 @@ import MediaGrid from './components/MediaGrid';
 import PlayerModal from './components/PlayerModal';
 import AudioHubView from './components/AudioHubView';
 import PodcastsView from './components/PodcastsView';
+import ConnectView from './components/ConnectView';
 import LiveTVView from './components/LiveTVView';
 import SportsView from './components/SportsView';
 import ContinueWatchingView from './components/ContinueWatchingView';
@@ -432,7 +433,7 @@ export default function App() {
     // `loading` tracks the TMDB catalog fetch. Destinations that don't read TMDB
     // must be listed here or they sit behind a skeleton waiting on data they
     // never use — 'music' was missing, so Sauti stalled on a cold start.
-    const NEEDS_TMDB = !['home', 'radio', 'audio', 'music', 'podcasts', 'tv', 'sports', 'continue'].includes(activeTab);
+    const NEEDS_TMDB = !['home', 'radio', 'audio', 'music', 'podcasts', 'connect', 'tv', 'sports', 'continue'].includes(activeTab);
     if (loading && NEEDS_TMDB) {
       // A skeleton in the shape of the destination, not a spinner over a blank
       // screen: the layout stays still, and the wait reads as "loading this"
@@ -619,6 +620,8 @@ export default function App() {
         return <MusicView onNav={navigate} />;
       case 'podcasts':
         return <PodcastsView onNav={navigate} />;
+      case 'connect':
+        return <ConnectView onNav={navigate} />;
       case 'downloads':
         return <DownloadsView onPlay={handlePlay} />;
       case 'tv':

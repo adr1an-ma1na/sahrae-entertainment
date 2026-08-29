@@ -1,9 +1,10 @@
-import { Music2, Mic2, Radio } from 'lucide-react';
+import { Music2, Mic2, Radio, Youtube } from 'lucide-react';
 
 const TABS: { id: string; label: string; icon: typeof Music2 }[] = [
   { id: 'music', label: 'Music', icon: Music2 },
   { id: 'podcasts', label: 'Podcasts', icon: Mic2 },
   { id: 'audio', label: 'Radio', icon: Radio },
+  { id: 'connect', label: 'Connect', icon: Youtube },
 ];
 
 /**
