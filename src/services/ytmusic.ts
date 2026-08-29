@@ -18,6 +18,7 @@ export interface Track {
   date?: string;      // human-readable upload/release date
   uploaded?: number;  // raw upload timestamp (ms) for sorting
   audioUrl?: string;  // direct audio file URL (podcast RSS / owned catalog) → plays via <audio>, backgrounds
+  audioUrlAlt?: string; // the original tracking URL, retried if audioUrl fails (see unwrapTrackingUrl)
   feedUrl?: string;   // podcast show RSS feed (for opening a show's episodes)
   scStream?: string;  // SoundCloud progressive transcoding URL → resolved to audioUrl on play
   description?: string; // podcast episode show-notes (HTML), for the episode detail page

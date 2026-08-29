@@ -25,6 +25,9 @@ interface MusicCtx {
   expanded: boolean;
   buffering: boolean;
   active: boolean;
+  /** Why the current item would not play. Null when nothing is wrong. */
+  playbackError: string | null;
+  clearPlaybackError: () => void;
   autoplay: boolean;
   toggleAutoplay: () => void;
   queueSource: string;
@@ -110,6 +113,9 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   // instead of the YouTube IFrame. Streaming is untouched when not local.
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const usingLocalRef = useRef(false);
+  // The tracking URL to retry with if the unwrapped direct URL is refused, and a
+  // flag so we only ever fall back once per track rather than looping.
+  const altSrcRef = useRef<string | null>(null);
   // Latest control fns + live position, for the OS MediaSession handlers (which
   // are registered once but must always act on current state).
   const ctrlRef = useRef<{ next: () => void; prev: () => void; stop: () => void; seek: (s: number) => void }>({ next: () => {}, prev: () => {}, stop: () => {}, seek: () => {} });
@@ -119,6 +125,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const [index, setIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [buffering, setBuffering] = useState(false);
+  // Playback failures used to be swallowed: the <audio> element had no error
+  // listener and a YouTube error silently skipped to the next track. Both looked
+  // identical to "nothing happened", which is the worst thing a player can do.
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const [shuffle, setShuffle] = useState(false);
@@ -285,7 +295,22 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       let d: { event?: string; info?: { currentTime?: number; duration?: number; playerState?: number } };
       try { d = JSON.parse(e.data); } catch { return; }
       if (!d || !d.event) return;
-      if (d.event === 'onError') { skipRef.current(); return; }
+      if (d.event === 'onError') {
+        // 101 and 150 both mean the uploader disallowed playback outside
+        // YouTube. That is a property of the video, not a fault in the app, and
+        // silently skipping it made the app look broken for videos the listener
+        // can plainly see on YouTube.
+        const code = Number((d as { info?: number }).info);
+        setPlaybackError(
+          code === 101 || code === 150
+            ? 'The uploader does not allow this one to play outside YouTube. Skipping.'
+            : code === 100
+              ? 'That video is no longer available. Skipping.'
+              : 'YouTube could not play that one. Skipping.',
+        );
+        skipRef.current();
+        return;
+      }
       if ((d.event === 'infoDelivery' || d.event === 'onStateChange') && d.info) {
         const info = d.info;
         if (typeof info.currentTime === 'number') { liveRef.current.position = info.currentTime; setPosition(info.currentTime); }
@@ -315,10 +340,33 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     const onPause = () => setIsPlaying(false);
     const onWaiting = () => setBuffering(true);
     const onEnded = () => endedRef.current();
+    const onError = () => {
+      // Some publishers sign their tracking chain and refuse the direct file, so
+      // one retry with the original URL before giving up. Only once — a second
+      // failure is a real failure, and retrying forever would spin silently.
+      const alt = altSrcRef.current;
+      if (alt) {
+        altSrcRef.current = null;
+        try { a.src = alt; a.play().catch(() => {}); return; } catch { /* fall through */ }
+      }
+      // MediaError codes: 2 network, 3 decode, 4 unsupported/404. A podcast MP3
+      // that 404s or redirects to HTML lands on 4, which is by far the common
+      // case and used to leave the player sitting at 0:00 pretending to play.
+      const code = a.error?.code;
+      setIsPlaying(false);
+      setBuffering(false);
+      setPlaybackError(
+        code === 2 ? 'Lost the connection while loading this episode.'
+          : code === 3 ? 'This episode is in a format the browser cannot play.'
+            : 'This episode could not be loaded — the file may have moved or been removed.',
+      );
+    };
     const onTime = () => { if (usingLocalRef.current) { setPosition(a.currentTime || 0); if (a.duration && isFinite(a.duration)) setDuration(a.duration); } };
     a.addEventListener('play', onPlay); a.addEventListener('playing', onPlay);
     a.addEventListener('pause', onPause); a.addEventListener('waiting', onWaiting);
     a.addEventListener('ended', onEnded); a.addEventListener('timeupdate', onTime);
+    a.addEventListener('error', onError);
+    a.addEventListener('stalled', onWaiting);
     return () => { try { a.pause(); a.removeAttribute('src'); } catch { /* ignore */ } };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -331,7 +379,17 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     if (local && a) {
       usingLocalRef.current = true;
       try { playerRef.current?.pauseVideo?.(); } catch { /* ignore */ }
-      a.src = local; a.play().catch(() => {});
+      a.src = local;
+      // Only meaningful when the source we just set is the unwrapped one.
+      altSrcRef.current = (local === c.audioUrl && c.audioUrlAlt) ? c.audioUrlAlt : null;
+      setPlaybackError(null);
+      a.play().catch((err: unknown) => {
+        // NotAllowedError is the browser's autoplay policy, not a broken file —
+        // the listener just has to press play once. Anything else is a failure.
+        const name = (err as { name?: string })?.name;
+        if (name === 'NotAllowedError') return;
+        setPlaybackError('Could not start this episode. Tap play to try again.');
+      });
       setActive(true);
     } else {
       usingLocalRef.current = false;
@@ -545,6 +603,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   }, [current, isPlaying]);
 
   const playQueue = (tracks: Track[], startIndex = 0, source = '') => {
+    // A new selection is a fresh attempt; the previous failure is no longer news.
+    setPlaybackError(null);
     if (!tracks.length) return;
     haptics.press();
     setActive(true);
@@ -711,6 +771,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         toggle, stop, next, prev, seek, setRate, toggleShuffle, cycleRepeat, toggleLike, isLiked,
         likedTracks, setExpanded,
         playlists, recentlyPlayed, tasteSeeds, onboarded, addTasteSeeds, completeOnboarding,
+        playbackError, clearPlaybackError: () => setPlaybackError(null),
         createPlaylist, importPlaylist, deletePlaylist, renamePlaylist, addToPlaylist, removeFromPlaylist,
         addSheetTrack, openAddSheet, closeAddSheet,
         sleepTimer, setSleepTimer, crossfade, setCrossfade, reorderQueue, clearQueue,

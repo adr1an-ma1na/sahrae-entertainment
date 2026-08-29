@@ -10,7 +10,7 @@
  *      node --experimental-strip-types listen-check.mjs --offline   (skip network)
  */
 import { parsePlaylistId, parseISODuration } from './src/services/youtubeParse.ts';
-import { mergeEpisodes } from './src/services/itunesPodcasts.ts';
+import { mergeEpisodes, unwrapTrackingUrl } from './src/services/itunesPodcasts.ts';
 import { matchEpisodeVideo, tokenize, tokenOverlap, durationScore } from './src/services/episodeVideo.ts';
 
 let pass = 0, fail = 0;
@@ -192,6 +192,36 @@ if (!process.argv.includes('--offline')) {
   ok('iTunes sends Access-Control-Allow-Origin (works in the PWA)',
     cors.headers.get('access-control-allow-origin') === '*',
     String(cors.headers.get('access-control-allow-origin')));
+}
+
+// ── unwrapTrackingUrl ─────────────────────────────────────────────────────
+// Podcast publishers chain analytics redirectors in front of the audio. Those
+// are tracker domains, so a content blocker kills the chain and the episode
+// never loads — the real failure this was written for. The file is at the end
+// of the path; these assert we find it without breaking anything else.
+console.log('\nunwrapTrackingUrl');
+{
+  const chained = 'https://pdst.fm/e/pscrb.fm/rss/p/mgln.ai/e/1390/claritaspod.com/measure/p.podderapp.com/2544644999/mgln.ai/e/1651/episode.flightcast.com/01M0AAXF9ND240164721SD7ETJ.mp3';
+  ok('unwraps a 6-hop chain to the real host',
+    unwrapTrackingUrl(chained) === 'https://episode.flightcast.com/01M0AAXF9ND240164721SD7ETJ.mp3');
+  ok('unwraps a chartable.com prefix',
+    unwrapTrackingUrl('https://chtbl.com/track/ABC/traffic.megaphone.fm/X9.mp3') === 'https://traffic.megaphone.fm/X9.mp3');
+  ok('unwraps a podtrac prefix',
+    unwrapTrackingUrl('https://dts.podtrac.com/redirect.mp3/traffic.libsyn.com/s/ep1.mp3') === 'https://traffic.libsyn.com/s/ep1.mp3');
+
+  // Must not touch what is already direct, or anything that is not audio.
+  ok('leaves an already-direct URL alone',
+    unwrapTrackingUrl('https://traffic.megaphone.fm/PLAIN.mp3') === 'https://traffic.megaphone.fm/PLAIN.mp3');
+  ok('leaves a non-audio URL alone',
+    unwrapTrackingUrl('https://feeds.npr.org/500005/podcast.xml') === 'https://feeds.npr.org/500005/podcast.xml');
+  ok('leaves a path with no embedded host alone',
+    unwrapTrackingUrl('https://cdn.example.com/a/b/c/ep.mp3') === 'https://cdn.example.com/a/b/c/ep.mp3');
+  ok('garbage in, garbage out — never throws', unwrapTrackingUrl('not a url') === 'not a url');
+  ok('empty string is returned unchanged', unwrapTrackingUrl('') === '');
+  ok('preserves a query string',
+    unwrapTrackingUrl('https://pdst.fm/e/cdn.host.com/f.mp3?token=1') === 'https://cdn.host.com/f.mp3?token=1');
+  ok('handles m4a as well as mp3',
+    unwrapTrackingUrl('https://chtbl.com/t/A/cdn.host.com/f.m4a') === 'https://cdn.host.com/f.m4a');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -1,4 +1,5 @@
 import { Track } from './ytmusic';
+import { unwrapTrackingUrl } from './itunesPodcasts';
 
 /**
  * Podcasts from real RSS feeds (open, legal, direct MP3 files) — NOT YouTube.
@@ -86,6 +87,10 @@ export async function getPodcastEpisodes(feedUrl: string, fallback?: Partial<Pod
     }
     if (!audioUrl) continue; // no media → skip
     audioUrl = audioUrl.replace(/^http:\/\//i, 'https://'); // https app can't play http media
+    // Feeds carry the same analytics redirector chains iTunes does, and a
+    // content blocker killing any hop kills the episode — see unwrapTrackingUrl.
+    const trackedUrl = audioUrl;
+    audioUrl = unwrapTrackingUrl(audioUrl);
     const title = tagText(it, 'title') || 'Episode';
     const pub = tagText(it, 'pubDate');
     const uploaded = pub ? Date.parse(pub) : 0;
@@ -113,6 +118,9 @@ export async function getPodcastEpisodes(feedUrl: string, fallback?: Partial<Pod
       artworkLarge: art,
       duration: dur,
       audioUrl,
+      // Only set when unwrapping changed something; the player retries this if
+      // the direct URL is refused (a few publishers sign the tracking chain).
+      audioUrlAlt: audioUrl !== trackedUrl ? trackedUrl : undefined,
       feedUrl,
       date: uploaded ? new Date(uploaded).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '',
       uploaded: uploaded || 0,

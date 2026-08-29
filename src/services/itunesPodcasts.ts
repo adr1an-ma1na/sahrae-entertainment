@@ -25,6 +25,45 @@ import type { Track } from './ytmusic';
 
 const LOOKUP_LIMIT = 200; // iTunes' documented ceiling for this entity
 
+const AUDIO_EXT = /\.(mp3|m4a|aac|ogg|oga|opus|wav|flac)$/i;
+
+/**
+ * Strip podcast tracking prefixes off an episode URL.
+ *
+ * Publishers chain analytics redirectors in front of the real file:
+ *
+ *   https://pdst.fm/e/pscrb.fm/rss/p/mgln.ai/e/1390/claritaspod.com/measure/
+ *     p.podderapp.com/…/episode.flightcast.com/01M0AAXF9ND…​.mp3
+ *
+ * Every hop is a tracker domain, and tracker domains are exactly what a content
+ * blocker blocks — Brave's shields, uBlock, a pi-hole. When one of them is
+ * blocked the whole chain dies and the episode simply never loads, which is the
+ * failure this was written for. The real file is sitting in plain sight at the
+ * end of the path.
+ *
+ * Unwrapping also drops six redirects to one, so episodes start faster.
+ *
+ * Conservative by construction: it only rewrites when the path ends in an audio
+ * extension AND contains an embedded hostname, and the original is kept as a
+ * fallback (see `audioUrlAlt`) because a few publishers sign the chain and only
+ * serve through it.
+ */
+export function unwrapTrackingUrl(raw: string): string {
+  let u: URL;
+  try { u = new URL(raw); } catch { return raw; }
+  if (!AUDIO_EXT.test(u.pathname)) return raw;
+
+  const parts = u.pathname.split('/').filter(Boolean);
+  // Walk back for the last segment shaped like a hostname; the rest is the path.
+  for (let i = parts.length - 2; i >= 0; i--) {
+    const seg = parts[i];
+    if (/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(seg) && /\.[a-z]{2,}$/i.test(seg)) {
+      return `https://${seg}/${parts.slice(i + 1).join('/')}${u.search}`;
+    }
+  }
+  return raw;
+}
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 /** Direct fetch first (iTunes is CORS-open, so this is the fast path
@@ -45,8 +84,9 @@ async function fetchJson(url: string): Promise<any | null> {
 }
 
 function mapEpisode(r: any, showTitle: string, showArt: string, feedUrl?: string): Track | null {
-  const audioUrl = String(r.episodeUrl || '').replace(/^http:\/\//i, 'https://');
-  if (!audioUrl) return null; // no media → not playable, so not an episode we can offer
+  const tracked = String(r.episodeUrl || '').replace(/^http:\/\//i, 'https://');
+  if (!tracked) return null; // no media → not playable, so not an episode we can offer
+  const audioUrl = unwrapTrackingUrl(tracked);
 
   const art = String(r.artworkUrl600 || r.artworkUrl160 || r.artworkUrl60 || showArt || '')
     .replace(/^http:\/\//i, 'https://');
@@ -63,6 +103,9 @@ function mapEpisode(r: any, showTitle: string, showArt: string, feedUrl?: string
     artworkLarge: art,
     duration: r.trackTimeMillis ? Math.round(r.trackTimeMillis / 1000) : 0,
     audioUrl,
+    // Only when unwrapping actually changed something — a publisher that signs
+    // the tracking chain will 403 the direct URL, and the player retries this.
+    audioUrlAlt: audioUrl !== tracked ? tracked : undefined,
     feedUrl: feedUrl || String(r.feedUrl || '') || undefined,
     date: released ? new Date(released).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '',
     uploaded: released || 0,
