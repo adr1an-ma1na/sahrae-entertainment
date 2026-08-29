@@ -19,7 +19,7 @@ import express from 'express';
 import cors from 'cors';
 import {
   exchangeCode, healthBody, isConfigured, parseOrigins, PROVIDERS, refreshToken,
-} from './core.js';
+} from '../lib/core.js';
 
 const app = express();
 const PORT = process.env.PORT || 8787;

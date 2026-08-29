@@ -17,7 +17,7 @@
  *   GET  /health
  */
 
-import { exchangeCode, healthBody, originAllowed, parseOrigins, refreshToken } from './core.js';
+import { exchangeCode, healthBody, originAllowed, parseOrigins, refreshToken } from '../lib/core.js';
 
 /** CORS headers for an allowed origin. Echoes the origin rather than using `*`,
  *  because `*` would let any site drive token exchange with our secret. */

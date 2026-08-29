@@ -1,0 +1,8 @@
+# The api/ serverless function IS the backend on Vercel. runtimes/ holds the
+# alternative runtimes (Express for local debugging, a Cloudflare Worker) and
+# their tests — none of which are deployed. Both import lib/, which stays.
+runtimes/
+android/
+capacitor.config.ts
+connector-check.mjs
+scripts/

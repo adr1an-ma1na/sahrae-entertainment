@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vercel dev",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types connector-check.mjs && cd backend && node core-check.mjs && node session-check.mjs && node api-check.mjs && node worker-check.mjs",
+    "test": "node --experimental-strip-types connector-check.mjs && node runtimes/core-check.mjs && node runtimes/session-check.mjs && node runtimes/api-check.mjs && node runtimes/worker-check.mjs",
     "build": "tsc --noEmit && vite build",
     "build:pwa": "npm run build",
     "build:android": "node scripts/check-android-env.mjs && npm run build && cap sync android",
@@ -16,7 +16,7 @@
     "android:apk": "cd android && gradlew.bat assembleRelease",
     "android:aab": "cd android && gradlew.bat bundleRelease",
     "dev:vite": "vite",
-    "dev:express": "node --env-file=.env backend/server.js",
+    "dev:express": "node --env-file=.env runtimes/server.js",
     "deploy": "vercel --prod"
   },
   "dependencies": {

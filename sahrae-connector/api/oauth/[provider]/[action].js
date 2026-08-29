@@ -19,7 +19,7 @@
  * Routes: POST /api/oauth/:provider/token | refresh
  */
 
-import { exchangeCode, refreshToken } from '../../../backend/core.js';
+import { exchangeCode, refreshToken } from '../../../lib/core.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {

@@ -10,7 +10,7 @@
 import {
   credentialsFor, exchangeCode, getProvider, healthBody, isConfigured,
   originAllowed, parseOrigins, PROVIDERS, refreshToken, safeError,
-} from './core.js';
+} from '../lib/core.js';
 
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = '') => {

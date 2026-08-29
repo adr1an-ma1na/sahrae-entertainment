@@ -5,16 +5,8 @@
   "outputDirectory": "dist",
 
   "rewrites": [
-    {
-      "//": "Token exchange, same-origin. The frontend calls /oauth/:provider/:action; this maps it onto the serverless function. MUST come before the SPA fallback below — rewrites are matched in order, and the fallback would otherwise swallow it and return index.html.",
-      "source": "/oauth/:path*",
-      "destination": "/api/oauth/:path*"
-    },
-    {
-      "//": "SPA fallback. This is what makes /connect/callback resolve — without it Vercel 404s on a path with no file, and the OAuth redirect dies before the app ever loads. api/ and oauth/ are excluded so the function routes above still win.",
-      "source": "/((?!api/|oauth/).*)",
-      "destination": "/index.html"
-    }
+    { "source": "/oauth/:path*", "destination": "/api/oauth/:path*" },
+    { "source": "/((?!api/|oauth/).*)", "destination": "/index.html" }
   ],
 
   "headers": [
@@ -23,20 +15,14 @@
       "headers": [
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "X-Frame-Options", "value": "DENY" },
         {
-          "//": "The page must not be framable: an attacker framing the connect screen could trick someone into authorising a provider (clickjacking).",
-          "key": "X-Frame-Options",
-          "value": "DENY"
-        },
-        {
-          "//": "connect-src is 'self' plus the provider APIs the browser calls directly. Token exchange is same-origin now, so no third-party backend origin appears here at all — that is the security dividend of dropping the cross-origin backend.",
           "key": "Content-Security-Policy",
           "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://open.spotify.com https://www.youtube.com https://s.ytimg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'none'; connect-src 'self' https://api.spotify.com https://www.googleapis.com; frame-src https://open.spotify.com https://www.youtube.com https://www.youtube-nocookie.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
         }
       ]
     },
     {
-      "//": "Token responses carry credentials. Nothing may cache them — not the browser, not Vercel's edge, not an intermediary.",
       "source": "/oauth/(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, private" },

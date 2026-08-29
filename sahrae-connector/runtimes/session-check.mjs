@@ -14,8 +14,8 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 import {
   buildCookie, clearCookie, cookieName, custodyAvailable, readCookie, seal, unseal,
-} from './session.js';
-import { exchangeCode, healthBody, refreshToken } from './core.js';
+} from '../lib/session.js';
+import { exchangeCode, healthBody, refreshToken } from '../lib/core.js';
 
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = '') => {
