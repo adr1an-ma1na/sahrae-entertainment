@@ -1,11 +1,32 @@
+// Self-contained on purpose.
+//
+// This module deploys on its own, with only its own directory uploaded, so
+// extending the host repo's tsconfig broke the build the moment it ran anywhere
+// but this machine: tsc reported "Cannot read file /vercel/tsconfig.json" and
+// then cascaded a dozen more errors from the missing base options.
 {
-  "extends": "../tsconfig.json",
   "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "allowJs": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+
+    // Relative imports carry an explicit .ts/.tsx so the same source runs under
+    // plain node (for the test harness) as well as through Vite.
+    "allowImportingTsExtensions": true,
+
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "useDefineForClassFields": false
   },
-  "include": ["src", "connector-check.mjs"],
-  "exclude": ["node_modules", "dist", "android", "backend/node_modules"]
+  "include": ["src"],
+  "exclude": ["node_modules", "dist", "android", "runtimes", "api", "scripts"]
 }
