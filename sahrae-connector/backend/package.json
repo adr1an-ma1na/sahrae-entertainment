@@ -1,0 +1,17 @@
+{
+  "name": "sahrae-connector-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "OAuth token exchange + refresh. The only place client secrets exist.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --env-file=../.env server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2"
+  },
+  "engines": { "node": ">=20" }
+}
