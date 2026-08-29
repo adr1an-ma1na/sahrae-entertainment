@@ -26,17 +26,20 @@ function corsHeaders(origin) {
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Max-Age': '86400',
+    // Required for the httpOnly refresh cookie to travel cross-origin. Only
+    // meaningful because the allow-list echoes a specific origin — a wildcard
+    // origin and credentials are mutually exclusive by spec, for good reason.
+    'Access-Control-Allow-Credentials': 'true',
     Vary: 'Origin',
   };
   if (origin) h['Access-Control-Allow-Origin'] = origin;
   return h;
 }
 
-function json(body, status, origin) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
-  });
+function json(body, status, origin, setCookie) {
+  const headers = { 'Content-Type': 'application/json', ...corsHeaders(origin) };
+  if (setCookie) headers['Set-Cookie'] = setCookie;
+  return new Response(JSON.stringify(body), { status, headers });
 }
 
 export default {
@@ -76,12 +79,12 @@ export default {
 
       const result = action === 'token'
         ? await exchangeCode(provider, env, payload || {})
-        : await refreshToken(provider, env, payload || {});
+        : await refreshToken(provider, env, payload || {}, request.headers.get('Cookie'));
 
       // Log the failure without the payload: it carries the code and verifier.
       if (result.status >= 400) console.error(`[${provider}] ${action} -> ${result.status}`);
 
-      return json(result.body, result.status, origin);
+      return json(result.body, result.status, origin, result.setCookie);
     }
 
     return json({ error: 'Not found.' }, 404, origin);

@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vercel dev",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types connector-check.mjs && cd backend && node core-check.mjs && node api-check.mjs && node worker-check.mjs",
+    "test": "node --experimental-strip-types connector-check.mjs && cd backend && node core-check.mjs && node session-check.mjs && node api-check.mjs && node worker-check.mjs",
     "build": "tsc --noEmit && vite build",
     "build:pwa": "npm run build",
     "build:android": "node scripts/check-android-env.mjs && npm run build && cap sync android",

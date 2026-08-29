@@ -10,6 +10,8 @@
  * README about moving refresh-token custody here before real users.
  */
 
+import { buildCookie, clearCookie, custodyAvailable, CUSTODY_HINT, readCookie, seal, unseal } from './session.js';
+
 /** Per-provider token endpoints and how each wants its client credentials. */
 export const PROVIDERS = {
   spotify: {
@@ -39,6 +41,9 @@ export function credentialsFor(provider, secrets) {
     clientSecret: secrets[provider.secretKey],
   };
 }
+
+// Re-exported for callers that only import core.js.
+export { custodyAvailable, CUSTODY_HINT };
 
 export function isConfigured(provider, secrets) {
   const { clientId, clientSecret } = credentialsFor(provider, secrets);
@@ -77,17 +82,26 @@ async function postToken(provider, secrets, params) {
   return { ok: res.ok, status: res.status, json };
 }
 
-/** Only the fields the client needs — nothing else crosses back. */
-function passthrough(json) {
-  return {
+/**
+ * Only the fields the client needs — nothing else crosses back.
+ *
+ * `refresh_token` is included ONLY when cookie custody is unavailable. When it
+ * is available the token stays server-side in an encrypted httpOnly cookie and
+ * the browser never sees it; `refresh_custody` tells the client which happened
+ * so it does not sit waiting for a value that is not coming.
+ */
+function passthrough(json, custody) {
+  const out = {
     access_token: json.access_token,
-    // Providers that rotate refresh tokens return a new one; those that do not
-    // omit it, and the client keeps the one it holds.
-    refresh_token: json.refresh_token,
     expires_in: json.expires_in,
     scope: json.scope,
     token_type: json.token_type,
+    refresh_custody: custody,
   };
+  // Providers that rotate refresh tokens return a new one; those that do not
+  // omit it, and whoever holds the old one keeps it.
+  if (custody === 'client' && json.refresh_token) out.refresh_token = json.refresh_token;
+  return out;
 }
 
 /**
@@ -115,14 +129,25 @@ export async function exchangeCode(providerName, secrets, { code, codeVerifier, 
       code_verifier: codeVerifier,
     });
     if (!ok) return { status, body: { error: safeError(json, 'Token exchange failed.') } };
-    return { status: 200, body: passthrough(json) };
+
+    // Keep the refresh token server-side where we can. It is the long-lived
+    // credential; the access token expires in an hour and is far less valuable.
+    if (custodyAvailable(secrets) && json.refresh_token) {
+      const sealed = await seal(json.refresh_token, secrets.SESSION_SECRET);
+      return {
+        status: 200,
+        body: passthrough(json, 'cookie'),
+        setCookie: buildCookie(providerName, sealed),
+      };
+    }
+    return { status: 200, body: passthrough(json, 'client') };
   } catch {
     return { status: 502, body: { error: 'Could not reach the provider’s token endpoint.' } };
   }
 }
 
 /** Refresh an access token. */
-export async function refreshToken(providerName, secrets, { refreshToken: rt }) {
+export async function refreshToken(providerName, secrets, { refreshToken: rt }, cookieHeader) {
   const provider = getProvider(providerName);
   if (!provider) return { status: 404, body: { error: `Unknown or unconfigured provider: ${providerName}` } };
   if (!isConfigured(provider, secrets)) {
@@ -131,15 +156,59 @@ export async function refreshToken(providerName, secrets, { refreshToken: rt }) 
       body: { error: `${providerName} is missing credentials on the server. Set ${provider.idKey} and ${provider.secretKey}.` },
     };
   }
-  if (!rt) return { status: 400, body: { error: 'refreshToken is required.' } };
+  // Prefer the cookie: if one is present, the client is not supposed to be
+  // holding a refresh token at all, and trusting a body value over it would let
+  // a caller substitute their own.
+  let token = rt;
+  let viaCookie = false;
+  if (custodyAvailable(secrets)) {
+    const sealed = readCookie(cookieHeader, providerName);
+    if (sealed) {
+      const opened = await unseal(sealed, secrets.SESSION_SECRET);
+      if (opened) { token = opened; viaCookie = true; }
+    }
+  }
+
+  if (!token) {
+    return {
+      status: 400,
+      body: {
+        error: custodyAvailable(secrets)
+          ? 'No refresh session. Reconnect this service.'
+          : 'refreshToken is required.',
+      },
+      // A cookie that will not open is a cookie worth removing, or the client
+      // retries against it forever.
+      ...(custodyAvailable(secrets) ? { setCookie: clearCookie(providerName) } : {}),
+    };
+  }
 
   try {
     const { ok, status, json } = await postToken(provider, secrets, {
       grant_type: 'refresh_token',
-      refresh_token: rt,
+      refresh_token: token,
     });
-    if (!ok) return { status, body: { error: safeError(json, 'Refresh failed.') } };
-    return { status: 200, body: passthrough(json) };
+    if (!ok) {
+      // The grant is gone (revoked, expired, rotated away). Drop the cookie so
+      // the UI shows "connect" instead of failing every call from now on.
+      return {
+        status,
+        body: { error: safeError(json, 'Refresh failed.') },
+        ...(viaCookie ? { setCookie: clearCookie(providerName) } : {}),
+      };
+    }
+
+    if (viaCookie) {
+      // Re-seal when the provider rotated the token; otherwise leave the
+      // existing cookie alone rather than rewriting an identical one.
+      const next = json.refresh_token;
+      return {
+        status: 200,
+        body: passthrough(json, 'cookie'),
+        ...(next ? { setCookie: buildCookie(providerName, await seal(next, secrets.SESSION_SECRET)) } : {}),
+      };
+    }
+    return { status: 200, body: passthrough(json, 'client') };
   } catch {
     return { status: 502, body: { error: 'Could not reach the provider’s token endpoint.' } };
   }
@@ -148,6 +217,10 @@ export async function refreshToken(providerName, secrets, { refreshToken: rt }) 
 export function healthBody(secrets, allowedOrigins) {
   return {
     ok: true,
+    // Surfaced so a misconfigured deployment is visible rather than silently
+    // running in the weaker mode.
+    refreshCustody: custodyAvailable(secrets) ? 'cookie' : 'client',
+    ...(custodyAvailable(secrets) ? {} : { hint: CUSTODY_HINT }),
     providers: Object.fromEntries(
       Object.entries(PROVIDERS).map(([name, p]) => [name, { configured: isConfigured(p, secrets) }]),
     ),

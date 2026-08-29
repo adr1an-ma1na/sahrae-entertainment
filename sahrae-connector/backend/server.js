@@ -39,17 +39,21 @@ app.use(cors({
     cb(new Error(`Origin not allowed: ${origin}`));
   },
   methods: ['POST', 'GET', 'OPTIONS'],
+  // The refresh cookie must travel on cross-origin dev setups.
+  credentials: true,
 }));
 
 app.post('/oauth/:provider/token', async (req, res) => {
   const r = await exchangeCode(req.params.provider, process.env, req.body || {});
   if (r.status >= 400) console.error(`[${req.params.provider}] token -> ${r.status}`);
+  if (r.setCookie) res.setHeader('Set-Cookie', r.setCookie);
   res.status(r.status).json(r.body);
 });
 
 app.post('/oauth/:provider/refresh', async (req, res) => {
-  const r = await refreshToken(req.params.provider, process.env, req.body || {});
+  const r = await refreshToken(req.params.provider, process.env, req.body || {}, req.headers.cookie);
   if (r.status >= 400) console.error(`[${req.params.provider}] refresh -> ${r.status}`);
+  if (r.setCookie) res.setHeader('Set-Cookie', r.setCookie);
   res.status(r.status).json(r.body);
 });
 

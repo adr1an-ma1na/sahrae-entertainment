@@ -113,6 +113,8 @@ export async function completeFromUrl(url: string): Promise<ProviderId> {
   const res = await fetch(`${BACKEND_URL}/oauth/${pending.provider}/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    // Required for the server's httpOnly refresh cookie to be stored.
+    credentials: 'include',
     body: JSON.stringify({ code, codeVerifier: pending.verifier, redirectUri: REDIRECT_URI }),
   });
 
@@ -129,7 +131,11 @@ export async function completeFromUrl(url: string): Promise<ProviderId> {
   setToken(pending.provider, {
     accessToken: t.access_token,
     expiresAt: expiryFromSeconds(Number(t.expires_in) || 3600),
+    // Absent under cookie custody: the server kept it, encrypted and httpOnly,
+    // so it never enters JavaScript and XSS cannot walk off with a permanent
+    // grant. `refresh_custody` records which mode this session is in.
     refreshToken: t.refresh_token,
+    custody: t.refresh_custody === 'cookie' ? 'cookie' : 'client',
     scope: t.scope,
     tokenType: t.token_type,
   });
@@ -143,12 +149,18 @@ const inflight = new Map<ProviderId, Promise<StoredToken | null>>();
 
 async function doRefresh(provider: ProviderId): Promise<StoredToken | null> {
   const current = getToken(provider);
-  if (!current?.refreshToken) return null;
+  if (!current) return null;
+  // Under cookie custody there is nothing local to send — the browser attaches
+  // the httpOnly cookie and the server reads the token out of it.
+  if (current.custody !== 'cookie' && !current.refreshToken) return null;
 
   const res = await fetch(`${BACKEND_URL}/oauth/${provider}/refresh`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refreshToken: current.refreshToken }),
+    credentials: 'include',
+    body: JSON.stringify(
+      current.custody === 'cookie' ? {} : { refreshToken: current.refreshToken },
+    ),
   });
   if (!res.ok) {
     // The grant is gone (revoked, expired, rotated away). Clearing is the honest
@@ -163,8 +175,10 @@ async function doRefresh(provider: ProviderId): Promise<StoredToken | null> {
     accessToken: t.access_token,
     expiresAt: expiryFromSeconds(Number(t.expires_in) || 3600),
     // Providers that rotate refresh tokens return a new one; those that don't
-    // omit it, and the existing one stays valid.
-    refreshToken: t.refresh_token || current.refreshToken,
+    // omit it, and the existing one stays valid. Under cookie custody neither
+    // is ever present here — the server re-seals its own cookie.
+    refreshToken: t.refresh_custody === 'cookie' ? undefined : (t.refresh_token || current.refreshToken),
+    custody: t.refresh_custody === 'cookie' ? 'cookie' : 'client',
     scope: t.scope || current.scope,
     tokenType: t.token_type || current.tokenType,
   };

@@ -40,7 +40,11 @@ export default async function handler(req, res) {
 
   const result = action === 'token'
     ? await exchangeCode(provider, process.env, payload || {})
-    : await refreshToken(provider, process.env, payload || {});
+    : await refreshToken(provider, process.env, payload || {}, req.headers?.cookie);
+
+  // The refresh token rides back as an encrypted httpOnly cookie when custody is
+  // enabled, so it never enters JavaScript.
+  if (result.setCookie) res.setHeader('Set-Cookie', result.setCookie);
 
   // Log the outcome without the payload: it carries the code and verifier.
   if (result.status >= 400) console.error(`[${provider}] ${action} -> ${result.status}`);

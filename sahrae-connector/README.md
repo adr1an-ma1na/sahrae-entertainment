@@ -218,7 +218,7 @@ with real `Request` objects. All three are offline, verified by stubbing
 missing parameters 400, unconfigured providers 500 naming the variable to set,
 and a disallowed `Origin` is refused 403 with no CORS header granting access.
 
-`npm test` runs all four suites: 141 + 43 + 16 + 21.
+`npm test` runs all five suites: 141 + 43 + 45 + 16 + 21 = 266 assertions, every one offline (verified by stubbing `fetch` to throw).
 
 ---
 
@@ -357,17 +357,31 @@ attacker's account.
 **CORS is an allow-list**, not `*`. An open policy would let any site drive token
 exchange using our secret.
 
-### Known gap — refresh-token custody
+### Refresh-token custody
 
-Access *and* refresh tokens are currently kept in `localStorage`. Google's
-refresh tokens do not expire, so that is a long-lived grant sitting somewhere an
-XSS on the app origin could read.
+The refresh token is the long-lived credential — Google's does not expire at
+all. It is **not** given to the browser.
 
-Phases 1–2 do this because there is no session backend to hold it against yet.
-**Before real users:** keep the refresh token on the backend, keyed by an
-httpOnly `SameSite=Lax` session cookie, and hand the client only the short-lived
-access token. Flagged in `backend/server.js` and `src/auth/tokenStore.ts` too, at
-the point where the mistake would be made.
+When `SESSION_SECRET` is set, the server seals the refresh token with AES-GCM and
+returns it as an httpOnly cookie: `HttpOnly; Secure; SameSite=Lax; Path=/oauth`.
+Script on the page cannot read it, the browser attaches it automatically on
+refresh, and the client only ever stores a short-lived access token. Rotating
+`SESSION_SECRET` invalidates every session at once, which is a usable revocation
+switch. `/health` reports `refreshCustody: "cookie"`.
+
+Without `SESSION_SECRET` the server falls back to returning the token to the
+client — the older, weaker behaviour — and `/health` says `"client"` with a hint.
+It degrades loudly rather than silently.
+
+**What this does not fix.** XSS on the app origin can still *call* the refresh
+endpoint, because the browser attaches the cookie for it, and get an access token
+that way. What it can no longer do is take the permanent grant and reuse it later
+from somewhere else. That is the difference between an incident you end by
+rotating a secret and one you cannot end at all.
+
+**Native.** In the APK the backend is necessarily cross-origin, so this should
+move to secure platform storage (Keychain / EncryptedSharedPreferences) rather
+than `localStorage`. Not done — flagged in `src/auth/tokenStore.ts`.
 
 ---
 

@@ -14,7 +14,14 @@ export interface StoredToken {
   accessToken: string;
   /** Epoch ms. */
   expiresAt: number;
+  /**
+   * Present only under 'client' custody. Under 'cookie' custody the refresh
+   * token lives server-side in an encrypted httpOnly cookie and never reaches
+   * this object — which is the entire point of that mode.
+   */
   refreshToken?: string;
+  /** Which side holds the refresh token for this session. */
+  custody?: 'cookie' | 'client';
   scope?: string;
   tokenType?: string;
 }
@@ -58,10 +65,12 @@ export function isConnected(id: ProviderId): boolean {
   return !!t && t.expiresAt - SKEW_MS > Date.now();
 }
 
-/** True when we have a token that has expired but can be refreshed. */
+/** True when we have a token that has expired but can be refreshed. Under
+ *  cookie custody there is no local refresh token, and that is not a reason to
+ *  say no — the browser holds the cookie. */
 export function isRefreshable(id: ProviderId): boolean {
   const t = getToken(id);
-  return !!t && !!t.refreshToken;
+  return !!t && (t.custody === 'cookie' || !!t.refreshToken);
 }
 
 export function needsRefresh(id: ProviderId): boolean {
@@ -75,14 +84,27 @@ export function expiryFromSeconds(seconds: number): number {
 }
 
 /**
- * A refresh token is long-lived credential material. Google's, in particular,
- * does not expire — so keeping one in localStorage means a persistent grant
- * sitting in a place any XSS on this origin can read.
+ * Refresh-token custody.
  *
- * Phase 1 keeps it client-side because there is no session backend yet to hold
- * it against. Before this ships to real users, the refresh token should stay on
- * the backend, bound to a Sahrae session cookie, with the client only ever
- * holding the short-lived access token. Flagged here rather than buried in the
- * README because this is the file where the mistake would be made.
+ * When the backend has SESSION_SECRET set, the refresh token never arrives
+ * here: the server seals it into an encrypted httpOnly cookie, so a script on
+ * this origin cannot read the long-lived grant. Only the short-lived access
+ * token is stored below.
+ *
+ * Without SESSION_SECRET the server falls back to returning it, and it is kept
+ * here — the older, weaker behaviour, reported by /health as
+ * refreshCustody: "client" rather than degrading silently.
+ *
+ * REMAINING GAP, stated honestly: under cookie custody, XSS on this origin can
+ * still CALL the refresh endpoint, because the browser attaches the cookie
+ * automatically, and obtain an access token that way. What it can no longer do
+ * is take the permanent grant and use it later from somewhere else. On native,
+ * where the backend is necessarily cross-origin, this should move to secure
+ * platform storage (Keychain / EncryptedSharedPreferences) rather than
+ * localStorage.
  */
-export const persistRefresh = true;
+export function custodyOf(id: ProviderId): 'cookie' | 'client' | 'none' {
+  const t = getToken(id);
+  if (!t) return 'none';
+  return t.custody === 'cookie' ? 'cookie' : 'client';
+}
