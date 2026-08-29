@@ -261,21 +261,47 @@ There is no router in the app. `ConnectorScreen` completes the flow by reading
 `?code=` off whatever URL it loads at, so the rewrite is the only routing needed;
 a router would just be a second place that has to agree what the callback path is.
 
-### After the first deploy
+### Deployment state
 
-In **Vercel → Settings → Environment Variables**:
+Already set, verified live:
 
-| Variable | Value |
+| | |
 |---|---|
-| `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET` | from the Spotify dashboard |
-| `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET` | from Google Cloud |
-| `VITE_SPOTIFY_CLIENT_ID` / `VITE_YOUTUBE_CLIENT_ID` | the same client IDs, public |
-| `VITE_CONNECTOR_REDIRECT` | `https://<your-app>.vercel.app/connect/callback` |
-| `VITE_CONNECTOR_BACKEND` | leave **empty** — same-origin |
+| `SESSION_SECRET` | set on all three environments — `/health` reports `refreshCustody: "cookie"` |
+| `VITE_CONNECTOR_REDIRECT` | `https://sahrae-connector.vercel.app/connect/callback`, confirmed baked into the deployed bundle |
+| `VITE_CONNECTOR_BACKEND` | unset, which means same-origin — correct for web |
 
-Then add that redirect URI at **both** providers, character for character, and
-**redeploy**: `VITE_*` values are compiled into the bundle at build time, not
-read at runtime, so changing one without rebuilding changes nothing.
+**Still required — nobody can sign in until these are set.** `/health` currently
+reports both providers `configured: false`.
+
+```bash
+cd sahrae-connector
+npx vercel env add SPOTIFY_CLIENT_ID production
+npx vercel env add SPOTIFY_CLIENT_SECRET production
+npx vercel env add YOUTUBE_CLIENT_ID production
+npx vercel env add YOUTUBE_CLIENT_SECRET production
+npx vercel env add VITE_SPOTIFY_CLIENT_ID production
+npx vercel env add VITE_YOUTUBE_CLIENT_ID production
+npx vercel --prod
+```
+
+The CLI prompts for each value, so the secrets never appear in a file or in
+shell history. The two `VITE_` entries are the same client IDs again — public by
+design, because a PKCE client has to send one to start the flow — and they must
+be set before the build, since `VITE_*` values are compiled in rather than read
+at runtime.
+
+Where they come from:
+
+- **Spotify** — <https://developer.spotify.com/dashboard>, create an app.
+- **YouTube** — Google Cloud console for the project, enable **YouTube Data API
+  v3**, then Credentials → OAuth client ID → Web application.
+
+At **both**, register the redirect URI exactly:
+
+```
+https://sahrae-connector.vercel.app/connect/callback
+```
 
 ### Android
 
