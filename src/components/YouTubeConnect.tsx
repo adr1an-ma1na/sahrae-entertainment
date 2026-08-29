@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Youtube, Loader2, Play, RefreshCw, LogOut, Music2, Video, ListMusic } from 'lucide-react';
-import { youtubeService, API_DISABLED_HELP, type YoutubePlaylist, type YoutubeUserProfile } from '../services/youtube';
+import { youtubeService, API_DISABLED_HELP, KEY_BLOCKED_HELP, CREDENTIALS_URL, type YoutubePlaylist, type YoutubeUserProfile } from '../services/youtube';
 import { getApiState, ENABLE_URL } from '../services/ytDataApi';
 import { Track } from '../services/ytmusic';
 import { useMusic } from '../hooks/useMusic';
@@ -50,9 +50,11 @@ export default function YouTubeConnect() {
   const [openList, setOpenList] = useState<{ p: YoutubePlaylist; tracks: Track[] | null } | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // The Data API being switched off is the single most likely reason nothing
-  // works, and its error is indistinguishable from a bug unless it is named.
-  const apiOff = getApiState() === 'disabled';
+  // Two different 403s with two different fixes. Naming the wrong one sends
+  // someone to the wrong console page, which is how this was got wrong before.
+  const state = getApiState();
+  const apiOff = state === 'disabled';
+  const keyBlocked = state === 'keyBlocked';
 
   const load = useCallback(async (which: Tab, force = false) => {
     if (!youtubeService.isConnected()) return;
@@ -128,6 +130,9 @@ export default function YouTubeConnect() {
           </div>
         </div>
 
+        {/* A blocked KEY does not stop sign-in: the OAuth path sends a Bearer
+            token and no key, so connecting still works and reads your library.
+            Only a disabled API stops everything. */}
         <button onClick={onConnect} disabled={connecting || apiOff}
           className="btn-sauti px-6 py-3 rounded-full text-sm font-black inline-flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
           {connecting ? <><Loader2 className="w-4 h-4 animate-spin" /> Opening Google…</> : 'Connect with Google'}
@@ -143,7 +148,15 @@ export default function YouTubeConnect() {
             <p className="text-sm font-semibold text-amber-200 mb-1">YouTube access is switched off for this app</p>
             <p className="text-xs text-amber-200/80 leading-relaxed mb-3">{API_DISABLED_HELP}</p>
             <a href={ENABLE_URL} target="_blank" rel="noreferrer"
-              className="btn-sauti px-4 py-2 rounded-lg text-xs font-black inline-block">Enable it</a>
+              className="btn-sauti px-4 py-2 rounded-lg text-xs font-black inline-block">Enable the API</a>
+          </div>
+        )}
+        {keyBlocked && (
+          <div className="mt-5 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+            <p className="text-sm font-semibold text-amber-200 mb-1">Browsing is limited — the app key cannot call YouTube</p>
+            <p className="text-xs text-amber-200/80 leading-relaxed mb-3">{KEY_BLOCKED_HELP}</p>
+            <a href={CREDENTIALS_URL} target="_blank" rel="noreferrer"
+              className="btn-sauti px-4 py-2 rounded-lg text-xs font-black inline-block">Open Credentials</a>
           </div>
         )}
         {error && <p className="text-sm text-red-400 mt-4">{error}</p>}
@@ -189,6 +202,15 @@ export default function YouTubeConnect() {
           );
         })}
       </div>
+
+      {keyBlocked && (
+        <div className="mb-5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+          <p className="text-sm font-semibold text-amber-200 mb-1">Your library works; app-wide browsing does not</p>
+          <p className="text-xs text-amber-200/80 leading-relaxed mb-2">{KEY_BLOCKED_HELP}</p>
+          <a href={CREDENTIALS_URL} target="_blank" rel="noreferrer"
+            className="text-xs font-black text-sauti hover:underline">Open Credentials →</a>
+        </div>
+      )}
 
       {error && (
         <div role="alert" className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">

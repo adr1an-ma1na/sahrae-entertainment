@@ -22,9 +22,12 @@ export { parseISODuration, parsePlaylistId } from './youtubeParse';
  * play counts still land with the artist and nothing here depends on an
  * unofficial proxy staying up.
  *
- * BOTH routes require "YouTube Data API v3" to be enabled on the Google Cloud
- * project behind firebase-applet-config.json. It is not enabled today — every
- * call returns 403 `accessNotConfigured`. See API_DISABLED_HELP below.
+ * Two separate permissions gate these, and conflating them cost real time once:
+ *   - The OAUTH route needs YouTube Data API v3 ENABLED on the project. It sends
+ *     a Bearer token and no API key, so key restrictions do not touch it.
+ *   - The KEY route additionally needs the API key to ALLOW YouTube. A key
+ *     Firebase created is restricted to Firebase's own services by default, so
+ *     it returns 403 API_KEY_SERVICE_BLOCKED even when the API is enabled.
  */
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
@@ -35,10 +38,32 @@ const auth = getAuth(app);
 const API_KEY: string = (import.meta.env?.VITE_YOUTUBE_API_KEY as string) || firebaseConfig.apiKey;
 const GCP_PROJECT = firebaseConfig.projectId;
 
+/**
+ * Two different 403s, and telling them apart matters — they have different fixes
+ * and pointing at the wrong one wastes real time.
+ *
+ *  SERVICE_DISABLED / accessNotConfigured
+ *      The API is switched off for the project. Fix: enable it.
+ *
+ *  API_KEY_SERVICE_BLOCKED
+ *      The API is on, but this API KEY is restricted to a list of APIs that does
+ *      not include YouTube. Enabling the API changes nothing. Fix: edit the key's
+ *      API restrictions. This is the default state of a key Firebase created,
+ *      because Firebase restricts its browser key to its own services.
+ */
 export const API_DISABLED_HELP =
   `YouTube Data API v3 is not enabled on this app's Google project (${GCP_PROJECT}). ` +
-  `Enable it at console.cloud.google.com/apis/library/youtube.googleapis.com — it is free, ` +
-  `and playlists will load straight after.`;
+  `Enable it at console.cloud.google.com/apis/library/youtube.googleapis.com — it is free.`;
+
+export const KEY_BLOCKED_HELP =
+  `This app's API key is not allowed to call YouTube. The API itself may well be enabled — ` +
+  `the key has its own separate allow-list. Open Google Cloud → APIs & Services → Credentials, ` +
+  `click the browser key for ${GCP_PROJECT}, and under "API restrictions" add "YouTube Data API v3" ` +
+  `(or choose "Don't restrict key"). Signing in with Google is unaffected: that path uses an OAuth ` +
+  `token rather than the key.`;
+
+export const CREDENTIALS_URL =
+  `https://console.cloud.google.com/apis/credentials?project=${GCP_PROJECT}`;
 
 export interface YoutubeUserProfile { name?: string; picture?: string; email?: string }
 
@@ -63,7 +88,15 @@ const MUSIC_CATEGORY_ID = '10';
 
 function apiError(status: number, body: any): Error {
   const reason = body?.error?.errors?.[0]?.reason || '';
-  if (status === 403 && (reason === 'accessNotConfigured' || /has not been used|is disabled|are blocked/i.test(body?.error?.message || ''))) {
+  // The structured reason is the reliable signal; the human message for both
+  // cases mentions "blocked", which is why matching on text alone got this
+  // wrong and reported a disabled API when the key was the problem.
+  const detailReason = (body?.error?.details || [])
+    .find((d: any) => d?.['@type']?.includes('ErrorInfo'))?.reason || '';
+  if (status === 403 && detailReason === 'API_KEY_SERVICE_BLOCKED') {
+    return new Error(KEY_BLOCKED_HELP);
+  }
+  if (status === 403 && (reason === 'accessNotConfigured' || detailReason === 'SERVICE_DISABLED' || /has not been used|is disabled/i.test(body?.error?.message || ''))) {
     return new Error(API_DISABLED_HELP);
   }
   if (status === 403 && reason === 'quotaExceeded') {

@@ -69,11 +69,13 @@ export function canSearch(): boolean { return readQuota().used + COST.search <= 
 // The Data API must be switched on for the Cloud project. Until it is, every
 // call 403s. One probe is enough to learn that — after which we stop calling and
 // let the caller fall back, instead of firing a doomed request per shelf.
-export type ApiState = 'unknown' | 'ok' | 'disabled' | 'quota';
+export type ApiState = 'unknown' | 'ok' | 'disabled' | 'keyBlocked' | 'quota';
 let apiState: ApiState = 'unknown';
 export function getApiState(): ApiState { return apiState; }
 export function resetApiState(): void { apiState = 'unknown'; }
 export const ENABLE_URL = `https://console.cloud.google.com/apis/library/youtube.googleapis.com?project=${firebaseConfig.projectId}`;
+/** Where to lift an API-key restriction — a different page from enabling the API. */
+export const CREDENTIALS_URL = `https://console.cloud.google.com/apis/credentials?project=${firebaseConfig.projectId}`;
 
 // ── Response cache ─────────────────────────────────────────────────────────
 // Charts move slowly and a listener revisits the same shelves constantly, so
@@ -107,7 +109,14 @@ async function get(path: string, units: number): Promise<any | null> {
     if (r.ok) { apiState = 'ok'; spend(units); return await r.json(); }
     const body = await r.json().catch(() => ({}));
     const reason = body?.error?.errors?.[0]?.reason || '';
-    if (r.status === 403 && (reason === 'accessNotConfigured' || /has not been used|is disabled|are blocked/i.test(body?.error?.message || ''))) {
+    // API_KEY_SERVICE_BLOCKED and SERVICE_DISABLED are both 403s whose human
+    // message says "blocked", but they have different fixes: one is the key's
+    // allow-list, the other is the API's on/off switch.
+    const detailReason = (body?.error?.details || [])
+      .find((x: any) => x?.['@type']?.includes('ErrorInfo'))?.reason || '';
+    if (r.status === 403 && detailReason === 'API_KEY_SERVICE_BLOCKED') {
+      apiState = 'keyBlocked';
+    } else if (r.status === 403 && (reason === 'accessNotConfigured' || detailReason === 'SERVICE_DISABLED' || /has not been used|is disabled/i.test(body?.error?.message || ''))) {
       apiState = 'disabled';
     } else if (r.status === 403 && reason === 'quotaExceeded') {
       apiState = 'quota';
@@ -170,7 +179,7 @@ async function withDurations(tracks: Track[]): Promise<Track[]> {
 }
 
 export const ytDataApi = {
-  available: (): boolean => apiState !== 'disabled' && !!API_KEY,
+  available: (): boolean => apiState !== 'disabled' && apiState !== 'keyBlocked' && !!API_KEY,
 
   /**
    * YouTube's real music chart for a region — 1 quota unit, and it carries
