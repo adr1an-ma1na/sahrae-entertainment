@@ -17,6 +17,7 @@ export interface Track {
   channelId?: string; // YouTube channel/show id (for podcast show feeds)
   date?: string;      // human-readable upload/release date
   uploaded?: number;  // raw upload timestamp (ms) for sorting
+  views?: number;     // view count (YouTube videos) — part of how a video row reads
   audioUrl?: string;  // direct audio file URL (podcast RSS / owned catalog) → plays via <audio>, backgrounds
   audioUrlAlt?: string; // the original tracking URL, retried if audioUrl fails (see unwrapTrackingUrl)
   feedUrl?: string;   // podcast show RSS feed (for opening a show's episodes)

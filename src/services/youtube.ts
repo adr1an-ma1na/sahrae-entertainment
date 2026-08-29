@@ -258,7 +258,7 @@ class YoutubeService {
    */
   private async attachDetails(tracks: Track[], authed: boolean): Promise<(Track & { categoryId?: string })[]> {
     const ids = tracks.map((t) => t.id).filter(Boolean);
-    const byId = new Map<string, { duration: number; categoryId?: string }>();
+    const byId = new Map<string, { duration: number; categoryId?: string; views?: number; uploaded?: number }>();
 
     // The batches are independent, so run them together. Sequentially, a
     // 500-item library meant ten round trips end to end before anything could
@@ -266,13 +266,21 @@ class YoutubeService {
     const chunks: string[] = [];
     for (let i = 0; i < ids.length; i += 50) chunks.push(ids.slice(i, i + 50).join(','));
     await Promise.all(chunks.map(async (chunk) => {
-      const ep = `youtube/v3/videos?part=contentDetails,snippet&id=${chunk}`;
+      // statistics costs nothing extra: videos.list is 1 unit per call whatever
+      // parts it carries, and viewCount is half of what makes a video row read
+      // like YouTube rather than like a song.
+      const ep = `youtube/v3/videos?part=contentDetails,snippet,statistics&id=${chunk}`;
       try {
         const d: any = authed ? await this.authed(ep) : await this.publicGet(ep);
         for (const v of d.items || []) {
           byId.set(v.id, {
             duration: parseISODuration(v.contentDetails?.duration || ''),
             categoryId: v.snippet?.categoryId,
+            views: v.statistics?.viewCount ? Number(v.statistics.viewCount) : undefined,
+            // playlistItems reports when the item was ADDED to the playlist;
+            // this is when the video was actually published, which is what a
+            // viewer means by "2 years ago".
+            uploaded: v.snippet?.publishedAt ? Date.parse(v.snippet.publishedAt) : undefined,
           });
         }
       } catch { /* details are a nicety — never fail the whole playlist for them */ }
@@ -280,11 +288,16 @@ class YoutubeService {
     // Leave duration 0 rather than inventing one when the lookup missed: the
     // player reads the true length off the media once it starts, and 0 renders
     // as "--:--" instead of a confident wrong number.
-    return tracks.map((t) => ({
-      ...t,
-      duration: byId.get(t.id)?.duration ?? 0,
-      categoryId: byId.get(t.id)?.categoryId,
-    }));
+    return tracks.map((t) => {
+      const d = byId.get(t.id);
+      return {
+        ...t,
+        duration: d?.duration ?? 0,
+        categoryId: d?.categoryId,
+        views: d?.views,
+        uploaded: d?.uploaded ?? t.uploaded,
+      };
+    });
   }
 
   private mapItems(items: any[]): Track[] {

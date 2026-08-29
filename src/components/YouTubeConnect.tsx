@@ -7,6 +7,7 @@ import { useMusic } from '../hooks/useMusic';
 import { CoverArt } from './ui/CoverArt';
 import { ShelfHeader, WideRow, ArtCard, Shelf, CardSkeleton } from './ui/Shelf';
 import { buildMadeForYou, type Mix } from '../services/mixes';
+import VideoCard from './ui/VideoCard';
 import { ytDataApi } from '../services/ytDataApi';
 
 /**
@@ -55,6 +56,9 @@ export default function YouTubeConnect() {
   const [openArtist, setOpenArtist] = useState<{ c: YoutubeChannel; tracks: Track[] | null } | null>(null);
   const [mixes, setMixes] = useState<Mix[] | null>(null);
   const [openMix, setOpenMix] = useState<Mix | null>(null);
+  // Which card may preview. Held by the parent so moving across the grid cannot
+  // leave a trail of players running behind the cursor.
+  const [hoverId, setHoverId] = useState<string | null>(null);
   const [openList, setOpenList] = useState<{ p: YoutubePlaylist; tracks: Track[] | null } | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -373,13 +377,13 @@ export default function YouTubeConnect() {
           ) : openArtist.tracks.length === 0 ? (
             <p className="text-sm text-zinc-500 py-8">Nothing published on this channel yet.</p>
           ) : (
-            <div className="grid sm:grid-cols-2 gap-x-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-6">
               {openArtist.tracks.map((t, i) => (
-                <WideRow key={t.id} title={t.title} subtitle={t.artist} meta={fmt(t.duration)}
-                  artwork={t.artwork} dominantColor={t.dominantColor}
-                  onClick={() => playQueue(openArtist.tracks!, i, openArtist.c.title)}
-                  onPlay={() => playQueue(openArtist.tracks!, i, openArtist.c.title)}
-                  playing={current?.id === t.id && isPlaying} />
+                <VideoCard key={t.id} track={t}
+                  activeId={hoverId}
+                  onHoverStart={setHoverId}
+                  onHoverEnd={(id) => setHoverId((cur) => (cur === id ? null : cur))}
+                  onPlay={() => playQueue(openArtist.tracks!, i, openArtist.c.title)} />
               ))}
             </div>
           )}
@@ -462,6 +466,22 @@ export default function YouTubeConnect() {
             ? 'Nothing in your liked list is tagged as music yet. Liked videos still appear under YouTube.'
             : 'Nothing liked on this account yet.'}
         </p>
+      ) : tab === 'videos' ? (
+        <>
+          <ShelfHeader>{TABS.find((t) => t.id === tab)?.blurb}</ShelfHeader>
+          {/* A video grid, not a track list: 16:9 stills, runtime burned into
+              the corner, channel and views underneath. Hovering previews it in
+              YouTube's own muted player. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-6">
+            {rows.map((t, i) => (
+              <VideoCard key={t.id} track={t}
+                activeId={hoverId}
+                onHoverStart={setHoverId}
+                onHoverEnd={(id) => setHoverId((cur) => (cur === id ? null : cur))}
+                onPlay={() => playQueue(rows, i, 'Liked videos')} />
+            ))}
+          </div>
+        </>
       ) : (
         <>
           <ShelfHeader>{TABS.find((t) => t.id === tab)?.blurb}</ShelfHeader>
@@ -469,8 +489,8 @@ export default function YouTubeConnect() {
             {rows.map((t, i) => (
               <WideRow key={t.id} title={t.title} subtitle={t.artist} meta={fmt(t.duration)}
                 artwork={t.artwork} dominantColor={t.dominantColor}
-                onClick={() => playQueue(rows, i, tab === 'music' ? 'Liked music' : 'Liked videos')}
-                onPlay={() => playQueue(rows, i, tab === 'music' ? 'Liked music' : 'Liked videos')}
+                onClick={() => playQueue(rows, i, 'Liked music')}
+                onPlay={() => playQueue(rows, i, 'Liked music')}
                 playing={current?.id === t.id && isPlaying} />
             ))}
           </div>
