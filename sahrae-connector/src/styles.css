@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+/* The connector runs standalone on Vercel as well as being importable into the
+   Sahrae app, so it carries its own base styling rather than assuming a host. */
+:root { color-scheme: dark; }
+
+html, body, #root { min-height: 100%; }
+
+body {
+  margin: 0;
+  background: #09090b;
+  color: #fff;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The embedded players are third-party iframes; give them a predictable box. */
+iframe { border: 0; display: block; max-width: 100%; }

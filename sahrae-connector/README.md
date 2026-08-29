@@ -19,6 +19,7 @@ it.
 | Providers | `src/providers/` | One adapter per service, all behind one interface |
 | Playback | `src/playback/` | Tier selection, Tier 1 hand-off, Tier 2 embeds, foreground guard |
 | UI | `src/library-ui/` | Connect screen, merged library, embedded player |
+| Shell | `index.html`, `src/main.tsx` | Standalone app, deployed to Vercel |
 
 ### Providers
 
@@ -213,6 +214,67 @@ missing parameters 400, unconfigured providers 500 naming the variable to set,
 and a disallowed `Origin` is refused 403 with no CORS header granting access.
 
 `npm test` runs all three suites.
+
+---
+
+## Deploying the frontend
+
+**Vercel**, static build plus an optional same-origin API.
+
+```bash
+cd sahrae-connector
+npx vercel        # first run links the project
+npx vercel --prod
+```
+
+Vercel reads `vercel.json`: it runs `npm run build:pwa` and serves `dist/`.
+
+### The rewrite that makes OAuth work
+
+```json
+{ "source": "/((?!api/).*)", "destination": "/index.html" }
+```
+
+Without it Vercel 404s on any path with no matching file — including
+`/connect/callback`, so the redirect would die before the app ever loaded. The
+`api/` exclusion keeps serverless functions routing normally.
+
+There is no router in the app. `ConnectorScreen` completes the flow by reading
+`?code=` off whatever URL it loads at, so the rewrite is the only routing needed;
+a router would just be a second place that has to agree what the callback path is.
+
+### After the first deploy
+
+1. Add the Vercel URL as an authorised redirect URI at **both** providers, as
+   `https://<your-app>.vercel.app/connect/callback` — character for character.
+2. Set `VITE_CONNECTOR_REDIRECT` to that same URL, and `VITE_CONNECTOR_BACKEND`
+   to the Worker URL, in Vercel → Settings → Environment Variables. Redeploy —
+   `VITE_*` values are baked in at build time, not read at runtime.
+3. Add the Vercel origin to `ALLOWED_ORIGINS` in `backend/wrangler.toml` and
+   redeploy the Worker, or the browser will block every token call.
+
+### Same-origin alternative (no CORS at all)
+
+`api/oauth/[provider]/[action].js` is a Vercel serverless function that reuses
+`backend/core.js` unchanged — the payoff from keeping that module
+framework-free. Running the exchange on the same origin as the app removes CORS
+from the picture entirely: no allow-list to keep in sync, no preflight, no
+cross-origin surface.
+
+To use it instead of the Worker: set the four provider variables in Vercel's
+environment, set `VITE_CONNECTOR_BACKEND` to an empty string, and add
+`{ "source": "/oauth/:path*", "destination": "/api/oauth/:path*" }` to the
+rewrites. The Worker stays the default; this is here because once the frontend
+is on Vercel it is strictly simpler.
+
+### Security headers
+
+`vercel.json` sets `X-Frame-Options: DENY` and `frame-ancestors 'none'` — an
+attacker framing the connect screen could otherwise trick someone into
+authorising a provider. The CSP's one permissive directive is `frame-src`,
+limited to the two sanctioned embed origins, which is exactly Tier 2 and nothing
+else. `media-src 'none'` is deliberate: this app must never play media itself,
+so the browser is told to refuse it.
 
 ---
 

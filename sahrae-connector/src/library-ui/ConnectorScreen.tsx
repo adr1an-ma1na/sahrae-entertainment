@@ -25,6 +25,10 @@ const fmtDuration = (ms: number): string => {
   return `${m}:${String(s).padStart(2, '0')}`;
 };
 
+// Guards the one-shot OAuth completion against StrictMode's double-invoke.
+// Module scope, not a ref: StrictMode remounts, and a ref would reset with it.
+let completionStarted = false;
+
 interface LoadState {
   loading: boolean;
   error?: string;
@@ -59,6 +63,15 @@ export default function ConnectorScreen() {
   useEffect(() => {
     const url = window.location.href;
     if (!/[?&]code=|[?&]error=/.test(url)) return;
+    // An authorization code is single-use, so this may run exactly once per page
+    // load. React StrictMode deliberately double-invokes effects in development,
+    // and a useRef would not help because StrictMode unmounts and remounts —
+    // the guard has to outlive the component, hence module scope. Without it the
+    // second exchange fails on a spent code and the user sees an error after a
+    // sign-in that actually succeeded.
+    if (completionStarted) return;
+    completionStarted = true;
+
     completeFromUrl(url)
       .then((provider) => {
         setNotice({ kind: 'info', text: `Connected to ${providerName(provider)}.` });

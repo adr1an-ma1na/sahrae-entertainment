@@ -1,6 +1,7 @@
-node_modules/
-dist/
-android/
-.env
 .dev.vars
+.env
+.vercel/
 .wrangler/
+android/
+dist/
+node_modules/
