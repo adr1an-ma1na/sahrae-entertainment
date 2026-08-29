@@ -3,21 +3,20 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Phase 1: OAuth PKCE connections to music services, unified SahraeTrack library, Tier 1 deep-link playback.",
+  "description": "OAuth PKCE connections to music services, unified SahraeTrack library, tiered playback (hand-off + sanctioned embeds).",
   "scripts": {
     "dev": "vite",
     "dev:backend": "node --env-file=.env backend/server.js",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types connector-check.mjs",
-
+    "test": "node --experimental-strip-types connector-check.mjs && cd backend && node core-check.mjs && node worker-check.mjs",
     "build": "tsc --noEmit && vite build",
     "build:pwa": "npm run build",
     "build:android": "npm run build && cap sync android",
-
     "android:add": "cap add android",
     "android:open": "cap open android",
     "android:apk": "cd android && gradlew.bat assembleRelease",
-    "android:aab": "cd android && gradlew.bat bundleRelease"
+    "android:aab": "cd android && gradlew.bat bundleRelease",
+    "deploy:backend": "cd backend && wrangler deploy"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.0",

@@ -15,7 +15,7 @@ it.
 |---|---|---|
 | Schema | `src/types/` | `SahraeTrack` — the shape every provider normalises into |
 | Auth | `src/auth/` | OAuth 2.0 PKCE: verifier/challenge, state check, token store, refresh |
-| Backend | `backend/` | Token exchange + refresh. **The only place client secrets exist** |
+| Backend | `backend/` | Token exchange + refresh. **The only place client secrets exist**. Runs on Cloudflare Workers |
 | Providers | `src/providers/` | One adapter per service, all behind one interface |
 | Playback | `src/playback/` | Tier selection, Tier 1 hand-off, Tier 2 embeds, foreground guard |
 | UI | `src/library-ui/` | Connect screen, merged library, embedded player |
@@ -204,9 +204,82 @@ expensive to get wrong:
   that an idle page is unaffected, and that returning offers a resume instead of
   auto-playing
 
-The backend was verified by running it: `/health` reports per-provider config,
-unknown providers 404, missing parameters 400, unconfigured providers 500 with
-the variable name to set, and a disallowed `Origin` is refused 403.
+The backend has its own suites — 43 for the shared core and 21 driving the
+Worker's fetch handler with real `Request` objects, which is exactly what the
+Workers runtime does, so routing, CORS and status mapping are verified without
+deploying. Both were also confirmed by running the Express server and calling it:
+`/health` reports per-provider config, unknown providers 404, malformed or
+missing parameters 400, unconfigured providers 500 naming the variable to set,
+and a disallowed `Origin` is refused 403 with no CORS header granting access.
+
+`npm test` runs all three suites.
+
+---
+
+## Deploying the backend
+
+**Cloudflare Workers**, for one reason that matters more than the others: no idle
+sleep. Render's free tier spins down after 15 minutes and takes ~50 seconds to
+wake — landing squarely in the middle of an OAuth redirect, where the user is
+already staring at a spinner. Workers also needs no card, and the backend is
+stateless, so there is nothing to persist.
+
+`backend/core.js` holds the logic; `server.js` (Express, local) and `worker.js`
+(Workers, deployed) are thin wrappers over it, so the two cannot drift.
+
+### One-time
+
+```bash
+cd sahrae-connector/backend
+npx wrangler login
+```
+
+Set the secrets. These are encrypted at rest and are **never** in
+`wrangler.toml` or the repo:
+
+```bash
+npx wrangler secret put SPOTIFY_CLIENT_SECRET
+npx wrangler secret put YOUTUBE_CLIENT_SECRET
+```
+
+Put the two client **IDs** and the CORS allow-list in `wrangler.toml` under
+`[vars]` — those are not secret, and a PKCE client has to send an ID to start the
+flow.
+
+> The allow-list matches on **origin**, which for GitHub Pages is the account
+> domain with no repo path: `https://adr1an-ma1na.github.io`, not
+> `.../sahrae-entertainment/`.
+
+### Deploy
+
+```bash
+npm run deploy:backend
+```
+
+Wrangler prints the URL — `https://sahrae-connector.<your-subdomain>.workers.dev`.
+Check it:
+
+```bash
+curl -s https://sahrae-connector.<your-subdomain>.workers.dev/health
+```
+
+Both providers should report `configured: true`. Then set
+`VITE_CONNECTOR_BACKEND` to that URL and rebuild the frontend.
+
+`npx wrangler tail` streams live logs. Failures are logged as
+`[provider] action -> status` without the request body, because that body
+carries the authorization code and verifier.
+
+### Local
+
+```bash
+npm run dev:backend     # Express on :8787
+# or
+cd backend && npm run dev:worker   # Wrangler, closer to production
+```
+
+`wrangler dev` reads secrets from `backend/.dev.vars` (git-ignored; copy
+`.dev.vars.example`).
 
 ---
 

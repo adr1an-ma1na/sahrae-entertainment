@@ -1,0 +1,29 @@
+# Cloudflare Worker for the sahrae-connector OAuth backend.
+#
+# SECRETS ARE NOT IN THIS FILE and must never be. Set them once with:
+#   wrangler secret put SPOTIFY_CLIENT_SECRET
+#   wrangler secret put YOUTUBE_CLIENT_SECRET
+# They are encrypted at rest and injected as `env` bindings at runtime.
+#
+# Client IDs are not secret (a PKCE client sends one to start the flow), so they
+# live in [vars] as plain configuration.
+
+name = "sahrae-connector"
+main = "worker.js"
+compatibility_date = "2026-01-15"
+
+# nodejs_compat is not needed: core.js uses only fetch, URLSearchParams and
+# btoa, all of which the Workers runtime provides natively.
+
+[vars]
+# Comma-separated CORS allow-list. Explicit origins only — "*" would let any
+# site drive token exchange with our client secret.
+# Add the deployed app origin here; note GitHub Pages' origin is the ACCOUNT
+# domain, with no repo path, because CORS matches on origin not path.
+ALLOWED_ORIGINS = "http://localhost:5173,https://localhost,https://adr1an-ma1na.github.io"
+
+SPOTIFY_CLIENT_ID = ""
+YOUTUBE_CLIENT_ID = ""
+
+[observability]
+enabled = true

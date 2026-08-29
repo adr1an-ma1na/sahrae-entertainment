@@ -2,3 +2,5 @@ node_modules/
 dist/
 android/
 .env
+.dev.vars
+.wrangler/

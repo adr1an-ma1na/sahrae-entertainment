@@ -1,0 +1,4 @@
+# Local secrets for `wrangler dev`. Copy to .dev.vars (git-ignored).
+# The deployed Worker uses `wrangler secret put` instead — never this file.
+SPOTIFY_CLIENT_SECRET=
+YOUTUBE_CLIENT_SECRET=
