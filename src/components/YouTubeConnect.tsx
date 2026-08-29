@@ -65,8 +65,10 @@ export default function YouTubeConnect() {
     }
     setLoading(true); setError(null);
     try {
-      if (which === 'music') setMusic(await youtubeService.fetchLikedMusic());
-      else if (which === 'videos') setVideos(await youtubeService.fetchLikedVideos());
+      // The first page paints while the rest of the library is still walking —
+      // a large Liked list used to show nothing until every page had landed.
+      if (which === 'music') setMusic(await youtubeService.fetchLikedMusic((partial) => setMusic((cur) => cur ?? partial)));
+      else if (which === 'videos') setVideos(await youtubeService.fetchLikedVideos((partial) => setVideos((cur) => cur ?? partial)));
       else setPlaylists(await youtubeService.fetchPlaylists());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load that from YouTube.');

@@ -7,7 +7,7 @@ const fmtDb = (mb: number) => `${mb > 0 ? '+' : ''}${(mb / 100).toFixed(0)} dB`;
 
 export default function EqualizerPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [eq, setEq] = useState<EqSettings>(() => loadEq());
-  const { crossfade, setCrossfade, sleepTimer, setSleepTimer } = useMusic();
+  const { crossfade, setCrossfade, sleepTimer, setSleepTimer, eqReachable, active } = useMusic();
 
   // Re-read on open so it reflects anything changed elsewhere.
   useEffect(() => { if (open) setEq(loadEq()); }, [open]);
@@ -25,6 +25,12 @@ export default function EqualizerPanel({ open, onClose }: { open: boolean; onClo
   };
 
   if (!open) return null;
+
+  // The sliders genuinely cannot affect YouTube playback: that audio lives in a
+  // cross-origin iframe and never reaches this page. Saying so beats letting
+  // someone drag a control that does nothing and conclude the app is broken —
+  // which is what happened while this panel was native-only and inert on web.
+  const inert = active && !eqReachable;
 
   return (
     <div role="dialog" data-tv-layer className="dark fixed inset-0 z-[135] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200"
@@ -49,6 +55,16 @@ export default function EqualizerPanel({ open, onClose }: { open: boolean; onClo
             <button onClick={onClose} tabIndex={0} data-tv-focusable data-tv-close className="w-10 h-10 rounded-full glass-liquid flex items-center justify-center text-white" aria-label="Close"><X className="w-5 h-5" /></button>
           </div>
         </div>
+
+        {inert && (
+          <div className="mx-4 mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-3">
+            <p className="text-xs text-amber-200 leading-relaxed">
+              These controls do not affect what is playing right now. YouTube plays inside its own
+              player, so its audio never passes through Sahrae. The equaliser works on podcasts,
+              downloads and radio — your settings are saved and apply the moment one of those plays.
+            </p>
+          </div>
+        )}
 
         <div className={`p-4 space-y-5 transition-opacity ${eq.on ? '' : 'opacity-50'}`}>
           {/* Presets */}

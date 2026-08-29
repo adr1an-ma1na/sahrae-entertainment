@@ -3,6 +3,8 @@ import { Track, ytmusic } from '../services/ytmusic';
 import { songRadio, diverseSample } from '../services/recommend';
 import { haptics } from '../services/haptics';
 import { downloads } from '../services/downloads';
+import { attachEq, applyWebEq, resumeEq } from '../services/eqWeb';
+import { loadEq } from '../services/eq';
 
 type Repeat = 'off' | 'one' | 'all';
 
@@ -25,6 +27,9 @@ interface MusicCtx {
   expanded: boolean;
   buffering: boolean;
   active: boolean;
+  /** True when audio runs through our <audio> element, so the EQ can reach it.
+   *  False for YouTube iframe playback, where the audio never enters this page. */
+  eqReachable: boolean;
   /** Why the current item would not play. Null when nothing is wrong. */
   playbackError: string | null;
   clearPlaybackError: () => void;
@@ -116,6 +121,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   // The tracking URL to retry with if the unwrapped direct URL is refused, and a
   // flag so we only ever fall back once per track rather than looping.
   const altSrcRef = useRef<string | null>(null);
+  // Guards the no-CORS retry so one failing source cannot loop.
+  const noCorsRetryRef = useRef<string | null>(null);
   // Latest control fns + live position, for the OS MediaSession handlers (which
   // are registered once but must always act on current state).
   const ctrlRef = useRef<{ next: () => void; prev: () => void; stop: () => void; seek: (s: number) => void }>({ next: () => {}, prev: () => {}, stop: () => {}, seek: () => {} });
@@ -135,6 +142,9 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const [repeat, setRepeat] = useState<Repeat>('off');
   const [expanded, setExpanded] = useState(false);
   const [active, setActive] = useState(false);
+  // Mirrors usingLocalRef into render, so the EQ panel can say plainly when the
+  // sliders cannot affect the current source instead of pretending they do.
+  const [eqReachable, setEqReachable] = useState(false);
   const [autoplay, setAutoplay] = useState(true);
   const [queueSource, setQueueSource] = useState('');
   const [likedTracks, setLikedTracks] = useState<Track[]>(() => {
@@ -335,8 +345,16 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const a = new Audio();
     a.preload = 'auto';
+    // Required before any src is set: a MediaElementSource over cross-origin
+    // media WITHOUT CORS outputs silence instead of erroring, and silence is
+    // impossible to debug. With it, a source that refuses CORS raises a load
+    // error we can catch and retry unprocessed (see onError).
+    a.crossOrigin = 'anonymous';
     audioElRef.current = a;
-    const onPlay = () => { setIsPlaying(true); setBuffering(false); setActive(true); window.dispatchEvent(new CustomEvent('sahrae:audioclaim', { detail: 'music' })); };
+    // Build the EQ graph once, around this element.
+    attachEq(a);
+    applyWebEq(loadEq());
+    const onPlay = () => { resumeEq(); setIsPlaying(true); setBuffering(false); setActive(true); window.dispatchEvent(new CustomEvent('sahrae:audioclaim', { detail: 'music' })); };
     const onPause = () => setIsPlaying(false);
     const onWaiting = () => setBuffering(true);
     const onEnded = () => endedRef.current();
@@ -348,6 +366,15 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       if (alt) {
         altSrcRef.current = null;
         try { a.src = alt; a.play().catch(() => {}); return; } catch { /* fall through */ }
+      }
+      // Second chance: the source may simply not allow CORS, which the
+      // crossOrigin attribute turns into this very error. Retry without it —
+      // playback matters more than the equaliser, so drop the processing and
+      // keep the audio.
+      if (a.crossOrigin && noCorsRetryRef.current !== a.src) {
+        noCorsRetryRef.current = a.src;
+        const src = a.src;
+        try { a.removeAttribute('crossorigin'); a.src = src; a.play().catch(() => {}); return; } catch { /* fall through */ }
       }
       // MediaError codes: 2 network, 3 decode, 4 unsupported/404. A podcast MP3
       // that 404s or redirects to HTML lands on 4, which is by far the common
@@ -377,7 +404,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const applyLocal = (local: string | null, c: Track) => {
     const a = audioElRef.current;
     if (local && a) {
-      usingLocalRef.current = true;
+      usingLocalRef.current = true; setEqReachable(true);
       try { playerRef.current?.pauseVideo?.(); } catch { /* ignore */ }
       a.src = local;
       // Only meaningful when the source we just set is the unwrapped one.
@@ -392,7 +419,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       });
       setActive(true);
     } else {
-      usingLocalRef.current = false;
+      usingLocalRef.current = false; setEqReachable(false);
       try { if (a) { a.pause(); a.removeAttribute('src'); a.load(); } } catch { /* ignore */ }
       if (readyRef.current && playerRef.current) {
         playerRef.current.loadVideoById(c.id);
@@ -771,6 +798,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         toggle, stop, next, prev, seek, setRate, toggleShuffle, cycleRepeat, toggleLike, isLiked,
         likedTracks, setExpanded,
         playlists, recentlyPlayed, tasteSeeds, onboarded, addTasteSeeds, completeOnboarding,
+        eqReachable,
         playbackError, clearPlaybackError: () => setPlaybackError(null),
         createPlaylist, importPlaylist, deletePlaylist, renamePlaylist, addToPlaylist, removeFromPlaylist,
         addSheetTrack, openAddSheet, closeAddSheet,

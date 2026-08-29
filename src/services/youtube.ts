@@ -182,13 +182,17 @@ class YoutubeService {
    * 300-song playlist silently arrived as 50. `cap` is a safety rail against a
    * runaway playlist, not a feature limit.
    */
-  private async paged(endpoint: string, authed: boolean, cap = 2000): Promise<any[]> {
+  private async paged(endpoint: string, authed: boolean, cap = 2000, onPage?: (items: any[]) => void): Promise<any[]> {
     const items: any[] = [];
     let pageToken = '';
     do {
       const url = `${endpoint}${endpoint.includes('?') ? '&' : '?'}maxResults=50${pageToken ? `&pageToken=${pageToken}` : ''}`;
       const data: any = authed ? await this.authed(url) : await this.publicGet(url);
-      items.push(...(data.items || []));
+      const page = data.items || [];
+      items.push(...page);
+      // Hand each page up as it lands so the UI can paint the first 50 instead
+      // of waiting for a whole library to finish walking.
+      if (onPage && page.length) onPage(page);
       pageToken = data.nextPageToken || '';
     } while (pageToken && items.length < cap);
     return items;
@@ -246,8 +250,13 @@ class YoutubeService {
   private async attachDetails(tracks: Track[], authed: boolean): Promise<(Track & { categoryId?: string })[]> {
     const ids = tracks.map((t) => t.id).filter(Boolean);
     const byId = new Map<string, { duration: number; categoryId?: string }>();
-    for (let i = 0; i < ids.length; i += 50) {
-      const chunk = ids.slice(i, i + 50).join(',');
+
+    // The batches are independent, so run them together. Sequentially, a
+    // 500-item library meant ten round trips end to end before anything could
+    // render; in parallel it is one round trip's worth of waiting.
+    const chunks: string[] = [];
+    for (let i = 0; i < ids.length; i += 50) chunks.push(ids.slice(i, i + 50).join(','));
+    await Promise.all(chunks.map(async (chunk) => {
       const ep = `youtube/v3/videos?part=contentDetails,snippet&id=${chunk}`;
       try {
         const d: any = authed ? await this.authed(ep) : await this.publicGet(ep);
@@ -258,7 +267,7 @@ class YoutubeService {
           });
         }
       } catch { /* details are a nicety — never fail the whole playlist for them */ }
-    }
+    }));
     // Leave duration 0 rather than inventing one when the lookup missed: the
     // player reads the true length off the media once it starts, and 0 renders
     // as "--:--" instead of a confident wrong number.
@@ -330,21 +339,43 @@ class YoutubeService {
    * the details lookup missed, since a 3-second clip or a 2-hour stream is not a
    * song whatever it is tagged.
    */
-  async fetchLiked(kind: 'music' | 'all' = 'all'): Promise<Track[]> {
-    const items = await this.paged(`youtube/v3/playlistItems?part=snippet&playlistId=${await this.likesPlaylistId()}`, true);
-    const detailed = await this.attachDetails(this.mapItems(items), true);
-    const filtered = kind === 'music'
-      ? detailed.filter((t) => t.categoryId === MUSIC_CATEGORY_ID
+  async fetchLiked(
+    kind: 'music' | 'all' = 'all',
+    onPartial?: (tracks: Track[]) => void,
+  ): Promise<Track[]> {
+    const listId = await this.likesPlaylistId();
+    const narrow = (rows: (Track & { categoryId?: string })[]) => (kind === 'music'
+      ? rows.filter((t) => t.categoryId === MUSIC_CATEGORY_ID
         && (t.duration === 0 || (t.duration >= 30 && t.duration <= 1800)))
-      : detailed;
-    return filtered.map(({ categoryId: _c, ...t }) => t);
+      : rows
+    ).map(({ categoryId: _c, ...t }) => t);
+
+    // Paint the first page while the rest is still arriving. A large library
+    // used to show nothing at all until every page and every detail batch had
+    // completed, which read as the connection being slow rather than thorough.
+    let firstPageDone = false;
+    const items = await this.paged(
+      `youtube/v3/playlistItems?part=snippet&playlistId=${listId}`,
+      true, 2000,
+      onPartial
+        ? (page) => {
+          if (firstPageDone) return;
+          firstPageDone = true;
+          this.attachDetails(this.mapItems(page), true)
+            .then((rows) => onPartial(narrow(rows)))
+            .catch(() => { /* the full pass below is the real answer */ });
+        }
+        : undefined,
+    );
+
+    return narrow(await this.attachDetails(this.mapItems(items), true));
   }
 
   /** Liked music only. */
-  fetchLikedMusic(): Promise<Track[]> { return this.fetchLiked('music'); }
+  fetchLikedMusic(onPartial?: (t: Track[]) => void): Promise<Track[]> { return this.fetchLiked('music', onPartial); }
 
   /** Everything liked, unfiltered — the YouTube (videos) surface. */
-  fetchLikedVideos(): Promise<Track[]> { return this.fetchLiked('all'); }
+  fetchLikedVideos(onPartial?: (t: Track[]) => void): Promise<Track[]> { return this.fetchLiked('all', onPartial); }
 
   /**
    * Import a public or unlisted playlist from a pasted link — no sign-in.
