@@ -196,18 +196,43 @@ export const ytDataApi = {
     return out;
   },
 
-  /** Typed search. 100 units, so it is cached for a day and budget-gated. */
-  search: async (q: string, kind: 'song' | 'video' = 'song'): Promise<Track[] | null> => {
+  /**
+   * Typed search — YouTube's own relevance ranking, not a reimplementation.
+   *
+   * 100 quota units per call against a 10,000/day project allowance shared by
+   * every user, so roughly 95 searches a day in total. That single fact shapes
+   * the whole feature: results are cached for a day, the budget is checked
+   * before spending, and the UI must never search on keystroke. YouTube can
+   * afford search-as-you-type; at 100 units a keystroke, we cannot.
+   *
+   * `opts` mirrors YouTube's own search filters, so the same query with the
+   * same filter returns what YouTube would return.
+   */
+  search: async (
+    q: string,
+    kind: 'song' | 'video' = 'song',
+    opts: { order?: 'relevance' | 'date' | 'viewCount' | 'rating'; duration?: 'any' | 'short' | 'medium' | 'long' } = {},
+  ): Promise<Track[] | null> => {
     const query = q.trim();
     if (!query) return [];
-    const key = `search.${kind}.${query.toLowerCase()}`;
+    const order = opts.order || 'relevance';
+    const duration = opts.duration || 'any';
+    // Filters are part of the cache identity — the same words with a different
+    // filter is a different search, and returning the cached one would silently
+    // ignore what was asked for.
+    const key = `search.${kind}.${order}.${duration}.${query.toLowerCase()}`;
     const hit = cacheGet<Track[]>(key, TTL.search);
     if (hit) return hit;
     if (!canSearch()) return null; // out of budget → caller falls back
+
     const cat = kind === 'song' ? '&videoCategoryId=10' : '';
-    const j = await get(`search?part=snippet&type=video${cat}&maxResults=25&q=${encodeURIComponent(query)}`, COST.search);
+    const ord = order !== 'relevance' ? `&order=${order}` : '';
+    const dur = duration !== 'any' ? `&videoDuration=${duration}` : '';
+    const j = await get(`search?part=snippet&type=video${cat}${ord}${dur}&maxResults=25&q=${encodeURIComponent(query)}`, COST.search);
     if (!j) return null;
     let out = await withDurations(mapMany(j.items));
+    // A song filter is about length as well as category: a two-hour "mix"
+    // tagged Music is not what someone searching for a song wants.
     if (kind === 'song') out = out.filter(isSongLength);
     cacheSet(key, out);
     return out;

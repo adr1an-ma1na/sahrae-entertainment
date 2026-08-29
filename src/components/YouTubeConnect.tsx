@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Youtube, Loader2, Play, RefreshCw, LogOut, Music2, Video, ListMusic, Users, Sparkles } from 'lucide-react';
+import { Youtube, Loader2, Play, RefreshCw, LogOut, Music2, Video, ListMusic, Users, Sparkles, Search, X } from 'lucide-react';
 import { youtubeService, API_DISABLED_HELP, KEY_BLOCKED_HELP, CREDENTIALS_URL, type YoutubeChannel, type YoutubePlaylist, type YoutubeUserProfile } from '../services/youtube';
-import { getApiState, ENABLE_URL } from '../services/ytDataApi';
+import { getApiState, ENABLE_URL, ytDataApi, canSearch } from '../services/ytDataApi';
 import { Track } from '../services/ytmusic';
 import { useMusic } from '../hooks/useMusic';
 import { CoverArt } from './ui/CoverArt';
 import { ShelfHeader, WideRow, ArtCard, Shelf, CardSkeleton } from './ui/Shelf';
 import { buildMadeForYou, type Mix } from '../services/mixes';
 import VideoCard from './ui/VideoCard';
-import { ytDataApi } from '../services/ytDataApi';
 
 /**
  * Connect a Google account and browse what it has liked and saved.
@@ -59,6 +58,40 @@ export default function YouTubeConnect() {
   // Which card may preview. Held by the parent so moving across the grid cannot
   // leave a trail of players running behind the cursor.
   const [hoverId, setHoverId] = useState<string | null>(null);
+
+  // ── Search ──
+  // Submit-to-search, never search-as-you-type. search.list costs 100 quota
+  // units against a 10,000/day allowance shared by every user of this app, so
+  // one keystroke per query would exhaust a day in about ninety-five
+  // characters. YouTube can afford incremental search; we cannot, and pretending
+  // otherwise would take the feature down for everyone by mid-morning.
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<Track[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [order, setOrder] = useState<'relevance' | 'date' | 'viewCount'>('relevance');
+  const [duration, setDuration] = useState<'any' | 'short' | 'long'>('any');
+
+  const runSearch = useCallback(async () => {
+    const q = query.trim();
+    if (!q || searching) return;
+    if (!canSearch()) {
+      setError(`Today's YouTube search allowance is used up (it resets at midnight Pacific). Browsing your library still works.`);
+      return;
+    }
+    setSearching(true); setError(null);
+    try {
+      // The Music tab searches songs, everything else searches all of YouTube —
+      // matching what each tab is for. Ranking is YouTube's own.
+      const kind = tab === 'music' ? 'song' : 'video';
+      const found = await ytDataApi.search(q, kind, { order, duration });
+      setResults(found || []);
+      if (found === null) setError('Search is unavailable right now.');
+    } finally {
+      setSearching(false);
+    }
+  }, [query, searching, tab, order, duration]);
+
+  const clearSearch = () => { setQuery(''); setResults(null); setError(null); };
   const [openList, setOpenList] = useState<{ p: YoutubePlaylist; tracks: Track[] | null } | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -251,6 +284,56 @@ export default function YouTubeConnect() {
         </button>
       </div>
 
+      {/* Search — YouTube's own ranking, with YouTube's own filters.
+          Deliberately submit-to-search: see runSearch for why incremental
+          search is not affordable here. */}
+      <form onSubmit={(e) => { e.preventDefault(); runSearch(); }} className="mb-5">
+        <div className="flex gap-2">
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={tab === 'music' ? 'Search songs on YouTube Music' : 'Search YouTube'}
+              aria-label={tab === 'music' ? 'Search songs' : 'Search YouTube'}
+              className="w-full bg-zinc-900/70 border border-white/10 rounded-full pl-10 pr-10 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-sauti/60"
+            />
+            {(query || results) && (
+              <button type="button" onClick={clearSearch} aria-label="Clear search"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          <button type="submit" disabled={!query.trim() || searching}
+            className="btn-sauti px-5 py-2.5 rounded-full text-xs font-black shrink-0 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-2">
+            {searching ? <><Loader2 className="w-4 h-4 animate-spin" /> Searching</> : 'Search'}
+          </button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 mt-2.5">
+          <select value={order} onChange={(e) => setOrder(e.target.value as typeof order)}
+            aria-label="Sort results"
+            className="bg-zinc-900 text-white text-xs rounded-lg px-2.5 py-1.5 border border-white/10 focus:outline-none focus:border-sauti/60">
+            <option value="relevance">Relevance</option>
+            <option value="date">Upload date</option>
+            <option value="viewCount">View count</option>
+          </select>
+          <select value={duration} onChange={(e) => setDuration(e.target.value as typeof duration)}
+            aria-label="Filter by length"
+            className="bg-zinc-900 text-white text-xs rounded-lg px-2.5 py-1.5 border border-white/10 focus:outline-none focus:border-sauti/60">
+            <option value="any">Any length</option>
+            <option value="short">Under 4 minutes</option>
+            <option value="long">Over 20 minutes</option>
+          </select>
+          {!canSearch() && (
+            <span className="text-[11px] text-amber-300/80">
+              Search allowance spent for today — browsing still works.
+            </span>
+          )}
+        </div>
+      </form>
+
       <div className="flex gap-1 glass p-1 rounded-xl w-fit mb-6">
         {TABS.map((t) => {
           const on = tab === t.id;
@@ -280,8 +363,43 @@ export default function YouTubeConnect() {
         </div>
       )}
 
-      {/* An opened mix */}
-      {openMix ? (
+      {/* Search results take precedence over whatever tab is selected — you
+          asked a question, the answer is what should be on screen. */}
+      {results ? (
+        results.length === 0 ? (
+          <p className="text-sm text-zinc-500 py-10 text-center border border-dashed border-white/10 rounded-xl">
+            Nothing found for “{query}”.
+          </p>
+        ) : (
+          <>
+            <ShelfHeader onShowAll={clearSearch} showAllLabel="Back to library">
+              {results.length} result{results.length === 1 ? '' : 's'}
+            </ShelfHeader>
+            {tab === 'music' ? (
+              <div className="grid sm:grid-cols-2 gap-x-4">
+                {results.map((t, i) => (
+                  <WideRow key={t.id} title={t.title} subtitle={t.artist} meta={fmt(t.duration)}
+                    artwork={t.artwork} dominantColor={t.dominantColor}
+                    onClick={() => playQueue(results, i, `Search: ${query}`)}
+                    onPlay={() => playQueue(results, i, `Search: ${query}`)}
+                    playing={current?.id === t.id && isPlaying} />
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-6">
+                {results.map((t, i) => (
+                  <VideoCard key={t.id} track={t}
+                    activeId={hoverId}
+                    onHoverStart={setHoverId}
+                    onHoverEnd={(id) => setHoverId((cur) => (cur === id ? null : cur))}
+                    onPlay={() => playQueue(results, i, `Search: ${query}`)} />
+                ))}
+              </div>
+            )}
+          </>
+        )
+      ) : /* An opened mix */
+      openMix ? (
         <div>
           <button onClick={() => setOpenMix(null)} className="text-xs font-bold text-sauti mb-4 hover:underline">← All mixes</button>
           <div className="flex items-end gap-4 mb-5">
