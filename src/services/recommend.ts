@@ -9,7 +9,7 @@
  * the real signals we have: YouTube's related-tracks graph + artist-level
  * diversity. These are pure, testable functions with no engine coupling.
  */
-import { Track } from './ytmusic';
+import type { Track } from './ytmusic.ts';
 
 const artistKey = (t: Track): string => (t.artist || '').trim().toLowerCase();
 
