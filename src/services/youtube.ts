@@ -67,6 +67,15 @@ export const CREDENTIALS_URL =
 
 export interface YoutubeUserProfile { name?: string; picture?: string; email?: string }
 
+export interface YoutubeChannel {
+  id: string;
+  title: string;
+  description: string;
+  thumbnail: string;
+  /** Uploads playlist id, derived rather than fetched — see fetchChannelUploads. */
+  uploadsId: string;
+}
+
 export interface YoutubePlaylist {
   id: string;
   title: string;
@@ -304,8 +313,8 @@ class YoutubeService {
   }
 
   /** A playlist the listener owns, complete and with real durations. */
-  async fetchPlaylistTracks(playlistId: string): Promise<Track[]> {
-    const items = await this.paged(`youtube/v3/playlistItems?part=snippet&playlistId=${playlistId}`, true);
+  async fetchPlaylistTracks(playlistId: string, limit = 2000): Promise<Track[]> {
+    const items = await this.paged(`youtube/v3/playlistItems?part=snippet&playlistId=${playlistId}`, true, limit);
     return this.attachDurations(this.mapItems(items), true);
   }
 
@@ -369,6 +378,47 @@ class YoutubeService {
     );
 
     return narrow(await this.attachDetails(this.mapItems(items), true));
+  }
+
+  /**
+   * Channels the listener subscribes to — the closest thing the API offers to
+   * "your artists". 1 quota unit per page, so this is cheap.
+   *
+   * Sorted alphabetically rather than by subscription date: this is a library to
+   * find something in, not a feed.
+   */
+  async fetchSubscriptions(limit = 200): Promise<YoutubeChannel[]> {
+    const items = await this.paged('youtube/v3/subscriptions?part=snippet&mine=true&order=alphabetical', true, limit);
+    const out: YoutubeChannel[] = [];
+    const seen = new Set<string>();
+    for (const it of items) {
+      const s = it.snippet || {};
+      const id = s.resourceId?.channelId;
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      const th = s.thumbnails || {};
+      out.push({
+        id,
+        // "- Topic" is YouTube's label for auto-generated artist channels, which
+        // is most of what a music listener subscribes to.
+        title: String(s.title || 'Channel').replace(/s*-s*Topic$/i, '').trim(),
+        description: String(s.description || ''),
+        thumbnail: th.high?.url || th.medium?.url || th.default?.url || '',
+        uploadsId: 'UU' + id.slice(2),
+      });
+    }
+    return out;
+  }
+
+  /**
+   * A channel's uploads.
+   *
+   * The uploads playlist id is the channel id with its second character changed
+   * from C to U — a documented identity, so this costs no extra call to look up.
+   */
+  async fetchChannelUploads(channelId: string, limit = 50): Promise<Track[]> {
+    if (!/^UC/.test(channelId)) return [];
+    return this.fetchPlaylistTracks('UU' + channelId.slice(2), limit);
   }
 
   /** Liked music only. */

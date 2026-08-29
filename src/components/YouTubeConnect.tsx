@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Youtube, Loader2, Play, RefreshCw, LogOut, Music2, Video, ListMusic } from 'lucide-react';
-import { youtubeService, API_DISABLED_HELP, KEY_BLOCKED_HELP, CREDENTIALS_URL, type YoutubePlaylist, type YoutubeUserProfile } from '../services/youtube';
+import { Youtube, Loader2, Play, RefreshCw, LogOut, Music2, Video, ListMusic, Users } from 'lucide-react';
+import { youtubeService, API_DISABLED_HELP, KEY_BLOCKED_HELP, CREDENTIALS_URL, type YoutubeChannel, type YoutubePlaylist, type YoutubeUserProfile } from '../services/youtube';
 import { getApiState, ENABLE_URL } from '../services/ytDataApi';
 import { Track } from '../services/ytmusic';
 import { useMusic } from '../hooks/useMusic';
@@ -21,11 +21,12 @@ import { ShelfHeader, WideRow, ArtCard, Shelf, CardSkeleton } from './ui/Shelf';
  * serves the media and the play still counts for the creator.
  */
 
-type Tab = 'music' | 'videos' | 'playlists';
+type Tab = 'music' | 'videos' | 'artists' | 'playlists';
 
 const TABS: { id: Tab; label: string; icon: typeof Music2; blurb: string }[] = [
   { id: 'music', label: 'YouTube Music', icon: Music2, blurb: 'Songs you have liked' },
   { id: 'videos', label: 'YouTube', icon: Video, blurb: 'Everything you have liked' },
+  { id: 'artists', label: 'Artists', icon: Users, blurb: 'Channels you subscribe to' },
   { id: 'playlists', label: 'Playlists', icon: ListMusic, blurb: 'Your saved playlists' },
 ];
 
@@ -47,6 +48,8 @@ export default function YouTubeConnect() {
   const [music, setMusic] = useState<Track[] | null>(null);
   const [videos, setVideos] = useState<Track[] | null>(null);
   const [playlists, setPlaylists] = useState<YoutubePlaylist[] | null>(null);
+  const [artists, setArtists] = useState<YoutubeChannel[] | null>(null);
+  const [openArtist, setOpenArtist] = useState<{ c: YoutubeChannel; tracks: Track[] | null } | null>(null);
   const [openList, setOpenList] = useState<{ p: YoutubePlaylist; tracks: Track[] | null } | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -62,6 +65,7 @@ export default function YouTubeConnect() {
       if (which === 'music' && music) return;
       if (which === 'videos' && videos) return;
       if (which === 'playlists' && playlists) return;
+      if (which === 'artists' && artists) return;
     }
     setLoading(true); setError(null);
     try {
@@ -69,13 +73,14 @@ export default function YouTubeConnect() {
       // a large Liked list used to show nothing until every page had landed.
       if (which === 'music') setMusic(await youtubeService.fetchLikedMusic((partial) => setMusic((cur) => cur ?? partial)));
       else if (which === 'videos') setVideos(await youtubeService.fetchLikedVideos((partial) => setVideos((cur) => cur ?? partial)));
+      else if (which === 'artists') setArtists(await youtubeService.fetchSubscriptions());
       else setPlaylists(await youtubeService.fetchPlaylists());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load that from YouTube.');
     } finally {
       setLoading(false);
     }
-  }, [music, videos, playlists]);
+  }, [music, videos, playlists, artists]);
 
   useEffect(() => { if (connected) load(tab); }, [connected, tab, load]);
 
@@ -99,7 +104,18 @@ export default function YouTubeConnect() {
   const onDisconnect = () => {
     youtubeService.disconnect();
     setConnected(false); setProfile(null);
-    setMusic(null); setVideos(null); setPlaylists(null); setOpenList(null);
+    setMusic(null); setVideos(null); setPlaylists(null); setArtists(null);
+    setOpenList(null); setOpenArtist(null);
+  };
+
+  const openArtistPage = async (c: YoutubeChannel) => {
+    setOpenArtist({ c, tracks: null });
+    try {
+      setOpenArtist({ c, tracks: await youtubeService.fetchChannelUploads(c.id, 50) });
+    } catch (err) {
+      setOpenArtist(null);
+      setError(err instanceof Error ? err.message : 'Could not open that channel.');
+    }
   };
 
   const openPlaylist = async (p: YoutubePlaylist) => {
@@ -196,7 +212,7 @@ export default function YouTubeConnect() {
           const on = tab === t.id;
           const Icon = t.icon;
           return (
-            <button key={t.id} onClick={() => { setTab(t.id); setOpenList(null); }} tabIndex={0} data-tv-focusable
+            <button key={t.id} onClick={() => { setTab(t.id); setOpenList(null); setOpenArtist(null); }} tabIndex={0} data-tv-focusable
               aria-pressed={on}
               className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2 ${on ? 'bg-sauti text-amber-950' : 'text-zinc-400 hover:text-white'}`}>
               <Icon className="w-4 h-4" /> {t.label}
@@ -220,8 +236,62 @@ export default function YouTubeConnect() {
         </div>
       )}
 
-      {/* Playlist detail */}
-      {openList ? (
+      {/* Artist detail — a channel's recent uploads */}
+      {openArtist ? (
+        <div>
+          <button onClick={() => setOpenArtist(null)} className="text-xs font-bold text-sauti mb-4 hover:underline">← All artists</button>
+          <div className="flex items-end gap-4 mb-5">
+            <div className="w-24 h-24 rounded-full overflow-hidden bg-zinc-800 shrink-0 relative">
+              <CoverArt imageUrl={openArtist.c.thumbnail} rounded="" className="absolute inset-0 w-full h-full" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-2xl font-display font-bold text-white truncate">{openArtist.c.title}</h3>
+              <p className="text-sm text-zinc-400">Latest uploads</p>
+            </div>
+            {openArtist.tracks?.length ? (
+              <button onClick={() => playQueue(openArtist.tracks!, 0, openArtist.c.title)}
+                aria-label={`Play ${openArtist.c.title}`}
+                className="btn-sauti w-12 h-12 rounded-full flex items-center justify-center shrink-0 ml-auto">
+                <Play className="w-5 h-5 fill-current ml-0.5" />
+              </button>
+            ) : null}
+          </div>
+          {openArtist.tracks === null ? (
+            <p className="text-sm text-zinc-400 flex items-center gap-2 py-6"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</p>
+          ) : openArtist.tracks.length === 0 ? (
+            <p className="text-sm text-zinc-500 py-8">Nothing published on this channel yet.</p>
+          ) : (
+            <div className="grid sm:grid-cols-2 gap-x-4">
+              {openArtist.tracks.map((t, i) => (
+                <WideRow key={t.id} title={t.title} subtitle={t.artist} meta={fmt(t.duration)}
+                  artwork={t.artwork} dominantColor={t.dominantColor}
+                  onClick={() => playQueue(openArtist.tracks!, i, openArtist.c.title)}
+                  onPlay={() => playQueue(openArtist.tracks!, i, openArtist.c.title)}
+                  playing={current?.id === t.id && isPlaying} />
+              ))}
+            </div>
+          )}
+        </div>
+      ) : tab === 'artists' ? (
+        artists === null ? (
+          <Shelf><CardSkeleton count={6} /></Shelf>
+        ) : artists.length === 0 ? (
+          <p className="text-sm text-zinc-500 py-10 text-center border border-dashed border-white/10 rounded-xl">
+            You are not subscribed to any channels yet.
+          </p>
+        ) : (
+          <>
+            <ShelfHeader>{artists.length} channel{artists.length === 1 ? '' : 's'}</ShelfHeader>
+            <div className="flex flex-wrap gap-1">
+              {artists.map((c) => (
+                <ArtCard key={c.id} title={c.title} artwork={c.thumbnail} round
+                  onClick={() => openArtistPage(c)} />
+              ))}
+            </div>
+          </>
+        )
+      ) : /* Playlist detail */
+      openList ? (
         <div>
           <button onClick={() => setOpenList(null)} className="text-xs font-bold text-sauti mb-4 hover:underline">← All playlists</button>
           <div className="flex items-end gap-4 mb-5">
