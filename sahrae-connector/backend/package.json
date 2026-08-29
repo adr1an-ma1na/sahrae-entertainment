@@ -12,7 +12,7 @@
     "deploy": "wrangler deploy",
     "secrets": "echo \"wrangler secret put SPOTIFY_CLIENT_SECRET  &&  wrangler secret put YOUTUBE_CLIENT_SECRET\"",
     "tail": "wrangler tail",
-    "test": "node core-check.mjs && node worker-check.mjs"
+    "test": "node core-check.mjs && node api-check.mjs && node worker-check.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",

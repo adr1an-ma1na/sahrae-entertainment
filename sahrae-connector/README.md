@@ -15,7 +15,7 @@ it.
 |---|---|---|
 | Schema | `src/types/` | `SahraeTrack` — the shape every provider normalises into |
 | Auth | `src/auth/` | OAuth 2.0 PKCE: verifier/challenge, state check, token store, refresh |
-| Backend | `backend/` | Token exchange + refresh. **The only place client secrets exist**. Runs on Cloudflare Workers |
+| Backend | `api/`, `backend/core.js` | Token exchange + refresh. **The only place client secrets exist**. Same-origin Vercel function |
 | Providers | `src/providers/` | One adapter per service, all behind one interface |
 | Playback | `src/playback/` | Tier selection, Tier 1 hand-off, Tier 2 embeds, foreground guard |
 | UI | `src/library-ui/` | Connect screen, merged library, embedded player |
@@ -93,7 +93,8 @@ A listener who would rather always be thrown into the real app can be given
 Both need the redirect URI registered **character for character**.
 
 - **Spotify** — <https://developer.spotify.com/dashboard> → Create app.
-  Redirect URI: `http://localhost:5173/connect/callback` for local work.
+  Redirect URI: `http://localhost:3000/connect/callback` for local work
+  (`vercel dev` serves on :3000).
   A new app is in *development mode*: only accounts you add to its allow-list can
   authorise it. Everyone else gets a 403 that looks like a bug and is not one.
 - **YouTube** — Google Cloud console → enable **YouTube Data API v3**, then
@@ -205,21 +206,22 @@ expensive to get wrong:
   that an idle page is unaffected, and that returning offers a resume instead of
   auto-playing
 
-The backend has its own suites — 43 for the shared core and 21 driving the
-Worker's fetch handler with real `Request` objects, which is exactly what the
-Workers runtime does, so routing, CORS and status mapping are verified without
-deploying. Both were also confirmed by running the Express server and calling it:
+The backend has its own suites — 43 for the shared core, 16 driving the Vercel
+function with Vercel-shaped req/res, and 21 driving the Worker's fetch handler
+with real `Request` objects. All three are offline, verified by stubbing
+`fetch` to throw: zero outbound calls. Both were also confirmed by running the Express server and calling it:
 `/health` reports per-provider config, unknown providers 404, malformed or
 missing parameters 400, unconfigured providers 500 naming the variable to set,
 and a disallowed `Origin` is refused 403 with no CORS header granting access.
 
-`npm test` runs all three suites.
+`npm test` runs all four suites: 135 + 43 + 16 + 21.
 
 ---
 
-## Deploying the frontend
+## Deploying
 
-**Vercel**, static build plus an optional same-origin API.
+**Vercel** — one project serving the app and its token-exchange API from the same
+origin.
 
 ```bash
 cd sahrae-connector
@@ -245,27 +247,59 @@ a router would just be a second place that has to agree what the callback path i
 
 ### After the first deploy
 
-1. Add the Vercel URL as an authorised redirect URI at **both** providers, as
-   `https://<your-app>.vercel.app/connect/callback` — character for character.
-2. Set `VITE_CONNECTOR_REDIRECT` to that same URL, and `VITE_CONNECTOR_BACKEND`
-   to the Worker URL, in Vercel → Settings → Environment Variables. Redeploy —
-   `VITE_*` values are baked in at build time, not read at runtime.
-3. Add the Vercel origin to `ALLOWED_ORIGINS` in `backend/wrangler.toml` and
-   redeploy the Worker, or the browser will block every token call.
+In **Vercel → Settings → Environment Variables**:
 
-### Same-origin alternative (no CORS at all)
+| Variable | Value |
+|---|---|
+| `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET` | from the Spotify dashboard |
+| `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET` | from Google Cloud |
+| `VITE_SPOTIFY_CLIENT_ID` / `VITE_YOUTUBE_CLIENT_ID` | the same client IDs, public |
+| `VITE_CONNECTOR_REDIRECT` | `https://<your-app>.vercel.app/connect/callback` |
+| `VITE_CONNECTOR_BACKEND` | leave **empty** — same-origin |
 
-`api/oauth/[provider]/[action].js` is a Vercel serverless function that reuses
+Then add that redirect URI at **both** providers, character for character, and
+**redeploy**: `VITE_*` values are compiled into the bundle at build time, not
+read at runtime, so changing one without rebuilding changes nothing.
+
+### Android
+
+`VITE_CONNECTOR_BACKEND` **must** be the absolute deployment URL for the APK.
+Capacitor serves the app from `https://localhost`, so an empty value would
+resolve `/oauth/…` against that and hit nothing. `backendMisconfigured()` in
+`src/auth/config.ts` detects this case at startup rather than leaving it to fail
+as a confusing network error on first use.
+
+### Token exchange runs same-origin
+
+`api/oauth/[provider]/[action].js` is a Vercel serverless function reusing
 `backend/core.js` unchanged — the payoff from keeping that module
-framework-free. Running the exchange on the same origin as the app removes CORS
-from the picture entirely: no allow-list to keep in sync, no preflight, no
-cross-origin surface.
+framework-free. `vercel.json` rewrites `/oauth/:path*` onto it.
 
-To use it instead of the Worker: set the four provider variables in Vercel's
-environment, set `VITE_CONNECTOR_BACKEND` to an empty string, and add
-`{ "source": "/oauth/:path*", "destination": "/api/oauth/:path*" }` to the
-rewrites. The Worker stays the default; this is here because once the frontend
-is on Vercel it is strictly simpler.
+Same-origin means **there is no CORS at all**: no allow-list to keep in sync
+across two hosts, no preflight, no cross-origin surface, and nothing in the CSP's
+`connect-src` beyond `'self'` and the two provider APIs the browser calls
+directly. The function emits no `Access-Control-*` headers by design — if it ever
+needs to serve another origin, that should be a decision made explicitly rather
+than inherited from a permissive default.
+
+**The rewrite order matters.** `/oauth/:path*` is listed *before* the SPA
+fallback, because Vercel matches in order and the fallback would otherwise
+swallow it and return `index.html`. The fallback's pattern excludes both `api/`
+and `oauth/` as a second line of defence.
+
+Token responses are sent `Cache-Control: no-store` — they carry credentials, and
+neither the browser nor Vercel's edge should hold them.
+
+### Cloudflare Worker (alternative)
+
+`backend/worker.js` is a complete, tested equivalent for Cloudflare Workers, kept
+because it costs nothing to keep and it is the right answer if the frontend ever
+moves off Vercel. It shares `core.js`, so both are covered by the same tests.
+
+To use it: deploy with `cd backend && npx wrangler deploy`, set the secrets with
+`wrangler secret put`, add the app origin to `ALLOWED_ORIGINS` in
+`wrangler.toml`, and set `VITE_CONNECTOR_BACKEND` to the Worker URL. Note that
+this reintroduces CORS, which same-origin removes.
 
 ### Security headers
 
@@ -278,70 +312,19 @@ so the browser is told to refuse it.
 
 ---
 
-## Deploying the backend
-
-**Cloudflare Workers**, for one reason that matters more than the others: no idle
-sleep. Render's free tier spins down after 15 minutes and takes ~50 seconds to
-wake — landing squarely in the middle of an OAuth redirect, where the user is
-already staring at a spinner. Workers also needs no card, and the backend is
-stateless, so there is nothing to persist.
-
-`backend/core.js` holds the logic; `server.js` (Express, local) and `worker.js`
-(Workers, deployed) are thin wrappers over it, so the two cannot drift.
-
-### One-time
+## Running locally
 
 ```bash
-cd sahrae-connector/backend
-npx wrangler login
+npm run dev
 ```
 
-Set the secrets. These are encrypted at rest and are **never** in
-`wrangler.toml` or the repo:
+`vercel dev` serves the Vite app and the `/api` functions on one origin — the
+same shape as production, so the same-origin path is what you actually exercise
+locally. It reads `.env`.
 
-```bash
-npx wrangler secret put SPOTIFY_CLIENT_SECRET
-npx wrangler secret put YOUTUBE_CLIENT_SECRET
-```
-
-Put the two client **IDs** and the CORS allow-list in `wrangler.toml` under
-`[vars]` — those are not secret, and a PKCE client has to send an ID to start the
-flow.
-
-> The allow-list matches on **origin**, which for GitHub Pages is the account
-> domain with no repo path: `https://adr1an-ma1na.github.io`, not
-> `.../sahrae-entertainment/`.
-
-### Deploy
-
-```bash
-npm run deploy:backend
-```
-
-Wrangler prints the URL — `https://sahrae-connector.<your-subdomain>.workers.dev`.
-Check it:
-
-```bash
-curl -s https://sahrae-connector.<your-subdomain>.workers.dev/health
-```
-
-Both providers should report `configured: true`. Then set
-`VITE_CONNECTOR_BACKEND` to that URL and rebuild the frontend.
-
-`npx wrangler tail` streams live logs. Failures are logged as
-`[provider] action -> status` without the request body, because that body
-carries the authorization code and verifier.
-
-### Local
-
-```bash
-npm run dev:backend     # Express on :8787
-# or
-cd backend && npm run dev:worker   # Wrangler, closer to production
-```
-
-`wrangler dev` reads secrets from `backend/.dev.vars` (git-ignored; copy
-`.dev.vars.example`).
+`npm run dev:vite` runs Vite alone (no token exchange), and `npm run dev:express`
+starts the Express server on :8787 if you want to debug the exchange in a plain
+Node process — set `VITE_CONNECTOR_BACKEND=http://localhost:8787` for that.
 
 ---
 

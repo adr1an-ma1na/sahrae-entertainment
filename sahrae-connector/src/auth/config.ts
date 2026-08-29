@@ -26,8 +26,34 @@ const env = (k: string): string => {
   }
 };
 
-/** Where the backend that holds the client secrets lives. */
-export const BACKEND_URL: string = env('VITE_CONNECTOR_BACKEND') || 'http://localhost:8787';
+/**
+ * Where the backend that holds the client secrets lives.
+ *
+ * Empty by default, which means SAME ORIGIN: requests go to `/oauth/…` on
+ * whatever host is serving the app, and Vercel rewrites that onto the
+ * serverless function. Same-origin removes CORS from the picture entirely —
+ * no allow-list to keep in sync across two hosts, no preflight, no
+ * cross-origin surface.
+ *
+ * It MUST be set to an absolute URL for the Android build. Capacitor serves the
+ * app from `https://localhost`, so a relative `/oauth/…` would resolve against
+ * that and hit nothing. See README, "Android".
+ */
+export const BACKEND_URL: string = env('VITE_CONNECTOR_BACKEND') ?? '';
+
+/**
+ * Guard against the APK shipping with a same-origin backend, which would fail
+ * every token call at runtime with a confusing network error. Capacitor sets
+ * `window.Capacitor`, so this is knowable at startup rather than at first use.
+ */
+export function backendMisconfigured(): string | null {
+  if (BACKEND_URL) return null;
+  const isNative = typeof window !== 'undefined'
+    && !!(window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } })
+      .Capacitor?.isNativePlatform?.();
+  if (!isNative) return null;
+  return 'VITE_CONNECTOR_BACKEND must be an absolute URL in the Android build — the app is served from https://localhost, so a same-origin path resolves to nothing.';
+}
 
 /**
  * The redirect target. Must be registered verbatim with each provider.

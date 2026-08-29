@@ -6,8 +6,13 @@
 
   "rewrites": [
     {
-      "//": "SPA fallback. This is what makes /connect/callback resolve — without it Vercel 404s on a path with no file, and the OAuth redirect dies before the app ever loads. /api/* is excluded so serverless functions still route.",
-      "source": "/((?!api/).*)",
+      "//": "Token exchange, same-origin. The frontend calls /oauth/:provider/:action; this maps it onto the serverless function. MUST come before the SPA fallback below — rewrites are matched in order, and the fallback would otherwise swallow it and return index.html.",
+      "source": "/oauth/:path*",
+      "destination": "/api/oauth/:path*"
+    },
+    {
+      "//": "SPA fallback. This is what makes /connect/callback resolve — without it Vercel 404s on a path with no file, and the OAuth redirect dies before the app ever loads. api/ and oauth/ are excluded so the function routes above still win.",
+      "source": "/((?!api/|oauth/).*)",
       "destination": "/index.html"
     }
   ],
@@ -24,10 +29,18 @@
           "value": "DENY"
         },
         {
-          "//": "frame-src is the one permissive directive, and only for the two sanctioned embed origins — Tier 2 is exactly this and nothing else.",
+          "//": "connect-src is 'self' plus the provider APIs the browser calls directly. Token exchange is same-origin now, so no third-party backend origin appears here at all — that is the security dividend of dropping the cross-origin backend.",
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://open.spotify.com https://www.youtube.com https://s.ytimg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'none'; connect-src 'self' https://api.spotify.com https://www.googleapis.com https://oauth2.googleapis.com https://*.workers.dev; frame-src https://open.spotify.com https://www.youtube.com https://www.youtube-nocookie.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://open.spotify.com https://www.youtube.com https://s.ytimg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'none'; connect-src 'self' https://api.spotify.com https://www.googleapis.com; frame-src https://open.spotify.com https://www.youtube.com https://www.youtube-nocookie.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
         }
+      ]
+    },
+    {
+      "//": "Token responses carry credentials. Nothing may cache them — not the browser, not Vercel's edge, not an intermediary.",
+      "source": "/oauth/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, private" },
+        { "key": "Pragma", "value": "no-cache" }
       ]
     }
   ]
