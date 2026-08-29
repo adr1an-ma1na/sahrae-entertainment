@@ -2,14 +2,15 @@ import { beginAuth, disconnect as dropToken, providerFetch } from '../auth/oauth
 import { isConnected as tokenConnected } from '../auth/tokenStore.ts';
 import { sahraeId, type PlaybackAction, type SahraeArtwork, type SahraePlaylist, type SahraePlaylistSummary, type SahraeTrack } from '../types/index.ts';
 import { ProviderError, type ProviderAdapter } from './types.ts';
+import { resolveAction, spotifyEmbedUrl } from '../playback/tierPolicy.ts';
 
 /**
  * Spotify Web API adapter.
  *
- * Phase 1 is read + hand off. Playback is Tier 1 only: we resolve to
- * `spotify:track:<id>` and let the Spotify app play it, which is the only way to
- * play Spotify audio without their SDK and an active Premium session. Nothing
- * here touches audio.
+ * Read + play-by-permission. Tracks advertise Tier 2 (Spotify's own sanctioned
+ * embed) and fall back to Tier 1 (hand off to the Spotify app) when the
+ * environment cannot embed. Spotify serves the audio in both cases; nothing here
+ * touches, sources or extracts media.
  */
 
 const API = 'https://api.spotify.com/v1';
@@ -48,9 +49,14 @@ export function toSahraeTrack(t: any, addedAt?: string): SahraeTrack | null {
     explicit: !!t.explicit,
     addedAt: addedAt ? Date.parse(addedAt) || undefined : undefined,
     playback: {
-      tier: 1,
+      // Spotify serves a sanctioned embed for every track, so the descriptor
+      // advertises Tier 2 as available. tierPolicy decides whether it is
+      // actually used — the track states its ceiling, the policy states the
+      // circumstances.
+      tier: 2,
       deepLink: t.uri || `spotify:track:${t.id}`,
       webUrl: t.external_urls?.spotify || `https://open.spotify.com/track/${t.id}`,
+      embedUrl: spotifyEmbedUrl(t.id),
     },
   };
 }
@@ -139,16 +145,15 @@ export const spotifyAdapter: ProviderAdapter = {
   },
 
   /**
-   * Tier 1 only, and that is a licensing boundary rather than a Phase 1
-   * shortcut: Spotify audio may only be played by Spotify's own app or its
-   * Web Playback SDK. We hand off; we never source the audio.
+   * Tier 2 where the environment allows it, Tier 1 otherwise — decided by
+   * tierPolicy, not here, so the licensing boundary lives in one tested place
+   * rather than being restated in every adapter.
+   *
+   * Either way Spotify serves the audio. Their embed enforces entitlement: an
+   * active Premium session in this browser gets full tracks, everyone else gets
+   * Spotify's own 30-second preview. We never source or extract the audio.
    */
-  resolvePlaybackAction: async (track): Promise<PlaybackAction> => ({
-    kind: 'deeplink',
-    deepLink: track.playback.deepLink,
-    webUrl: track.playback.webUrl,
-    provider: ID,
-  }),
+  resolvePlaybackAction: async (track): Promise<PlaybackAction> => resolveAction(track),
 };
 
 /* eslint-enable @typescript-eslint/no-explicit-any */

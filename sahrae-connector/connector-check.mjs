@@ -1,10 +1,11 @@
 /**
- * Phase 1 tests.
+ * Phase 1 + Phase 2 tests.
  *
- * Covers the three things that are genuinely easy to get wrong and expensive to
- * get wrong: PKCE/state handling (a security check), provider normalisation
- * (silent data corruption), and the Tier 1 fallback timing (a launcher that
- * either double-opens or never opens).
+ * Covers what is easy to get wrong and expensive to get wrong: PKCE and state
+ * handling (a security check), provider normalisation (silent data corruption),
+ * Tier 1 fallback timing (a launcher that double-opens or never opens), tier
+ * selection (the licensing boundary), and the foreground guard (the mechanism
+ * that keeps provider audio out of the background).
  *
  * Run: node --experimental-strip-types connector-check.mjs
  */
@@ -20,6 +21,11 @@ import { toSahraeTrack as spTrack } from './src/providers/spotify.ts';
 import { mergeTracks } from './src/providers/registry.ts';
 import { launchWith } from './src/playback/tier1.ts';
 import { pickArtwork, sahraeId } from './src/types/index.ts';
+import {
+  embedBlockedReason, embedUrlFor, isEmbeddable, resolveAction, resolveTier,
+  spotifyEmbedUrl, youtubeEmbedUrl,
+} from './src/playback/tierPolicy.ts';
+import { checkEmbedVisible, ForegroundGuard } from './src/playback/foregroundGuard.ts';
 
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = '') => {
@@ -111,11 +117,11 @@ ok('artists become an array', Array.isArray(sp.artists) && sp.artists[0] === 'Bi
 ok('duration stays in ms', sp.durationMs === 194000);
 ok('isrc is carried', sp.isrc === 'USUM71900764');
 ok('addedAt is parsed to epoch ms', sp.addedAt === Date.parse('2024-01-02T03:04:05Z'));
-ok('tier is 1', sp.playback.tier === 1);
+ok('advertises tier 2 (Spotify has a sanctioned embed)', sp.playback.tier === 2);
 ok('deep link is the spotify uri', sp.playback.deepLink === 'spotify:track:4cO');
 ok('web url is present as fallback', !!sp.playback.webUrl);
 ok('NO streamUrl is ever set', sp.playback.streamUrl === undefined);
-ok('NO embedUrl in phase 1', sp.playback.embedUrl === undefined);
+ok('carries an embed url', typeof sp.playback.embedUrl === 'string');
 ok('local files are rejected', spTrack({ ...SP, is_local: true }) === null);
 ok('null placeholders are rejected', spTrack(null) === null);
 ok('an entry without an id is rejected', spTrack({ ...SP, id: null }) === null);
@@ -230,7 +236,7 @@ const DEEP = { kind: 'deeplink', deepLink: 'spotify:track:1', webUrl: 'https://o
   // Phase 1 must refuse tiers it has not built rather than half-handling them.
   const h = harness();
   const r = await launchWith(h.deps, { kind: 'embed', embedUrl: 'https://e', provider: 'youtube' });
-  ok('a Tier 2 embed action is refused in Phase 1', r.opened === 'none');
+  ok('the Tier 1 launcher refuses an embed action (the player handles those)', r.opened === 'none');
   ok('  with an explicit reason', /not implemented in Phase 1/.test(r.reason));
 }
 {
@@ -241,6 +247,138 @@ const DEEP = { kind: 'deeplink', deepLink: 'spotify:track:1', webUrl: 'https://o
   h.fireTimer();
   ok('a late fallback timer cannot double-open', h.calls.external.length === 0);
 }
+
+// ══ PHASE 2 — Tier 2 embedded playback ════════════════════════════════════
+
+console.log('\nresolveTier / resolveAction');
+
+const ENV = { canEmbed: true, preferEmbed: true, hidden: false };
+const t2 = (over = {}) => ({
+  id: 'spotify:x', provider: 'spotify', providerId: 'x', title: 't', artists: ['a'],
+  durationMs: 1000, artwork: [],
+  playback: {
+    tier: 2, deepLink: 'spotify:track:x', webUrl: 'https://open.spotify.com/track/x',
+    embedUrl: 'https://open.spotify.com/embed/track/x', ...over,
+  },
+});
+
+ok('embeddable + allowed → tier 2', resolveTier(t2(), ENV) === 2);
+ok('no embedUrl → tier 1', resolveTier(t2({ embedUrl: undefined }), ENV) === 1);
+ok('no DOM to embed into → tier 1', resolveTier(t2(), { ...ENV, canEmbed: false }) === 1);
+ok('listener prefers hand-off → tier 1', resolveTier(t2(), { ...ENV, preferEmbed: false }) === 1);
+ok('page hidden → tier 1; never start an embed in the background',
+  resolveTier(t2(), { ...ENV, hidden: true }) === 1);
+ok('provider with no sanctioned embed → tier 1',
+  resolveTier({ ...t2(), provider: 'deezer' }, ENV) === 1);
+
+ok('isEmbeddable: spotify', isEmbeddable('spotify'));
+ok('isEmbeddable: youtube', isEmbeddable('youtube'));
+ok('isEmbeddable: not apple', !isEmbeddable('apple'));
+ok('isEmbeddable: not deezer', !isEmbeddable('deezer'));
+ok('isEmbeddable: not soundcloud', !isEmbeddable('soundcloud'));
+
+// Tier 3 is Phase 3. It must be unreachable without a Sahrae-owned stream.
+ok('a tier-3 claim WITHOUT a streamUrl does not get tier 3',
+  resolveTier(t2({ tier: 3, streamUrl: undefined }), ENV) !== 3);
+ok('tier 3 needs a real streamUrl (Sahrae-owned catalog only)',
+  resolveTier(t2({ tier: 3, streamUrl: 'https://cdn.sahrae/x.m4a' }), ENV) === 3);
+
+const act2 = resolveAction(t2(), ENV);
+ok('action is an embed at tier 2', act2.kind === 'embed');
+ok('  carrying the embed url', act2.embedUrl === 'https://open.spotify.com/embed/track/x');
+const act1 = resolveAction(t2(), { ...ENV, preferEmbed: false });
+ok('action is a deeplink at tier 1', act1.kind === 'deeplink');
+ok('  still carrying the web fallback', act1.webUrl.startsWith('https://'));
+ok('action is native at tier 3',
+  resolveAction(t2({ tier: 3, streamUrl: 'https://cdn.sahrae/x.m4a' }), ENV).kind === 'native');
+
+console.log('\nembed URLs');
+ok('spotify embed url shape', spotifyEmbedUrl('abc') === 'https://open.spotify.com/embed/track/abc');
+ok('spotify ids are url-encoded', spotifyEmbedUrl('a/b').includes('a%2Fb'));
+const ytU = youtubeEmbedUrl('vid1', 'https://app.test');
+ok('youtube embed enables the js api', ytU.includes('enablejsapi=1'));
+ok('youtube embed passes origin', ytU.includes('origin=https%3A%2F%2Fapp.test'));
+ok('youtube embed sets playsinline', ytU.includes('playsinline=1'));
+ok('youtube embed omits origin when unknown', !youtubeEmbedUrl('v').includes('origin='));
+ok('embedUrlFor picks spotify', embedUrlFor(t2()).includes('open.spotify.com/embed'));
+ok('embedUrlFor picks youtube',
+  embedUrlFor({ ...t2(), provider: 'youtube', providerId: 'v9' }).includes('youtube.com/embed/v9'));
+ok('embedUrlFor is undefined for a stub provider',
+  embedUrlFor({ ...t2(), provider: 'apple' }) === undefined);
+
+console.log('\nadapter descriptors advertise tier 2, never a stream');
+const spE = spTrack(SP);
+ok('spotify advertises tier 2', spE.playback.tier === 2);
+ok('spotify carries an embed url', !!spE.playback.embedUrl);
+ok('spotify keeps its tier 1 fallback', !!spE.playback.webUrl && !!spE.playback.deepLink);
+ok('spotify NEVER carries a streamUrl', spE.playback.streamUrl === undefined);
+const ytE = ytTrack('vid2', { title: 'x', channelTitle: 'c' }, 1000);
+ok('youtube advertises tier 2', ytE.playback.tier === 2);
+ok('youtube carries an embed url', !!ytE.playback.embedUrl);
+ok('youtube keeps its tier 1 fallback', !!ytE.playback.webUrl && !!ytE.playback.deepLink);
+ok('youtube NEVER carries a streamUrl', ytE.playback.streamUrl === undefined);
+
+console.log('\nembedBlockedReason');
+ok('null when it will embed', embedBlockedReason(t2(), ENV) === null);
+ok('explains a hidden page', /on screen/.test(embedBlockedReason(t2(), { ...ENV, hidden: true })));
+ok('explains an unsupported provider',
+  /no in-app player/i.test(embedBlockedReason({ ...t2(), provider: 'deezer' }, ENV)));
+ok('explains the preference being off',
+  /switched off/i.test(embedBlockedReason(t2(), { ...ENV, preferEmbed: false })));
+
+console.log('\nForegroundGuard — background playback is refused, not merely discouraged');
+function guardHarness() {
+  const events = [];
+  const g = new ForegroundGuard({
+    onMustPause: () => events.push('pause'),
+    onMayResume: () => events.push('resume'),
+  });
+  return { g, events };
+}
+{
+  const { g, events } = guardHarness();
+  g.playbackStarted();
+  g.handle('hidden');
+  ok('backgrounding pauses playback', events.join() === 'pause');
+  ok('  and the guard records it was responsible', g.wasPausedByGuard);
+}
+{
+  const { g, events } = guardHarness();
+  g.playbackStarted();
+  g.handle('hidden'); g.handle('hidden'); g.handle('hidden');
+  ok('repeated hidden events pause once, not three times',
+    events.filter((e) => e === 'pause').length === 1);
+}
+{
+  const { g, events } = guardHarness();
+  g.handle('hidden');
+  ok('backgrounding while idle does nothing', events.length === 0);
+}
+{
+  const { g, events } = guardHarness();
+  g.playbackStarted();
+  g.handle('hidden');
+  g.handle('visible');
+  ok('returning offers a resume rather than auto-playing', events.join() === 'pause,resume');
+  ok('  and clears the guard flag', !g.wasPausedByGuard);
+}
+{
+  const { g, events } = guardHarness();
+  g.playbackStarted();
+  g.handle('visible');
+  ok('returning without having paused does nothing', events.length === 0);
+}
+{
+  const { g, events } = guardHarness();
+  g.playbackStarted();
+  g.playbackStopped();
+  g.handle('hidden');
+  ok('after playback stops, backgrounding does not pause', events.length === 0);
+}
+
+console.log('\ncheckEmbedVisible');
+ok('an unmounted element is reported', /not mounted/.test(checkEmbedVisible(null)));
+ok('no-ops safely without a DOM', checkEmbedVisible({}) === null);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail > 0 ? 1 : 0);

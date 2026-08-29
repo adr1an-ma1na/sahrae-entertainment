@@ -4,8 +4,8 @@ Connects Sahrae to the music services a listener already uses, reads their saved
 music into one merged library, and hands playback back to the service that owns
 it.
 
-**Phase 1 is complete and is all that exists.** Phases 2 and 3 are deliberately
-not started — see [Scope](#scope).
+**Phases 1 and 2 are complete.** Phase 3 is deliberately not started — see
+[Scope](#scope).
 
 ---
 
@@ -17,8 +17,8 @@ not started — see [Scope](#scope).
 | Auth | `src/auth/` | OAuth 2.0 PKCE: verifier/challenge, state check, token store, refresh |
 | Backend | `backend/` | Token exchange + refresh. **The only place client secrets exist** |
 | Providers | `src/providers/` | One adapter per service, all behind one interface |
-| Playback | `src/playback/` | Tier 1 deep-link handoff with web fallback |
-| UI | `src/library-ui/` | Connect screen + merged library with provenance badges |
+| Playback | `src/playback/` | Tier selection, Tier 1 hand-off, Tier 2 embeds, foreground guard |
+| UI | `src/library-ui/` | Connect screen, merged library, embedded player |
 
 ### Providers
 
@@ -41,7 +41,7 @@ the two that work.
 | Tier | What | Status |
 |---|---|---|
 | **1** | Deep-link handoff — open the track in the provider's own app, falling back to its website | **Implemented** |
-| **2** | Foreground embedded playback via the provider's sanctioned embed/SDK | Not started |
+| **2** | Foreground embedded playback via the provider's sanctioned embed | **Implemented** |
 | **3** | Sahrae's own licensed catalog — direct stream, native background service | Not started |
 
 Which tier a track *can* use is a property of its licensing, so it travels on the
@@ -51,6 +51,37 @@ track (`track.playback.tier`) rather than being decided at the call site.
 serve. It is never derived for a third-party provider — that would mean
 circumventing their playback, which is out of scope by constraint, not by
 schedule.
+
+### Tier 2 — how it works
+
+Each provider's own player runs in an iframe. They serve the audio, so
+entitlement, ads and reporting all stay theirs and the play still counts for the
+artist.
+
+- **Spotify** — the Embed IFrame API. What a listener hears is Spotify's call: an
+  active Premium session in the same browser gets full tracks, everyone else gets
+  Spotify's 30-second preview. The UI says so rather than implying we can do
+  better. The Web Playback SDK is deliberately *not* used — it would need the
+  `streaming` scope and a Premium device registration, far more access than
+  reading a library justifies.
+- **YouTube** — the IFrame Player API, with the player visible. An uploader can
+  disable embedding; that only surfaces at load time as error 101/150, so the
+  player reports it and the track falls back to Tier 1.
+
+Two rules are enforced in code, not left to review:
+
+1. **Foreground only.** `ForegroundGuard` pauses playback when the page stops
+   being visible. Background playback of provider content is out of scope, and
+   it is the specific behaviour that gets apps removed. Returning to the app
+   *offers* a resume rather than restarting by itself — audio that starts on its
+   own in a room you have just walked into is a bad surprise.
+2. **The player stays visible.** `checkEmbedVisible` fails loudly in development
+   if the container is hidden, transparent or smaller than 200×200. Shrinking an
+   embed to get audio-only playback is a terms violation and an easy one to
+   introduce by accident.
+
+A listener who would rather always be thrown into the real app can be given
+`preferEmbed: false`; the same track then resolves to Tier 1.
 
 ---
 
@@ -154,7 +185,7 @@ falls back to the browser:
 npm test
 ```
 
-86 assertions, no network. Covers the parts that are easy to get wrong and
+135 assertions, no network. Covers the parts that are easy to get wrong and
 expensive to get wrong:
 
 - **PKCE** — including the RFC 7636 §A test vector, so the challenge derivation
@@ -166,6 +197,12 @@ expensive to get wrong:
   two rows unless a caller explicitly asks to collapse by ISRC
 - **Tier 1** — that the fallback fires when no app responds, does *not* fire when
   one does, and cannot double-open if the timer lands late
+- **Tier selection** — the licensing boundary: that a hidden page never starts an
+  embed, that a provider without a sanctioned embed falls to Tier 1, and that
+  Tier 3 is unreachable without a Sahrae-owned `streamUrl` no adapter can produce
+- **Foreground guard** — that backgrounding pauses once rather than three times,
+  that an idle page is unaffected, and that returning offers a resume instead of
+  auto-playing
 
 The backend was verified by running it: `/health` reports per-provider config,
 unknown providers 404, missing parameters 400, unconfigured providers 500 with
@@ -191,7 +228,7 @@ Access *and* refresh tokens are currently kept in `localStorage`. Google's
 refresh tokens do not expire, so that is a long-lived grant sitting somewhere an
 XSS on the app origin could read.
 
-Phase 1 does this because there is no session backend to hold it against yet.
+Phases 1–2 do this because there is no session backend to hold it against yet.
 **Before real users:** keep the refresh token on the backend, keyed by an
 httpOnly `SameSite=Lax` session cookie, and hand the client only the short-lived
 access token. Flagged in `backend/server.js` and `src/auth/tokenStore.ts` too, at
@@ -204,13 +241,16 @@ the point where the mistake would be made.
 Not built, by constraint rather than by schedule:
 
 - **No audio extraction** from any third-party service.
-- **No background playback** of Spotify or YouTube content.
+- **No background playback** of Spotify or YouTube content — enforced by
+  `ForegroundGuard`, not merely intended.
 - **No replication of another app's branding.** `ProviderBadge` is a neutral
   two-letter chip in Sahrae's own palette — not a logo, wordmark or brand colour.
   A Spotify-green pill implies an endorsement that does not exist.
 
-Phase 2 (embedded playback) and Phase 3 (owned catalog + native background
-service) need explicit sign-off before starting.
+Phase 3 (owned catalog + native background service) needs explicit sign-off
+before starting. It is the only tier that may legitimately stream audio Sahrae
+serves itself, and the only one that may play in the background — because by
+then the rights are ours.
 
 ---
 

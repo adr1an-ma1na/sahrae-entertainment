@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { completeFromUrl, OAuthError } from '../auth/oauthClient.ts';
 import { subscribe } from '../auth/tokenStore.ts';
 import { launch } from '../playback/tier1.ts';
@@ -6,13 +6,15 @@ import { adapterFor, allAdapters, mergeTracks } from '../providers/registry.ts';
 import type { ProviderAdapter } from '../providers/types.ts';
 import { pickArtwork, type ProviderId, type SahraeTrack } from '../types/index.ts';
 import ProviderBadge, { providerName } from './ProviderBadge.tsx';
+import EmbedPlayer from './EmbedPlayer.tsx';
 
 /**
- * Phase 1 library screen.
+ * Library screen.
  *
  * Lists every provider, connects them, pulls each connected library, and shows
  * the result as one merged list with a provenance badge per row. Activating a
- * row performs a Tier 1 hand-off.
+ * row resolves through tierPolicy: Tier 2 plays in the provider's own embed
+ * below, Tier 1 hands off to its app.
  */
 
 const fmtDuration = (ms: number): string => {
@@ -38,6 +40,13 @@ export default function ConnectorScreen() {
   const [byProvider, setByProvider] = useState<Record<string, LoadState>>({});
   const [notice, setNotice] = useState<{ kind: 'error' | 'info'; text: string } | null>(null);
   const [dedupe, setDedupe] = useState(false);
+
+  // The track playing in the Tier 2 embed, or null when nothing is embedded.
+  // Mirrored into a ref so callbacks can read it without a stale closure and
+  // without doing work inside a state updater.
+  const [playing, setPlaying] = useState<SahraeTrack | null>(null);
+  const playingRef = useRef<SahraeTrack | null>(null);
+  useEffect(() => { playingRef.current = playing; }, [playing]);
 
   const connected = useMemo(
     () => allAdapters.filter((a) => a.implemented && a.isConnected()),
@@ -109,8 +118,40 @@ export default function ConnectorScreen() {
     });
   };
 
+  /** Hand a track off to the provider's app (Tier 1). */
+  const handOff = useCallback(async (track: SahraeTrack, reason?: string) => {
+    if (reason) setNotice({ kind: 'info', text: `${reason} Opening ${providerName(track.provider)} instead.` });
+    const result = await launch({
+      kind: 'deeplink',
+      deepLink: track.playback.deepLink,
+      webUrl: track.playback.webUrl,
+      provider: track.provider,
+    });
+    if (result.opened === 'none') {
+      setNotice({ kind: 'error', text: result.reason || 'Could not open that track.' });
+    }
+  }, []);
+
   const onPlay = async (track: SahraeTrack) => {
     const action = await adapterFor(track.provider).resolvePlaybackAction(track);
+
+    // Tier 2 — play it here, in the provider's own visible player.
+    if (action.kind === 'embed') {
+      setPlaying(track);
+      return;
+    }
+    // Tier 3 is Phase 3 and nothing produces it yet; refusing is honest.
+    if (action.kind === 'native') {
+      setNotice({ kind: 'error', text: 'Sahrae-hosted playback is not built yet.' });
+      return;
+    }
+    if (action.kind === 'unavailable') {
+      setNotice({ kind: 'error', text: action.reason });
+      return;
+    }
+
+    // Tier 1.
+    setPlaying(null);
     const result = await launch(action);
     if (result.opened === 'none') {
       setNotice({ kind: 'error', text: result.reason || 'Could not open that track.' });
@@ -118,6 +159,19 @@ export default function ConnectorScreen() {
       setNotice({ kind: 'info', text: `Opened in ${providerName(track.provider)} on the web.` });
     }
   };
+
+  /**
+   * The embed reported it cannot play — fall back to the provider's app.
+   *
+   * The current track is read from a ref, not from inside a setState updater:
+   * React may invoke an updater twice (StrictMode, concurrent re-render), and a
+   * hand-off fired from inside one would launch the external app twice.
+   */
+  const onEmbedFallback = useCallback((reason: string) => {
+    const current = playingRef.current;
+    setPlaying(null);
+    if (current) void handOff(current, reason);
+  }, [handOff]);
 
   const merged = useMemo(
     () => mergeTracks(
@@ -130,13 +184,13 @@ export default function ConnectorScreen() {
   const anyLoading = Object.values(byProvider).some((s) => s.loading);
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white px-4 md:px-8 py-8 max-w-5xl mx-auto">
+    <div className={`min-h-screen bg-zinc-950 text-white px-4 md:px-8 py-8 max-w-5xl mx-auto ${playing ? "pb-[26rem]" : ""}`}>
       <header className="mb-8">
         <p className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-1">Sahrae</p>
         <h1 className="text-3xl md:text-4xl font-bold tracking-tight">Connections</h1>
         <p className="text-sm text-zinc-400 mt-2 max-w-2xl">
-          Link the services you already use. Sahrae reads your saved music and shows it in one list —
-          playing a track hands it to that service&apos;s own app.
+          Link the services you already use. Sahrae reads your saved music into one list.
+          Playing a track uses that service&apos;s own player — here when it can, in their app when it cannot.
         </p>
       </header>
 
@@ -247,9 +301,19 @@ export default function ConnectorScreen() {
       </section>
 
       <p className="text-[11px] text-zinc-600 mt-10 leading-relaxed">
-        Sahrae does not host or stream audio from these services. Selecting a track opens it in that
-        service&apos;s own app, or on its website if the app is not installed.
+        Sahrae does not host or stream audio from these services. A track plays in that service&apos;s
+        own player inside Sahrae, or opens in its app — the service always serves the audio.
+        In-app playback runs only while Sahrae is on screen.
       </p>
+
+      {playing && (
+        <EmbedPlayer
+          key={playing.id}
+          track={playing}
+          onFallback={onEmbedFallback}
+          onClose={() => setPlaying(null)}
+        />
+      )}
     </div>
   );
 }

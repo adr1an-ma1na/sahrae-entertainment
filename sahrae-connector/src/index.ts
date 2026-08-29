@@ -31,9 +31,25 @@ export {
 } from './auth/oauthClient.ts';
 export { isConnected, subscribe as subscribeToTokens } from './auth/tokenStore.ts';
 
-// Playback (Tier 1 only in Phase 1)
+// Playback — Tier 1 hand-off
 export { launch, launchWith, type LaunchResult } from './playback/tier1.ts';
 
 // UI
 export { default as ConnectorScreen } from './library-ui/ConnectorScreen.tsx';
 export { default as ProviderBadge, providerName } from './library-ui/ProviderBadge.tsx';
+
+// Playback — Tier 2 (Phase 2)
+export {
+  DEFAULT_ENVIRONMENT, embedBlockedReason, embedUrlFor, isEmbeddable,
+  resolveAction, resolveTier, spotifyEmbedUrl, youtubeEmbedUrl,
+  type TierEnvironment,
+} from './playback/tierPolicy.ts';
+export {
+  attachForegroundGuard, checkEmbedVisible, ForegroundGuard,
+  type ForegroundGuardOptions, type GuardEvent,
+} from './playback/foregroundGuard.ts';
+export {
+  createEmbed, createSpotifyEmbed, createYouTubeEmbed,
+  type CreateEmbedOptions, type EmbedController, type EmbedState, type EmbedStatus,
+} from './playback/embed/index.ts';
+export { default as EmbedPlayer, type EmbedPlayerProps } from './library-ui/EmbedPlayer.tsx';

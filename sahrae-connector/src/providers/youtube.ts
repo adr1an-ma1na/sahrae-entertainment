@@ -2,6 +2,7 @@ import { beginAuth, disconnect as dropToken, providerFetch } from '../auth/oauth
 import { isConnected as tokenConnected } from '../auth/tokenStore.ts';
 import { sahraeId, type PlaybackAction, type SahraeArtwork, type SahraePlaylist, type SahraePlaylistSummary, type SahraeTrack } from '../types/index.ts';
 import { ProviderError, type ProviderAdapter } from './types.ts';
+import { resolveAction, youtubeEmbedUrl } from '../playback/tierPolicy.ts';
 
 /**
  * YouTube Data API v3 adapter.
@@ -61,12 +62,18 @@ export function toSahraeTrack(videoId: string, snippet: any, durationMs = 0, add
     artwork: thumbs(snippet.thumbnails),
     addedAt: addedAt ? Date.parse(addedAt) || undefined : undefined,
     playback: {
-      tier: 1,
+      // Tier 2 is available in principle. An individual uploader can still
+      // disable embedding, which the API does not tell us up front — the player
+      // reports it as error 101/150 at load, and the UI falls back to Tier 1
+      // then. Advertising Tier 2 optimistically is correct: the alternative is
+      // never embedding anything on the chance that one video refuses.
+      tier: 2,
       // vnd.youtube: is the scheme the YouTube app registers. Android also
       // resolves the https watch URL to the app via App Links, so the web URL
       // is a genuine fallback rather than a consolation prize.
       deepLink: `vnd.youtube:${videoId}`,
       webUrl: `https://www.youtube.com/watch?v=${videoId}`,
+      embedUrl: youtubeEmbedUrl(videoId, typeof window !== 'undefined' ? window.location.origin : undefined),
     },
   };
 }
@@ -211,15 +218,12 @@ export const youtubeAdapter: ProviderAdapter = {
   },
 
   /**
-   * Tier 1. Phase 2 would move this to the sanctioned IFrame embed (Tier 2);
-   * extracting the audio stream would be neither, and is out of scope.
+   * Tier 2 via YouTube's sanctioned IFrame player where the environment allows,
+   * Tier 1 otherwise. YouTube serves the media either way, so their ads and view
+   * counting stay intact and the play lands with the creator. Extracting the
+   * audio stream would be neither tier, and stays out of scope.
    */
-  resolvePlaybackAction: async (track): Promise<PlaybackAction> => ({
-    kind: 'deeplink',
-    deepLink: track.playback.deepLink,
-    webUrl: track.playback.webUrl,
-    provider: ID,
-  }),
+  resolvePlaybackAction: async (track): Promise<PlaybackAction> => resolveAction(track),
 };
 
 /* eslint-enable @typescript-eslint/no-explicit-any */
