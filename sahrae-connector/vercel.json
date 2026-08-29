@@ -3,19 +3,36 @@
   "framework": "vite",
   "buildCommand": "npm run build:pwa",
   "outputDirectory": "dist",
-
   "rewrites": [
-    { "source": "/oauth/:path*", "destination": "/api/oauth/:path*" },
-    { "source": "/((?!api/|oauth/).*)", "destination": "/index.html" }
+    {
+      "source": "/health",
+      "destination": "/api/health"
+    },
+    {
+      "source": "/oauth/:path*",
+      "destination": "/api/oauth/:path*"
+    },
+    {
+      "source": "/((?!api/|oauth/|health$).*)",
+      "destination": "/index.html"
+    }
   ],
-
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "X-Frame-Options", "value": "DENY" },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
         {
           "key": "Content-Security-Policy",
           "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://open.spotify.com https://www.youtube.com https://s.ytimg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'none'; connect-src 'self' https://api.spotify.com https://www.googleapis.com; frame-src https://open.spotify.com https://www.youtube.com https://www.youtube-nocookie.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
@@ -25,8 +42,14 @@
     {
       "source": "/oauth/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, private" },
-        { "key": "Pragma", "value": "no-cache" }
+        {
+          "key": "Cache-Control",
+          "value": "no-store, no-cache, must-revalidate, private"
+        },
+        {
+          "key": "Pragma",
+          "value": "no-cache"
+        }
       ]
     }
   ]

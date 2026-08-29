@@ -224,14 +224,26 @@ and a disallowed `Origin` is refused 403 with no CORS header granting access.
 
 ## Deploying
 
-**Vercel** — one project serving the app and its token-exchange API from the same
-origin.
+**Live: <https://sahrae-connector.vercel.app>**
+
+One Vercel project serving the app and its token-exchange API from the same
+origin. `/health` reports what the deployment actually has configured.
 
 ```bash
 cd sahrae-connector
-npx vercel        # first run links the project
 npx vercel --prod
 ```
+
+`SESSION_SECRET` is already set for all three environments, so refresh tokens are
+in httpOnly cookies rather than the browser. Confirm with:
+
+```bash
+curl -s https://sahrae-connector.vercel.app/health
+```
+
+It should say `"refreshCustody": "cookie"`. It currently reports both providers
+as `configured: false` — the four provider credentials below are the remaining
+step, and nothing can sign in until they are set.
 
 Vercel reads `vercel.json`: it runs `npm run build:pwa` and serves `dist/`.
 
