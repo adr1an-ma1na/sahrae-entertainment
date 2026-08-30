@@ -1,10 +1,11 @@
 import { X, ExternalLink, AlertCircle, Info, Star, Calendar, Clock, Play, RefreshCw, Plus, Check, Maximize, ArrowLeft, SkipBack, SkipForward, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle } from 'lucide-react';
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { fetchMediaDetails, MediaDetails, getImageUrl, fetchSimilar, MediaItem, SeasonDetails, fetchSeasonDetails } from '../services/tmdb';
 import { useWatchProgress } from '../hooks/useWatchProgress';
 import { useMyList } from '../hooks/useMyList';
 import { loadEq, saveEq, EQ_PRESETS, PRESET_EXTRAS } from '../services/eq';
 import { haptics } from '../services/haptics';
+import { rankServers, recordDwell, recordFailure } from '../services/serverHealth';
 import MovieDownloadModal from './MovieDownloadModal';
 import { posterColor, cachedPosterColor } from '../services/posterColor';
 import { playerSandbox, isShieldOn, setShieldOn as persistShield, shieldAppliesHere } from '../services/adShield';
@@ -28,6 +29,10 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const [infoTab, setInfoTab] = useState<'details' | 'similar' | 'episodes'>('details');
   const [playingTrailer, setPlayingTrailer] = useState<string | null>(null);
   const [selectedServer, setSelectedServer] = useState(0);
+  // When the current server started playing, so leaving it can be read as a
+  // verdict — a quick switch means it did not work.
+  const serverSinceRef = useRef<number>(Date.now());
+  const serverIdRef = useRef<string>('');
   const [selectedSeason, setSelectedSeason] = useState(initialSeason || 1);
   const [selectedEpisode, setSelectedEpisode] = useState(initialEpisode || 1);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -189,8 +194,10 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
 
   const reportCurrentMovieServerDead = () => {
     haptics.tap();
-    const currentServerId = SERVERS[selectedServer]?.id;
+    const currentServerId = dynamicServers[selectedServer]?.id;
     if (!currentServerId) return;
+    // An explicit "this is dead" is the strongest signal there is.
+    recordFailure(currentServerId);
 
     setFailedServers(prev => {
       if (prev.includes(currentServerId)) return prev;
@@ -198,15 +205,15 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     });
 
     // Automatically switch to the next non-failed server in sequence
-    let nextIdx = (selectedServer + 1) % SERVERS.length;
+    let nextIdx = (selectedServer + 1) % dynamicServers.length;
     let iterations = 0;
-    while (iterations < SERVERS.length) {
-      const serverId = SERVERS[nextIdx].id;
+    while (iterations < dynamicServers.length) {
+      const serverId = dynamicServers[nextIdx].id;
       // Is this server also failed?
       if (!failedServers.includes(serverId) && serverId !== currentServerId) {
         break;
       }
-      nextIdx = (nextIdx + 1) % SERVERS.length;
+      nextIdx = (nextIdx + 1) % dynamicServers.length;
       iterations++;
     }
 
@@ -262,20 +269,29 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   // download portal ("Download movies and TV shows"), not a stream. It now lives
   // only behind the Download button (see DOWNLOAD_SOURCE below), per the request
   // that it stop being the default play server.
+  /**
+   * Sources, best-first as a starting point — reordered per device by
+   * serverHealth from what has actually played here.
+   *
+   * Five entries were removed after a reachability audit rather than left in
+   * hoping: moviesapi.club, vidsrc.net and embed.su no longer resolve at all
+   * (NXDOMAIN), the superembed path 404s, and smashystream answers 200 with an
+   * empty body. A dead server in the list is worse than no server — it is a
+   * choice the viewer has to make and then undo.
+   *
+   * The rest are kept even where they failed from one network: three of them
+   * resolve fine and were simply blocked by one ISP, which is exactly the case
+   * per-device ranking exists to handle.
+   */
   const SERVERS = [
     { id: 'multiembed', name: 'Ultra HD (MultiEmbed)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://multiembed.mov/?video_id=${id}&tmdb=1` : `https://multiembed.mov/?video_id=${id}&tmdb=1&s=${s}&e=${e}`, type: 'iframe' },
     { id: 'vidsrccc', name: 'Ultra HD V3 (VidSrc.cc)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.cc/v3/embed/movie/${id}` : `https://vidsrc.cc/v3/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
-    { id: 'smashystream', name: 'Multi-Source HQ (SmashyStream)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://embed.smashystream.com/playere.php?tmdb=${id}` : `https://embed.smashystream.com/playere.php?tmdb=${id}&season=${s}&episode=${e}`, type: 'iframe' },
     { id: 'vidsrcto', name: 'Premium 4K CDN (VidSrc.to)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.to/embed/movie/${id}` : `https://vidsrc.to/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
     { id: 'vidbinge', name: 'HQ Cinema (VidBinge)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidbinge.com/embed/movie/${id}` : `https://vidbinge.com/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
-    { id: 'superembed', name: 'Ultra HD 3 (SuperEmbed)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://multiembed.mov/direct/superembed/movie/${id}` : `https://multiembed.mov/direct/superembed/tv/${id}/${s}/${e}`, type: 'iframe' },
-    { id: 'moviesapi', name: 'HiFi Premium (MoviesAPI)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://moviesapi.club/movie/${id}` : `https://moviesapi.club/tv/${id}-${s}-${e}`, type: 'iframe' },
     { id: 'autoembed', name: 'Cloud AutoEmbed (AutoEmbed)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://autoembed.co/movie/tmdb/${id}` : `https://autoembed.co/tv/tmdb/${id}-${s}-${e}`, type: 'iframe' },
     { id: 'vidsrcpro', name: 'Premium HD (VidSrc.pro)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.pro/embed/movie/${id}` : `https://vidsrc.pro/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
     { id: '2embed', name: 'HQ Stream (2Embed)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://www.2embed.cc/embed/${id}` : `https://www.2embed.cc/embedtv/${id}&s=${s}&e=${e}`, type: 'iframe' },
-    { id: 'vidsrcnet', name: 'Fast Stream (VidSrc.net)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.net/embed/movie?tmdb=${id}` : `https://vidsrc.net/embed/tv?tmdb=${id}&season=${s}&episode=${e}`, type: 'iframe' },
     { id: 'vidsrcme', name: 'Fast Stream 2 (VidSrc.me)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.me/embed/movie?tmdb=${id}` : `https://vidsrc.me/embed/tv?tmdb=${id}&season=${s}&episode=${e}`, type: 'iframe' },
-    { id: 'embedsu', name: 'Backup (Embed.su)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://embed.su/embed/movie/${id}` : `https://embed.su/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
   ];
 
   useEffect(() => {
@@ -433,6 +449,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   // Reset the one-shot auto-retry when the content or server actually changes.
   useEffect(() => { autoRetriedRef.current = false; }, [isPlaying, selectedServer, selectedSeason, selectedEpisode]);
 
+
   const handleMouseMove = () => {
     setShowControls(true);
     if (hideControlsTimeoutRef.current) {
@@ -464,7 +481,39 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
 
   if (!isOpen || !currentMediaId || !currentMediaType || !details) return null;
 
-  const dynamicServers = [...SERVERS];
+  /**
+   * Ordered by what has actually played on THIS device.
+   *
+   * Sources that work vary by country and ISP — an audit found three servers
+   * that resolve perfectly but were blocked on one network. Starting everyone
+   * at index 0 means every viewer on that network hits a dead player first,
+   * every time. Ranking locally means the app gets it right on the second try
+   * and stays right.
+   *
+   * Memoised on the media, so the order is stable while something is open
+   * rather than re-sorting under the viewer mid-watch.
+   */
+  const dynamicServers = useMemo(() => rankServers(SERVERS), [currentMediaId, currentMediaType]);
+
+  /**
+   * Score the server the viewer just left.
+   *
+   * A cross-origin iframe cannot tell us whether it played, so dwell time is
+   * the signal: leaving quickly means it did not. Runs on change and on unmount,
+   * so closing the player counts too.
+   */
+  useEffect(() => {
+    const previous = serverIdRef.current;
+    const since = serverSinceRef.current;
+    const now = dynamicServers[selectedServer]?.id || '';
+    if (previous && previous !== now) recordDwell(previous, Date.now() - since);
+    serverIdRef.current = now;
+    serverSinceRef.current = Date.now();
+    return () => {
+      if (serverIdRef.current) recordDwell(serverIdRef.current, Date.now() - serverSinceRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedServer, dynamicServers, isOpen]);
 
   const currentServerObj = dynamicServers[selectedServer] || dynamicServers[0];
   const src = currentServerObj.getUrl(currentMediaType, currentMediaId || 0, selectedSeason, selectedEpisode);
