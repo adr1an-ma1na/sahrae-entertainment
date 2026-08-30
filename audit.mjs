@@ -99,12 +99,20 @@ async function auditMovies() {
     if (r.ok && r.body) {
       // A 200 is not enough: a parked domain, a "not found" page and a real
       // player all return 200. Look for something a player would carry.
+      //
+      // Two categories, because they look nothing alike. An old-style provider
+      // ships the player in the HTML. A modern one ships an app shell and mounts
+      // the player in JavaScript — Videasy and VidSrc.su both do, and an
+      // HTML-only test called them broken when they serve both films and
+      // episodes perfectly well. Judging a React player by its server HTML is
+      // like judging a restaurant by its front door.
       const html = await r.body.text().catch(() => '');
-      const looksPlayable = /<iframe|<video|jwplayer|playerjs|hls\.js|\.m3u8|sources\s*[:=]/i.test(html);
+      const inMarkup = /<iframe|<video|jwplayer|playerjs|hls\.js|\.m3u8|sources\s*[:=]/i.test(html);
+      const mountsInJs = /__NEXT_DATA__|<div id="(root|app|__next)"|type="module".*\.js|\/_next\/|\/assets\/.*\.js/i.test(html);
       const looksDead = /domain (is )?for sale|parked|buy this domain|not found|no results/i.test(html);
       if (looksDead) { verdict = false; note += ' · parked/not-found page'; }
-      else if (!looksPlayable) { verdict = false; note += ` · 200 but no player markup (${html.length}b)`; }
-      else note += ' · player markup present';
+      else if (!inMarkup && !mountsInJs) { verdict = false; note += ` · 200 but no player and no app shell (${html.length}b)`; }
+      else note += inMarkup ? ' · player in markup' : ' · app shell, player mounts in js';
     }
     record('movies', verdict);
     return line(verdict, id, note);
@@ -174,11 +182,23 @@ async function auditRadio() {
   const stations = parseStations();
   console.log(`\n── Radio (${stations.length}) ` + '─'.repeat(50));
   const results = await pool(stations, async ([name, url]) => {
-    const r = await probe(url, { headers: { Range: 'bytes=0-1023', Icy_MetaData: '1' } });
+    // NO Range header.
+    //
+    // Asking for bytes 0-1023 of a LIVE STREAM is incoherent — a stream has no
+    // length and no byte offsets — and a correct server answers 416 Range Not
+    // Satisfiable. This script used to send one anyway and read the 416 as a
+    // dead station, which nearly deleted LagosJump Radio: it serves audio/mpeg
+    // perfectly well, it was simply being asked a nonsensical question.
+    //
+    // The stream is cancelled as soon as the headers are in, so nothing is
+    // downloaded beyond what the connection has already buffered.
+    const r = await probe(url, { headers: { Icy_MetaData: '1' } });
     let ok = r.ok;
     let note = `${r.status || r.error} ${r.ms}ms ${r.type.slice(0, 24)}`;
     // A station serving HTML is a station that has stopped serving audio.
     if (r.ok && /text\/html/.test(r.type)) { ok = false; note += ' · html, not audio'; }
+    if (r.ok && r.status === 416) { ok = false; note += ' · 416 (probe bug — should not happen without Range)'; }
+    r.body?.body?.cancel?.().catch(() => { /* already closed */ });
     record('radio', ok);
     return line(ok, name, note);
   });
@@ -189,8 +209,16 @@ async function auditRadio() {
 async function auditApis() {
   console.log('\n── APIs and services ' + '─'.repeat(44));
   const key = JSON.parse(fs.readFileSync('firebase-applet-config.json', 'utf8')).apiKey;
+  // Read TMDB's key from the source the app actually uses, not an env var the
+  // runner has to remember to set. Requiring one made this report a 401 and
+  // call TMDB broken when TMDB was fine — an audit that cries wolf gets ignored,
+  // which defeats the point of having one.
+  const tmdbKey = fs.readFileSync('src/services/tmdb.ts', 'utf8').match(/API_KEY\s*=\s*'([^']+)'/)?.[1] || '';
   const checks = [
-    ['TMDB (trending)', 'https://api.themoviedb.org/3/trending/all/week?api_key=' + (process.env.TMDB_KEY || '')],
+    ['TMDB (trending)', `https://api.themoviedb.org/3/trending/all/week?api_key=${tmdbKey}`],
+    ['TMDB (movie detail)', `https://api.themoviedb.org/3/movie/550?api_key=${tmdbKey}&append_to_response=videos,credits`],
+    ['TMDB (tv season)', `https://api.themoviedb.org/3/tv/1396/season/1?api_key=${tmdbKey}`],
+    ['TMDB (search)', `https://api.themoviedb.org/3/search/multi?api_key=${tmdbKey}&query=dune`],
     ['iTunes podcast search', 'https://itunes.apple.com/search?media=podcast&limit=1&term=news'],
     ['iTunes episodes', 'https://itunes.apple.com/lookup?id=1665219519&entity=podcastEpisode&limit=1'],
     ['YouTube chart (KE)', `https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&videoCategoryId=10&regionCode=KE&maxResults=1&key=${key}`],

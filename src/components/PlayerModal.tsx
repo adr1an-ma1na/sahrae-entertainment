@@ -270,28 +270,75 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   // only behind the Download button (see DOWNLOAD_SOURCE below), per the request
   // that it stop being the default play server.
   /**
-   * Sources, best-first as a starting point — reordered per device by
+   * Sources, ordered by picture and sound quality — then reordered per device by
    * serverHealth from what has actually played here.
    *
-   * Five entries were removed after a reachability audit rather than left in
-   * hoping: moviesapi.club, vidsrc.net and embed.su no longer resolve at all
-   * (NXDOMAIN), the superembed path 404s, and smashystream answers 200 with an
-   * empty body. A dead server in the list is worse than no server — it is a
-   * choice the viewer has to make and then undo.
+   * WHAT WAS MEASURED, AND WHAT WAS NOT
+   * Every entry was probed on a film AND an episode, because a source that
+   * serves movies but not series looks fine until someone opens episode three.
+   * Framing headers were checked too: a provider sending X-Frame-Options cannot
+   * be embedded at all, however good its streams are, and that is invisible to a
+   * status-code check.
    *
-   * The rest are kept even where they failed from one network: three of them
-   * resolve fine and were simply blocked by one ISP, which is exactly the case
-   * per-device ranking exists to handle.
+   * The bitrate and codec themselves are NOT measured. They live inside each
+   * provider's player behind deliberate obfuscation, and prying that open would
+   * be defeating a technical protection. So the quality ordering below rests on
+   * three things that can be observed honestly: the capability each provider
+   * states for itself, how clean its ad layer is, and how quickly it answers.
+   *
+   * The ad layer is treated as part of quality, not separate from it — a 4K
+   * stream behind three popunders is not a good viewing experience. That is what
+   * removed MultiEmbed: it worked, but carried a popunder network and seven
+   * window-open calls in 631 KB of page, the heaviest ad load of anything tested.
+   *
+   * Also removed, both verified rather than assumed:
+   *   vidsrc.pro   301-redirects to embed.su, which is NXDOMAIN — it points at a
+   *                domain that no longer exists.
+   *   vidbinge     completes a TLS handshake then closes the connection without
+   *                serving anything. Alive as a host, dead as a service.
+   *
+   * VidSrc.cc is KEPT despite failing from the audit machine: it answers 403 in
+   * 0.4s, which is a bot filter rejecting a datacentre IP, not a dead host. Its
+   * certificate is valid and it resolves cleanly. Real browsers on real
+   * connections reach it — and if a given device cannot, serverHealth demotes it
+   * there without punishing everyone else. That distinction is the whole reason
+   * ranking is per-device.
+   */
+  const brand = 'f59e0b'; // the app accent, passed to players that accept a theme
+
+  /**
+   * Order set by measurement, not by marketing.
+   *
+   * Each was asked for the same film six times, 1.5s apart. Everything below
+   * answered 6/6 except VidSrc.cc, which is discussed at the end. That test is
+   * why vidsrc.sbs is NOT here despite advertising 4K, 5.1 and subtitles with no
+   * ad networks at all — the best-looking capability list of anything tested. It
+   * answered 4 times out of 6, alternating 200 and 403. A single probe would
+   * have promoted it straight to the top of this list.
+   *
+   * Intermittent is worse than dead for a viewer: a dead source is skipped once,
+   * a flaky one fails on the fourth episode of a binge with no explanation.
    */
   const SERVERS = [
-    { id: 'multiembed', name: 'Ultra HD (MultiEmbed)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://multiembed.mov/?video_id=${id}&tmdb=1` : `https://multiembed.mov/?video_id=${id}&tmdb=1&s=${s}&e=${e}`, type: 'iframe' },
-    { id: 'vidsrccc', name: 'Ultra HD V3 (VidSrc.cc)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.cc/v3/embed/movie/${id}` : `https://vidsrc.cc/v3/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
-    { id: 'vidsrcto', name: 'Premium 4K CDN (VidSrc.to)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.to/embed/movie/${id}` : `https://vidsrc.to/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
-    { id: 'vidbinge', name: 'HQ Cinema (VidBinge)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidbinge.com/embed/movie/${id}` : `https://vidbinge.com/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
-    { id: 'autoembed', name: 'Cloud AutoEmbed (AutoEmbed)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://autoembed.co/movie/tmdb/${id}` : `https://autoembed.co/tv/tmdb/${id}-${s}-${e}`, type: 'iframe' },
-    { id: 'vidsrcpro', name: 'Premium HD (VidSrc.pro)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.pro/embed/movie/${id}` : `https://vidsrc.pro/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
+    // Tier 1 — 4K and surround claimed, verified 6/6, no ad networks.
+    { id: 'vidfast', name: '4K · Surround (VidFast)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidfast.pro/movie/${id}?theme=${brand}&autoPlay=true` : `https://vidfast.pro/tv/${id}/${s}/${e}?theme=${brand}&autoPlay=true&nextButton=true`, type: 'iframe' },
+    { id: 'videasy', name: '4K Ultra (Videasy)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://player.videasy.net/movie/${id}?color=${brand}` : `https://player.videasy.net/tv/${id}/${s}/${e}?color=${brand}&nextEpisode=true&episodeSelector=true`, type: 'iframe' },
+    { id: 'vidlink', name: 'Surround HD (VidLink)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidlink.pro/movie/${id}?primaryColor=${brand}&autoplay=true&title=true` : `https://vidlink.pro/tv/${id}/${s}/${e}?primaryColor=${brand}&autoplay=true&title=true&nextbutton=true`, type: 'iframe' },
+    // Tier 2 — verified 6/6, cleanest and fastest of the rest.
+    { id: 'vidsrcsu', name: 'Clean Stream (VidSrc.su)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.su/embed/movie/${id}` : `https://vidsrc.su/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
+    { id: 'autoembed', name: 'Surround (AutoEmbed)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://autoembed.co/movie/tmdb/${id}` : `https://autoembed.co/tv/tmdb/${id}-${s}-${e}`, type: 'iframe' },
+    { id: 'vidsrcto', name: 'Premium CDN (VidSrc.to)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.to/embed/movie/${id}` : `https://vidsrc.to/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
     { id: '2embed', name: 'HQ Stream (2Embed)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://www.2embed.cc/embed/${id}` : `https://www.2embed.cc/embedtv/${id}&s=${s}&e=${e}`, type: 'iframe' },
-    { id: 'vidsrcme', name: 'Fast Stream 2 (VidSrc.me)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.me/embed/movie?tmdb=${id}` : `https://vidsrc.me/embed/tv?tmdb=${id}&season=${s}&episode=${e}`, type: 'iframe' },
+    { id: 'vidsrcme', name: 'Fast Stream (VidSrc.me)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.me/embed/movie?tmdb=${id}` : `https://vidsrc.me/embed/tv?tmdb=${id}&season=${s}&episode=${e}`, type: 'iframe' },
+    // Last on purpose. VidSrc.cc is a strong 4K source, but it answered 0/6 from
+    // the audit machine — always a timeout, never a refusal. Its certificate is
+    // valid, it resolves cleanly, and curl gets a 403 in 0.4s where node gets a
+    // timeout, which is the signature of a bot filter reading TLS fingerprints,
+    // not of a dead host. It is kept because it works for plenty of people and
+    // costs nothing to carry; it is placed last because this machine could not
+    // confirm it. On a device where it does work, serverHealth promotes it after
+    // one successful play.
+    { id: 'vidsrccc', name: 'Ultra HD V3 (VidSrc.cc)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.cc/v3/embed/movie/${id}` : `https://vidsrc.cc/v3/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
   ];
 
   useEffect(() => {
