@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
-import { gpuReport } from "../../services/gpu";
 
 /**
  * Sahrae premium shader background.
@@ -59,15 +58,6 @@ export function ShaderAnimation({ className }: ShaderAnimationProps) {
         gl_FragColor = vec4(color, alpha);
       }
     `;
-
-    // Refuse to run on a GPU that is not one.
-    //
-    // The old guard was the try/catch below alone, which only catches WebGL
-    // being ABSENT. Emulators and low-end TV boxes provide a perfectly working
-    // context backed by SwiftShader and execute every fragment on the CPU — so
-    // the check passed and the app then froze on its own first screen. This is
-    // decoration behind a mask at 50% opacity; it is never worth a hang.
-    if (!gpuReport().canRunShaders) return;
 
     let renderer: THREE.WebGLRenderer;
     try {

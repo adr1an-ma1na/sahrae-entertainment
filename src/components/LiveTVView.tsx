@@ -113,6 +113,7 @@ export const CHANNELS: Channel[] = [
   { name: 'Trace Urban', country: 'France', category: 'Music', url: 'https://channels.trace.plus/Traceprod/URBAN_AFRIC_FR_hd/index.m3u8' },
   // Renamed from "Vevo Dance": the working Vevo feed is the Pop channel, and
   // labelling it Dance would promise a genre it does not play.
+  { name: 'Vevo Pop', country: 'Global', category: 'Music', url: 'https://d128y56w6v2kax.cloudfront.net/playlist/amg00056-vevotv-vevopopau-samsungau/playlist.m3u8' },
   { name: 'Stingray Classica', country: 'Canada', category: 'Music', url: 'https://lotus.stingray.com/manifest/classica-cla008-montreal/samsungtvplus/master.m3u8' },
   // Lifestyle / Kids
   { name: 'Fashion TV', country: 'France', category: 'Lifestyle', url: 'https://edge-fast3.evrideo.tv/bfdbb576-83f7-11f0-9f89-0200170e3e04_1000028043_HLS/manifest.m3u8' },

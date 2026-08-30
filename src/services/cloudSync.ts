@@ -220,9 +220,45 @@ export function startSync(onPulled?: () => void): () => void {
 export function syncUnavailable(): boolean { return tableMissing; }
 
 /**
- * Where the setup lives.
+ * The SQL that turns both features on. Run once in Supabase → SQL Editor.
  *
- * The SQL is a real migration file rather than a string in here — it is
- * versioned, reviewable, and cannot drift from what was actually run.
+ * user_state   — a listener's library, readable and writable only by them.
+ * search_cache — YouTube results shared by everyone, so the quota is spent once
+ *                per query rather than once per person. Readable by all,
+ *                writable by signed-in users; the rows contain nothing private,
+ *                only public YouTube metadata somebody already searched for.
  */
-export const SETUP_SQL_PATH = 'supabase/migrations/0001_user_state_and_search_cache.sql';
+export const SETUP_SQL = `-- 1. A listener's own library, private to them.
+create table if not exists user_state (
+  user_id    uuid primary key references auth.users on delete cascade,
+  state      jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+alter table user_state enable row level security;
+
+create policy "own row" on user_state
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+
+-- 2. Shared YouTube search results. Public metadata only — no user data.
+--    Turns a 100-unit search into a one-off cost for the whole user base.
+create table if not exists search_cache (
+  cache_key  text primary key,
+  payload    jsonb not null,
+  created_at timestamptz not null default now()
+);
+
+alter table search_cache enable row level security;
+
+create policy "anyone may read" on search_cache
+  for select using (true);
+
+create policy "signed-in may fill" on search_cache
+  for insert with check (auth.role() = 'authenticated');
+
+create policy "signed-in may refresh" on search_cache
+  for update using (auth.role() = 'authenticated');
+
+-- Results older than a day are stale; drop them so the table stays small.
+create index if not exists search_cache_age on search_cache (created_at);`;

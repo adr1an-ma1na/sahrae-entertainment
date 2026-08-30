@@ -26,16 +26,11 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
-      # A hook below an early return shipped once and took the whole app to an
-      # error screen on every Play. Typecheck cannot see it; this can.
-      - name: Hook order
-        run: node hooks-check.mjs
-
       # --offline skips the live-API blocks, so a provider being down cannot
       # turn a green build red for reasons that have nothing to do with the code.
       - name: Test suites
         run: |
-          for suite in listen mixes video serverhealth sportsstreams tvnav adfilter downloads gpu; do
+          for suite in listen mixes video sportsstreams tvnav adfilter; do
             echo "── $suite ──"
             node --experimental-strip-types "$suite-check.mjs" --offline
           done

@@ -1442,29 +1442,8 @@ public class MainActivity extends BridgeActivity {
                             return AudioFx.ok();
                         } else if (path.startsWith("/__dllist")) {
                             return DownloadStore.json(DownloadStore.listJson(getApplicationContext()));
-                        } else if (path.startsWith("/__dlstats")) {
-                            // Bytes used, space free, and per-state counts — so the
-                            // Downloads screen can show a real storage meter instead
-                            // of omitting one.
-                            return DownloadStore.json(DownloadStore.statsJson(getApplicationContext()));
                         } else if (path.startsWith("/__dlremove")) {
                             try { DownloadStore.remove(getApplicationContext(), Long.parseLong(request.getUrl().getQueryParameter("id"))); } catch (Throwable ignore) {}
-                            return DownloadStore.json("{\"ok\":true}");
-                        } else if (path.startsWith("/__dlretry")) {
-                            // Re-queue a failed download from the URL captured when it
-                            // first started, so a retry costs one tap rather than
-                            // navigating the provider again.
-                            try { DownloadStore.retry(getApplicationContext(), Long.parseLong(request.getUrl().getQueryParameter("id"))); } catch (Throwable ignore) {}
-                            return DownloadStore.json("{\"ok\":true}");
-                        } else if (path.startsWith("/__dlwifi")) {
-                            DownloadStore.setWifiOnly(getApplicationContext(), "1".equals(request.getUrl().getQueryParameter("on")));
-                            return DownloadStore.json("{\"ok\":true}");
-                        } else if (path.startsWith("/__dlmeta")) {
-                            // Title AND identity (tmdb id, season, episode, poster),
-                            // staged just before a download starts so the saved file
-                            // can be shown with its artwork and grouped under its
-                            // series instead of appearing as a bare filename.
-                            DownloadStore.setPendingMeta(request.getUrl().getQueryParameter("m"));
                             return DownloadStore.json("{\"ok\":true}");
                         } else if (path.startsWith("/__dltitle")) {
                             DownloadStore.setPendingTitle(request.getUrl().getQueryParameter("t"));

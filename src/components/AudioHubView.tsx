@@ -44,9 +44,7 @@ export const STATIONS = [
   { name: 'East FM', country: 'Kenya', category: 'Asian', frequency: '106.3', url: 'https://eastfm-atunwadigital.streamguys1.com/eastfm' },
 
   // ── Rest of Africa ──
-  // Metro FM Lagos removed: go.webgateready.com resolves, but ports 443, 80 and
-  // 8000 are all closed — the host is up in DNS only. Nothing to fall back to,
-  // so the entry goes rather than sitting there failing silently.
+  { name: 'Metro FM Lagos', country: 'Nigeria', category: 'Pop', frequency: '97.7', url: 'https://go.webgateready.com/metrofm/radio.mp3' },
   { name: 'LagosJump Radio', country: 'Nigeria', category: 'Afrobeats', frequency: 'Digital', url: 'https://radio.lagosjumpradio.com/listen/lagosjump_radio/radio.mp3' },
   { name: 'Jacaranda FM', country: 'South Africa', category: 'Pop', frequency: '94.2', url: 'https://edge.iono.fm/xice/jacarandafm_live_medium.aac' },
   { name: 'Kaya FM', country: 'South Africa', category: 'Soul', frequency: '95.9', url: 'https://edge.iono.fm/xice/82_medium.aac' },
