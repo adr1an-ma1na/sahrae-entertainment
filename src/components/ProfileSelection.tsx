@@ -2,6 +2,7 @@ import { useState, FormEvent } from 'react';
 import { Plus, Edit2, Check } from 'lucide-react';
 import { useAuth, Profile } from '../hooks/useAuth';
 import { Suspense, lazy } from 'react';
+import { gpuReport } from '../services/gpu';
 
 /**
  * The shader background pulls in three.js — 112 KB gzipped for a decorative
@@ -163,9 +164,15 @@ export default function ProfileSelection() {
           maskImage: 'radial-gradient(ellipse at 50% 45%, black 25%, transparent 75%)',
         }}
       >
-        <Suspense fallback={null}>
-          <ShaderAnimation className="h-full w-full" />
-        </Suspense>
+        {/* Not merely "don't render it" — don't FETCH it. Skipping the element
+            still downloads and parses 459 KB of three.js on the device least able
+            to afford either, for decoration it has already been decided not to
+            show. The check is cheap and cached. */}
+        {gpuReport().canRunShaders && (
+          <Suspense fallback={null}>
+            <ShaderAnimation className="h-full w-full" />
+          </Suspense>
+        )}
       </div>
       <h1 className="text-4xl md:text-5xl font-bold text-white mb-12 text-center">Who's watching?</h1>
       
