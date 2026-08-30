@@ -8,16 +8,26 @@
  * evidence in it.
  *
  * Deliberately not a vendor SDK. Sentry's browser bundle is ~30 KB gzipped and
- * this file is under two, which matters on a build already carrying 680 KB. It
- * captures the same three sources a vendor would — uncaught errors, unhandled
- * rejections, failed resource loads — and posts them wherever
- * VITE_ERROR_ENDPOINT points. Set that to a Sentry-compatible endpoint, a
- * Vercel function, or nothing at all.
+ * this file is under two, which matters on a build already carrying too much.
+ * It captures the same three sources a vendor would: uncaught errors, unhandled
+ * rejections, and failed resource loads — that last category being the one that
+ * produced the silent podcast failure, where an audio element failed to load and
+ * nothing in the app noticed.
  *
- * With no endpoint configured it still keeps the last errors in memory, so the
- * diagnostics readout can show a listener what went wrong on their own device
- * when they get in touch — which beats "it just stopped working" by a mile.
+ * WHERE REPORTS GO
+ * Supabase, by default — the error_log table, no extra service to run. Set
+ * VITE_ERROR_ENDPOINT to send them somewhere else instead.
+ *
+ * Either way the last errors stay in memory too, so a listener's own device can
+ * say what went wrong when they get in touch. That beats "it just stopped
+ * working" even when the network was the thing that failed.
+ *
+ * WHAT IS NOT SENT
+ * No user id, no email, no page contents, no query strings — the path only.
+ * A bug report should not become a privacy problem.
  */
+
+import { SUPABASE_KEY, SUPABASE_REST } from '../supabase';
 
 export interface ReportedError {
   at: number;
@@ -40,30 +50,63 @@ const endpoint = (): string => {
   try { return (import.meta.env?.VITE_ERROR_ENDPOINT as string) || ''; } catch { return ''; }
 };
 
+/** Supabase is the default destination — no extra service to run. */
+const supabaseSink = (): string => (SUPABASE_REST ? `${SUPABASE_REST}/error_log` : '');
+
 /** The last errors this session, newest first. For the diagnostics view. */
 export function recentErrors(): ReportedError[] {
   return [...recent].reverse();
 }
 
 function send(e: ReportedError): void {
-  const url = endpoint();
-  if (!url || posted >= MAX_POSTS) return;
-  posted += 1;
-  const body = JSON.stringify({
-    ...e,
+  if (posted >= MAX_POSTS) return;
+
+  const payload = {
+    // ISO, not epoch: the column is timestamptz and PostgREST will not coerce a
+    // bare number into one.
+    at: new Date(e.at).toISOString(),
+    kind: e.kind,
+    message: e.message,
+    source: e.source,
+    stack: e.stack,
     // Enough to reproduce, nothing that identifies a person: no user id, no
     // email, no page contents. A bug report should not become a privacy problem.
     url: location.pathname,
     ua: navigator.userAgent,
     build: (import.meta.env?.VITE_BUILD as string) || 'dev',
-  });
-  // sendBeacon survives the page being closed, which is exactly when a fatal
-  // error tends to happen. fetch is the fallback where it is unavailable.
-  try {
-    if (navigator.sendBeacon?.(url, new Blob([body], { type: 'application/json' }))) return;
-  } catch { /* fall through */ }
-  void fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true })
-    .catch(() => { /* reporting must never itself throw */ });
+  };
+  const body = JSON.stringify(payload);
+
+  const custom = endpoint();
+  if (custom) {
+    posted += 1;
+    // sendBeacon survives the page being closed, which is exactly when a fatal
+    // error tends to happen. It cannot set headers, so it is only usable for a
+    // plain endpoint — not for Supabase, which needs an apikey.
+    try {
+      if (navigator.sendBeacon?.(custom, new Blob([body], { type: 'application/json' }))) return;
+    } catch { /* fall through */ }
+    void fetch(custom, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true })
+      .catch(() => { /* reporting must never itself throw */ });
+    return;
+  }
+
+  const sink = supabaseSink();
+  if (!sink) return; // nothing configured — the in-memory ring is still there
+  posted += 1;
+  void fetch(sink, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      // Without this PostgREST returns the inserted row, which we neither need
+      // nor are permitted to read — there is no select policy on the table.
+      Prefer: 'return=minimal',
+    },
+    body,
+    keepalive: true,
+  }).catch(() => { /* reporting must never itself throw */ });
 }
 
 export function report(message: string, opts: Partial<ReportedError> = {}): void {

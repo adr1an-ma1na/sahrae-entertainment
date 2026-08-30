@@ -25,3 +25,11 @@ export const supabase: SupabaseClient | null =
     : null;
 
 export const hasSupabase = !!supabase;
+
+/**
+ * Raw REST details, for callers that must not depend on the SDK being alive.
+ * The error reporter is the case: it has to work when initialising something
+ * else is exactly what failed.
+ */
+export const SUPABASE_REST = SUPABASE_URL ? `${SUPABASE_URL}/rest/v1` : '';
+export const SUPABASE_KEY = SUPABASE_ANON_KEY;
