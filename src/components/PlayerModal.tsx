@@ -543,8 +543,6 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   };
   const audioOn = eqPreset !== 'Off' && eqPreset !== 'Flat';
 
-  if (!isOpen || !currentMediaId || !currentMediaType || !details) return null;
-
   /**
    * Ordered by what has actually played on THIS device.
    *
@@ -567,6 +565,13 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
    * so closing the player counts too.
    */
   useEffect(() => {
+    // This guard used to be implicit: the hook sat BELOW the early return
+    // further down, so it only ran while the player was open. That is exactly
+    // what crashed the app — a closed modal ran fewer hooks than an open one,
+    // and React identifies hooks by call order, so the lists no longer lined up
+    // (minified error #310). The condition now lives inside the hook, where it
+    // changes behaviour without changing the number of hooks.
+    if (!isOpen) return;
     const previous = serverIdRef.current;
     const since = serverSinceRef.current;
     const now = dynamicServers[selectedServer]?.id || '';
@@ -578,6 +583,10 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedServer, dynamicServers, isOpen]);
+
+  // EVERY hook must be above this line. Adding one below it is the bug that
+  // produced React #310 and took the whole app down to an error screen.
+  if (!isOpen || !currentMediaId || !currentMediaType || !details) return null;
 
   const currentServerObj = dynamicServers[selectedServer] || dynamicServers[0];
   const src = currentServerObj.getUrl(currentMediaType, currentMediaId || 0, selectedSeason, selectedEpisode);
