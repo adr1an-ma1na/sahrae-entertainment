@@ -30,7 +30,7 @@ jobs:
       # turn a green build red for reasons that have nothing to do with the code.
       - name: Test suites
         run: |
-          for suite in listen mixes video serverhealth sportsstreams tvnav adfilter; do
+          for suite in listen mixes video serverhealth sportsstreams tvnav adfilter downloads; do
             echo "── $suite ──"
             node --experimental-strip-types "$suite-check.mjs" --offline
           done

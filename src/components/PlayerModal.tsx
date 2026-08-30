@@ -7,6 +7,7 @@ import { loadEq, saveEq, EQ_PRESETS, PRESET_EXTRAS } from '../services/eq';
 import { haptics } from '../services/haptics';
 import { rankServers, recordDwell, recordFailure } from '../services/serverHealth';
 import MovieDownloadModal from './MovieDownloadModal';
+import { videoDownloads } from '../services/videoDownloads';
 import { posterColor, cachedPosterColor } from '../services/posterColor';
 import { playerSandbox, isShieldOn, setShieldOn as persistShield, shieldAppliesHere } from '../services/adShield';
 
@@ -57,6 +58,22 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   // app's own storage.
   const handleOpenDownload = () => {
     if (!currentMediaId || !currentMediaType || !details) return;
+    // Stage what this download IS before the provider page opens.
+    //
+    // The capture happens in the native DownloadListener, which sees only a URL
+    // and a MIME type — nothing that says which film this is. Without this the
+    // saved file lands as a bare filename with no artwork and no way to group an
+    // episode under its show. Staged here rather than inside the modal because
+    // this is the moment the viewer's intent is unambiguous.
+    void videoDownloads.setPendingMeta({
+      title: currentMediaType === 'tv'
+        ? (details.name || details.title || 'Episode')
+        : (details.title || details.name || 'Movie'),
+      tmdbId: currentMediaId,
+      type: currentMediaType,
+      ...(currentMediaType === 'tv' ? { season: selectedSeason, episode: selectedEpisode, show: details.name || details.title } : {}),
+      ...(details.poster_path ? { poster: details.poster_path } : {}),
+    });
     setShowDownload(true);
   };
   // VidVault is the download provider only — deliberately not in SERVERS.
