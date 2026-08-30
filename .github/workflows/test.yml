@@ -1,0 +1,48 @@
+# Runs the test suites on every push and pull request.
+#
+# 211 assertions existed across six suites and nothing executed them, so a
+# regression could reach production with everything appearing green. The suites
+# are offline by design — they stub or avoid the network — so this needs no
+# secrets and no services.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      # --offline skips the live-API blocks, so a provider being down cannot
+      # turn a green build red for reasons that have nothing to do with the code.
+      - name: Test suites
+        run: |
+          for suite in listen mixes video sportsstreams tvnav adfilter; do
+            echo "── $suite ──"
+            node --experimental-strip-types "$suite-check.mjs" --offline
+          done
+
+      - name: Connector suites
+        working-directory: sahrae-connector
+        run: |
+          node --experimental-strip-types connector-check.mjs
+          node runtimes/core-check.mjs
+          node runtimes/session-check.mjs
+          node runtimes/api-check.mjs
+          node runtimes/worker-check.mjs
+
+      - name: Build
+        run: npm run build

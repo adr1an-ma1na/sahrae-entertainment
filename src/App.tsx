@@ -50,9 +50,24 @@ import Onboarding, { TasteGenre } from './components/Onboarding';
 import EmptyState from './components/EmptyState';
 import Coachmark from './components/Coachmark';
 import { applyEq, loadEq } from './services/eq';
+import { startSync } from './services/cloudSync';
 
 export default function App() {
   const { user, activeProfile, loading: authLoading } = useAuth();
+
+  /**
+   * Sync the signed-in listener's library to the server.
+   *
+   * Keyed on the user so signing in or out re-runs it. A pull that actually
+   * changed something reloads once, because playlists, likes and progress are
+   * read into state at startup by half a dozen hooks and there is no honest way
+   * to refresh them all in place — a reload is blunt but correct, and it only
+   * happens when the server genuinely had newer data.
+   */
+  useEffect(() => {
+    if (authLoading || !user) return;
+    return startSync(() => window.location.reload());
+  }, [user, authLoading]);
   const radio = useRadio(); // voice commands drive radio playback
   const [activeTab, setActiveTab] = useState('home');
   const [searchQuery, setSearchQuery] = useState('');

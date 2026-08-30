@@ -32,8 +32,21 @@ import { parseISODuration, dominantColor } from './youtubeParse';
  */
 
 import firebaseConfig from '../../firebase-applet-config.json';
+import { supabase } from '../supabase';
 
+/**
+ * A key of YouTube's own, when one is configured.
+ *
+ * Falling back to the Firebase key works, but it means one credential serves
+ * both sign-in and YouTube: editing its restrictions to unblock YouTube can
+ * equally remove Identity Toolkit and take authentication down across the whole
+ * app. That nearly happened. Set VITE_YOUTUBE_API_KEY to a key restricted to
+ * YouTube Data API v3 alone and the two stop sharing a blast radius.
+ */
 const API_KEY: string = (import.meta.env?.VITE_YOUTUBE_API_KEY as string) || firebaseConfig.apiKey;
+
+/** True when YouTube is riding on the Firebase key rather than its own. */
+export const usingSharedKey = !(import.meta.env?.VITE_YOUTUBE_API_KEY);
 const BASE = 'https://www.googleapis.com/youtube/v3';
 
 // ── Quota budget ───────────────────────────────────────────────────────────
@@ -93,6 +106,43 @@ function cacheGet<T>(key: string, ttl: number): T | null {
   } catch { /* ignore a corrupt entry */ }
   return null;
 }
+/**
+ * A search cache every listener shares.
+ *
+ * The per-device cache below only ever helps the person who paid for the call.
+ * The quota, though, is 10,000 units a day for the WHOLE project — so at 100
+ * units a search that is about 95 searches shared across everyone using Sahrae.
+ * Two people searching "amapiano" spent 200 units on one answer.
+ *
+ * Publishing results to a shared table changes the economics: the first search
+ * for a term costs 100 units and every subsequent one costs nothing, for
+ * everybody, until it expires. Popular queries — which is most of them — become
+ * free after their first use.
+ *
+ * Best-effort throughout. A miss, a missing table or a signed-out reader all
+ * fall through to the paid path, so this can only ever make things cheaper.
+ */
+async function sharedGet<T>(key: string, ttl: number): Promise<T | null> {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from('search_cache').select('payload, created_at').eq('cache_key', key).maybeSingle();
+    if (error || !data) return null;
+    if (Date.now() - Date.parse(data.created_at) > ttl) return null;
+    return data.payload as T;
+  } catch { return null; }
+}
+
+function sharedSet(key: string, data: unknown): void {
+  if (!supabase) return;
+  // Fire and forget: a listener should never wait on us being generous to the
+  // next one.
+  void supabase.from('search_cache')
+    .upsert({ cache_key: key, payload: data, created_at: new Date().toISOString() },
+      { onConflict: 'cache_key' })
+    .then(undefined, () => { /* table absent or read-only — the paid path still worked */ });
+}
+
 function cacheSet(key: string, data: unknown): void {
   const rec = { at: Date.now(), data };
   mem.set(key, rec);
@@ -223,6 +273,11 @@ export const ytDataApi = {
     const key = `search.${kind}.${order}.${duration}.${query.toLowerCase()}`;
     const hit = cacheGet<Track[]>(key, TTL.search);
     if (hit) return hit;
+
+    // Somebody may already have paid for this exact query today.
+    const shared = await sharedGet<Track[]>(key, TTL.search);
+    if (shared) { cacheSet(key, shared); return shared; }
+
     if (!canSearch()) return null; // out of budget → caller falls back
 
     const cat = kind === 'song' ? '&videoCategoryId=10' : '';
@@ -235,6 +290,7 @@ export const ytDataApi = {
     // tagged Music is not what someone searching for a song wants.
     if (kind === 'song') out = out.filter(isSongLength);
     cacheSet(key, out);
+    sharedSet(key, out); // pay once, on behalf of everyone
     return out;
   },
 

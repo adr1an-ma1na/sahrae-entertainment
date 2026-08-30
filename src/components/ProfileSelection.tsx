@@ -1,7 +1,17 @@
 import { useState, FormEvent } from 'react';
 import { Plus, Edit2, Check } from 'lucide-react';
 import { useAuth, Profile } from '../hooks/useAuth';
-import { ShaderAnimation } from '@/components/ui/shader-animation';
+import { Suspense, lazy } from 'react';
+
+/**
+ * The shader background pulls in three.js — 112 KB gzipped for a decorative
+ * animation behind one screen that most people see once. Loading it up front
+ * made it part of every first paint, including for someone who never reaches
+ * profile selection. Split out, it downloads only if this screen actually
+ * renders, and the page shows its own background until it arrives.
+ */
+const ShaderAnimation = lazy(() =>
+  import('@/components/ui/shader-animation').then((m) => ({ default: m.ShaderAnimation })));
 
 const AVATARS = [
   'https://api.dicebear.com/8.x/micah/svg?seed=Picasso&backgroundColor=ffdfbf',
@@ -153,7 +163,9 @@ export default function ProfileSelection() {
           maskImage: 'radial-gradient(ellipse at 50% 45%, black 25%, transparent 75%)',
         }}
       >
-        <ShaderAnimation className="h-full w-full" />
+        <Suspense fallback={null}>
+          <ShaderAnimation className="h-full w-full" />
+        </Suspense>
       </div>
       <h1 className="text-4xl md:text-5xl font-bold text-white mb-12 text-center">Who's watching?</h1>
       
