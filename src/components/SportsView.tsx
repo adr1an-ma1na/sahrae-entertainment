@@ -12,6 +12,7 @@ import { buildStreams, validateStream, metrics, canValidateDeeply } from '../ser
 import { loadSportsFeed, sourcesById, fetchStreamsFor, type Feed, type FeedEvent } from '../services/sportsFeed';
 import { hostOf } from '../services/sportsStreams';
 import Coachmark from './Coachmark';
+import { suppressPopups } from '../services/popupGuard';
 
 /**
  * Live Sports.
@@ -389,19 +390,16 @@ export default function SportsView() {
     };
   }, [playing]);
 
-  // Ad Shield: Intercept window.open popup attempts globally while playing sports
+  // Block popups this document opens while a stream is up. Same crash as the
+  // player had: the Android shell locks window.open, so assigning to it threw
+  // in strict mode and killed the app.
   useEffect(() => {
     if (!playing) return;
-    const originalOpen = window.open;
-    window.open = function (...args: any[]) {
-      console.warn('[Ad Shield Sports] Intercepted and blocked popup attempt:', args);
+    return suppressPopups((args) => {
+      console.warn('[Sahrae] Blocked a popup from the app document:', args);
       setShowAdNotice(true);
       setTimeout(() => setShowAdNotice(false), 6000);
-      return null;
-    };
-    return () => {
-      window.open = originalOpen;
-    };
+    });
   }, [playing]);
 
   // Detect clicks/interaction on the third-party iframe (blur of parent window)

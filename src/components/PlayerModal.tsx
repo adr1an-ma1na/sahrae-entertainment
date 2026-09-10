@@ -8,6 +8,7 @@ import { haptics } from '../services/haptics';
 import MovieDownloadModal from './MovieDownloadModal';
 import { posterColor, cachedPosterColor } from '../services/posterColor';
 import { playerSandbox, isShieldOn, setShieldOn as persistShield, shieldAppliesHere } from '../services/adShield';
+import { suppressPopups } from '../services/popupGuard';
 
 interface PlayerModalProps {
   isOpen: boolean;
@@ -151,16 +152,15 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   // blocks those is the iframe `sandbox` attribute (see services/adShield.ts).
   useEffect(() => {
     if (!isOpen || !isPlaying) return;
-    const originalOpen = window.open;
-    window.open = function (...args: any[]) {
+    // Via suppressPopups rather than assigning window.open directly. The Android
+    // shell locks that property non-writable, and a direct assignment therefore
+    // THREW in strict mode — taking the whole app to the error screen on every
+    // Play, in the APK only.
+    return suppressPopups((args) => {
       console.warn('[Sahrae] Blocked a popup from the app document:', args);
       setShowAdNotice(true);
       setTimeout(() => setShowAdNotice(false), 6000);
-      return null;
-    };
-    return () => {
-      window.open = originalOpen;
-    };
+    });
   }, [isOpen, isPlaying]);
 
   useEffect(() => {
