@@ -170,63 +170,67 @@ export default function App() {
     setPlayerConfig({ isOpen: false, mediaId: null, mediaType: null, startInInfo: false });
   }, []);
 
+  /**
+   * Load the Home screen in two waves, and never throw away work that succeeded.
+   *
+   * WHAT THIS REPLACES, because it failed in a specific and bad way:
+   * the previous version raced Promise.allSettled over nine requests against one
+   * fifteen-second timeout. allSettled cannot reject — but the RACE can, and when
+   * the timeout won it discarded every response that had already arrived and
+   * showed "Network Error" for the whole app. Nine parallel TLS handshakes on a
+   * slow connection (an Android emulator, a weak mobile signal) exceed fifteen
+   * seconds easily, so the app went from fully working to fully broken with
+   * nothing in between.
+   *
+   * Now each request carries its own timeout and retry (see tmdbFetch), so there
+   * is no global deadline to blow, and the two waves mean the screen appears as
+   * soon as there is something to show rather than waiting on the slowest rail.
+   */
   const loadInitialData = async () => {
     setLoading(true);
     setInitialLoadError(false);
-    
-    // Safety timeout - if TMDB is hanging
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Request timed out')), 15000)
-    );
 
     try {
-      const results = await Promise.race([
-        Promise.allSettled([
-          fetchTrending('movie'),
-          fetchTrending('tv'),
-          fetchDiscover('movie', 1),
-          fetchDiscover('tv', 1),
-          fetchGenres('movie'),
-          fetchGenres('tv'),
-          fetchDiscover('movie', 1, 18, 'vote_average.desc'),
-          fetchDiscover('movie', 1, 878, 'vote_average.desc'),
-          fetchDiscover('tv', 1, undefined, 'vote_average.desc')
-        ]),
-        timeoutPromise
-      ]) as PromiseSettledResult<any>[];
-      
-      const trendingData = results[0].status === 'fulfilled' ? results[0].value : [];
-      const trendingSeriesData = results[1].status === 'fulfilled' ? results[1].value : [];
-      const moviesData = results[2].status === 'fulfilled' ? results[2].value : [];
-      const seriesData = results[3].status === 'fulfilled' ? results[3].value : [];
-      const mGenres = results[4].status === 'fulfilled' ? results[4].value : [];
-      const tGenres = results[5].status === 'fulfilled' ? results[5].value : [];
-      const dramasData = results[6]?.status === 'fulfilled' ? results[6].value : [];
-      const sciFiData = results[7]?.status === 'fulfilled' ? results[7].value : [];
-      const bingeData = results[8]?.status === 'fulfilled' ? results[8].value : [];
-      
+      // Wave 1 — the minimum Home needs to render anything at all.
+      const [trendingRes, moviesRes] = await Promise.allSettled([
+        fetchTrending('movie'),
+        fetchDiscover('movie', 1),
+      ]);
+      const trendingData = trendingRes.status === 'fulfilled' ? trendingRes.value : [];
+      const moviesData = moviesRes.status === 'fulfilled' ? moviesRes.value : [];
+
       setTrending(trendingData);
-      setTrendingSeries(trendingSeriesData);
       setMovies(moviesData);
-      setSeries(seriesData);
-      setMovieGenres(mGenres);
-      setTvGenres(tGenres);
-      setAwardDramas(dramasData);
-      setSciFi(sciFiData);
-      setBingeShows(bingeData);
-      
-      // If we literally got nothing back from the primary requests, treat as error
+
+      // Only a total blank is an error. One failed rail is not.
       if (trendingData.length === 0 && moviesData.length === 0) {
         setInitialLoadError(true);
-      } else if (trendingData.length > 0) {
+        return;
+      }
+      if (trendingData.length > 0) {
         setHeroItem(trendingData[Math.floor(Math.random() * Math.min(5, trendingData.length))]);
       }
     } catch (error) {
-      console.error("Failed to fetch data:", error);
+      console.error('Failed to fetch the initial catalog:', error);
       setInitialLoadError(true);
+      return;
     } finally {
       setLoading(false);
     }
+
+    // Wave 2 — the remaining rails, filled in as they land. Deliberately not
+    // awaited: a slow genre rail must never hold up a screen that already has
+    // something on it, and each failure is confined to its own shelf.
+    const fill = <T,>(p: Promise<T>, apply: (v: T) => void) => {
+      p.then(apply).catch((e) => console.warn('[sahrae] a Home rail failed to load:', e));
+    };
+    fill(fetchTrending('tv'), setTrendingSeries);
+    fill(fetchDiscover('tv', 1), setSeries);
+    fill(fetchGenres('movie'), setMovieGenres);
+    fill(fetchGenres('tv'), setTvGenres);
+    fill(fetchDiscover('movie', 1, 18, 'vote_average.desc'), setAwardDramas);
+    fill(fetchDiscover('movie', 1, 878, 'vote_average.desc'), setSciFi);
+    fill(fetchDiscover('tv', 1, undefined, 'vote_average.desc'), setBingeShows);
   };
 
   useEffect(() => {

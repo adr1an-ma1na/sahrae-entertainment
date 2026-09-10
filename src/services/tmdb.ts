@@ -1,6 +1,62 @@
 const API_KEY = 'f1a823e739bfce21511a8e2f8e42befc';
 const BASE_URL = 'https://api.themoviedb.org/3';
 
+/**
+ * Every TMDB request goes through here, with a timeout and a retry.
+ *
+ * WHY: each of the dozen calls below used a bare fetch() with neither. A bare
+ * fetch has no timeout at all — it waits as long as the platform lets it — so a
+ * stalled connection hung forever, and a single dropped packet was a permanent
+ * failure with no second attempt.
+ *
+ * That surfaced as "Network Error — we had trouble connecting to the movie
+ * database" on the whole app. It was reported on an Android emulator, whose
+ * network stack is slow enough to expose it, but the same fragility applies to
+ * any weak mobile connection: the app worked or it did not, with nothing in
+ * between and no recovery.
+ *
+ * The retry is deliberately narrow. A 401 (bad key) or a 404 will fail again
+ * identically, so retrying wastes the viewer's time; only transient conditions
+ * are retried — network errors, timeouts, 429 rate limits, and 5xx.
+ */
+const REQUEST_TIMEOUT_MS = 12_000;
+const RETRIES = 2;
+const RETRY_BASE_MS = 600;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+export async function tmdbFetch(url: string, init?: RequestInit): Promise<Response> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= RETRIES; attempt++) {
+    // A fresh controller per attempt — an aborted one stays aborted.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      const res = await fetch(url, { ...init, signal: controller.signal });
+
+      // Worth another go: rate limited, or the server is having a moment.
+      if ((res.status === 429 || res.status >= 500) && attempt < RETRIES) {
+        lastError = new Error(`TMDB ${res.status}`);
+        await sleep(RETRY_BASE_MS * Math.pow(2, attempt));
+        continue;
+      }
+      return res;
+    } catch (err) {
+      // Aborted by our own timeout, or the connection failed outright.
+      lastError = err;
+      if (attempt < RETRIES) {
+        await sleep(RETRY_BASE_MS * Math.pow(2, attempt));
+        continue;
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('TMDB request failed');
+}
+
 export interface Genre {
   id: number;
   name: string;
@@ -89,18 +145,18 @@ export interface MediaDetails extends MediaItem {
 }
 
 export const fetchTrending = async (type: 'movie' | 'tv' = 'movie'): Promise<MediaItem[]> => {
-  const res = await fetch(`${BASE_URL}/trending/${type}/week?api_key=${API_KEY}&language=en-US`);
+  const res = await tmdbFetch(`${BASE_URL}/trending/${type}/week?api_key=${API_KEY}&language=en-US`);
   const data = await res.json();
   return data.results.map((item: any) => ({ ...item, media_type: type }));
 };
 
 export const fetchSeasonDetails = async (tvId: number, seasonNumber: number): Promise<SeasonDetails> => {
-  const res = await fetch(`${BASE_URL}/tv/${tvId}/season/${seasonNumber}?api_key=${API_KEY}&language=en-US`);
+  const res = await tmdbFetch(`${BASE_URL}/tv/${tvId}/season/${seasonNumber}?api_key=${API_KEY}&language=en-US`);
   return await res.json();
 };
 
 export const searchMedia = async (query: string, page: number = 1): Promise<{results: MediaItem[], totalPages: number}> => {
-  const res = await fetch(`${BASE_URL}/search/multi?api_key=${API_KEY}&query=${encodeURIComponent(query)}&language=en-US&include_adult=false&page=${page}`);
+  const res = await tmdbFetch(`${BASE_URL}/search/multi?api_key=${API_KEY}&query=${encodeURIComponent(query)}&language=en-US&include_adult=false&page=${page}`);
   const data = await res.json();
   return {
     results: data.results.filter((item: any) => item.media_type === 'movie' || item.media_type === 'tv'),
@@ -123,7 +179,7 @@ export const fetchGenres = async (type: 'movie' | 'tv' = 'movie'): Promise<Genre
     console.error('Error reading genres cache', e);
   }
 
-  const res = await fetch(`${BASE_URL}/genre/${type}/list?api_key=${API_KEY}&language=en-US`);
+  const res = await tmdbFetch(`${BASE_URL}/genre/${type}/list?api_key=${API_KEY}&language=en-US`);
   const data = await res.json();
   const result = data.genres;
 
@@ -155,7 +211,7 @@ export const fetchDiscover = async (type: 'movie' | 'tv' = 'movie', page: number
   const voteFloorParam = sortBy.startsWith('vote_average')
     ? `&vote_count.gte=${MIN_VOTES_FOR_RATING_SORT}`
     : '';
-  const res = await fetch(`${BASE_URL}/discover/${type}?api_key=${API_KEY}&language=en-US&include_adult=false&page=${page}${genreParam}${sortParam}${yearParam}${voteFloorParam}`);
+  const res = await tmdbFetch(`${BASE_URL}/discover/${type}?api_key=${API_KEY}&language=en-US&include_adult=false&page=${page}${genreParam}${sortParam}${yearParam}${voteFloorParam}`);
   if (!res.ok) throw new Error(`TMDB discover failed: ${res.status}`);
   const data = await res.json();
   return Array.isArray(data.results)
@@ -237,7 +293,7 @@ export const fetchMediaDetails = async (id: number, type: 'movie' | 'tv' = 'movi
     console.error('Error reading media details cache', e);
   }
 
-  const res = await fetch(`${BASE_URL}/${type}/${id}?api_key=${API_KEY}&append_to_response=credits,videos&language=en-US&include_video_language=en,null`);
+  const res = await tmdbFetch(`${BASE_URL}/${type}/${id}?api_key=${API_KEY}&append_to_response=credits,videos&language=en-US&include_video_language=en,null`);
   const data = await res.json();
   const result = { ...data, media_type: type };
 
@@ -247,13 +303,13 @@ export const fetchMediaDetails = async (id: number, type: 'movie' | 'tv' = 'movi
 };
 
 export const fetchRecommendations = async (id: number, type: 'movie' | 'tv' = 'movie'): Promise<MediaItem[]> => {
-  const res = await fetch(`${BASE_URL}/${type}/${id}/recommendations?api_key=${API_KEY}&language=en-US&page=1`);
+  const res = await tmdbFetch(`${BASE_URL}/${type}/${id}/recommendations?api_key=${API_KEY}&language=en-US&page=1`);
   const data = await res.json();
   return data.results.map((item: any) => ({ ...item, media_type: type }));
 };
 
 export const fetchSimilar = async (id: number, type: 'movie' | 'tv' = 'movie'): Promise<MediaItem[]> => {
-  const res = await fetch(`${BASE_URL}/${type}/${id}/similar?api_key=${API_KEY}&language=en-US&page=1`);
+  const res = await tmdbFetch(`${BASE_URL}/${type}/${id}/similar?api_key=${API_KEY}&language=en-US&page=1`);
   const data = await res.json();
   return data.results.map((item: any) => ({ ...item, media_type: type }));
 };
@@ -283,7 +339,7 @@ export const getImageUrl = (path: string | null, size: 'w500' | 'original' | 'w7
 };
 
 export const searchPeople = async (query: string, page: number = 1): Promise<{results: any[], totalPages: number}> => {
-  const res = await fetch(`${BASE_URL}/search/person?api_key=${API_KEY}&query=${encodeURIComponent(query)}&language=en-US&include_adult=false&page=${page}`);
+  const res = await tmdbFetch(`${BASE_URL}/search/person?api_key=${API_KEY}&query=${encodeURIComponent(query)}&language=en-US&include_adult=false&page=${page}`);
   const data = await res.json();
   return {
     results: data.results || [],
@@ -292,7 +348,7 @@ export const searchPeople = async (query: string, page: number = 1): Promise<{re
 };
 
 export const fetchPopularPeople = async (page: number = 1): Promise<{results: any[], totalPages: number}> => {
-  const res = await fetch(`${BASE_URL}/person/popular?api_key=${API_KEY}&language=en-US&page=${page}`);
+  const res = await tmdbFetch(`${BASE_URL}/person/popular?api_key=${API_KEY}&language=en-US&page=${page}`);
   const data = await res.json();
   return {
     results: data.results || [],
@@ -301,7 +357,7 @@ export const fetchPopularPeople = async (page: number = 1): Promise<{results: an
 };
 
 export const fetchPersonDetails = async (id: number): Promise<any> => {
-  const res = await fetch(`${BASE_URL}/person/${id}?api_key=${API_KEY}&language=en-US&append_to_response=combined_credits`);
+  const res = await tmdbFetch(`${BASE_URL}/person/${id}?api_key=${API_KEY}&language=en-US&append_to_response=combined_credits`);
   return await res.json();
 };
 
