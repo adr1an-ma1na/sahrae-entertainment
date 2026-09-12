@@ -262,20 +262,31 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   // download portal ("Download movies and TV shows"), not a stream. It now lives
   // only behind the Download button (see DOWNLOAD_SOURCE below), per the request
   // that it stop being the default play server.
+  //
+  // SIX ENTRIES WERE REMOVED, each verified dead rather than assumed:
+  //   moviesapi.club  NXDOMAIN — the domain does not exist
+  //   vidsrc.net      NXDOMAIN
+  //   embed.su        no A record
+  //   vidsrc.pro      resolves, but 301-redirects to embed.su, which is dead
+  //   superembed      host answers, but its embed path 404s
+  //   vidbinge        host answers, but its embed path returns no player markup
+  //
+  // A dead entry is worse than no entry: it is a choice the viewer makes and
+  // then has to undo, and with seven of thirteen dead the picker was mostly
+  // traps. VidSrc.cc and SmashyStream are KEPT — both resolve with valid
+  // certificates and fail only from one audit network, which is a bot filter,
+  // not a dead host.
+  //
+  // Re-check with `node audit.mjs movies` before a release; these hosts rot
+  // without notice and the list is a claim, not a fact.
   const SERVERS = [
     { id: 'multiembed', name: 'Ultra HD (MultiEmbed)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://multiembed.mov/?video_id=${id}&tmdb=1` : `https://multiembed.mov/?video_id=${id}&tmdb=1&s=${s}&e=${e}`, type: 'iframe' },
     { id: 'vidsrccc', name: 'Ultra HD V3 (VidSrc.cc)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.cc/v3/embed/movie/${id}` : `https://vidsrc.cc/v3/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
     { id: 'smashystream', name: 'Multi-Source HQ (SmashyStream)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://embed.smashystream.com/playere.php?tmdb=${id}` : `https://embed.smashystream.com/playere.php?tmdb=${id}&season=${s}&episode=${e}`, type: 'iframe' },
     { id: 'vidsrcto', name: 'Premium 4K CDN (VidSrc.to)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.to/embed/movie/${id}` : `https://vidsrc.to/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
-    { id: 'vidbinge', name: 'HQ Cinema (VidBinge)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidbinge.com/embed/movie/${id}` : `https://vidbinge.com/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
-    { id: 'superembed', name: 'Ultra HD 3 (SuperEmbed)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://multiembed.mov/direct/superembed/movie/${id}` : `https://multiembed.mov/direct/superembed/tv/${id}/${s}/${e}`, type: 'iframe' },
-    { id: 'moviesapi', name: 'HiFi Premium (MoviesAPI)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://moviesapi.club/movie/${id}` : `https://moviesapi.club/tv/${id}-${s}-${e}`, type: 'iframe' },
     { id: 'autoembed', name: 'Cloud AutoEmbed (AutoEmbed)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://autoembed.co/movie/tmdb/${id}` : `https://autoembed.co/tv/tmdb/${id}-${s}-${e}`, type: 'iframe' },
-    { id: 'vidsrcpro', name: 'Premium HD (VidSrc.pro)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.pro/embed/movie/${id}` : `https://vidsrc.pro/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
     { id: '2embed', name: 'HQ Stream (2Embed)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://www.2embed.cc/embed/${id}` : `https://www.2embed.cc/embedtv/${id}&s=${s}&e=${e}`, type: 'iframe' },
-    { id: 'vidsrcnet', name: 'Fast Stream (VidSrc.net)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.net/embed/movie?tmdb=${id}` : `https://vidsrc.net/embed/tv?tmdb=${id}&season=${s}&episode=${e}`, type: 'iframe' },
     { id: 'vidsrcme', name: 'Fast Stream 2 (VidSrc.me)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.me/embed/movie?tmdb=${id}` : `https://vidsrc.me/embed/tv?tmdb=${id}&season=${s}&episode=${e}`, type: 'iframe' },
-    { id: 'embedsu', name: 'Backup (Embed.su)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://embed.su/embed/movie/${id}` : `https://embed.su/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
   ];
 
   useEffect(() => {
