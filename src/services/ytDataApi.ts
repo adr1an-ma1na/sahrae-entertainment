@@ -1,3 +1,4 @@
+import { httpFetch } from './http.ts';
 import type { Track, Artist, Album } from './ytmusic';
 import { parseISODuration, dominantColor } from './youtubeParse';
 
@@ -155,7 +156,7 @@ async function get(path: string, units: number): Promise<any | null> {
   if (!API_KEY || apiState === 'disabled') return null;
   const sep = path.includes('?') ? '&' : '?';
   try {
-    const r = await fetch(`${BASE}/${path}${sep}key=${API_KEY}`);
+    const r = await httpFetch(`${BASE}/${path}${sep}key=${API_KEY}`);
     if (r.ok) { apiState = 'ok'; spend(units); return await r.json(); }
     const body = await r.json().catch(() => ({}));
     const reason = body?.error?.errors?.[0]?.reason || '';

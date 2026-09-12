@@ -1,61 +1,20 @@
+import { httpFetch } from './http.ts';
 const API_KEY = 'f1a823e739bfce21511a8e2f8e42befc';
 const BASE_URL = 'https://api.themoviedb.org/3';
 
 /**
- * Every TMDB request goes through here, with a timeout and a retry.
+ * Every TMDB request goes through here, so none of them can hang.
  *
- * WHY: each of the dozen calls below used a bare fetch() with neither. A bare
- * fetch has no timeout at all — it waits as long as the platform lets it — so a
- * stalled connection hung forever, and a single dropped packet was a permanent
- * failure with no second attempt.
+ * Each of the calls below used a bare fetch(), which has no timeout and no
+ * retry: a stalled connection waited forever and one dropped packet was
+ * permanent. That is what produced "Network Error — we had trouble connecting
+ * to the movie database" across the whole app.
  *
- * That surfaced as "Network Error — we had trouble connecting to the movie
- * database" on the whole app. It was reported on an Android emulator, whose
- * network stack is slow enough to expose it, but the same fragility applies to
- * any weak mobile connection: the app worked or it did not, with nothing in
- * between and no recovery.
- *
- * The retry is deliberately narrow. A 401 (bad key) or a 404 will fail again
- * identically, so retrying wastes the viewer's time; only transient conditions
- * are retried — network errors, timeouts, 429 rate limits, and 5xx.
+ * The timeout and retry policy now lives in services/http.ts, shared with the
+ * other remote services that had the identical fault.
  */
-const REQUEST_TIMEOUT_MS = 12_000;
-const RETRIES = 2;
-const RETRY_BASE_MS = 600;
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-export async function tmdbFetch(url: string, init?: RequestInit): Promise<Response> {
-  let lastError: unknown;
-
-  for (let attempt = 0; attempt <= RETRIES; attempt++) {
-    // A fresh controller per attempt — an aborted one stays aborted.
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-    try {
-      const res = await fetch(url, { ...init, signal: controller.signal });
-
-      // Worth another go: rate limited, or the server is having a moment.
-      if ((res.status === 429 || res.status >= 500) && attempt < RETRIES) {
-        lastError = new Error(`TMDB ${res.status}`);
-        await sleep(RETRY_BASE_MS * Math.pow(2, attempt));
-        continue;
-      }
-      return res;
-    } catch (err) {
-      // Aborted by our own timeout, or the connection failed outright.
-      lastError = err;
-      if (attempt < RETRIES) {
-        await sleep(RETRY_BASE_MS * Math.pow(2, attempt));
-        continue;
-      }
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-
-  throw lastError instanceof Error ? lastError : new Error('TMDB request failed');
-}
+export const tmdbFetch = (url: string, init?: RequestInit): Promise<Response> =>
+  httpFetch(url, init);
 
 export interface Genre {
   id: number;

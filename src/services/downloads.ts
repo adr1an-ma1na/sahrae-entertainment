@@ -1,3 +1,4 @@
+import { tryFetch } from './http.ts';
 import { useEffect, useState } from 'react';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Capacitor } from '@capacitor/core';
@@ -43,8 +44,16 @@ function safeName(id: string): string { return id.replace(/[^a-zA-Z0-9._-]/g, '_
 // NOT require a streamable body here: some intercepted/proxy responses are `ok`
 // but expose no ReadableStream, and the caller falls back to arrayBuffer.
 async function openStream(url: string): Promise<Response | null> {
-  try { const r = await fetch(url); if (r.ok) return r; } catch { /* try proxy */ }
-  try { const r = await fetch(`https://localhost/__ddfetch?u=${encodeURIComponent(url)}`); if (r.ok) return r; } catch { /* give up */ }
+  // Bounded, because the whole point here is the fallback on the next line: a
+  // bare fetch that HANGS never throws, so the proxy attempt never happened and
+  // the download simply waited forever.
+  //
+  // The budget covers the headers only — the body streams unbounded after that
+  // (see HttpOptions.timeoutMs), so a large file on a slow link is unaffected.
+  const direct = await tryFetch(url, undefined, 10_000);
+  if (direct?.ok) return direct;
+  const proxied = await tryFetch(`https://localhost/__ddfetch?u=${encodeURIComponent(url)}`, undefined, 10_000);
+  if (proxied?.ok) return proxied;
   return null;
 }
 

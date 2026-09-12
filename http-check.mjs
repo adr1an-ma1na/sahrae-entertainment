@@ -1,5 +1,5 @@
 /**
- * TMDB request-layer tests.
+ * HTTP request-layer tests (services/http.ts, used by TMDB and the rest).
  *
  * The app showed "Network Error — we had trouble connecting to the movie
  * database" and became completely unusable, because every TMDB call was a bare
@@ -36,7 +36,7 @@ function scriptFetch(steps) {
   return calls;
 }
 
-const load = async () => (await import('./src/services/tmdb.ts?t=' + Math.random())).tmdbFetch;
+const load = async () => (await import('./src/services/http.ts?t=' + Math.random())).httpFetch;
 
 console.log('\nthe happy path');
 {
@@ -123,6 +123,34 @@ console.log('\nthe hang that started all this');
   ok('each attempt gets a fresh AbortSignal', calls.signals[0] !== calls.signals[1]);
   ok('  and neither is aborted on success',
     calls.signals[1] instanceof AbortSignal && !calls.signals[1].aborted);
+}
+
+console.log('\na timeout must bound HEADERS, not the body');
+{
+  // A download must not be aborted mid-transfer by a short header budget. The
+  // timer is cleared the moment fetch() resolves — which is when headers land —
+  // so a slow body streams on. If this regresses, every download on a weak
+  // connection breaks, which is worse than the bug being fixed.
+  const { tryFetch } = await import('./src/services/http.ts?t=' + Math.random());
+  globalThis.fetch = async (url, init) => ({
+    status: 200, ok: true, url, signalAtHeaders: init?.signal,
+  });
+  const res = await tryFetch('https://cdn.test/big.mp3', undefined, 50);
+  ok('headers within the budget resolve normally', res !== null && res.status === 200);
+  await new Promise((r) => setTimeout(r, 200)); // well past the 50ms budget
+  ok('the signal is NOT aborted afterwards, so the body may keep streaming',
+    res.signalAtHeaders && res.signalAtHeaders.aborted === false,
+    res.signalAtHeaders ? `aborted=${res.signalAtHeaders.aborted}` : 'no signal');
+}
+
+console.log('\ntryFetch resolves null rather than throwing, so a fallback can run');
+{
+  const { tryFetch } = await import('./src/services/http.ts?t=' + Math.random());
+  let n = 0;
+  globalThis.fetch = async () => { n++; throw new TypeError('Failed to fetch'); };
+  const res = await tryFetch('https://dead.test/x', undefined, 50);
+  ok('a failed request resolves to null', res === null);
+  ok('  and is not retried — the caller has its own fallback to try', n === 1, `made ${n}`);
 }
 
 globalThis.fetch = realFetch;

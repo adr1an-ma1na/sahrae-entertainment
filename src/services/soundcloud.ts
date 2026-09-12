@@ -1,3 +1,4 @@
+import { tryFetch } from './http.ts';
 import { Track } from './ytmusic';
 
 /**
@@ -15,11 +16,11 @@ const API = 'https://api-v2.soundcloud.com';
 
 async function ddText(url: string): Promise<string | null> {
   try {
-    const r = await fetch(`https://localhost/__ddfetch?u=${encodeURIComponent(url)}`, { cache: 'no-store' });
+    const r = await tryFetch(`https://localhost/__ddfetch?u=${encodeURIComponent(url)}`, { cache: 'no-store' });
     if (r.ok) { const t = await r.text(); if (t) return t; }
   } catch { /* not native */ }
   try {
-    const r = await fetch(url, { cache: 'no-store' });
+    const r = await tryFetch(url, { cache: 'no-store' });
     if (r.ok) return await r.text();
   } catch { /* give up */ }
   return null;

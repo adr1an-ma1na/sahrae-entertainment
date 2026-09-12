@@ -1,3 +1,4 @@
+import { tryFetch } from './http.ts';
 import { Track } from './ytmusic';
 import { unwrapTrackingUrl } from './itunesPodcasts';
 
@@ -15,11 +16,11 @@ export interface PodShow { id: string; title: string; author: string; artwork: s
 async function fetchText(url: string): Promise<string | null> {
   // Try the native passthrough first (no CORS, works in the APK), then direct.
   try {
-    const r = await fetch(`https://localhost/__ddfetch?u=${encodeURIComponent(url)}`, { cache: 'no-store' });
+    const r = await tryFetch(`https://localhost/__ddfetch?u=${encodeURIComponent(url)}`, { cache: 'no-store' });
     if (r.ok) { const t = await r.text(); if (t) return t; }
   } catch { /* not native / not reachable */ }
   try {
-    const r = await fetch(url, { cache: 'no-store' });
+    const r = await tryFetch(url, { cache: 'no-store' });
     if (r.ok) return await r.text();
   } catch { /* give up */ }
   return null;

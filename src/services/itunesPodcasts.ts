@@ -1,3 +1,4 @@
+import { tryFetch } from './http.ts';
 import type { Track } from './ytmusic';
 
 /**
@@ -73,11 +74,11 @@ export function unwrapTrackingUrl(raw: string): string {
  *  the PWA a guaranteed failed request on every single call. */
 async function fetchJson(url: string): Promise<any | null> {
   try {
-    const r = await fetch(url, { cache: 'no-store' });
+    const r = await tryFetch(url, { cache: 'no-store' });
     if (r.ok) return await r.json();
   } catch { /* offline, or a network that blocks Apple — try native */ }
   try {
-    const r = await fetch(`https://localhost/__ddfetch?u=${encodeURIComponent(url)}`, { cache: 'no-store' });
+    const r = await tryFetch(`https://localhost/__ddfetch?u=${encodeURIComponent(url)}`, { cache: 'no-store' });
     if (r.ok) { const t = await r.text(); if (t) return JSON.parse(t); }
   } catch { /* not native */ }
   return null;

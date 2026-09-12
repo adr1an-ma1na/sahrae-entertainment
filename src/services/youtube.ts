@@ -1,3 +1,4 @@
+import { httpFetch } from './http.ts';
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -166,7 +167,7 @@ class YoutubeService {
   private async authed<T>(endpoint: string): Promise<T> {
     const token = this.getToken();
     if (!token) throw new Error('Not connected to YouTube');
-    const r = await fetch(`https://www.googleapis.com/${endpoint}`, { headers: { Authorization: `Bearer ${token}` } });
+    const r = await httpFetch(`https://www.googleapis.com/${endpoint}`, { headers: { Authorization: `Bearer ${token}` } });
     if (!r.ok) {
       const body = await r.json().catch(() => ({}));
       if (r.status === 401) { this.disconnect(); throw new Error('Session expired. Reconnect your YouTube account.'); }
@@ -178,7 +179,7 @@ class YoutubeService {
   /** Key-only call — public data, no sign-in. */
   private async publicGet<T>(endpoint: string): Promise<T> {
     const sep = endpoint.includes('?') ? '&' : '?';
-    const r = await fetch(`https://www.googleapis.com/${endpoint}${sep}key=${API_KEY}`);
+    const r = await httpFetch(`https://www.googleapis.com/${endpoint}${sep}key=${API_KEY}`);
     if (!r.ok) throw apiError(r.status, await r.json().catch(() => ({})));
     return r.json();
   }

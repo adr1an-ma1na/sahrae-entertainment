@@ -1,3 +1,4 @@
+import { tryFetch } from './http.ts';
 import { ytDataApi } from './ytDataApi';
 
 /**
@@ -362,7 +363,7 @@ export const ytmusic = {
     // 2) On-device native resolver (residential IP -> a real, playable googlevideo
     //    audio URL). Powers reliable downloads + background playback.
     try {
-      const r = await fetch(`https://localhost/__ytaudio?v=${encodeURIComponent(videoId)}`, { cache: 'no-store' });
+      const r = await tryFetch(`https://localhost/__ytaudio?v=${encodeURIComponent(videoId)}`, { cache: 'no-store' }, 10_000);
       if (r.ok) { const a = await r.json(); if (a && a.url) return { url: a.url, mime: 'audio/mp4' }; }
     } catch { /* give up -> caller falls back to streaming */ }
     return null;
