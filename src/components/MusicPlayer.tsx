@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, Fragment, type CSSProperties } from 'react';
-import { Play, Pause, SkipForward, SkipBack, ChevronDown, Heart, Shuffle, Repeat, Repeat1, Music2, Plus, X, ListMusic, Mic2, SlidersHorizontal, RotateCcw, RotateCw, Gauge, Moon, Radio, ArrowUp, ArrowDown } from 'lucide-react';
+import { Play, Pause, SkipForward, SkipBack, ChevronDown, Heart, Shuffle, Repeat, Repeat1, Music2, Plus, X, ListMusic, Mic2, SlidersHorizontal, RotateCcw, RotateCw, Gauge, Moon, Radio, ArrowUp, ArrowDown, Disc3, Clapperboard } from 'lucide-react';
 import { useMusic } from '../hooks/useMusic';
 import { Track, ytmusic } from '../services/ytmusic';
 import { hdArtwork } from '../services/albumArt';
@@ -128,8 +128,11 @@ export default function MusicPlayer() {
     current, isPlaying, position, duration, shuffle, repeat, expanded, active,
     queue, index, queueSource, jumpTo, removeFromQueue, playQueue, startRadio,
     toggle, stop, next, prev, seek, setRate, toggleShuffle, cycleRepeat, toggleLike, isLiked, setExpanded, openAddSheet,
-    autoplay, toggleAutoplay, reorderQueue, clearQueue, recentlyPlayed
+    autoplay, toggleAutoplay, reorderQueue, clearQueue, recentlyPlayed,
+    videoMode, setVideoMode, canShowVideo, setVideoSlot,
   } = useMusic();
+  // Video is only real when the track is YouTube-backed; a podcast file has none.
+  const showingVideo = videoMode && canShowVideo;
   const [showQueue, setShowQueue] = useState(false);
   const [qTab, setQTab] = useState<'next' | 'lyrics' | 'related'>('next');
   const [showEq, setShowEq] = useState(false);
@@ -292,9 +295,35 @@ export default function MusicPlayer() {
               </button>
             </div>
 
+            {/* Song / Video — the same switch YouTube Music puts above its art.
+                Only offered when there is a video; a podcast file has none, and a
+                toggle that does nothing is worse than no toggle. */}
+            {canShowVideo && (
+              <div className="flex justify-center mt-4 shrink-0">
+                <div role="tablist" aria-label="Song or video" className="glass inline-flex p-1 rounded-full">
+                  {([['song', 'Song', Disc3], ['video', 'Video', Clapperboard]] as const).map(([key, label, Icon]) => {
+                    const on = (key === 'video') === showingVideo;
+                    return (
+                      <button key={key} role="tab" aria-selected={on} tabIndex={0} data-tv-focusable
+                        onClick={() => setVideoMode(key === 'video')}
+                        className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${on ? 'bg-amber-700 text-amber-100' : 'text-zinc-300 hover:text-white'}`}>
+                        <Icon className="w-4 h-4" /> {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Album art (lyrics live in the Up next / Lyrics / Related panel) */}
             <div className="flex-1 flex items-center justify-center py-6 min-h-0 shrink-0">
-              {current.artworkLarge || current.artwork ? (
+              {showingVideo ? (
+                /* The slot the live YouTube player is laid over (see useMusic).
+                   16:9, and never under 200px tall: YouTube requires an embedded
+                   player's viewport to be at least 200x200. */
+                <div ref={setVideoSlot} className="w-full max-w-[640px] aspect-video min-h-[200px] rounded-3xl bg-black/60"
+                  aria-label="Music video" />
+              ) : current.artworkLarge || current.artwork ? (
                 <div className="relative w-[min(80vw,42vh)] max-w-[380px]"
                   style={{ transform: isPlaying ? 'scale(1)' : 'scale(0.94)', transition: 'transform 320ms cubic-bezier(0.22,1,0.36,1)' }}>
                   <CoverArt imageUrl={hdArt || current.artworkLarge || current.artwork} fallbackUrl={current.artwork} dominantColor={current.dominantColor} rounded="rounded-3xl"

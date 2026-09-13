@@ -7,6 +7,12 @@ import { useMusic } from '../hooks/useMusic';
 import { youtubeService, YoutubePlaylist, YoutubeUserProfile } from '../services/youtube';
 import { CoverArt } from './ui/CoverArt';
 import { ArtCard, QuickTile } from './ui/Shelf';
+import VideoCard from './ui/VideoCard';
+import EmptyState from './EmptyState';
+
+// The current year, for search queries. Hardcoding it meant every shelf
+// quietly became last year's music on 1 January.
+const YEAR = new Date().getFullYear();
 import SautiOnboarding from './SautiOnboarding';
 import ListenTabs from './ListenTabs';
 import Coachmark from './Coachmark';
@@ -41,6 +47,13 @@ const JUNK_RE = /(\bdj\s|nonstop|non-stop|mashup|megamix|mega\s?mix|\bmix\b|bass
 function isCleanSong(t: Track): boolean {
   if (!t) return false;
   if (t.duration && t.duration > 600) return false; // >10 min → almost always a mix/compilation
+  // YouTube Shorts and behind-the-scenes clips: a song title does not tag
+  // itself #shorts, and three or more hashtags is promotion rather than a name.
+  // One reached "New in Kenya" as "Making Of #TseMonate #behindthescenes #BTS
+  // #shorts #kenya #trending…".
+  const title = t.title || '';
+  if (/#shorts?\b/i.test(title) || (title.match(/#\w+/g) || []).length >= 3) return false;
+  if (t.duration && t.duration < 60) return false; // under a minute is a clip, not a song
   return !JUNK_RE.test(`${t.title} ${t.artist}`);
 }
 
@@ -114,6 +127,28 @@ const fmtDur = (s?: number): string => {
   const ss = Math.floor(s % 60);
   return `${m}:${String(ss).padStart(2, '0')}`;
 };
+
+/**
+ * What "new" and "discovery" mean in each chart region.
+ *
+ * These shelves used to search the same words for everyone —
+ * "new releases music hits 2026" — with no region. YouTube's global volume
+ * for that phrase is dominated by Indian releases, so a Kenyan listener who
+ * picked Burna Boy, Wizkid and Tems was shown Haryanvi and Punjabi tracks.
+ * Now the query speaks the region's music, and the search is scoped to the
+ * region, so its results are also what can actually play there.
+ *
+ * The year is computed, not typed: a hardcoded "2026" silently turns every
+ * shelf into last year's music on the first of January.
+ */
+const REGION_MUSIC: Record<string, { name: string; releases: string; discover: string }> = {
+  KE: { name: 'Kenya', releases: 'new kenyan songs official video', discover: 'east african music new artists' },
+  NG: { name: 'Nigeria', releases: 'new naija afrobeats songs official video', discover: 'new afrobeats artists' },
+  ZA: { name: 'South Africa', releases: 'new amapiano songs official video', discover: 'south african new artists amapiano' },
+  GB: { name: 'the UK', releases: 'new uk songs official video', discover: 'uk rising artists new music' },
+  US: { name: 'the US', releases: 'new songs official video', discover: 'rising artists new music' },
+};
+const regionMusic = (code: string) => REGION_MUSIC[code] || REGION_MUSIC.KE;
 
 function TrackRow({ track, onPlay, onRemove, index }: { track: Track; onPlay: () => void; onRemove?: () => void; index?: number }) {
   const { current, isPlaying, toggle, toggleLike, isLiked, openAddSheet } = useMusic();
@@ -235,7 +270,9 @@ function greeting(): string {
 }
 
 export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) {
-  const { playQueue, likedTracks, playlists, recentlyPlayed: rawRecent, tasteSeeds, onboarded, addTasteSeeds, completeOnboarding, createPlaylist, importPlaylist, deletePlaylist, removeFromPlaylist, openAddSheet } = useMusic();
+  const { playQueue, likedTracks, playlists, recentlyPlayed: rawRecent, tasteSeeds, onboarded, addTasteSeeds, completeOnboarding, createPlaylist, importPlaylist, deletePlaylist, removeFromPlaylist, openAddSheet, setVideoMode, setExpanded } = useMusic();
+  // One hover preview at a time across the Music videos shelf.
+  const [videoPreviewId, setVideoPreviewId] = useState<string | null>(null);
   // Sauti is music only — podcasts play through the shared engine, so strip them
   // from every recently-played-derived shelf, pill, mix, and the header gradient.
   const recentlyPlayed = rawRecent.filter((t) => !t.id.startsWith('pod:') && !t.feedUrl);
@@ -279,8 +316,27 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   const [moodTracks, setMoodTracks] = useState<Track[]>([]);
   const [moodLoading, setMoodLoading] = useState(false);
 
-  // Live Trending Charts region
-  const [chartRegion, setChartRegion] = useState<string>('US');
+  // Live Trending Charts region. This defaulted to 'US' for everyone, in an app
+  // built for Kenya — the first chart a Nairobi listener saw was Billboard. Now:
+  // the listener's last choice, else their device region if it is one of the
+  // charts on offer, else Kenya.
+  const [chartRegion, setChartRegionState] = useState<string>(() => {
+    const offered = ['US', 'GB', 'KE', 'NG', 'ZA'];
+    try {
+      const saved = localStorage.getItem('sahrae.music.chartRegion.v1');
+      if (saved && offered.includes(saved)) return saved;
+    } catch { /* storage unavailable */ }
+    const langs = (typeof navigator !== 'undefined' && (navigator.languages?.length ? navigator.languages : [navigator.language])) || [];
+    for (const l of langs) {
+      const region = String(l || '').split(/[-_]/)[1]?.toUpperCase();
+      if (region && offered.includes(region)) return region;
+    }
+    return 'KE';
+  });
+  const setChartRegion = (r: string) => {
+    setChartRegionState(r);
+    try { localStorage.setItem('sahrae.music.chartRegion.v1', r); } catch { /* storage unavailable */ }
+  };
   const [chartTracks, setChartTracks] = useState<Track[]>([]);
   const [chartLoading, setChartLoading] = useState(false);
 
@@ -468,11 +524,11 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
     (async () => {
       try {
         const moodQueries: Record<string, string> = {
-          'Energize': 'best energy upbeat pop songs 2026',
+          'Energize': `best energy upbeat pop songs ${YEAR}`,
           'Relax': 'lofi chill relax acoustic instrumental indie',
           'Focus': 'deep focus study brain music ambient lofi',
           'Workout': 'gym motivation workout pump hip hop electro dance',
-          'Feel Good': 'happy feel good positive hits 2026',
+          'Feel Good': `happy feel good positive hits ${YEAR}`,
         };
         const q = moodQueries[activeMood] || `${activeMood} music`;
         const raw = await ytmusic.search(q);
@@ -494,14 +550,20 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
     setSections([]); setLoadingHome(true);
     (async () => {
       try {
+        const rm = regionMusic(chartRegion);
+        const year = new Date().getFullYear();
         const shelves = [
-          { title: 'New Releases', q: 'new releases music hits 2026' },
-          { title: 'Fresh Discoveries', q: 'fresh discoveries alternative acoustic 2026' }
+          // Most-watched among the last month's uploads. Sorting by upload date
+          // alone surfaced whatever was posted an hour ago — AI covers included.
+          { title: `New in ${rm.name}`, q: `${rm.releases} ${year}`, order: 'viewCount' as const, withinDays: 30 },
+          { title: 'Fresh Discoveries', q: `${rm.discover} ${year}`, order: 'relevance' as const, withinDays: 0 },
         ];
         const results = await Promise.all(
           shelves.map(async (s) => {
             try {
-              const raw = await ytmusic.search(s.q);
+              // Scoped to the chart region, and shared: everyone in a region
+              // asking the same question is answered from one paid search.
+              const raw = await ytmusic.search(s.q, { order: s.order, region: chartRegion, withinDays: s.withinDays });
               const tracks = freshFirst(raw.filter(isCleanSong), dayKey() ^ hashStr(s.title), 30);
               return { title: s.title, tracks };
             } catch {
@@ -516,7 +578,9 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+    // Re-runs when the listener switches chart region, so "New in Kenya"
+    // becomes "New in Nigeria" rather than staying on the first region loaded.
+  }, [chartRegion]);
 
   // Your Mix from listening (built on entry)
   useEffect(() => {
@@ -633,7 +697,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
     let cancelled = false; setGenreLoading(true); setGenreTracks([]);
     (async () => {
       // Song-oriented (NOT "mix"/"playlist", which pull cheap DJ-mix compilations).
-      const queries = [`best ${genre} songs 2026`, `${genre} hits 2026`, `popular ${genre} songs`, `${genre} essentials`, `top ${genre} tracks`];
+      const queries = [`best ${genre} songs ${YEAR}`, `${genre} hits ${YEAR}`, `popular ${genre} songs`, `${genre} essentials`, `top ${genre} tracks`];
       const lists = await Promise.all(queries.map((q) => ytmusic.search(q).catch(() => [] as Track[])));
       if (cancelled) return;
       const seen = new Set<string>(); const pool: Track[] = [];
@@ -742,7 +806,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
         {genreLoading ? (
           <div className="flex items-center gap-2 text-zinc-400 py-10"><Loader2 className="w-6 h-6 animate-spin text-amber-500" /> Loading {genre}…</div>
         ) : genreTracks.length === 0 ? (
-          <p className="text-zinc-500 py-8">Nothing found for {genre}.</p>
+          <EmptyState compact illustration="search" title={`Nothing for ${genre} right now`} message="Try another mood or genre — these fill from YouTube and change through the day." />
         ) : (
           <div className="grid sm:grid-cols-2 gap-2">{shown.map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(shown, i, genre)} /></Fragment>)}</div>
         )}
@@ -816,7 +880,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
             {detail.kind === 'artist' && detailAlbums.length > 0 && (
               <section><SectionHead icon={<Disc3 className="w-5 h-5 text-sauti" />}>Albums & Singles</SectionHead><div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{detailAlbums.map(albumTile)}</div></section>
             )}
-            {detailTracks.length === 0 && <p className="text-zinc-500 py-8">Nothing to show here.</p>}
+            {detailTracks.length === 0 && <EmptyState compact illustration="playlist" title="Nothing here yet" message="This list has no playable songs at the moment." />}
           </>
         )}
       </div>
@@ -887,7 +951,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
             searching ? (
               <div className="flex items-center gap-2 text-zinc-400 py-8"><Loader2 className="w-5 h-5 animate-spin text-amber-500" /> Searching…</div>
             ) : (rSongs.length + rArtists.length + rAlbums.length === 0) ? (
-              <p className="text-zinc-500 py-8">No results found.</p>
+              <EmptyState compact illustration="search" title="No matches" message="Check the spelling, or search for an artist instead of a song." />
             ) : (
               <div className="space-y-8">
                 {/* Top result + Songs (Spotify-exact, spec §1.3.7) */}
@@ -981,6 +1045,44 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                   </div>
                 </section>
               )}
+
+              {/* ── Music videos — the region's most-watched music on YouTube,
+                  as videos. Built from the chart already fetched for Live
+                  Trending Charts below, so it costs no extra quota at all.
+                  Tapping one opens Now Playing straight into Video. ── */}
+              {chartTracks.length > 0 && (() => {
+                const videos = chartTracks.filter((t) => t.duration >= 90).slice(0, 16);
+                if (videos.length < 4) return null;
+                const source = `Music videos · ${regionMusic(chartRegion).name}`;
+                return (
+                  <section className="mb-9">
+                    <SectionHead icon={<Sparkles className="w-5 h-5 text-sauti" />}>
+                      Music videos
+                      <span className="ml-2 text-sm font-normal text-zinc-400">Trending in {regionMusic(chartRegion).name}</span>
+                    </SectionHead>
+                    <div className="overflow-x-auto scrollbar-hide pb-3 -mx-1 px-1">
+                      <div className="flex gap-4">
+                        {videos.map((t, i) => (
+                          <div key={t.id} className="w-[240px] sm:w-[280px] shrink-0">
+                            <VideoCard
+                              track={t}
+                              activeId={videoPreviewId}
+                              onHoverStart={setVideoPreviewId}
+                              onHoverEnd={(id) => setVideoPreviewId((cur) => (cur === id ? null : cur))}
+                              onPlay={() => {
+                                setVideoPreviewId(null);
+                                playQueue(videos, i, source);
+                                setVideoMode(true);
+                                setExpanded(true);
+                              }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </section>
+                );
+              })()}
 
               {/* ── YouTube Music Real-Time Trending Charts Section ── */}
               <section className="mb-10 bg-zinc-900/30 border border-white/5 rounded-3xl p-5 md:p-6 relative overflow-hidden">
@@ -1144,7 +1246,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
               <span className="text-sm font-bold">Syncing tracks from YouTube…</span>
             </div>
           ) : openList.tracks.length === 0 ? (
-            <p className="text-zinc-500 py-8">No songs yet. Sync more songs on YouTube or add local ones.</p>
+            <EmptyState compact illustration="music" title="No songs yet" message="Like songs on YouTube Music, or connect your account, and they appear here." />
           ) : (
             <>
               <div className="flex justify-end mb-3">{sortSelect}</div>
@@ -1374,7 +1476,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
           )}
 
           <section><SectionHead>Your Playlists</SectionHead>
-            {playlists.length === 0 ? <p className="text-zinc-500 py-6">No playlists yet. Create one above, or tap + on any song.</p> : (
+            {playlists.length === 0 ? <EmptyState compact illustration="playlist" title="No playlists yet" message="Create one above, or tap + on any song to start one." /> : (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">{playlists.map((p) => (
                 <button key={p.id} onClick={() => setOpenId(p.id)} tabIndex={0} data-tv-focusable className="card-lift text-left rounded-2xl overflow-hidden border border-white/10 bg-zinc-900">
                   <div className={`aspect-square relative flex items-center justify-center overflow-hidden ${p.tracks[0]?.artwork ? 'bg-zinc-800' : `bg-gradient-to-br ${gradFor(p.name)}`}`}>{p.tracks[0]?.artwork ? <img src={p.tracks[0].artwork} alt="" className="w-full h-full object-cover" /> : <><div aria-hidden className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-black/20" /><span className="relative font-display font-black text-white/95 text-3xl tracking-tight drop-shadow">{monogram(p.name)}</span></>}</div>

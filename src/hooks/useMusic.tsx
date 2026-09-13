@@ -5,6 +5,7 @@ import { haptics } from '../services/haptics';
 import { downloads } from '../services/downloads';
 import { attachEq, applyWebEq, resumeEq } from '../services/eqWeb';
 import { loadEq } from '../services/eq';
+import { cleanTrackText } from '../services/trackText.ts';
 
 type Repeat = 'off' | 'one' | 'all';
 
@@ -54,6 +55,13 @@ interface MusicCtx {
   isLiked: (id: string) => boolean;
   likedTracks: Track[];
   setExpanded: (v: boolean) => void;
+  /** Show the music video instead of the artwork (YouTube-backed tracks only). */
+  videoMode: boolean;
+  setVideoMode: (v: boolean) => void;
+  /** The current track has a video to show — false for podcast audio files. */
+  canShowVideo: boolean;
+  /** Now Playing registers the element the video should cover. */
+  setVideoSlot: (el: HTMLElement | null) => void;
   // Library
   playlists: Playlist[];
   recentlyPlayed: Track[];
@@ -89,6 +97,17 @@ const RECENT_KEY = 'sahrae.music.recent.v1';
 const SEEDS_KEY = 'sahrae.music.tasteSeeds.v1';
 const ONBOARD_KEY = 'sahrae.music.onboarded.v1';
 const loadLS = <T,>(k: string, fb: T): T => { try { const s = localStorage.getItem(k); return s ? JSON.parse(s) : fb; } catch { return fb; } };
+
+/**
+ * Saved history — likes, recently played, playlists — was written before titles
+ * were cleaned, so it holds "RemaVEVO" and "&#39;". It feeds the personal mixes,
+ * which is how "WizkidVEVO & similar" reached the Music home, and it grouped one
+ * artist under two names. Cleaning on load repairs it in place; cleanTrackText is
+ * idempotent, so already-clean entries pass through unchanged. Only podcast-free
+ * tracks are touched — an episode's title is the show's, not a song's.
+ */
+const cleanSaved = (list: Track[]): Track[] =>
+  Array.isArray(list) ? list.map((t) => (t && !t.audioUrl ? { ...t, ...cleanTrackText(t.title, t.artist) } : t)) : [];
 const saveLS = (k: string, v: unknown) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ } };
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -141,6 +160,23 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState<Repeat>('off');
   const [expanded, setExpanded] = useState(false);
+
+  // ── Song / Video ──────────────────────────────────────────────────────────
+  // The music already plays through a YouTube embed — the SAME video id, held
+  // at 1×1 pixel. Video mode does not start a second stream: it moves that one
+  // player over a slot in Now Playing. An iframe reloads if it is re-parented
+  // in the DOM, so the player never moves; its fixed container is repositioned
+  // to cover the slot instead. Same element, same playback position, no reload,
+  // no second buffer, no audio drift.
+  const [videoMode, setVideoModeState] = useState<boolean>(() => {
+    try { return localStorage.getItem('sahrae.music.videoMode.v1') === '1'; } catch { return false; }
+  });
+  const setVideoMode = (v: boolean) => {
+    setVideoModeState(v);
+    try { localStorage.setItem('sahrae.music.videoMode.v1', v ? '1' : '0'); } catch { /* storage unavailable */ }
+  };
+  const [videoSlot, setVideoSlot] = useState<HTMLElement | null>(null);
+  const playerHostRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(false);
   // Mirrors usingLocalRef into render, so the EQ panel can say plainly when the
   // sliders cannot affect the current source instead of pretending they do.
@@ -148,11 +184,12 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const [autoplay, setAutoplay] = useState(true);
   const [queueSource, setQueueSource] = useState('');
   const [likedTracks, setLikedTracks] = useState<Track[]>(() => {
-    try { return JSON.parse(localStorage.getItem(LIKED_KEY) || '[]'); } catch { return []; }
+    try { return cleanSaved(JSON.parse(localStorage.getItem(LIKED_KEY) || '[]')); } catch { return []; }
   });
-  const [playlists, setPlaylists] = useState<Playlist[]>(() => loadLS<Playlist[]>(PL_KEY, []));
-  const [recentlyPlayed, setRecentlyPlayed] = useState<Track[]>(() => loadLS<Track[]>(RECENT_KEY, []));
-  const [tasteSeeds, setTasteSeeds] = useState<Track[]>(() => loadLS<Track[]>(SEEDS_KEY, []));
+  const [playlists, setPlaylists] = useState<Playlist[]>(() =>
+    loadLS<Playlist[]>(PL_KEY, []).map((pl) => ({ ...pl, tracks: cleanSaved(pl.tracks) })));
+  const [recentlyPlayed, setRecentlyPlayed] = useState<Track[]>(() => cleanSaved(loadLS<Track[]>(RECENT_KEY, [])));
+  const [tasteSeeds, setTasteSeeds] = useState<Track[]>(() => cleanSaved(loadLS<Track[]>(SEEDS_KEY, [])));
   const [onboarded, setOnboarded] = useState<boolean>(() => loadLS<boolean>(ONBOARD_KEY, false));
   const [addSheetTrack, setAddSheetTrack] = useState<Track | null>(null);
 
@@ -789,6 +826,58 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     toggle, next, prev, stop,
   };
 
+  // A podcast file or SoundCloud stream has no video; only YouTube-backed tracks do.
+  const canShowVideo = !!current && !current.audioUrl && !current.scStream;
+
+  // Position the one YouTube player over the Now Playing slot, or park it back
+  // at 1×1. Driven by the slot's geometry — ResizeObserver for layout changes,
+  // a capturing scroll listener because Now Playing scrolls inside its own
+  // element — rather than a per-frame loop that would run for as long as a
+  // song plays.
+  useEffect(() => {
+    const host = playerHostRef.current;
+    const frame = document.getElementById('sahrae-yt') as HTMLIFrameElement | null;
+    if (!host || !frame) return;
+
+    const park = () => {
+      Object.assign(host.style, {
+        left: '', top: '', right: '0px', bottom: '0px', width: '1px', height: '1px',
+        opacity: '0', zIndex: '-1', borderRadius: '0px', boxShadow: 'none',
+      });
+      frame.style.width = '1px';
+      frame.style.height = '1px';
+    };
+
+    const show = videoMode && canShowVideo && expanded && !!videoSlot;
+    if (!show || !videoSlot) { park(); return; }
+
+    const place = () => {
+      const r = videoSlot.getBoundingClientRect();
+      Object.assign(host.style, {
+        right: '', bottom: '',
+        left: `${Math.round(r.left)}px`, top: `${Math.round(r.top)}px`,
+        width: `${Math.round(r.width)}px`, height: `${Math.round(r.height)}px`,
+        // Above the Now Playing sheet (z-120), below its queue/lyrics panel (z-125).
+        opacity: '1', zIndex: '121', borderRadius: '24px',
+        boxShadow: '0 18px 48px rgba(0,0,0,.45)', overflow: 'hidden',
+      });
+      frame.style.width = '100%';
+      frame.style.height = '100%';
+    };
+
+    place();
+    const ro = new ResizeObserver(place);
+    ro.observe(videoSlot);
+    window.addEventListener('resize', place);
+    document.addEventListener('scroll', place, true);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', place);
+      document.removeEventListener('scroll', place, true);
+      park();
+    };
+  }, [videoMode, canShowVideo, expanded, videoSlot, current?.id]);
+
   return (
     <Ctx.Provider
       value={{
@@ -797,6 +886,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         playQueue, addToQueue, playNext, startRadio, removeFromQueue, jumpTo,
         toggle, stop, next, prev, seek, setRate, toggleShuffle, cycleRepeat, toggleLike, isLiked,
         likedTracks, setExpanded,
+        videoMode, setVideoMode, canShowVideo, setVideoSlot,
         playlists, recentlyPlayed, tasteSeeds, onboarded, addTasteSeeds, completeOnboarding,
         eqReachable,
         playbackError, clearPlaybackError: () => setPlaybackError(null),
@@ -806,8 +896,11 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       }}
     >
       {children}
-      {/* Hidden YouTube player — 1x1, present in the viewport so it isn't throttled. */}
-      <div aria-hidden style={{ position: 'fixed', right: 0, bottom: 0, width: 1, height: 1, opacity: 0, pointerEvents: 'none', zIndex: -1 }}>
+      {/* The YouTube player. Parked at 1×1 for audio (present in the viewport so
+          it isn't throttled); moved over the Now Playing slot in video mode by
+          the effect above. Pointer events stay off so Sahrae's own controls
+          remain the ones that work. */}
+      <div ref={playerHostRef} aria-hidden style={{ position: 'fixed', right: 0, bottom: 0, width: 1, height: 1, opacity: 0, pointerEvents: 'none', zIndex: -1, background: '#000', transition: 'border-radius .2s' }}>
         <iframe id="sahrae-yt" title="Sauti audio" allow="autoplay; encrypted-media" style={{ border: 0, width: '1px', height: '1px' }} />
       </div>
     </Ctx.Provider>

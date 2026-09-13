@@ -1,5 +1,10 @@
 import { tryFetch } from './http.ts';
 import { ytDataApi } from './ytDataApi';
+import { cleanTrackText } from './trackText.ts';
+
+// The current year, for search queries. Hardcoding it meant every shelf
+// quietly became last year's music on 1 January.
+const YEAR = new Date().getFullYear();
 
 /**
  * Sahrae Music — YouTube Music engine (Piped-backed, key-less).
@@ -47,23 +52,23 @@ export const GENRES = [
 // bootleg mixtape wall.
 export const SECTIONS: { title: string; q: string }[] = [
   // Discovery
-  { title: 'New Music Friday', q: 'new music friday 2026 new songs' },
-  { title: 'Trending Now', q: 'trending songs 2026' },
-  { title: 'Top Hits', q: 'top hits 2026' },
-  { title: 'Fresh Finds', q: 'new song releases 2026' },
+  { title: 'New Music Friday', q: `new music friday ${YEAR} new songs` },
+  { title: 'Trending Now', q: `trending songs ${YEAR}` },
+  { title: 'Top Hits', q: `top hits ${YEAR}` },
+  { title: 'Fresh Finds', q: `new song releases ${YEAR}` },
   // By region
-  { title: 'USA', q: 'usa top songs 2026' },
-  { title: 'United Kingdom', q: 'uk top songs 2026' },
-  { title: 'France', q: 'french songs 2026' },
-  { title: 'Spain', q: 'spanish songs 2026 exitos' },
-  { title: 'Brazil', q: 'brazil songs 2026 sucessos' },
-  { title: 'Europe', q: 'european top hits 2026' },
+  { title: 'USA', q: `usa top songs ${YEAR}` },
+  { title: 'United Kingdom', q: `uk top songs ${YEAR}` },
+  { title: 'France', q: `french songs ${YEAR}` },
+  { title: 'Spain', q: `spanish songs ${YEAR} exitos` },
+  { title: 'Brazil', q: `brazil songs ${YEAR} sucessos` },
+  { title: 'Europe', q: `european top hits ${YEAR}` },
   // By genre
-  { title: 'Afrobeats Essentials', q: 'best afrobeats songs 2026' },
-  { title: 'Amapiano', q: 'amapiano 2026 hits' },
-  { title: 'US Hip-Hop', q: 'us hip hop songs 2026' },
-  { title: 'R&B', q: 'best rnb songs 2026' },
-  { title: 'Pop', q: 'best pop songs 2026' },
+  { title: 'Afrobeats Essentials', q: `best afrobeats songs ${YEAR}` },
+  { title: 'Amapiano', q: `amapiano ${YEAR} hits` },
+  { title: 'US Hip-Hop', q: `us hip hop songs ${YEAR}` },
+  { title: 'R&B', q: `best rnb songs ${YEAR}` },
+  { title: 'Pop', q: `best pop songs ${YEAR}` },
 ];
 
 // Trending playlists by country/region — rendered as tappable cards. Each opens
@@ -71,30 +76,45 @@ export const SECTIONS: { title: string; q: string }[] = [
 export type TrendingPlaylist = { id: string; title: string; short: string; subtitle: string; flag: string; grad: string; count: number; weekly?: boolean; queries: string[] };
 export const TRENDING_PLAYLISTS: TrendingPlaylist[] = [
   // Regional - 100 songs, well-curated, refreshed daily.
-  { id: 'americas', title: 'Top 100 - Americas', short: 'Americas', flag: '\u{1F30E}', subtitle: 'US, Latin, Canada & Brazil', grad: 'from-blue-600 to-red-600', count: 100, queries: ['billboard hot 100 2026', 'top songs usa this week 2026', 'latin hits 2026', 'reggaeton 2026 hits', 'canada top hits 2026', 'brazil top hits 2026', 'top 100 songs america 2026'] },
-  { id: 'africa', title: 'Top 100 - Africa', short: 'Africa', flag: '\u{1F30D}', subtitle: 'Afrobeats, Amapiano, Bongo & more', grad: 'from-amber-500 to-emerald-700', count: 100, queries: ['afrobeats top 100 2026', 'amapiano hits 2026', 'bongo flava 2026', 'gengetone hits 2026', 'naija top songs 2026', 'south africa top hits 2026', 'african hits this week 2026'] },
-  { id: 'southamerica', title: 'Top 100 - South America', short: 'S. America', flag: '\u{1F30E}', subtitle: 'Reggaeton, Sertanejo & Latin pop', grad: 'from-yellow-500 to-green-600', count: 100, queries: ['reggaeton hits 2026', 'brazil funk sertanejo 2026', 'latin top 100 2026', 'argentina top songs 2026', 'colombia top hits 2026', 'musica latina 2026 exitos', 'peru chile top hits 2026'] },
-  { id: 'uk', title: 'Top 100 - United Kingdom', short: 'UK', flag: '\u{1F1EC}\u{1F1E7}', subtitle: 'Official Chart, Pop & Drill', grad: 'from-blue-700 to-rose-600', count: 100, queries: ['uk official chart top 40 2026', 'uk top 100 songs 2026', 'uk drill grime 2026', 'british pop hits 2026', 'uk dance 2026', 'uk rnb 2026', 'uk hits this week 2026'] },
-  { id: 'europe', title: 'Top 100 - Europe', short: 'Europe', flag: '\u{1F1EA}\u{1F1FA}', subtitle: 'Pan-European hits', grad: 'from-indigo-600 to-sky-600', count: 100, queries: ['europe top hits 2026', 'german top charts 2026', 'french hits 2026', 'spanish hits 2026', 'italian top songs 2026', 'dutch top 40 2026', 'europe top 100 2026'] },
+  { id: 'americas', title: 'Top 100 - Americas', short: 'Americas', flag: '\u{1F30E}', subtitle: 'US, Latin, Canada & Brazil', grad: 'from-blue-600 to-red-600', count: 100, queries: [`billboard hot 100 ${YEAR}`, `top songs usa this week ${YEAR}`, `latin hits ${YEAR}`, `reggaeton ${YEAR} hits`, `canada top hits ${YEAR}`, `brazil top hits ${YEAR}`, `top 100 songs america ${YEAR}`] },
+  { id: 'africa', title: 'Top 100 - Africa', short: 'Africa', flag: '\u{1F30D}', subtitle: 'Afrobeats, Amapiano, Bongo & more', grad: 'from-amber-500 to-emerald-700', count: 100, queries: [`afrobeats top 100 ${YEAR}`, `amapiano hits ${YEAR}`, `bongo flava ${YEAR}`, `gengetone hits ${YEAR}`, `naija top songs ${YEAR}`, `south africa top hits ${YEAR}`, `african hits this week ${YEAR}`] },
+  { id: 'southamerica', title: 'Top 100 - South America', short: 'S. America', flag: '\u{1F30E}', subtitle: 'Reggaeton, Sertanejo & Latin pop', grad: 'from-yellow-500 to-green-600', count: 100, queries: [`reggaeton hits ${YEAR}`, `brazil funk sertanejo ${YEAR}`, `latin top 100 ${YEAR}`, `argentina top songs ${YEAR}`, `colombia top hits ${YEAR}`, `musica latina ${YEAR} exitos`, `peru chile top hits ${YEAR}`] },
+  { id: 'uk', title: 'Top 100 - United Kingdom', short: 'UK', flag: '\u{1F1EC}\u{1F1E7}', subtitle: 'Official Chart, Pop & Drill', grad: 'from-blue-700 to-rose-600', count: 100, queries: [`uk official chart top 40 ${YEAR}`, `uk top 100 songs ${YEAR}`, `uk drill grime ${YEAR}`, `british pop hits ${YEAR}`, `uk dance ${YEAR}`, `uk rnb ${YEAR}`, `uk hits this week ${YEAR}`] },
+  { id: 'europe', title: 'Top 100 - Europe', short: 'Europe', flag: '\u{1F1EA}\u{1F1FA}', subtitle: 'Pan-European hits', grad: 'from-indigo-600 to-sky-600', count: 100, queries: [`europe top hits ${YEAR}`, `german top charts ${YEAR}`, `french hits ${YEAR}`, `spanish hits ${YEAR}`, `italian top songs ${YEAR}`, `dutch top 40 ${YEAR}`, `europe top 100 ${YEAR}`] },
   // Country - Top 50.
-  { id: 'us', title: 'Top 50 - United States', short: 'USA', flag: '\u{1F1FA}\u{1F1F8}', subtitle: 'Trending in the US', grad: 'from-blue-600 to-red-600', count: 50, queries: ['billboard hot 100 2026', 'top songs usa this week 2026', 'us trending songs 2026'] },
-  { id: 'ke', title: 'Top 50 - Kenya', short: 'Kenya', flag: '\u{1F1F0}\u{1F1EA}', subtitle: 'Trending in Kenya', grad: 'from-red-600 to-green-700', count: 50, queries: ['kenya trending songs 2026', 'gengetone hits 2026', 'kenyan music 2026 hits'] },
-  { id: 'ug', title: 'Top 50 - Uganda', short: 'Uganda', flag: '\u{1F1FA}\u{1F1EC}', subtitle: 'Trending in Uganda', grad: 'from-yellow-500 to-red-600', count: 50, queries: ['uganda trending songs 2026', 'ugandan music 2026 hits'] },
-  { id: 'tz', title: 'Top 50 - Tanzania', short: 'Tanzania', flag: '\u{1F1F9}\u{1F1FF}', subtitle: 'Trending in Tanzania', grad: 'from-green-600 to-yellow-500', count: 50, queries: ['bongo flava 2026 hits', 'tanzania trending songs 2026'] },
-  { id: 'ng', title: 'Top 50 - Nigeria', short: 'Nigeria', flag: '\u{1F1F3}\u{1F1EC}', subtitle: 'Trending in Nigeria', grad: 'from-green-600 to-emerald-800', count: 50, queries: ['naija afrobeats 2026 hits', 'nigeria trending songs 2026'] },
-  { id: 'gh', title: 'Top 50 - Ghana', short: 'Ghana', flag: '\u{1F1EC}\u{1F1ED}', subtitle: 'Trending in Ghana', grad: 'from-red-600 to-yellow-500', count: 50, queries: ['ghana trending songs 2026', 'ghanaian afrobeats 2026'] },
-  { id: 'za', title: 'Top 50 - South Africa', short: 'S. Africa', flag: '\u{1F1FF}\u{1F1E6}', subtitle: 'Trending in South Africa', grad: 'from-green-600 to-amber-600', count: 50, queries: ['amapiano 2026 hits', 'south africa trending songs 2026'] },
+  { id: 'us', title: 'Top 50 - United States', short: 'USA', flag: '\u{1F1FA}\u{1F1F8}', subtitle: 'Trending in the US', grad: 'from-blue-600 to-red-600', count: 50, queries: [`billboard hot 100 ${YEAR}`, `top songs usa this week ${YEAR}`, `us trending songs ${YEAR}`] },
+  { id: 'ke', title: 'Top 50 - Kenya', short: 'Kenya', flag: '\u{1F1F0}\u{1F1EA}', subtitle: 'Trending in Kenya', grad: 'from-red-600 to-green-700', count: 50, queries: [`kenya trending songs ${YEAR}`, `gengetone hits ${YEAR}`, `kenyan music ${YEAR} hits`] },
+  { id: 'ug', title: 'Top 50 - Uganda', short: 'Uganda', flag: '\u{1F1FA}\u{1F1EC}', subtitle: 'Trending in Uganda', grad: 'from-yellow-500 to-red-600', count: 50, queries: [`uganda trending songs ${YEAR}`, `ugandan music ${YEAR} hits`] },
+  { id: 'tz', title: 'Top 50 - Tanzania', short: 'Tanzania', flag: '\u{1F1F9}\u{1F1FF}', subtitle: 'Trending in Tanzania', grad: 'from-green-600 to-yellow-500', count: 50, queries: [`bongo flava ${YEAR} hits`, `tanzania trending songs ${YEAR}`] },
+  { id: 'ng', title: 'Top 50 - Nigeria', short: 'Nigeria', flag: '\u{1F1F3}\u{1F1EC}', subtitle: 'Trending in Nigeria', grad: 'from-green-600 to-emerald-800', count: 50, queries: [`naija afrobeats ${YEAR} hits`, `nigeria trending songs ${YEAR}`] },
+  { id: 'gh', title: 'Top 50 - Ghana', short: 'Ghana', flag: '\u{1F1EC}\u{1F1ED}', subtitle: 'Trending in Ghana', grad: 'from-red-600 to-yellow-500', count: 50, queries: [`ghana trending songs ${YEAR}`, `ghanaian afrobeats ${YEAR}`] },
+  { id: 'za', title: 'Top 50 - South Africa', short: 'S. Africa', flag: '\u{1F1FF}\u{1F1E6}', subtitle: 'Trending in South Africa', grad: 'from-green-600 to-amber-600', count: 50, queries: [`amapiano ${YEAR} hits`, `south africa trending songs ${YEAR}`] },
   // Weekly New Music Friday (reshuffles each week).
-  { id: 'nmf-af', title: 'New Music Friday - Africa', short: 'NMF Africa', flag: '\u{1F30D}', subtitle: 'Fresh African drops, weekly', grad: 'from-amber-500 to-emerald-700', count: 50, weekly: true, queries: ['new african music this week 2026', 'new afrobeats friday 2026', 'new amapiano this week 2026', 'new bongo flava 2026'] },
-  { id: 'nmf-global', title: 'New Music Friday - Global', short: 'NMF Global', flag: '\u{1F310}', subtitle: 'Fresh worldwide, weekly', grad: 'from-sky-500 to-violet-700', count: 50, weekly: true, queries: ['new music friday 2026', 'new songs this week 2026', 'new pop releases 2026', 'new hip hop this week 2026'] },
+  { id: 'nmf-af', title: 'New Music Friday - Africa', short: 'NMF Africa', flag: '\u{1F30D}', subtitle: 'Fresh African drops, weekly', grad: 'from-amber-500 to-emerald-700', count: 50, weekly: true, queries: [`new african music this week ${YEAR}`, `new afrobeats friday ${YEAR}`, `new amapiano this week ${YEAR}`, `new bongo flava ${YEAR}`] },
+  { id: 'nmf-global', title: 'New Music Friday - Global', short: 'NMF Global', flag: '\u{1F310}', subtitle: 'Fresh worldwide, weekly', grad: 'from-sky-500 to-violet-700', count: 50, weekly: true, queries: [`new music friday ${YEAR}`, `new songs this week ${YEAR}`, `new pop releases ${YEAR}`, `new hip hop this week ${YEAR}`] },
 ];
 
+/**
+ * Piped fallback instances — used only when the official API cannot answer.
+ *
+ * Measured 2026-09-13 with a real search against every instance in Piped's own
+ * public-instance documentation plus this list: 19 probed, ONE answered
+ * (api.piped.private.coffee, 20 results). The rest refuse connections, return
+ * 502, or 404. The public Piped network has largely collapsed, so there is no
+ * healthier list to swap in; the lesson is not to depend on it, which is why the
+ * official API is always asked first and results are shared across users.
+ *
+ * Order matters for one reason: pipedGet races every instance at once, so dead
+ * ones cost a request but never stall anything — but its native last resort
+ * uses INSTANCES[0], which was a dead server. The live one goes first. The rest
+ * stay, since instances do come back, and a comeback is picked up by the race.
+ */
 const INSTANCES = [
+  'https://api.piped.private.coffee',
   'https://pipedapi.kavin.rocks',
   'https://pipedapi.adminforge.de',
   'https://pipedapi.reallyaweso.me',
   'https://pipedapi.leptons.xyz',
-  'https://api.piped.private.coffee',
   'https://pipedapi.r4fo.com',
   'https://pipedapi.nosebs.ru',
   'https://pipedapi.ducks.party',
@@ -221,10 +241,11 @@ function fmtDate(it: any): string | undefined {
 function mapItem(it: any): Track | null {
   const id = vId(it.url || '');
   if (!id || !it.duration || it.duration <= 0) return null;
+  const text = cleanTrackText(it.title || 'Unknown', it.uploaderName || '');
   return {
     id,
-    title: it.title || 'Unknown',
-    artist: (it.uploaderName || '').replace(/\s*-\s*Topic$/i, '').trim() || 'Unknown Artist',
+    title: text.title,
+    artist: text.artist,
     artwork: it.thumbnail, artworkLarge: hiRes(it.thumbnail, id), duration: it.duration,
     dominantColor: dominantColor(id),
     channelId: chanId(it.uploaderUrl || ''),
@@ -267,8 +288,8 @@ async function official<T>(
 }
 
 export const ytmusic = {
-  search: (q: string): Promise<Track[]> =>
-    official(() => ytDataApi.search(q, 'song'), () => searchRaw(q, 'music_songs').then(mapItems)),
+  search: (q: string, opts: { order?: 'relevance' | 'date' | 'viewCount'; region?: string; withinDays?: number } = {}): Promise<Track[]> =>
+    official(() => ytDataApi.search(q, 'song', opts), () => searchRaw(q, 'music_songs').then(mapItems)),
 
   // Video search — used for Podcasts (which live as videos on YouTube). Returns
   // the same Track shape (id = videoId) so it plays through the music engine for
@@ -327,7 +348,7 @@ export const ytmusic = {
     const title = String(j?.title || '').replace(/\([^)]*\)|\[[^\]]*\]/g, '').replace(/\s+/g, ' ').trim();
     const seed = artist || title;
     if (seed) push(await ytmusic.search(`${seed} songs`).catch(() => [] as Track[]));
-    if (out.length < 5) push(await ytmusic.search('top hits 2026').catch(() => [] as Track[]));
+    if (out.length < 5) push(await ytmusic.search(`top hits ${YEAR}`).catch(() => [] as Track[]));
     return out;
   }),
 

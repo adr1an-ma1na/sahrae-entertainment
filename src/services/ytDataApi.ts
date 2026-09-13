@@ -1,6 +1,7 @@
 import { httpFetch } from './http.ts';
 import type { Track, Artist, Album } from './ytmusic';
 import { parseISODuration, dominantColor } from './youtubeParse';
+import { cleanArtist, cleanTrackText, decodeEntities } from './trackText.ts';
 
 /**
  * Official YouTube Data API v3 client — the music catalog behind Sauti.
@@ -181,7 +182,6 @@ async function get(path: string, units: number): Promise<any | null> {
 const hiRes = (th: any, id: string): string =>
   th?.maxres?.url || th?.standard?.url || th?.high?.url || th?.medium?.url || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
 
-const cleanArtist = (s: string): string => String(s || '').replace(/\s*-\s*Topic$/i, '').trim() || 'Unknown Artist';
 
 /** A videos.list item already carries duration, so these need no second call. */
 function mapVideo(v: any): Track | null {
@@ -189,10 +189,11 @@ function mapVideo(v: any): Track | null {
   if (!id || typeof id !== 'string') return null;
   const s = v.snippet || {};
   const dur = parseISODuration(v.contentDetails?.duration);
+  const text = cleanTrackText(String(s.title || 'Unknown'), s.videoOwnerChannelTitle || s.channelTitle);
   return {
     id,
-    title: String(s.title || 'Unknown'),
-    artist: cleanArtist(s.videoOwnerChannelTitle || s.channelTitle),
+    title: text.title,
+    artist: text.artist,
     artwork: s.thumbnails?.medium?.url || s.thumbnails?.default?.url,
     artworkLarge: hiRes(s.thumbnails, id),
     duration: dur,
@@ -200,7 +201,19 @@ function mapVideo(v: any): Track | null {
     channelId: s.channelId,
     date: s.publishedAt ? new Date(s.publishedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : undefined,
     uploaded: s.publishedAt ? Date.parse(s.publishedAt) : 0,
+    views: Number(v.statistics?.viewCount) || undefined,
   };
+}
+
+/**
+ * Repair tracks read back from a cache. Entries written before trackText existed
+ * hold escaped, label-heavy titles for up to a day, in this device's cache and in
+ * the shared one. Refetching to refresh them would spend quota; cleaning on read
+ * costs nothing, and cleanTrackText is idempotent, so clean entries pass through
+ * unchanged.
+ */
+function repair(list: Track[]): Track[] {
+  return list.map((t) => ({ ...t, ...cleanTrackText(t.title, t.artist) }));
 }
 
 function mapMany(items: any[]): Track[] {
@@ -239,8 +252,8 @@ export const ytDataApi = {
   chart: async (regionCode: string, max = 50): Promise<Track[] | null> => {
     const key = `chart.${regionCode}.${max}`;
     const hit = cacheGet<Track[]>(key, TTL.chart);
-    if (hit) return hit;
-    const j = await get(`videos?part=snippet,contentDetails&chart=mostPopular&videoCategoryId=10&regionCode=${encodeURIComponent(regionCode)}&maxResults=${Math.min(max, 50)}`, COST.cheap);
+    if (hit) return repair(hit);
+    const j = await get(`videos?part=snippet,contentDetails,statistics&chart=mostPopular&videoCategoryId=10&regionCode=${encodeURIComponent(regionCode)}&maxResults=${Math.min(max, 50)}`, COST.cheap);
     if (!j) return null;
     const out = mapMany(j.items).filter(isSongLength);
     cacheSet(key, out);
@@ -262,7 +275,7 @@ export const ytDataApi = {
   search: async (
     q: string,
     kind: 'song' | 'video' = 'song',
-    opts: { order?: 'relevance' | 'date' | 'viewCount' | 'rating'; duration?: 'any' | 'short' | 'medium' | 'long' } = {},
+    opts: { order?: 'relevance' | 'date' | 'viewCount' | 'rating'; duration?: 'any' | 'short' | 'medium' | 'long'; region?: string; withinDays?: number } = {},
   ): Promise<Track[] | null> => {
     const query = q.trim();
     if (!query) return [];
@@ -271,20 +284,30 @@ export const ytDataApi = {
     // Filters are part of the cache identity — the same words with a different
     // filter is a different search, and returning the cached one would silently
     // ignore what was asked for.
-    const key = `search.${kind}.${order}.${duration}.${query.toLowerCase()}`;
+    // Region scopes results to what can play there. It belongs in the cache
+    // identity: Kenya's answer handed to a Nigerian listener would be wrong.
+    const region = /^[A-Z]{2}$/.test(opts.region || '') ? opts.region! : '';
+    // A recency window is expressed as a calendar date, so it is stable for a
+    // whole day and the cache can actually hit; a raw timestamp would make
+    // every call a new key and every call a paid search.
+    const days = Math.max(0, Math.floor(opts.withinDays || 0));
+    const after = days ? new Date(Date.now() - days * 864e5).toISOString().slice(0, 10) : '';
+    const key = `search.${kind}.${order}.${duration}.${region}.${after}.${query.toLowerCase()}`;
     const hit = cacheGet<Track[]>(key, TTL.search);
-    if (hit) return hit;
+    if (hit) return repair(hit);
 
     // Somebody may already have paid for this exact query today.
     const shared = await sharedGet<Track[]>(key, TTL.search);
-    if (shared) { cacheSet(key, shared); return shared; }
+    if (shared) { const fixed = repair(shared); cacheSet(key, fixed); return fixed; }
 
     if (!canSearch()) return null; // out of budget → caller falls back
 
     const cat = kind === 'song' ? '&videoCategoryId=10' : '';
     const ord = order !== 'relevance' ? `&order=${order}` : '';
     const dur = duration !== 'any' ? `&videoDuration=${duration}` : '';
-    const j = await get(`search?part=snippet&type=video${cat}${ord}${dur}&maxResults=25&q=${encodeURIComponent(query)}`, COST.search);
+    const reg = region ? `&regionCode=${region}` : '';
+    const pub = after ? `&publishedAfter=${after}T00:00:00Z` : '';
+    const j = await get(`search?part=snippet&type=video${cat}${ord}${dur}${reg}${pub}&maxResults=25&q=${encodeURIComponent(query)}`, COST.search);
     if (!j) return null;
     let out = await withDurations(mapMany(j.items));
     // A song filter is about length as well as category: a two-hour "mix"
@@ -299,7 +322,7 @@ export const ytDataApi = {
   playlistTracks: async (playlistId: string, cap = 100): Promise<Track[] | null> => {
     const key = `pl.${playlistId}.${cap}`;
     const hit = cacheGet<Track[]>(key, TTL.playlist);
-    if (hit) return hit;
+    if (hit) return repair(hit);
     const items: any[] = [];
     let pageToken = '';
     do {
@@ -347,7 +370,7 @@ export const ytDataApi = {
     const out: Album[] = (j.items || [])
       .map((it: any) => ({
         id: it.id?.playlistId,
-        name: String(it.snippet?.title || 'Album'),
+        name: decodeEntities(String(it.snippet?.title || 'Album')),
         thumbnail: it.snippet?.thumbnails?.high?.url || it.snippet?.thumbnails?.default?.url,
         artist: cleanArtist(it.snippet?.channelTitle),
       }))

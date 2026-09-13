@@ -4,6 +4,7 @@ import { getAuth, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { Track } from './ytmusic';
 import { parseISODuration, parsePlaylistId, dominantColor } from './youtubeParse';
+import { cleanTrackText } from './trackText.ts';
 
 // Re-exported so callers can keep importing them from the service they belong to.
 export { parseISODuration, parsePlaylistId } from './youtubeParse';
@@ -312,11 +313,12 @@ class YoutubeService {
       if (TOMBSTONES.has(title)) continue; // removed upstream — not playable
       seen.add(videoId);
       const th = s.thumbnails || {};
+      // Titles arrive HTML-escaped and written for YouTube search; see trackText.
+      const text = cleanTrackText(title || 'Unknown Title', s.videoOwnerChannelTitle || s.channelTitle || 'YouTube');
       out.push({
         id: videoId,
-        title: title || 'Unknown Title',
-        // "- Topic" is how YouTube labels auto-generated artist channels.
-        artist: String(s.videoOwnerChannelTitle || s.channelTitle || 'YouTube').replace(/\s*-\s*Topic$/i, '').trim(),
+        title: text.title,
+        artist: text.artist,
         artwork: th.medium?.url || th.default?.url || '',
         artworkLarge: th.maxres?.url || th.standard?.url || th.high?.url || th.medium?.url || '',
         duration: 0,
