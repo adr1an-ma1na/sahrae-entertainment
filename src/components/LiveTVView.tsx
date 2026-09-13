@@ -4,6 +4,7 @@ import { X, Maximize, Search, Heart, RadioTower, Loader2, WifiOff } from 'lucide
 import { Capacitor } from '@capacitor/core';
 import Coachmark from './Coachmark';
 import { onChannelRequest } from '../services/voiceBus';
+import Illustration from './ui/Illustration';
 
 interface Channel { name: string; country: string; category: Category; url: string; kind?: 'hls' | 'yt' }
 type Category = 'News' | 'Regional' | 'Sports' | 'Documentary' | 'Science' | 'Wildlife' | 'Anime' | 'Music' | 'Kids' | 'Lifestyle';
@@ -364,7 +365,11 @@ export default function LiveTVView() {
 
       {/* Channels */}
       {visible.length === 0 ? (
-        <p className="text-zinc-500 py-12 text-center">{cat === 'Favorites' ? 'No favorites yet, tap the heart on a channel.' : 'No channels match your search.'}</p>
+        <div className="flex flex-col items-center text-center py-10">
+          <Illustration name={cat === 'Favorites' ? 'favorites' : 'tv'} className="w-44 md:w-52 h-auto mb-4" />
+          <p className="text-white font-semibold mb-1">{cat === 'Favorites' ? 'No favourite channels yet' : 'No channels match'}</p>
+          <p className="text-zinc-400 text-sm max-w-xs">{cat === 'Favorites' ? 'Tap the heart on any channel to keep it here.' : 'Try a different search or category.'}</p>
+        </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
           {visible.map(renderCard)}

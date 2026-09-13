@@ -78,6 +78,7 @@ export default function MediaGrid({ title, items, onPlay, defaultType = 'movie',
     return (
       <EmptyState
         icon={SearchX}
+        illustration="search"
         title="Nothing here yet"
         message={`We couldn't find anything for ${title}. Try a different spelling, a broader filter, or browse what's trending.`}
       />

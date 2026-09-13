@@ -142,6 +142,7 @@ export default function DiscoveryView({ type, genres, onPlay }: DiscoveryViewPro
       ) : (
         <EmptyState
           icon={SlidersHorizontal}
+          illustration="filters"
           title="No titles match those filters"
           message="Nothing lines up with this combination. Widening the year range or clearing a genre usually brings plenty back."
         />

@@ -3,6 +3,7 @@ import { X, Plus, Check, ListMusic, Music2, Play, ListPlus, Download, Loader2, R
 import { useMusic } from '../hooks/useMusic';
 import { haptics } from '../services/haptics';
 import { downloads } from '../services/downloads';
+import Illustration from './ui/Illustration';
 
 export default function AddToPlaylistSheet() {
   const { addSheetTrack, closeAddSheet, playlists, createPlaylist, addToPlaylist, addToQueue, playNext, startRadio } = useMusic();
@@ -99,7 +100,10 @@ export default function AddToPlaylistSheet() {
         {/* Existing playlists */}
         <div className="overflow-y-auto custom-scrollbar p-2">
           {playlists.length === 0 ? (
-            <p className="text-zinc-500 text-sm text-center py-8">No playlists yet. Create one above.</p>
+            <div className="flex flex-col items-center text-center py-6">
+              <Illustration name="playlist" className="w-32 h-auto mb-2" />
+              <p className="text-zinc-400 text-sm">No playlists yet. Create one above.</p>
+            </div>
           ) : (
             playlists.map((p) => {
               const has = p.tracks.some((t) => t.id === track.id);

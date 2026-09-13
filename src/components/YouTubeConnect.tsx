@@ -8,6 +8,7 @@ import { CoverArt } from './ui/CoverArt';
 import { ShelfHeader, WideRow, ArtCard, Shelf, CardSkeleton } from './ui/Shelf';
 import { buildMadeForYou, type Mix } from '../services/mixes';
 import VideoCard from './ui/VideoCard';
+import Illustration from './ui/Illustration';
 
 /**
  * Connect a Google account and browse what it has liked and saved.
@@ -493,7 +494,10 @@ export default function YouTubeConnect() {
           {openArtist.tracks === null ? (
             <p className="text-sm text-zinc-400 flex items-center gap-2 py-6"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</p>
           ) : openArtist.tracks.length === 0 ? (
-            <p className="text-sm text-zinc-500 py-8">Nothing published on this channel yet.</p>
+            <div className="flex flex-col items-center text-center py-8">
+              <Illustration name="video" className="w-40 h-auto mb-3" />
+              <p className="text-sm text-zinc-400">Nothing published on this channel yet.</p>
+            </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-6">
               {openArtist.tracks.map((t, i) => (

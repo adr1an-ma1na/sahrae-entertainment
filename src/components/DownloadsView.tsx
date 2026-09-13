@@ -5,6 +5,7 @@ import { useMusic } from '../hooks/useMusic';
 import { CoverArt } from './ui/CoverArt';
 import { useVideoDownloads } from '../hooks/useVideoDownloads';
 import { getImageUrl } from '../services/tmdb';
+import Illustration from './ui/Illustration';
 
 interface DownloadsViewProps {
   onPlay?: (id: number, type: 'movie' | 'tv', startInInfo?: boolean, playTrailer?: boolean, season?: number, episode?: number) => void;
@@ -129,19 +130,19 @@ export default function DownloadsView({ onPlay }: DownloadsViewProps) {
               })}
             </div>
           ) : (
-            <div className="glass rounded-2xl p-6 text-sm text-zinc-400 leading-relaxed text-center sm:text-left">
-              <Film className="w-10 h-10 text-amber-500/50 mb-3 mx-auto sm:mx-0" />
+            <div className="glass rounded-3xl px-6 py-8 text-sm text-zinc-400 leading-relaxed text-center flex flex-col items-center">
+              <Illustration name="downloads" className="w-48 md:w-56 h-auto mb-4" />
               {supported ? (
                 <>
-                  <h4 className="text-white font-bold text-base mb-1">No movie or TV downloads yet</h4>
-                  <p className="text-xs text-zinc-400 max-w-md">
+                  <h4 className="text-white font-bold text-lg mb-1">No movie or TV downloads yet</h4>
+                  <p className="text-sm text-zinc-400 max-w-md">
                     Open any title and tap <span className="text-amber-500 font-bold">Download</span>. The file is saved inside the app and appears here when it finishes.
                   </p>
                 </>
               ) : (
                 <>
-                  <h4 className="text-white font-bold text-base mb-1">Downloads need the Android app</h4>
-                  <p className="text-xs text-zinc-400 max-w-md">
+                  <h4 className="text-white font-bold text-lg mb-1">Downloads need the Android app</h4>
+                  <p className="text-sm text-zinc-400 max-w-md">
                     A browser can't save a video into the app's own storage, so in-app downloads only work in the Sahrae Android app. On the web, the Download button opens the provider and the file saves to this device instead.
                   </p>
                 </>
@@ -185,8 +186,10 @@ export default function DownloadsView({ onPlay }: DownloadsViewProps) {
               </div>
             </>
           ) : (
-            <div className="glass rounded-2xl p-5 text-sm text-zinc-400 leading-relaxed">
-              In Sauti or Podcasts, tap <span className="text-sauti font-semibold">Download</span> on a song or episode, saving it inside the app to play with no internet.
+            <div className="glass rounded-3xl px-6 py-8 text-sm text-zinc-400 leading-relaxed text-center flex flex-col items-center">
+              <Illustration name="music" className="w-48 md:w-56 h-auto mb-4" />
+              <h4 className="text-white font-bold text-lg mb-1">No songs or episodes saved</h4>
+              <p className="max-w-md">In Music or Podcasts, tap <span className="text-sauti font-semibold">Download</span> on a song or episode to play it here with no internet.</p>
             </div>
           )}
         </div>

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Play, Pause, Radio, Signal, Search } from 'lucide-react';
 import { useRadio } from '../hooks/useRadio';
 import ListenTabs from './ListenTabs';
+import Illustration from './ui/Illustration';
 
 const COUNTRIES = [
   { code: 'All', name: 'All Regions', flag: '🌍' },
@@ -449,7 +450,7 @@ export default function AudioHubView({ onNav }: { onNav?: (tab: string) => void 
           </div>
         ) : (
           <div className="text-center py-16 bg-zinc-950/40 border border-white/5 rounded-2xl">
-            <Radio className="w-12 h-12 text-zinc-600 mx-auto mb-4 animate-pulse" />
+            <Illustration name="radio" className="w-44 md:w-52 h-auto mx-auto mb-4" />
             <h4 className="text-lg font-bold text-white mb-1">No stations found</h4>
             <p className="text-sm text-zinc-500 max-w-md mx-auto px-4">
               We couldn't find any radio stations matching your active filters. Try searching for something else or clearing your search.

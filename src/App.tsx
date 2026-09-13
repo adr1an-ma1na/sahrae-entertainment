@@ -51,6 +51,7 @@ import EmptyState from './components/EmptyState';
 import Coachmark from './components/Coachmark';
 import { applyEq, loadEq } from './services/eq';
 import { startSync } from './services/cloudSync';
+import Illustration from './components/ui/Illustration';
 
 export default function App() {
   const { user, activeProfile, loading: authLoading } = useAuth();
@@ -467,15 +468,13 @@ export default function App() {
         if (initialLoadError) {
           return (
             <div className="flex flex-col items-center justify-center min-h-[70vh] px-4 text-center">
-              <div className="w-16 h-16 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center mb-6">
-                <AlertCircle className="w-8 h-8" />
-              </div>
-              <h2 className="text-2xl font-bold text-white mb-2">Network Error</h2>
-              <p className="text-zinc-400 max-w-sm mb-8">We had trouble connecting to the movie database. This can happen after waking up from sleep or due to an adblocker.</p>
+              <Illustration name="offline" className="w-52 md:w-60 h-auto mb-5" />
+              <h2 className="text-2xl font-bold text-white mb-2">Can't reach the catalogue</h2>
+              <p className="text-zinc-400 max-w-sm mb-8">The movie database didn't answer. Check your connection and try again — if you use an ad blocker, it may be blocking it.</p>
               <button 
                 onClick={loadInitialData}
                 disabled={loading}
-                className="flex items-center gap-2 px-6 py-3 bg-amber-500 text-amber-950 font-bold rounded-xl hover:bg-amber-400 transition-colors disabled:opacity-50"
+                className="btn-gold flex items-center gap-2 px-6 py-3 font-bold rounded-full disabled:opacity-50"
               >
                 <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
                 {loading ? 'Retrying...' : 'Retry Connection'}
@@ -522,7 +521,7 @@ export default function App() {
         return <FlowChannelsView onPlay={handlePlay} />;
       case 'mylist':
         return myList.length === 0 ? (
-          <EmptyState icon={Heart} title="Your list is empty"
+          <EmptyState icon={Heart} illustration="list" title="Your list is empty"
             message="Tap the ♥ on any movie or show to save it here and watch it later."
             actionLabel="Browse movies" onAction={() => navigate('movies')} />
         ) : (

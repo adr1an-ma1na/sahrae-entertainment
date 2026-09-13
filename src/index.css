@@ -992,3 +992,19 @@ html.tv-mode .tv-rail { display: none !important; }
 html.tv-mode:not(.nav-collapsed) .tv-full { display: flex !important; transform: none !important; }
 html.tv-mode:not(.nav-collapsed) .tv-shell { padding-left: 16rem !important; }
 html.tv-mode:not(.nav-collapsed) .tv-navbar { left: 16rem !important; }
+
+/* ── Illustration motion ────────────────────────────────────────────────────
+   A slow drift on the subject and a gentle twinkle on the sparkles — enough to
+   make an empty screen feel alive rather than broken, slow enough not to pull
+   attention from the one action the screen offers. Off for reduced motion, and
+   off on TV and weak graphics, where an always-running animation on a screen
+   nobody is interacting with is pure cost. */
+@keyframes illo-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+@keyframes illo-twinkle { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+.illo .illo-float { animation: illo-float 6s ease-in-out infinite; transform-box: fill-box; }
+.illo .illo-twinkle { animation: illo-twinkle 4.5s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .illo .illo-float, .illo .illo-twinkle { animation: none; }
+}
+html.tv-mode .illo .illo-float, html.tv-mode .illo .illo-twinkle,
+html.low-gfx .illo .illo-float, html.low-gfx .illo .illo-twinkle { animation: none; }
