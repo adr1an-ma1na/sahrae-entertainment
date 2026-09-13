@@ -13,6 +13,9 @@ import { loadSportsFeed, sourcesById, fetchStreamsFor, type Feed, type FeedEvent
 import { hostOf } from '../services/sportsStreams';
 import Coachmark from './Coachmark';
 import { suppressPopups } from '../services/popupGuard';
+import { readAudioFormat, bestAudioTrack, upscaleDecision, bestHeight, type AudioFormat } from '../services/streamQuality.ts';
+import { gpuReport } from '../services/gpu.ts';
+import { attachUpscaler } from '../services/upscaler.ts';
 
 /**
  * Live Sports.
@@ -65,7 +68,6 @@ const CHANNELS: Channel[] = [
   { name: 'beIN Sports XTRA', category: 'Football', desc: 'Football & global sports', url: 'https://bein-xtra-bein.amagi.tv/playlist.m3u8' },
   { name: 'FIFA+ HD', category: 'Football', desc: 'Football live matches & archive', url: 'https://d2w9q46ikgrcwx.cloudfront.net/v1/master/3722c60a815c199d9c0ef36c5b73da68a62b09d1/cc-of5cbk3sav3w5/v1/sysdata_s_p_a_fifa_7/samsungheadend_us/latest/main/hls/playlist.m3u8' },
   { name: 'Real Madrid TV', category: 'Football', desc: 'Los Blancos 24/7', url: 'https://rmtv.akamaized.net/hls/live/2043153/rmtv-es-web/master.m3u8' },
-  { name: 'CazeTV', category: 'Football', desc: 'Football & live tournaments', url: 'https://dfr80qz435crc.cloudfront.net/MNOP/Amagi/Caze/Caze_TV_BR/Caze_TV.m3u8' },
   { name: 'FTF Sports Network', category: 'Football', desc: 'For The Fan global sports', url: 'https://1593604785.rsc.cdn77.org/FTF/FTF_SCTE.m3u8' },
   { name: 'beIN Sports en Español', category: 'Football', desc: 'Fútbol en vivo', url: 'https://dc1644a9jazgj.cloudfront.net/beIN_Sports_Xtra_Espanol.m3u8' },
   { name: 'ACCDN Sports', category: 'Football', desc: 'ACC College Football & Sports', url: 'https://raycom-accdn-firetv.amagi.tv/playlist.m3u8' },
@@ -98,7 +100,26 @@ function fallbackChannels(sport: string): Channel[] {
   // finds a live one, and the viewer can flip between the channels covering it
   // (Cricfy-style) even before an event's dedicated server is live.
   const sameCat = CHANNELS.filter((c) => c.category === primary.category);
-  const universal = ['Red Bull TV', 'Fubo Sports', 'Stadium Live', 'Pluto Sports HD', 'beIN Sports XTRA']
+  /**
+   * Last-resort channels, ordered by MEASURED resolution rather than by name.
+   *
+   * The previous order was almost exactly backwards. Reading each manifest:
+   *
+   *     beIN Sports XTRA   720p      was LAST
+   *     SportsGrid         720p      was absent
+   *     Red Bull TV        240p      was FIRST
+   *     Stadium Live       360p
+   *     Fubo Sports        216p
+   *     Pluto Sports HD    declares no resolution at all
+   *
+   * So a viewer who fell through to the universal list — which is precisely the
+   * viewer whose event had no stream — was handed 240p first and 720p last, and
+   * one of the options carries "HD" in a name no manifest supports. Sport-
+   * specific channels still come before all of these, because relevance beats
+   * resolution: Red Bull TV at 240p is worth more on a motorsport fixture than
+   * a crisp channel showing something else.
+   */
+  const universal = ['beIN Sports XTRA', 'SportsGrid Network', 'Stadium Live', 'Red Bull TV', 'Fubo Sports', 'Pluto Sports HD']
     .map((n) => CHANNELS.find((c) => c.name === n))
     .filter((c): c is Channel => !!c);
   const seen = new Set<string>();
@@ -182,6 +203,57 @@ const HLSPlayer = ({ src, onUnplayable }: { src: string; onUnplayable?: () => vo
   const hlsRef = useRef<Hls | null>(null);
   const [levels, setLevels] = useState<{ height: number; index: number }[]>([]);
   const [pinnedLevel, setPinnedLevel] = useState(-1);
+  /** What the manifest actually declares for audio — null until known. */
+  const [audioFmt, setAudioFmt] = useState<AudioFormat | null>(null);
+  /** Highest rendition the source offers, for the upscale decision. */
+  const [sourceHeight, setSourceHeight] = useState(0);
+  const [upscaleOn, setUpscaleOn] = useState<boolean>(() => {
+    try { return localStorage.getItem('sahrae.sports.upscale') !== 'off'; } catch { return true; }
+  });
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  /**
+   * Whether to upscale, recomputed when the source or the preference changes.
+   *
+   * devicePixelRatio matters: a 1440-CSS-pixel window on a 2x display is really
+   * showing 2880 device pixels, and ignoring that would decline to upscale on
+   * exactly the screens that would benefit most.
+   */
+  const decision = useMemo(() => {
+    const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
+    const displayHeight = typeof window !== 'undefined' ? Math.round(window.screen.height * dpr) : 0;
+    return upscaleDecision({
+      sourceHeight,
+      displayHeight,
+      hardwareGpu: gpuReport().canRunShaders,
+      enabled: upscaleOn,
+    });
+  }, [sourceHeight, upscaleOn]);
+
+  /** True only once the GPU path has actually started — never merely intended. */
+  const [upscaling, setUpscaling] = useState(false);
+
+  useEffect(() => {
+    setUpscaling(false);
+    if (!decision.shouldUpscale) return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video) return;
+
+    // The canvas only exists once `upscaling` is true, so the first pass arms
+    // it and the second attaches. Attaching to a canvas that is not mounted
+    // would silently render into nothing.
+    if (!canvas) { setUpscaling(true); return; }
+
+    const handle = attachUpscaler(video, canvas, decision.targetHeight);
+    if (!handle.active) {
+      // GL refused. Fall straight back to the plain video rather than leaving a
+      // blank canvas over a live match.
+      setUpscaling(false);
+      return;
+    }
+    return () => handle.detach();
+  }, [decision.shouldUpscale, decision.targetHeight, upscaling]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -241,6 +313,30 @@ const HLSPlayer = ({ src, onUnplayable }: { src: string; onUnplayable?: () => vo
             setTimeout(() => { try { if (hls.autoLevelEnabled !== false) hls.nextLevel = -1; } catch { /* destroyed */ } }, 8000);
           }
           setLevels((hls.levels || []).map((l, i) => ({ height: l.height || 0, index: i })));
+
+          // Read what this stream ACTUALLY carries, from the manifest.
+          //
+          // Atmos in HLS is signalled by CHANNELS="16/JOC", not by the codec:
+          // plain 5.1 is also ec-3, so trusting the codec alone would stamp
+          // "Atmos" on ordinary surround. The badge additionally requires that
+          // this device can decode it — a label for audio the WebView cannot
+          // play is worse than no label.
+          const at = (hls as any).audioTracks as { audioCodec?: string; channels?: string; name?: string }[] | undefined;
+          if (at?.length) {
+            const chosen = bestAudioTrack(
+              at.map((t) => ({ codec: t.audioCodec || '', channels: t.channels || '', name: t.name })),
+            );
+            setAudioFmt(chosen ? readAudioFormat(chosen) : null);
+          } else {
+            // A muxed stream has no separate audio rendition; the video level
+            // carries the codec. Still honest: no JOC means no Atmos claim.
+            const lv = hls.levels?.[hls.currentLevel] || hls.levels?.[0];
+            const codec = (lv as any)?.audioCodec || '';
+            setAudioFmt(codec ? readAudioFormat({ codec, channels: '' }) : null);
+          }
+
+          // Upscale decision, from the source height and this display.
+          setSourceHeight(bestHeight(hls.levels || []));
         } catch { /* level control is best-effort */ }
         video.play().catch(() => {});
       });
@@ -286,7 +382,73 @@ const HLSPlayer = ({ src, onUnplayable }: { src: string; onUnplayable?: () => vo
 
   return (
     <>
-      <video ref={videoRef} className="absolute inset-0 w-full h-full object-contain bg-black" controls autoPlay playsInline />
+      {/* When upscaling, the canvas carries the picture and the <video> becomes
+          the (invisible) decoder. Native controls cannot be used in that mode —
+          a canvas drawn above them hides them — so the canvas takes a tap for
+          play/pause. For a LIVE feed that is the whole of what the native bar
+          offered anyway: there is nothing to seek to. */}
+      <video
+        ref={videoRef}
+        className={`absolute inset-0 w-full h-full object-contain bg-black ${upscaling ? 'opacity-0 pointer-events-none' : ''}`}
+        controls={!upscaling}
+        autoPlay
+        playsInline
+      />
+      {upscaling && (
+        <canvas
+          ref={canvasRef}
+          onClick={() => { const v = videoRef.current; if (!v) return; v.paused ? v.play().catch(() => {}) : v.pause(); }}
+          className="absolute inset-0 w-full h-full object-contain bg-black cursor-pointer"
+        />
+      )}
+      {/* Honest capability badges.
+          Each one is rendered only when the stream ACTUALLY carries it and this
+          device can actually use it. The Dolby/Atmos badge in particular comes
+          from the manifest's CHANNELS attribute plus a real decoder check — it
+          is never inferred from a codec name, because plain 5.1 and Atmos share
+          the ec-3 codec and guessing would mislabel ordinary surround. */}
+      {(audioFmt?.label || upscaling) && (
+        <div className="absolute top-3 left-3 z-30 flex items-center gap-1.5">
+          {upscaling && (
+            <span
+              title={decision.reason}
+              className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/90 text-amber-950 border border-amber-300/40"
+            >
+              {decision.targetHeight}p
+            </span>
+          )}
+          {audioFmt?.label && (
+            <span
+              title={`codec ${audioFmt.codec || 'unknown'}${audioFmt.channels ? ` · channels ${audioFmt.channels}` : ''}`}
+              className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                audioFmt.showAtmos
+                  ? 'bg-white/90 text-black border-white/40'
+                  : audioFmt.showDolby
+                    ? 'bg-zinc-200/90 text-black border-white/30'
+                    : 'bg-black/70 text-zinc-300 border-white/10'
+              }`}
+            >
+              {audioFmt.label}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Upscale toggle — only offered where it would genuinely do something. */}
+      {(decision.shouldUpscale || upscaling) && (
+        <button
+          onClick={() => {
+            const n = !upscaleOn;
+            setUpscaleOn(n);
+            try { localStorage.setItem('sahrae.sports.upscale', n ? 'on' : 'off'); } catch { /* ignore */ }
+          }}
+          className="absolute bottom-3 left-3 z-30 px-2.5 py-1 rounded-full text-[10px] font-bold bg-black/70 backdrop-blur border border-white/10 text-zinc-200 hover:text-white"
+          title={decision.reason}
+        >
+          Enhance {upscaleOn ? 'On' : 'Off'}
+        </button>
+      )}
+
       {/* Quality picker. Only rendered when the stream genuinely offers more
           than one rendition — listing "1080p" for a single-variant stream would
           be claiming a quality that is not there. */}
@@ -564,10 +726,18 @@ export default function SportsView() {
     const apiSources = sourcesById.get(m.id);
     if (apiSources?.length) {
       void (async () => {
+        // Six, not four, and in ranked order (sportsFeed stores them ranked).
+        //
+        // A source that returns nothing now returns an EMPTY list rather than a
+        // fabricated URL, so a slot spent on a dead source yields nothing at all
+        // instead of a phantom server. Asking more sources is therefore the
+        // difference between "no feeds for this event" and a working one — and
+        // it costs nothing on fixtures whose first source answers, because the
+        // requests run in parallel.
         const metas = (await Promise.all(
-          apiSources.slice(0, 4).map((src) => fetchStreamsFor(src.source, src.id)),
+          apiSources.slice(0, 6).map((src) => fetchStreamsFor(src.source, src.id)),
         )).flat().filter(Boolean) as NonNullable<FeedEvent['streamMeta']>;
-        if (!metas.length) return;
+        if (!metas.length) return; // fallback channels seeded above still play
         // Build the merged list from the ref, not inside a state updater, so the
         // ids we then validate are the SAME objects that land in state. Deriving
         // ids separately silently validated streams that did not exist.

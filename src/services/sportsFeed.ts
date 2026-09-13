@@ -1,3 +1,4 @@
+import { recordSourceOutcome, rankSources } from './sportsSources.ts';
 /**
  * Live sports fixtures.
  *
@@ -67,28 +68,44 @@ async function getJson<T>(url: string, timeoutMs = 12000): Promise<T | null> {
 }
 
 /**
- * Embed URLs for one match.
+ * Real streams for one match, from one source.
  *
  * `/api/stream/{source}/{id}` returns the exact embedUrl per stream plus real
  * `hd` and `language` flags — so quality labels come from the provider rather
- * than being inferred, which is the rule the reliability brief sets out. If that
- * call fails we fall back to the documented URL shape rather than dropping the
- * match entirely.
+ * than being inferred.
+ *
+ * IT NO LONGER INVENTS A URL WHEN THE ANSWER IS EMPTY.
+ * This used to end with a fabricated `/embed/{source}/{id}/1` whenever the API
+ * returned nothing, on the theory that a guess beat dropping the match. It does
+ * not. The `echo` source is named on 149 of 232 live fixtures and returns an
+ * empty list every single time, so that line manufactured a dead "Server 1" for
+ * two fifths of the schedule — motorsport and F1 worst of all. The viewer got a
+ * list of servers where none of them opened, which is the exact complaint this
+ * file's own comment describes a few lines further down without connecting it.
+ *
+ * An empty answer is information. It is now returned as an empty list, recorded
+ * against the source so the ranking learns, and the caller moves to the next
+ * source instead of offering a link nobody has any reason to believe in.
  */
 export async function fetchStreamsFor(source: string, id: string): Promise<FeedEvent['streamMeta']> {
   const rows = await getJson<{ embedUrl: string; hd: boolean; language?: string; source: string; streamNo: number }[]>(
     `${API_BASE}/stream/${encodeURIComponent(source)}/${encodeURIComponent(id)}`,
     9000,
   );
-  if (Array.isArray(rows) && rows.length) return rows;
-  return [{ embedUrl: `https://embed.st/embed/${source}/${id}/1`, hd: false, source, streamNo: 1 }];
+  const got = Array.isArray(rows) && rows.length > 0;
+  recordSourceOutcome(source, got);
+  return got ? rows! : [];
 }
 
 function toFeedEvent(m: ApiMatch, live: boolean): FeedEvent {
   // One embed per source up-front (stream 1). The per-stream detail is fetched
   // lazily when the event is opened, so listing 300 matches does not fire 300
   // extra requests.
-  const embeds = (m.sources || []).map((s) => `https://embed.st/embed/${s.source}/${s.id}/1`);
+  //
+  // Ranked, because the feed's own order is not informative: the source it names
+  // most often is the one that never yields a stream. Best-believed first means
+  // the first thing tried is the thing most likely to play.
+  const embeds = rankSources(m.sources || []).map((s) => `https://embed.st/embed/${s.source}/${s.id}/1`);
   return {
     id: m.id,
     title: m.title,
@@ -153,8 +170,11 @@ export async function loadSportsFeed(): Promise<Feed> {
   if (Array.isArray(all) && all.length) {
     const liveIds = new Set((live || []).map((m) => m.id));
     sourcesById.clear();
-    for (const m of all) if (m.sources?.length) sourcesById.set(m.id, m.sources);
-    for (const m of live || []) if (m.sources?.length) sourcesById.set(m.id, m.sources);
+    // Stored ranked, so whoever expands them on open tries the most promising
+    // first and a slice of four is four real chances rather than three wasted
+    // slots behind a source that never answers.
+    for (const m of all) if (m.sources?.length) sourcesById.set(m.id, rankSources(m.sources));
+    for (const m of live || []) if (m.sources?.length) sourcesById.set(m.id, rankSources(m.sources));
 
     // `live` occasionally carries a match `all` has not picked up yet.
     const merged = new Map<string, ApiMatch>();

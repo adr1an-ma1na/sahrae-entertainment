@@ -279,7 +279,18 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   //
   // Re-check with `node audit.mjs movies` before a release; these hosts rot
   // without notice and the list is a claim, not a fact.
+  //
+  // THE FIRST THREE were added after testing 26 providers on a film AND an
+  // episode. They lead because they state the highest capability (4K, surround,
+  // subtitles) and carry no ad networks, and because all three accept a theme
+  // parameter — so the player renders in Sahrae's amber rather than a stranger's
+  // default blue. Re-verified live before being restored here.
+  const brand = 'f59e0b'; // the app accent, for players that accept a theme
+
   const SERVERS = [
+    { id: 'vidfast', name: '4K · Surround (VidFast)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidfast.pro/movie/${id}?theme=${brand}&autoPlay=true` : `https://vidfast.pro/tv/${id}/${s}/${e}?theme=${brand}&autoPlay=true&nextButton=true`, type: 'iframe' },
+    { id: 'videasy', name: '4K Ultra (Videasy)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://player.videasy.net/movie/${id}?color=${brand}` : `https://player.videasy.net/tv/${id}/${s}/${e}?color=${brand}&nextEpisode=true&episodeSelector=true`, type: 'iframe' },
+    { id: 'vidlink', name: 'Surround HD (VidLink)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidlink.pro/movie/${id}?primaryColor=${brand}&autoplay=true&title=true` : `https://vidlink.pro/tv/${id}/${s}/${e}?primaryColor=${brand}&autoplay=true&title=true&nextbutton=true`, type: 'iframe' },
     { id: 'multiembed', name: 'Ultra HD (MultiEmbed)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://multiembed.mov/?video_id=${id}&tmdb=1` : `https://multiembed.mov/?video_id=${id}&tmdb=1&s=${s}&e=${e}`, type: 'iframe' },
     { id: 'vidsrccc', name: 'Ultra HD V3 (VidSrc.cc)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.cc/v3/embed/movie/${id}` : `https://vidsrc.cc/v3/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
     { id: 'smashystream', name: 'Multi-Source HQ (SmashyStream)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://embed.smashystream.com/playere.php?tmdb=${id}` : `https://embed.smashystream.com/playere.php?tmdb=${id}&season=${s}&episode=${e}`, type: 'iframe' },
