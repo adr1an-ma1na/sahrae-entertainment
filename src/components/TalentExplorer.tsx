@@ -428,7 +428,7 @@ export default function TalentExplorer({ onPlay }: TalentExplorerProps) {
                     onClick={() => onPlay(item.id, detailsTab === 'movies' ? 'movie' : 'tv', true)}
                     className="group cursor-pointer flex flex-col active:scale-95 transition-all duration-200"
                   >
-                    <div className="relative aspect-[2/3] w-full rounded-xl overflow-hidden border border-white/10 bg-zinc-900 shadow-md group-hover:border-amber-500/50 group-hover:shadow-[0_0_15px_rgba(245,158,11,0.2)] transition-all">
+                    <div className="relative aspect-[2/3] w-full rounded-xl overflow-hidden border border-white/10 bg-zinc-900 shadow-md group-hover:border-amber-500/50 group-hover: transition-all">
                       <img
                         src={getImageUrl(item.poster_path, 'w185')}
                         alt={item.title || item.name}

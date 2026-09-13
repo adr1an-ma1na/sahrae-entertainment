@@ -36,7 +36,7 @@ export default function Onboarding({ onDone }: { onDone: (genres: TasteGenre[]) 
     <div role="dialog" aria-modal="true" aria-label="Welcome to Sahrae" className="fixed inset-0 z-[150] bg-[#0a0806] flex flex-col overflow-hidden">
       {/* Desert-dawn wash — ties to the app icon */}
       <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[46%]"
-        style={{ background: 'radial-gradient(90% 80% at 50% 8%, rgba(245,158,11,0.30), transparent 62%), radial-gradient(60% 50% at 78% 0%, rgba(236,72,153,0.16), transparent 68%)' }} />
+        style={{ background: 'radial-gradient(90% 80% at 50% 8%, rgba(168,199,250,0.30), transparent 62%), radial-gradient(60% 50% at 78% 0%, rgba(236,72,153,0.16), transparent 68%)' }} />
       <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#241608] to-transparent" />
 
       {/* Skip */}

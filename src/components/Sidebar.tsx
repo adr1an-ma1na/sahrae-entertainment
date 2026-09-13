@@ -42,15 +42,16 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
       const active = activeTab === t.id;
       return (
         <button key={t.id} onClick={() => setActiveTab(t.id)} tabIndex={0} data-tv-focusable
-          className={`w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all focus:outline-none ${
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-full text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
             active
-              ? 'text-white shadow-[inset_-3px_-3px_7px_rgba(255,255,255,0.04),inset_4px_4px_10px_rgba(0,0,0,0.5)]'
-              : 'text-zinc-400 hover:text-white shadow-[-3px_-3px_6px_rgba(255,255,255,0.03),3px_3px_8px_rgba(0,0,0,0.4)] hover:shadow-[-2px_-2px_5px_rgba(255,255,255,0.05),3px_3px_9px_rgba(0,0,0,0.5)]'
+              ? 'bg-amber-700 text-amber-100'
+              : 'text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.08]'
           }`}>
-          {/* Active state is shown by the inset "pressed" shadow and white text
-              only. The icon used to flip to gold (text-sauti) on selection,
-              which read as the sidebar changing colour every time you clicked
-              it. The affordance stays; the hue shift does not. */}
+          {/* Material 3 navigation drawer: inactive destinations have no
+              container at all, and the active one sits in a full-round
+              primary-container pill. The previous neumorphic raised/pressed
+              shadows put a box around EVERY item, which is the opposite of how
+              a Material drawer separates the selected row from the rest. */}
           <Icon className="w-5 h-5 shrink-0" />
           <span className="truncate">{t.label}</span>
         </button>
@@ -63,10 +64,10 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
     const active = activeTab === t.id;
     return (
       <button key={t.id} onClick={() => setActiveTab(t.id)} tabIndex={0} data-tv-focusable title={t.label} aria-label={t.label}
-        className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all focus:outline-none ${
+        className={`w-14 h-8 rounded-full flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
           active
-            ? 'text-white shadow-[inset_-3px_-3px_7px_rgba(255,255,255,0.04),inset_4px_4px_10px_rgba(0,0,0,0.5)]'
-            : 'text-zinc-400 hover:text-white shadow-[-3px_-3px_6px_rgba(255,255,255,0.03),3px_3px_8px_rgba(0,0,0,0.4)]'
+            ? 'bg-amber-700 text-amber-100'
+            : 'text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.08]'
         }`}>
         <Icon className="w-5 h-5" />
       </button>
@@ -98,7 +99,7 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
       )}
 
       {/* Full labelled sidebar (lg+) */}
-      <aside className={`tv-full hidden lg:flex flex-col fixed left-0 top-0 bottom-0 w-64 z-40 glass sidebar-glass border-r border-white/15 shadow-[inset_-1px_0_0_rgba(255,255,255,0.12),12px_0_48px_rgba(0,0,0,0.45)] pt-[env(safe-area-inset-top)] transition-transform duration-300 ${collapsed ? '-translate-x-full' : 'translate-x-0'}`}>
+      <aside className={`tv-full hidden lg:flex flex-col fixed left-0 top-0 bottom-0 w-64 z-40 glass sidebar-glass border-r border-white/10 pt-[env(safe-area-inset-top)] transition-transform duration-300 ${collapsed ? '-translate-x-full' : 'translate-x-0'}`}>
         <div className="px-5 pt-5 pb-4 flex items-center justify-between">
           <h1 className="text-2xl font-black tracking-tighter cursor-pointer whitespace-nowrap" onClick={() => setActiveTab('home')}>
             <span className="text-gold">SAHRAE</span>

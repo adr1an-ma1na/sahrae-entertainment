@@ -184,7 +184,7 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
     <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-[1600px] mx-auto pb-24">
       {/* Page Header */}
       <div className="mb-8 flex items-center gap-3">
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-rose-500 flex items-center justify-center shadow-lg shadow-amber-500/20 shrink-0">
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-rose-500 flex items-center justify-center shrink-0">
           <Tv className="w-6 h-6 text-white animate-pulse" />
         </div>
         <div>

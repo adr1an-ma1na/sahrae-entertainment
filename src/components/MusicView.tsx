@@ -69,7 +69,7 @@ const MOODS: { name: string; grad: string; tint: string }[] = [
   { name: 'Happy', grad: 'from-yellow-400 to-amber-500', tint: 'rgba(250,204,21,0.5)' },
   { name: 'Romance', grad: 'from-pink-500 to-rose-600', tint: 'rgba(236,72,153,0.5)' },
   { name: 'Afro Vibes', grad: 'from-green-500 to-emerald-700', tint: 'rgba(34,197,94,0.5)' },
-  { name: 'Gospel', grad: 'from-amber-400 to-yellow-600', tint: 'rgba(245,158,11,0.5)' },
+  { name: 'Gospel', grad: 'from-amber-400 to-yellow-600', tint: 'rgba(168,199,250,0.5)' },
   { name: 'Road Trip', grad: 'from-sky-400 to-sky-600', tint: 'rgba(56,189,248,0.5)' },
   { name: 'Sleep', grad: 'from-slate-700 to-slate-900', tint: 'rgba(51,65,85,0.6)' },
   { name: 'Throwback', grad: 'from-purple-500 to-purple-800', tint: 'rgba(168,85,247,0.5)' },
@@ -725,7 +725,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
 
   if (genre) {
     const shown = sortTracks(genreTracks);
-    const hc = genreTint || genreTracks[0]?.dominantColor || 'rgba(245,158,11,0.4)';
+    const hc = genreTint || genreTracks[0]?.dominantColor || 'rgba(168,199,250,0.4)';
     return (
       <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
         <div aria-hidden className="absolute inset-x-0 top-0 h-80 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${hc} 0%, transparent 100%)`, opacity: 0.5 }} />
@@ -752,7 +752,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
 
   if (viewMix) {
     const shown = sortTracks(viewMix.tracks);
-    const hc = viewMix.tracks[0]?.dominantColor || 'rgba(245,158,11,0.4)';
+    const hc = viewMix.tracks[0]?.dominantColor || 'rgba(168,199,250,0.4)';
     return (
       <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
         <div aria-hidden className="absolute inset-x-0 top-0 h-80 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${hc} 0%, transparent 100%)`, opacity: 0.5 }} />
@@ -779,7 +779,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
 
   if (detail) {
     const shownTracks = sortTracks(detailTracks);
-    const heroColor = detailTracks[0]?.dominantColor || 'rgba(245,158,11,0.4)';
+    const heroColor = detailTracks[0]?.dominantColor || 'rgba(168,199,250,0.4)';
     return (
       <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
         <div aria-hidden className="absolute inset-x-0 top-0 h-80 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${heroColor} 0%, transparent 100%)`, opacity: 0.5 }} />
@@ -828,13 +828,13 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
       {showOnboarding && <SautiOnboarding onComplete={seedFromArtists} onSkip={closeOnboarding} />}
       {/* Living aurora glow — tinted by the most recently played track (spec §1.2.4) */}
       <div aria-hidden className="pointer-events-none absolute -top-10 left-0 right-0 h-64 -z-0 opacity-70"
-        style={{ background: `radial-gradient(60% 70% at 12% 0%, ${recentlyPlayed[0]?.dominantColor || 'rgba(245,158,11,0.5)'}, transparent 70%), radial-gradient(50% 60% at 80% 10%, rgba(251,191,36,0.12), transparent 72%)`, filter: 'blur(8px)', transition: 'background 700ms ease' }} />
+        style={{ background: `radial-gradient(60% 70% at 12% 0%, ${recentlyPlayed[0]?.dominantColor || 'rgba(168,199,250,0.5)'}, transparent 70%), radial-gradient(50% 60% at 80% 10%, rgba(168,199,250,0.12), transparent 72%)`, filter: 'blur(8px)', transition: 'background 700ms ease' }} />
       <div className="relative"><ListenTabs active="music" onNav={onNav ?? (() => {})} /></div>
       <div className="relative overline text-sauti mb-1.5">Sauti · sound on Sahrae</div>
       <div className="relative flex items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-3">
           <div className="relative w-12 h-12 shrink-0" aria-hidden>
-            <div className="absolute inset-0 rounded-full bg-[#0b0b0d] shadow-lg shadow-amber-500/25" style={{ backgroundImage: 'repeating-radial-gradient(circle at 50% 50%, rgba(245,158,11,0.20) 0 1px, transparent 1px 4px)' }} />
+            <div className="absolute inset-0 rounded-full bg-[#0b0b0d]" style={{ backgroundImage: 'repeating-radial-gradient(circle at 50% 50%, rgba(168,199,250,0.20) 0 1px, transparent 1px 4px)' }} />
             <div className="absolute inset-0 rounded-full ring-1 ring-white/10" />
             <div className="absolute inset-0 m-auto w-[22px] h-[22px] rounded-full bg-gradient-to-tr from-amber-300 via-amber-500 to-amber-600 flex items-center justify-center shadow-inner"><Music2 className="w-3.5 h-3.5 text-amber-950" /></div>
           </div>
@@ -872,7 +872,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                     }}
                     className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap border ${
                       isActive
-                        ? 'bg-sauti border-sauti text-amber-950 font-black scale-105 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+                        ? 'bg-sauti border-sauti text-amber-950 font-black scale-105'
                         : 'bg-zinc-900/60 border-white/5 text-zinc-300 hover:text-white hover:bg-zinc-800'
                     }`}
                   >
@@ -1077,7 +1077,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                         <div className="aspect-square relative bg-zinc-800">
                           <CoverArt imageUrl={m.tracks[0]?.artworkLarge || m.tracks[0]?.artwork} dominantColor={m.tracks[0]?.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
                           {/* Colourful tint from the mix's dominant colour (YT Music mix-card look) */}
-                          <div className="absolute inset-0" style={{ background: `linear-gradient(150deg, ${m.tracks[0]?.dominantColor || 'rgba(245,158,11,0.6)'} 0%, transparent 60%)`, opacity: 0.55, mixBlendMode: 'soft-light' }} />
+                          <div className="absolute inset-0" style={{ background: `linear-gradient(150deg, ${m.tracks[0]?.dominantColor || 'rgba(168,199,250,0.6)'} 0%, transparent 60%)`, opacity: 0.55, mixBlendMode: 'soft-light' }} />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/25 to-transparent" />
                           <div className="absolute bottom-2.5 left-2.5 right-2.5">
                             <div className="overline text-[9px] mb-0.5">Made for you</div>
@@ -1112,7 +1112,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
         </>
       ) : openList ? (
         <section className="relative">
-          <div aria-hidden className="absolute inset-x-0 -top-24 h-72 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${openList.tracks[0]?.dominantColor || 'rgba(245,158,11,0.4)'} 0%, transparent 100%)`, opacity: 0.5 }} />
+          <div aria-hidden className="absolute inset-x-0 -top-24 h-72 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${openList.tracks[0]?.dominantColor || 'rgba(168,199,250,0.4)'} 0%, transparent 100%)`, opacity: 0.5 }} />
           <button onClick={() => setOpenId(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-4 text-sm px-3.5 py-2 rounded-full bg-zinc-900/85 backdrop-blur-xl border border-white/10 shadow-lg"><ChevronLeft className="w-4 h-4" /> Library</button>
           <div className="flex items-end gap-4 mb-6">
             <div className={`w-28 h-28 rounded-2xl bg-gradient-to-br ${
@@ -1222,7 +1222,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
               </div>
               {catalogState === 'disabled' && (
                 <a href={ENABLE_URL} target="_blank" rel="noreferrer"
-                  className="btn-sauti px-4 py-2 rounded-xl text-xs font-black shrink-0 text-center">
+                  className="btn-sauti px-4 py-2 rounded-full text-xs font-black shrink-0 text-center">
                   Enable it
                 </a>
               )}
@@ -1254,7 +1254,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
               <button
                 onClick={handleImportPlaylist}
                 disabled={importing || !importUrl.trim()}
-                className="btn-sauti px-5 py-2.5 rounded-xl text-xs font-black shrink-0 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="btn-sauti px-5 py-2.5 rounded-full text-xs font-black shrink-0 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {importing ? <><Loader2 className="w-4 h-4 animate-spin" /> Importing…</> : 'Import'}
               </button>
@@ -1272,7 +1272,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
             {creating ? (
               <div className="flex items-center gap-2 p-2 rounded-2xl bg-zinc-900/60 border border-white/10 col-span-2 sm:col-span-1">
                 <input autoFocus value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newName.trim()) { createPlaylist(newName); setNewName(''); setCreating(false); } }} placeholder="Playlist name" className="flex-1 min-w-0 bg-transparent px-2 text-sm text-white focus:outline-none" />
-                <button onClick={() => { if (newName.trim()) { createPlaylist(newName); setNewName(''); setCreating(false); } }} className="btn-sauti px-3 py-2 rounded-lg text-xs font-bold shrink-0">Add</button>
+                <button onClick={() => { if (newName.trim()) { createPlaylist(newName); setNewName(''); setCreating(false); } }} className="btn-sauti px-3 py-2 rounded-full text-xs font-bold shrink-0">Add</button>
               </div>
             ) : (
               <button onClick={() => setCreating(true)} tabIndex={0} data-tv-focusable className="card-lift flex items-center gap-3 p-4 rounded-2xl bg-zinc-900/50 border border-white/10 text-left"><span className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center shrink-0"><Plus className="w-6 h-6 text-sauti" /></span><span className="font-bold text-white">New playlist</span></button>

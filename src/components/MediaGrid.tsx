@@ -102,7 +102,7 @@ export default function MediaGrid({ title, items, onPlay, defaultType = 'movie',
             whileTap={{ scale: 0.96 }}
             onClick={() => onGenreSelect(null)}
             className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors cursor-pointer ${
-              selectedGenre === null ? 'bg-amber-500 text-amber-950 shadow-md shadow-amber-500/20' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white'
+              selectedGenre === null ? 'bg-amber-500 text-amber-950' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white'
             }`}
           >
             All
@@ -118,7 +118,7 @@ export default function MediaGrid({ title, items, onPlay, defaultType = 'movie',
               whileTap={{ scale: 0.96 }}
               onClick={() => onGenreSelect(genre.id)}
               className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors cursor-pointer ${
-                selectedGenre === genre.id ? 'bg-amber-500 text-amber-950 shadow-md shadow-amber-500/20' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white'
+                selectedGenre === genre.id ? 'bg-amber-500 text-amber-950' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white'
               }`}
             >
               {genre.name}

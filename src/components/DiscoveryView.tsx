@@ -126,7 +126,7 @@ export default function DiscoveryView({ type, genres, onPlay }: DiscoveryViewPro
               whileTap={{ scale: 0.95 }}
               onClick={() => setPage(p => p + 1)}
               disabled={loading}
-              className="bg-amber-500 hover:bg-amber-400 text-amber-950 px-8 py-3 rounded-full font-bold transition-all shadow-[0_0_15px_rgba(245,158,11,0.3)] disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-2 cursor-pointer"
+              className="bg-amber-500 hover:bg-amber-400 text-amber-950 px-8 py-3 rounded-full font-bold transition-all disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-2 cursor-pointer"
             >
               {loading ? (
                 <div className="w-5 h-5 border-2 border-amber-950 border-t-transparent rounded-full animate-spin"></div>

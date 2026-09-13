@@ -72,16 +72,16 @@ export default function BottomTabBar({ activeTab, setActiveTab }: { activeTab: s
             const Icon = t.icon; const on = t.id === 'audio' ? AUDIO_TABS.includes(activeTab) : activeTab === t.id;
             return (
               <button key={t.id} onClick={() => go(t.id)} tabIndex={0} data-tv-focusable
-                className={`flex-1 flex flex-col items-center gap-1 py-2 transition-colors ${on ? 'text-sauti' : 'text-zinc-400 hover:text-zinc-200'}`}>
-                <span className={`flex items-center justify-center w-12 h-7 rounded-full transition-colors ${on ? 'bg-sauti/15' : ''}`}><Icon className="w-6 h-6" /></span>
-                <span className="text-[10px] font-semibold">{t.label}</span>
+                className={`flex-1 flex flex-col items-center gap-1 py-2 transition-colors ${on ? 'text-zinc-100' : 'text-zinc-400 hover:text-zinc-200'}`}>
+                <span className={`flex items-center justify-center w-16 h-8 rounded-full transition-colors ${on ? 'bg-amber-700 text-amber-100' : ''}`}><Icon className="w-6 h-6" /></span>
+                <span className="text-xs font-medium">{t.label}</span>
               </button>
             );
           })}
           <button onClick={() => setMoreOpen(true)} tabIndex={0} data-tv-focusable
-            className={`flex-1 flex flex-col items-center gap-1 py-2 transition-colors ${moreActive || moreOpen ? 'text-sauti' : 'text-zinc-400 hover:text-zinc-200'}`}>
-            <span className={`flex items-center justify-center w-12 h-7 rounded-full transition-colors ${moreActive || moreOpen ? 'bg-sauti/15' : ''}`}><Grid3x3 className="w-6 h-6" /></span>
-            <span className="text-[10px] font-semibold">More</span>
+            className={`flex-1 flex flex-col items-center gap-1 py-2 transition-colors ${moreActive || moreOpen ? 'text-zinc-100' : 'text-zinc-400 hover:text-zinc-200'}`}>
+            <span className={`flex items-center justify-center w-16 h-8 rounded-full transition-colors ${moreActive || moreOpen ? 'bg-amber-700 text-amber-100' : ''}`}><Grid3x3 className="w-6 h-6" /></span>
+            <span className="text-xs font-medium">More</span>
           </button>
         </div>
       </nav>

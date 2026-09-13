@@ -25,7 +25,7 @@ export default function DownloadsView({ onPlay }: DownloadsViewProps) {
     <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-5xl mx-auto min-h-screen pb-40">
       <div className="overline text-sauti mb-1.5">Sahrae · Offline</div>
       <div className="flex items-center gap-3 mb-8">
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-400 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-400 to-amber-600 flex items-center justify-center">
           <Download className="w-6 h-6 text-white" />
         </div>
         <div>
@@ -43,7 +43,7 @@ export default function DownloadsView({ onPlay }: DownloadsViewProps) {
           onClick={() => setActiveTab('videos')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-bold transition-all ${
             activeTab === 'videos'
-              ? 'bg-amber-500 text-amber-950 shadow-lg shadow-amber-500/20'
+              ? 'bg-amber-500 text-amber-950'
               : 'text-zinc-400 hover:text-white bg-white/5 hover:bg-white/10'
           }`}
         >
@@ -54,7 +54,7 @@ export default function DownloadsView({ onPlay }: DownloadsViewProps) {
           onClick={() => setActiveTab('audio')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-bold transition-all ${
             activeTab === 'audio'
-              ? 'bg-amber-500 text-amber-950 shadow-lg shadow-amber-500/20'
+              ? 'bg-amber-500 text-amber-950'
               : 'text-zinc-400 hover:text-white bg-white/5 hover:bg-white/10'
           }`}
         >

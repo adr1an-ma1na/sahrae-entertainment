@@ -542,7 +542,7 @@ export default function App() {
                 }`}
               >
                 Movies & Shows
-                {searchCategory === 'media' && <div className="absolute -bottom-[17px] left-0 right-0 h-0.5 bg-amber-500 rounded-full shadow-[0_0_8px_rgba(245,158,11,0.5)]" />}
+                {searchCategory === 'media' && <div className="absolute -bottom-[17px] left-0 right-0 h-0.5 bg-amber-500 rounded-full" />}
               </button>
               <button
                 onClick={() => { haptics.tap(); setSearchCategory('talent'); }}
@@ -551,7 +551,7 @@ export default function App() {
                 }`}
               >
                 Directors & Actors
-                {searchCategory === 'talent' && <div className="absolute -bottom-[17px] left-0 right-0 h-0.5 bg-amber-500 rounded-full shadow-[0_0_8px_rgba(245,158,11,0.5)]" />}
+                {searchCategory === 'talent' && <div className="absolute -bottom-[17px] left-0 right-0 h-0.5 bg-amber-500 rounded-full" />}
               </button>
             </div>
 
@@ -618,7 +618,7 @@ export default function App() {
                       <button
                         onClick={loadMoreSearchResults}
                         disabled={loading}
-                        className="bg-amber-500 hover:bg-amber-400 text-amber-950 px-8 py-3 rounded-full font-bold transition-all hover:scale-105 shadow-[0_0_15px_rgba(245,158,11,0.3)] disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-2"
+                        className="bg-amber-500 hover:bg-amber-400 text-amber-950 px-8 py-3 rounded-full font-bold transition-all hover:scale-105 disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-2"
                       >
                         {loading ? (
                           <><div className="w-5 h-5 border-2 border-amber-950 border-t-transparent rounded-full animate-spin"></div> Loading…</>

@@ -86,7 +86,7 @@ export default function AddToPlaylistSheet() {
             <div className="flex items-center gap-2">
               <input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleCreate()} placeholder="Playlist name"
                 className="flex-1 bg-zinc-900 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/60" />
-              <button onClick={handleCreate} className="btn-sauti px-4 py-2.5 rounded-xl text-sm font-bold">Create</button>
+              <button onClick={handleCreate} className="btn-sauti px-4 py-2.5 rounded-full text-sm font-bold">Create</button>
             </div>
           ) : (
             <button onClick={() => setCreating(true)} className="flex items-center gap-3 w-full text-left text-white">

@@ -406,7 +406,7 @@ export default function PodcastsHome() {
   // ── Episode detail: show-notes (tappable timestamps) + chapters (spec §2.4) ──
   if (episodeView) {
     const ep = episodeView;
-    const hc = ep.dominantColor || 'rgba(245,158,11,0.4)';
+    const hc = ep.dominantColor || 'rgba(168,199,250,0.4)';
     const played = getProgress(ep.id)?.state === 'played';
     const notes = linkifyTimestamps(sanitizeNotes(ep.description || ''));
     const chapters = ep.chapters?.length ? ep.chapters : epChapters;
@@ -472,7 +472,7 @@ export default function PodcastsHome() {
 
   // ── Show page: a series' episodes, organised (Spotify-style) ──
   if (showView) {
-    const hc = showView.dominantColor || 'rgba(245,158,11,0.4)';
+    const hc = showView.dominantColor || 'rgba(168,199,250,0.4)';
     const sortedEps = [...showEpisodes].sort((a, b) => (epSort === 'new' ? (b.uploaded || 0) - (a.uploaded || 0) : (a.uploaded || 0) - (b.uploaded || 0)));
     const prog = getMany(showEpisodes.map((e) => e.id)); void progV;
     const filteredEps = sortedEps.filter((ep) => {

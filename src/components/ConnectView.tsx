@@ -13,7 +13,7 @@ export default function ConnectView({ onNav }: { onNav?: (tab: string) => void }
   return (
     <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-40 relative">
       <div aria-hidden className="pointer-events-none absolute -top-10 left-0 right-0 h-64 -z-10 opacity-70"
-        style={{ background: 'radial-gradient(60% 70% at 12% 0%, rgba(239,68,68,0.18), transparent 70%), radial-gradient(50% 60% at 80% 10%, rgba(245,158,11,0.12), transparent 72%)', filter: 'blur(8px)' }} />
+        style={{ background: 'radial-gradient(60% 70% at 12% 0%, rgba(239,68,68,0.18), transparent 70%), radial-gradient(50% 60% at 80% 10%, rgba(168,199,250,0.12), transparent 72%)', filter: 'blur(8px)' }} />
       <div className="overline mb-1.5">Sahrae · Listen</div>
       <div className="flex items-center gap-3 mb-6">
         <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-red-500 via-red-600 to-rose-700 flex items-center justify-center shadow-lg shadow-red-600/25">

@@ -243,7 +243,7 @@ export default function YouTubeConnect() {
             <p className="text-sm font-semibold text-amber-200 mb-1">YouTube access is switched off for this app</p>
             <p className="text-xs text-amber-200/80 leading-relaxed mb-3">{API_DISABLED_HELP}</p>
             <a href={ENABLE_URL} target="_blank" rel="noreferrer"
-              className="btn-sauti px-4 py-2 rounded-lg text-xs font-black inline-block">Enable the API</a>
+              className="btn-sauti px-4 py-2 rounded-full text-xs font-black inline-block">Enable the API</a>
           </div>
         )}
         {keyBlocked && (
@@ -251,7 +251,7 @@ export default function YouTubeConnect() {
             <p className="text-sm font-semibold text-amber-200 mb-1">Browsing is limited — the app key cannot call YouTube</p>
             <p className="text-xs text-amber-200/80 leading-relaxed mb-3">{KEY_BLOCKED_HELP}</p>
             <a href={CREDENTIALS_URL} target="_blank" rel="noreferrer"
-              className="btn-sauti px-4 py-2 rounded-lg text-xs font-black inline-block">Open Credentials</a>
+              className="btn-sauti px-4 py-2 rounded-full text-xs font-black inline-block">Open Credentials</a>
           </div>
         )}
         {error && <p className="text-sm text-red-400 mt-4">{error}</p>}

@@ -114,7 +114,7 @@ export default function VoiceAssistant({ catalog, onCommand }: VoiceAssistantPro
         tabIndex={0}
         aria-label="Ask Sahrae"
         title={supported ? 'Ask Sahrae' : 'Voice input is not supported on this browser'}
-        className="fixed z-[130] right-4 bottom-[calc(env(safe-area-inset-bottom)+7.5rem)] md:bottom-8 w-14 h-14 rounded-full bg-gradient-to-tr from-amber-400 to-amber-600 text-amber-950 shadow-lg shadow-amber-500/30 flex items-center justify-center border border-amber-300/40 transition-transform active:scale-95 hover:scale-105"
+        className="fixed z-[130] right-4 bottom-[calc(env(safe-area-inset-bottom)+7.5rem)] md:bottom-8 w-14 h-14 rounded-full bg-gradient-to-tr from-amber-400 to-amber-600 text-amber-950 flex items-center justify-center border border-amber-300/40 transition-transform active:scale-95 hover:scale-105"
       >
         <Mic className="w-6 h-6" />
       </button>

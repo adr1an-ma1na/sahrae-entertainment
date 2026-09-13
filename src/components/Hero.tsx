@@ -68,7 +68,7 @@ export default function Hero({ item, onPlay }: HeroProps) {
           <div className="flex flex-wrap items-center gap-4">
             <button
               onClick={() => onPlay(item.id, type, false)}
-              className="btn-gold flex items-center justify-center gap-2 px-7 md:px-9 py-3 rounded-xl font-bold text-lg hover:scale-[1.03]"
+              className="btn-gold flex items-center justify-center gap-2 px-7 md:px-9 py-3 rounded-full font-bold text-lg"
             >
               <Play className="w-6 h-6 fill-current" />
               Play

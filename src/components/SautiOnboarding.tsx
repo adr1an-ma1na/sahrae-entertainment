@@ -73,13 +73,13 @@ export default function SautiOnboarding({ onComplete, onSkip }: { onComplete: (n
     <div role="dialog" aria-modal="true" aria-label="Set up Sauti" className="fixed inset-0 z-[120] bg-[#09090b] overflow-y-auto">
       {/* Aurora wash */}
       <div aria-hidden className="pointer-events-none fixed top-0 left-0 right-0 h-72 opacity-80"
-        style={{ background: 'radial-gradient(55% 70% at 15% 0%, rgba(245,158,11,0.24), transparent 70%), radial-gradient(50% 60% at 85% 6%, rgba(236,72,153,0.16), transparent 72%)', filter: 'blur(10px)' }} />
+        style={{ background: 'radial-gradient(55% 70% at 15% 0%, rgba(168,199,250,0.24), transparent 70%), radial-gradient(50% 60% at 85% 6%, rgba(236,72,153,0.16), transparent 72%)', filter: 'blur(10px)' }} />
 
       <div className="relative max-w-3xl mx-auto px-5 pt-[calc(env(safe-area-inset-top)+2.5rem)] pb-40">
         {/* Header — vinyl mark ties it to Sauti */}
         <div className="flex items-center gap-3 mb-5">
           <div className="relative w-12 h-12 shrink-0" aria-hidden>
-            <div className="absolute inset-0 rounded-full bg-[#0b0b0d] shadow-lg shadow-amber-500/25" style={{ backgroundImage: 'repeating-radial-gradient(circle at 50% 50%, rgba(245,158,11,0.20) 0 1px, transparent 1px 4px)' }} />
+            <div className="absolute inset-0 rounded-full bg-[#0b0b0d]" style={{ backgroundImage: 'repeating-radial-gradient(circle at 50% 50%, rgba(168,199,250,0.20) 0 1px, transparent 1px 4px)' }} />
             <div className="absolute inset-0 rounded-full ring-1 ring-white/10" />
             <div className="absolute inset-0 m-auto w-[22px] h-[22px] rounded-full bg-gradient-to-tr from-amber-300 via-amber-500 to-amber-600 flex items-center justify-center shadow-inner"><Sparkles className="w-3 h-3 text-amber-950" /></div>
           </div>

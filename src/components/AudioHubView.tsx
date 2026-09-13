@@ -143,11 +143,11 @@ export default function AudioHubView({ onNav }: { onNav?: (tab: string) => void 
     <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-40 relative">
       {/* Aurora glow behind the header — warms to the now-playing station's colour */}
       <div aria-hidden className="pointer-events-none absolute -top-10 left-0 right-0 h-64 -z-10 opacity-70"
-        style={{ background: 'radial-gradient(60% 70% at 12% 0%, rgba(245,158,11,0.22), transparent 70%), radial-gradient(50% 60% at 80% 10%, rgba(251,191,36,0.12), transparent 72%)', filter: 'blur(8px)' }} />
+        style={{ background: 'radial-gradient(60% 70% at 12% 0%, rgba(168,199,250,0.22), transparent 70%), radial-gradient(50% 60% at 80% 10%, rgba(168,199,250,0.12), transparent 72%)', filter: 'blur(8px)' }} />
       {/* Header */}
       <div className="overline mb-1.5">Sahrae · Listen</div>
       <div className="flex items-center gap-3 mb-6">
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-300 via-amber-500 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/25">
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-300 via-amber-500 to-amber-600 flex items-center justify-center">
           <Radio className="w-6 h-6 text-white" />
         </div>
         <div>
@@ -197,7 +197,7 @@ export default function AudioHubView({ onNav }: { onNav?: (tab: string) => void 
                       {/* Stylus arm lines */}
                       <path d="M 35 5 L 35 45 L 20 65 L 12 60" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                       {/* Cartridge head */}
-                      <rect x="5" y="55" width="10" height="14" rx="2" fill="#d97706" transform="rotate(-15, 10, 62)" />
+                      <rect x="5" y="55" width="10" height="14" rx="2" fill="#7CACF8" transform="rotate(-15, 10, 62)" />
                     </svg>
                   </div>
                 </div>
@@ -284,7 +284,7 @@ export default function AudioHubView({ onNav }: { onNav?: (tab: string) => void 
                           onClick={() => setEqPreset(p)}
                           className={`px-3 py-2 text-left text-xs font-bold rounded-xl border transition-all ${
                             active 
-                              ? 'bg-amber-500/10 border-amber-500 text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.15)]' 
+                              ? 'bg-amber-500/10 border-amber-500 text-amber-400' 
                               : 'bg-zinc-900 border-white/5 text-zinc-400 hover:text-white hover:border-white/10'
                           }`}
                         >
@@ -301,7 +301,7 @@ export default function AudioHubView({ onNav }: { onNav?: (tab: string) => void 
                 {/* Main Console Play/Pause trigger */}
                 <button
                   onClick={() => togglePlay(nowPlaying.url, nowPlaying.name)}
-                  className="w-full btn-gold py-3 px-4 rounded-xl font-bold flex items-center justify-center gap-2.5 text-xs"
+                  className="w-full btn-gold py-3 px-4 rounded-full font-bold flex items-center justify-center gap-2.5 text-xs"
                 >
                   {playingUrl ? (
                     <>
@@ -361,7 +361,7 @@ export default function AudioHubView({ onNav }: { onNav?: (tab: string) => void 
                   onClick={() => setSelectedCountry(c.code)}
                   className={`px-4 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 whitespace-nowrap transition-all ${
                     active 
-                      ? 'bg-amber-500 text-amber-950 shadow-md shadow-amber-500/10 scale-[1.02]' 
+                      ? 'bg-amber-500 text-amber-950 scale-[1.02]' 
                       : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-white/5 hover:border-white/10'
                   }`}
                 >
