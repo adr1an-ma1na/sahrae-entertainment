@@ -1,7 +1,17 @@
-/* Roboto is Material 3's type family. Google Sans is proprietary and not
-   available to us, and substituting a lookalike would be a worse imitation than
-   simply using the face Material actually specifies. */
-@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap');
+/* Google Sans Flex — Google's own product typeface, now served by Google Fonts
+   (an earlier note here said Google Sans was unavailable; that stopped being
+   true, and was checked against the live API before this change).
+
+   Loaded as a variable font on two axes:
+     wght 300–900  one file instead of four static weights
+     opsz 6–144    optical sizing — the letterforms re-draw for their size, so a
+                   48px headline gets tighter spacing and finer detail while 12px
+                   captions stay open and legible. This is most of what makes
+                   large type read as "premium" rather than "scaled up".
+   The ROND (roundness) axis was measured and left out: +54 KB for an effect
+   too subtle to justify on the low-end devices this app targets.
+   Latin payload: 117 KB, fetched once and cached. */
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,300..900&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -43,8 +53,8 @@
   --color-amber-900: #041E49;
   --color-amber-950: #062E6F; /* on-primary — dark text on a primary fill */
 
-  --font-sans: "Roboto", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Roboto", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Google Sans Flex", "Google Sans", Roboto, ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Google Sans Flex", "Google Sans", Roboto, ui-sans-serif, system-ui, sans-serif;
 }
 
 @layer base {
@@ -72,6 +82,16 @@
 
     --white: #1F1F1F;
     --black: #FFFFFF;
+
+    /* Liquid glass, light theme: frosted white. A higher fill than dark
+       because a light surface over a colourful poster needs more body to keep
+       dark text legible. */
+    --glass-alpha: 68%;
+    --glass-alpha-strong: 52%;
+    --glass-edge: rgba(255, 255, 255, 0.70);
+    --glass-rim: rgba(255, 255, 255, 0.85);
+    --glass-shadow: 0 8px 28px rgba(15, 23, 42, 0.12);
+    --glass-sheen: rgba(255, 255, 255, 0.55);
   }
 
   .dark {
@@ -102,6 +122,14 @@
     --zinc-50: #FFFFFF;
     --white: #ffffff;
     --black: #000000;
+
+    /* Liquid glass, dark theme: smoked glass. */
+    --glass-alpha: 58%;
+    --glass-alpha-strong: 40%;
+    --glass-edge: rgba(255, 255, 255, 0.14);
+    --glass-rim: rgba(255, 255, 255, 0.20);
+    --glass-shadow: 0 10px 34px rgba(0, 0, 0, 0.38);
+    --glass-sheen: rgba(255, 255, 255, 0.09);
   }
 
   .midnight {
@@ -125,6 +153,14 @@
 
     --white: #ffffff;
     --black: #000000;
+
+    /* Liquid glass, midnight: glass tinted by the blue-slate surface. */
+    --glass-alpha: 56%;
+    --glass-alpha-strong: 38%;
+    --glass-edge: rgba(187, 199, 219, 0.18);
+    --glass-rim: rgba(221, 227, 238, 0.22);
+    --glass-shadow: 0 10px 34px rgba(3, 8, 20, 0.45);
+    --glass-sheen: rgba(221, 227, 238, 0.10);
   }
 }
 
@@ -188,18 +224,29 @@
 
   html, body { background-color: #131314; }
   body {
-    font-family: "Roboto", ui-sans-serif, system-ui, sans-serif;
+    font-family: var(--font-sans);
+    /* Let the opsz axis follow font-size. Default in most engines; stated so an
+       older WebView does not pin every size to one optical master. */
+    font-optical-sizing: auto;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     font-feature-settings: "kern", "liga", "calt";
   }
 
-  /* Display headings: tighter optical tracking + balanced line wrapping */
+  /* Headings. Optical sizing already tightens large type, so tracking is
+     lighter than a static face needed; the weight does the work. Balanced
+     wrapping stops a two-line title ending on one orphaned word. */
   h1, h2, h3 {
-    letter-spacing: -0.02em;
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: -0.015em;
     text-wrap: balance;
   }
+  .font-display { font-family: var(--font-display); letter-spacing: -0.015em; }
+  /* Tabular figures where numbers line up — runtimes, scores, timestamps — so a
+     ticking clock does not make the text beside it shuffle. */
+  .tabular-nums, time { font-variant-numeric: tabular-nums; }
 
   /* On-brand text selection */
   ::selection {
@@ -275,62 +322,79 @@
   }
   .card-lift:focus-visible { outline: 2px solid var(--gold-400); outline-offset: 2px; }
 
-  /* ── Material 3 surfaces, replacing the "liquid glass" system ──────────────
-     These read their colour from --zinc-*, which each theme redefines and which
-     a forced-dark overlay redefines again by carrying the .dark class. That is
-     why the per-theme overrides further down this file are gone: a surface
-     defined by token is already correct in light, dark, midnight and inside a
-     dark player on a light page, with no special cases to keep in sync.
+  /* ── Liquid glass, on a Material skeleton ─────────────────────────────────
+     Structure stays Material 3 — shapes, nav pills, the filled blue primary,
+     state layers. The SURFACES become glass: chrome that floats over content
+     and lets it show through, blurred.
 
-     color-mix gives the slight translucency Material allows over media. It
-     needs Chrome 111, and this app runs on WebViews older than that, so an
-     opaque declaration comes first: an engine that cannot parse color-mix
-     drops that line and keeps a solid, legible surface rather than a
-     transparent one. */
+     Glass reads as glass rather than grey plastic from four light layers,
+     each doing one job:
+       fill   the theme surface at partial opacity — enough body to keep text
+              legible over a bright poster
+       blur   backdrop blur + saturate, so what shows through is soft and a
+              little richer in colour than the content itself
+       rim    a 1px inset highlight on the top edge — light catching the edge
+              of a pane; the single strongest glass cue
+       sheen  a faint top-down gradient: glass is brighter facing the light
+     The glass removed last round stacked four inset shadows and a glare blob
+     on every button — the heavy, cheap-looking version of the same idea.
+
+     Fallbacks (end of file): opaque background-color before color-mix for
+     WebViews that cannot parse it; opaque when backdrop-filter is unsupported,
+     since translucency without blur is just low contrast; and opaque, unblurred
+     surfaces under .low-gfx, .tv-mode and prefers-reduced-transparency. */
   .glass {
-    background: var(--zinc-900);
-    background: color-mix(in srgb, var(--zinc-900) 94%, transparent);
-    border: 1px solid var(--hairline);
-    box-shadow: var(--e1);
+    background-color: var(--zinc-900);
+    background-color: color-mix(in srgb, var(--zinc-900) var(--glass-alpha), transparent);
+    background-image: linear-gradient(180deg, var(--glass-sheen) 0%, transparent 38%);
+    -webkit-backdrop-filter: blur(24px) saturate(170%);
+    backdrop-filter: blur(24px) saturate(170%);
+    border: 1px solid var(--glass-edge);
+    box-shadow: inset 0 1px 0 var(--glass-rim), var(--glass-shadow);
   }
 
-  /* Navigation drawer. Material draws it as a flat surface-container-low with
-     no sheen; kept as a class so the sidebar's markup does not change. */
+  /* Navigation drawer — more body, because it holds long lists of text, and
+     no drop shadow: it is anchored to the screen edge, where a shadow reads as
+     a gap rather than depth. */
   .sidebar-glass {
-    background: var(--zinc-900) !important;
-    border-color: var(--hairline) !important;
-    box-shadow: none !important;
+    background-color: var(--zinc-900) !important;
+    background-color: color-mix(in srgb, var(--zinc-900) 72%, transparent) !important;
+    border-color: var(--glass-edge) !important;
+    box-shadow: inset -1px 0 0 var(--glass-rim) !important;
   }
 
-  /* Material 3 filled tonal button — the secondary action.
-     Tonal rather than outlined because this button mostly sits OVER artwork
-     (the hero's Trailer button, player controls): an outlined button is
-     transparent, and a transparent control on a bright poster is unreadable.
-     The opaque fallback comes first for the same WebView reason as .glass. */
+  /* Secondary button — a liquid glass pill. It sits over hero artwork, which is
+     exactly where glass earns its place: the poster shows through blurred, and
+     the label stays legible because the fill carries the contrast. */
   .btn-glass {
     position: relative;
-    background: var(--zinc-800);
-    background: color-mix(in srgb, var(--zinc-800) 88%, transparent);
-    border: 1px solid transparent;
+    isolation: isolate;
+    background-color: var(--zinc-800);
+    background-color: color-mix(in srgb, var(--zinc-800) var(--glass-alpha-strong), transparent);
+    background-image: linear-gradient(180deg, var(--glass-sheen) 0%, transparent 55%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid var(--glass-edge);
     color: var(--zinc-100);
     border-radius: 9999px;
-    transition: box-shadow .2s var(--ease-premium);
+    box-shadow: inset 0 1px 0 var(--glass-rim), 0 4px 18px rgba(0, 0, 0, 0.22);
+    transition: box-shadow .25s var(--ease-premium), border-color .25s var(--ease-premium);
   }
   .btn-glass::after {
-    content: ''; position: absolute; inset: 0; border-radius: inherit;
+    content: ""; position: absolute; inset: 0; border-radius: inherit;
     background: currentColor; opacity: 0; pointer-events: none;
     transition: opacity .2s var(--ease-premium);
   }
   .btn-glass:hover::after  { opacity: .08; }
-  .btn-glass:active::after { opacity: .10; }
-  .btn-glass:hover { box-shadow: var(--e1); }
+  .btn-glass:active::after { opacity: .12; }
+  .btn-glass:hover { border-color: var(--glass-rim); box-shadow: inset 0 1px 0 var(--glass-rim), 0 8px 26px rgba(0, 0, 0, 0.30); }
   .btn-glass:focus-visible { outline: 2px solid var(--gold-400); outline-offset: 2px; }
 
   /* Overline — Material 3 label-small: 11px, 500, 0.5px tracking, uppercase.
      The old editorial version used a second typeface and 0.18em tracking, which
      is a magazine kicker rather than a Material label. */
   .overline {
-    font-family: "Roboto", ui-sans-serif, system-ui, sans-serif;
+    font-family: var(--font-sans);
     font-size: 0.6875rem;
     font-weight: 500;
     letter-spacing: 0.05em;
@@ -373,14 +437,17 @@
 
   /* App canvas: deep cinematic base (theme-aware) + a viewport-fixed glow field. */
   .aurora-bg { background-color: var(--zinc-950); }
-  /* Kept as ambience, but retinted to the primary and pulled well back. A warm
-     amber bloom under a blue accent is the single most obvious way a converted
-     theme betrays its old palette. */
+  /* Ambient colour field behind the whole app. It matters more now than it did
+     with flat surfaces: glass has nothing to refract over a uniform black, and
+     a blurred pane over nothing is just a dark rectangle. A cool blue, a deep
+     indigo and a faint violet — kept in the primary's family so the glass picks
+     up colour that belongs to the palette. */
   .aurora-glow {
     background-image:
-      radial-gradient(55% 70% at 12% -8%, rgba(168,199,250,0.08), transparent 60%),
-      radial-gradient(50% 65% at 95% 4%, rgba(8,66,160,0.10), transparent 60%),
-      radial-gradient(75% 55% at 50% 112%, rgba(168,199,250,0.05), transparent 70%);
+      radial-gradient(55% 70% at 12% -8%, rgba(168,199,250,0.15), transparent 60%),
+      radial-gradient(50% 65% at 95% 4%, rgba(8,66,160,0.22), transparent 60%),
+      radial-gradient(60% 50% at 70% 60%, rgba(124,92,230,0.07), transparent 70%),
+      radial-gradient(75% 55% at 50% 112%, rgba(168,199,250,0.08), transparent 70%);
     animation: aurora-breathe 24s ease-in-out infinite alternate;
   }
 }
@@ -473,18 +540,22 @@
     box-shadow: var(--e1);
   }
 
-  /* Material 3 icon button / tonal pill for controls over album art.
-     Replaces "Apple-style liquid glass": heavy blur, a specular glare blob and
-     four stacked inset highlights. The glare pseudo-element is disabled rather
-     than deleted from markup, so nothing that uses the class needs to change. */
+  /* Liquid glass control — round transport buttons and Lyrics / Queue pills
+     over album art. Clearer than chrome glass (less fill, more saturation)
+     because it sits on artwork you are meant to see. The highlight is one soft
+     radial in the top-left, not a hard glare blob. */
   .glass-liquid {
     position: relative;
     isolation: isolate;
-    background: var(--zinc-800);
-    background: color-mix(in srgb, var(--zinc-800) 82%, transparent);
-    border: 1px solid transparent;
+    background-color: var(--zinc-800);
+    background-color: color-mix(in srgb, var(--zinc-800) var(--glass-alpha-strong), transparent);
+    background-image: radial-gradient(120% 80% at 25% 0%, var(--glass-sheen) 0%, transparent 60%);
+    -webkit-backdrop-filter: blur(18px) saturate(190%);
+    backdrop-filter: blur(18px) saturate(190%);
+    border: 1px solid var(--glass-edge);
     color: var(--zinc-100);
-    transition: box-shadow .2s var(--ease-premium);
+    box-shadow: inset 0 1px 0 var(--glass-rim), 0 6px 22px rgba(0, 0, 0, 0.26);
+    transition: box-shadow .25s var(--ease-premium), transform .25s var(--ease-premium);
   }
   .glass-liquid::before {
     content: ""; position: absolute; inset: 0; border-radius: inherit; z-index: -1;
@@ -492,8 +563,8 @@
     transition: opacity .2s var(--ease-premium);
   }
   .glass-liquid:hover::before  { opacity: .08; }
-  .glass-liquid:active::before { opacity: .12; }
-  .glass-liquid:hover { box-shadow: var(--e1); }
+  .glass-liquid:active::before { opacity: .14; }
+  .glass-liquid:active { transform: scale(.96); }
   .glass-liquid:focus-visible { outline: 2px solid var(--gold-400); outline-offset: 2px; }
 }
 
@@ -742,13 +813,16 @@ a:focus-visible {
     opacity: .5;
   }
 
-  /* Player transport surface — a Material tonal container over artwork. The
-     opaque line first, for WebViews that cannot parse color-mix. */
+  /* Player transport deck — the widest glass surface, so the most blur: a large
+     pane over moving video needs it to stay calm. */
   .control-deck {
-    background: var(--zinc-900);
-    background: color-mix(in srgb, var(--zinc-900) 86%, transparent);
-    border: 1px solid var(--hairline);
-    box-shadow: var(--e1);
+    background-color: var(--zinc-900);
+    background-color: color-mix(in srgb, var(--zinc-900) var(--glass-alpha), transparent);
+    background-image: linear-gradient(180deg, var(--glass-sheen) 0%, transparent 42%);
+    -webkit-backdrop-filter: blur(28px) saturate(170%);
+    backdrop-filter: blur(28px) saturate(170%);
+    border: 1px solid var(--glass-edge);
+    box-shadow: inset 0 1px 0 var(--glass-rim), var(--glass-shadow);
     border-radius: var(--m3-xl);
   }
 
@@ -852,16 +926,55 @@ html.tv-mode .control-deck {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-/* Fully opaque surfaces for TV: the Material surfaces above are already
-   blur-free, but they use color-mix for slight translucency, and TV boxes run
-   exactly the old WebViews that cannot parse it. Solid token colours here keep
-   the Material palette on TV instead of these rules reinstating the old
-   near-black and white tints over it. */
+/* Flat, opaque glass: TV mode, weak graphics, and viewers who asked for less
+   transparency. backdrop-filter re-renders and blurs everything behind an
+   element on every frame; on a software rasteriser — emulators, many TV boxes —
+   that runs on the CPU and scrolling becomes a slideshow. .low-gfx is set before
+   first paint by services/graphicsTier.ts. The sheen gradient stays: it costs
+   nothing and keeps a flat surface from looking dead.
+
+   Selectors are written out long-hand, not with :is(). :is() needs Chrome 88,
+   and an older WebView that does not understand it discards the ENTIRE rule —
+   which would leave full blur on precisely the weak devices this rule exists
+   to protect. */
 html.tv-mode .glass,
-html.tv-mode .sidebar-glass { background: var(--zinc-900) !important; }
+html.tv-mode .sidebar-glass,
 html.tv-mode .btn-glass,
-html.tv-mode .glass-liquid { background: var(--zinc-800) !important; }
+html.tv-mode .glass-liquid,
+html.tv-mode .control-deck,
+html.low-gfx .glass,
+html.low-gfx .sidebar-glass,
+html.low-gfx .btn-glass,
+html.low-gfx .glass-liquid,
+html.low-gfx .control-deck {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+html.tv-mode .glass,
+html.tv-mode .sidebar-glass,
+html.tv-mode .control-deck,
+html.low-gfx .glass,
+html.low-gfx .sidebar-glass,
+html.low-gfx .control-deck { background-color: var(--zinc-900) !important; }
+html.tv-mode .btn-glass,
+html.tv-mode .glass-liquid,
+html.low-gfx .btn-glass,
+html.low-gfx .glass-liquid { background-color: var(--zinc-800) !important; }
 html.tv-mode .chip { background: transparent !important; }
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass, .sidebar-glass, .control-deck { background-color: var(--zinc-900) !important; }
+  .btn-glass, .glass-liquid { background-color: var(--zinc-800) !important; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass, .sidebar-glass, .btn-glass, .glass-liquid, .control-deck {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+  .glass, .sidebar-glass, .control-deck { background-color: var(--zinc-900) !important; }
+  .btn-glass, .glass-liquid { background-color: var(--zinc-800) !important; }
+}
 html.tv-mode .np-bleed { filter: blur(24px) saturate(120%) !important; }
 /* No hover-float / will-change repaint churn on the remote — the focus ring is
    the selection cue, so the card doesn't also need to scale + cast a big shadow. */
