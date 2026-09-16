@@ -275,7 +275,8 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   const [videoPreviewId, setVideoPreviewId] = useState<string | null>(null);
   // Sauti is music only — podcasts play through the shared engine, so strip them
   // from every recently-played-derived shelf, pill, mix, and the header gradient.
-  const recentlyPlayed = rawRecent.filter((t) => !t.id.startsWith('pod:') && !t.feedUrl);
+  // isPodcast covers video episodes, which are ordinary YouTube ids with no feed.
+  const recentlyPlayed = rawRecent.filter((t) => !t.id.startsWith('pod:') && !t.feedUrl && !t.isPodcast);
 
   // Cold-start onboarding: show the taste picker only to a genuinely fresh
   // listener (no plays, likes, or seeds yet). `tasteSig` is a stable dep for the
