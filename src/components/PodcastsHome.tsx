@@ -9,6 +9,11 @@ import { useMusic } from '../hooks/useMusic';
 import { CoverArt } from './ui/CoverArt';
 import { Shelf, ShelfHeader, ArtCard, WideRow, QuickTile, greeting } from './ui/Shelf';
 import { getFollows, isFollowed, toggleFollow, listInProgress, getProgress, getMany, getSeen, markShowSeen, markPlayed, markUnplayed, EpisodeProgress } from '../services/podcasts';
+import VideoCard from './ui/VideoCard';
+import EmptyState from './EmptyState';
+import { loadVideoPodcasts, VIDEO_SHOWS, type VideoEpisode } from '../services/videoPodcasts';
+import { listenerRegion } from '../services/region';
+import { ytDataApi } from '../services/ytDataApi';
 
 // 'Top' is deliberately absent — the Top Podcasts chart covers it, and fetching
 // a shelf nothing renders was a wasted request on every page load.
@@ -69,7 +74,31 @@ function sanitizeNotes(html: string): string {
 const showToTrack = (s: PodShow): Track => ({ id: s.id, title: s.title, artist: s.author, artwork: s.artwork, artworkLarge: s.artwork, duration: 0, feedUrl: s.feedUrl });
 
 export default function PodcastsHome() {
-  const { playQueue, seek, stop, current } = useMusic();
+  const { playQueue, seek, stop, current, setVideoMode, setExpanded } = useMusic();
+
+  // ── Video podcasts ──
+  // Full episodes from shows that publish on YouTube, the listener's region
+  // first. Played through the same engine as music, so Now Playing opens in
+  // Watch and can drop to Listen without restarting the episode.
+  const [videoEps, setVideoEps] = useState<VideoEpisode[]>([]);
+  const [videoEpsLoading, setVideoEpsLoading] = useState(true);
+  const [videoPreviewId, setVideoPreviewId] = useState<string | null>(null);
+  const podRegion = listenerRegion(['KE', 'NG', 'ZA']);
+  useEffect(() => {
+    let cancelled = false;
+    setVideoEpsLoading(true);
+    loadVideoPodcasts(podRegion)
+      .then((eps) => { if (!cancelled) setVideoEps(eps); })
+      .catch(() => { /* the shelf simply does not appear */ })
+      .finally(() => { if (!cancelled) setVideoEpsLoading(false); });
+    return () => { cancelled = true; };
+  }, [podRegion]);
+  const watchVideoEpisode = (i: number) => {
+    setVideoPreviewId(null);
+    playQueue(videoEps.map((e) => e.track), i, 'Podcasts · Video');
+    setVideoMode(true);
+    setExpanded(true);
+  };
   const [query, setQuery] = useState('');
   // Watch an episode on YouTube (searched on demand).
   const [watchOpen, setWatchOpen] = useState(false);
@@ -230,15 +259,48 @@ export default function PodcastsHome() {
   // Refresh "continue" whenever we return to this screen / progress changes.
   useEffect(() => { setCont(listInProgress()); }, [progV]);
 
-  // Curated category shelves — sequential so it never floods the network.
+  // Curated category shelves.
+  //
+  // These were fetched strictly one at a time "so it never floods the network",
+  // and Browse took about 25 seconds to fill: eight iTunes searches of roughly
+  // three seconds each, in series. Three at a time is still gentle — iTunes
+  // allows about twenty requests a minute per IP — and brings that to a few
+  // seconds. Results are also kept for twelve hours, because category
+  // membership changes on the scale of days, so a return visit fills instantly.
   useEffect(() => {
     let cancelled = false; setLoadingHome(true);
-    (async () => {
-      for (const c of CATEGORIES) {
-        const shows = await searchPodcastShows(c, 12).catch(() => [] as PodShow[]);
-        if (cancelled) return;
-        if (shows.length) setShelves((prev) => [...prev, { title: c, items: shows.map(showToTrack) }]);
+    const CACHE_KEY = 'sahrae.podcasts.categories.v1';
+    const TTL_MS = 12 * 3600_000;
+    try {
+      const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+      if (cached && Date.now() - cached.at < TTL_MS && Array.isArray(cached.shelves) && cached.shelves.length) {
+        setShelves(cached.shelves);
         setLoadingHome(false);
+        return () => { cancelled = true; };
+      }
+    } catch { /* fall through to a fresh load */ }
+
+    (async () => {
+      const results: { title: string; items: Track[] }[] = [];
+      const queue = [...CATEGORIES];
+      const worker = async () => {
+        while (queue.length && !cancelled) {
+          const c = queue.shift()!;
+          const shows = await searchPodcastShows(c, 12).catch(() => [] as PodShow[]);
+          if (cancelled) return;
+          if (shows.length) {
+            const shelf = { title: c, items: shows.map(showToTrack) };
+            results.push(shelf);
+            // Keep the curated order, not whichever request finished first.
+            setShelves(CATEGORIES.map((name) => results.find((r) => r.title === name)).filter(Boolean) as { title: string; items: Track[] }[]);
+          }
+          setLoadingHome(false);
+        }
+      };
+      await Promise.all([worker(), worker(), worker()]);
+      if (!cancelled && results.length) {
+        const ordered = CATEGORIES.map((name) => results.find((r) => r.title === name)).filter(Boolean);
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), shelves: ordered })); } catch { /* storage full */ }
       }
     })();
     return () => { cancelled = true; };
@@ -355,6 +417,23 @@ export default function PodcastsHome() {
   const onWatch = async (t: Track) => {
     stop();
     setWatchTitle(t.title); setWatchId(null); setWatchOpen(true);
+
+    // A show we already know publishes on YouTube: match against its recent
+    // uploads — about 2 quota units — instead of a 100-unit search. Every
+    // Watch tap used to pay for a full search, and because most podcasts never
+    // publish video, it mostly paid to learn "not on YouTube".
+    const norm = (x: string) => x.toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const known = VIDEO_SHOWS.find((v) => {
+      const a = norm(v.name), b = norm(t.artist || '');
+      return a && b && (a.includes(b) || b.includes(a));
+    });
+    if (known) {
+      const uploads = await ytDataApi.latestUploads([known.channelId], 50).catch(() => null);
+      const list = uploads?.get(known.channelId) || [];
+      const hit = matchEpisodeVideo(t, list);
+      if (hit) { setWatchId(hit.track.id); return; }
+    }
+
     const q = `${t.artist} ${t.title}`.replace(/\s+/g, ' ').trim().slice(0, 110);
     const r = await ytmusic.searchVideos(q).catch(() => [] as Track[]);
     const hit = matchEpisodeVideo(t, r);
@@ -508,7 +587,7 @@ export default function PodcastsHome() {
         {showLoading ? (
           <div className="flex items-center gap-2 text-zinc-400 py-10"><Loader2 className="w-5 h-5 animate-spin text-amber-500" /> Loading episodes…</div>
         ) : showEpisodes.length === 0 ? (
-          <p className="text-zinc-500 py-10 text-center">No episodes found for this show.</p>
+          <EmptyState compact illustration="podcast" title="No episodes to show" message="This show's feed didn't return any episodes. It may be moving hosts — try again later." />
         ) : (
           <div className="space-y-2 pb-6">
             <div className="flex items-center justify-between mb-2 gap-3">
@@ -525,7 +604,7 @@ export default function PodcastsHome() {
               ))}
             </div>
             {filteredEps.length === 0 ? (
-              <p className="text-zinc-500 py-8 text-center text-sm">No matching episodes.</p>
+              <EmptyState compact illustration="search" title="No matching episodes" message="Try a different word, or clear the search to see every episode." />
             ) : filteredEps.map((ep) => {
               const pr = prog[ep.id];
               const played = pr?.state === 'played';
@@ -568,7 +647,7 @@ export default function PodcastsHome() {
           <div className="flex items-center gap-2 text-zinc-400 py-10"><Loader2 className="w-5 h-5 animate-spin text-amber-500" /> Searching…</div>
         ) : results.length ? (
           <div className="flex flex-wrap gap-4">{results.map(card)}</div>
-        ) : <p className="text-zinc-500 py-10 text-center">No podcasts found.</p>
+        ) : <EmptyState compact illustration="podcast" title="No podcasts found" message="Try the show's name, a host, or a topic like 'football' or 'business'." />
       ) : (
         <>
           {/* ── 1. Greeting + quick access ──────────────────────────────────
@@ -687,6 +766,44 @@ export default function PodcastsHome() {
                   })}
                 </div>
               )}
+            </section>
+          )}
+
+          {/* ── Watch · video podcasts ────────────────────────────────────────
+              The newest full episode from shows that publish on YouTube, this
+              listener's region first. Hidden entirely if nothing loads, rather
+              than showing an empty row. */}
+          {(videoEpsLoading || videoEps.length > 0) && (
+            <section className="mb-10">
+              <div className="flex items-baseline justify-between gap-3 mb-4">
+                <h3 className="text-xl font-display font-bold text-white tracking-tight flex items-center gap-2">
+                  <Video className="w-5 h-5 text-sauti" /> Watch
+                </h3>
+                <span className="text-sm text-zinc-400">Video podcasts</span>
+              </div>
+              <div className="overflow-x-auto scrollbar-hide pb-3 -mx-1 px-1">
+                <div className="flex gap-4">
+                  {videoEpsLoading && !videoEps.length
+                    ? Array.from({ length: 4 }).map((_, i) => (
+                        <div key={i} className="w-[260px] sm:w-[300px] shrink-0 animate-pulse">
+                          <div className="w-full aspect-video rounded-xl bg-white/5" />
+                          <div className="h-3 rounded bg-white/5 w-4/5 mt-3" />
+                          <div className="h-2.5 rounded bg-white/5 w-2/5 mt-2" />
+                        </div>
+                      ))
+                    : videoEps.map((e, i) => (
+                        <div key={e.track.id} className="w-[260px] sm:w-[300px] shrink-0">
+                          <VideoCard
+                            track={e.track}
+                            activeId={videoPreviewId}
+                            onHoverStart={setVideoPreviewId}
+                            onHoverEnd={(id) => setVideoPreviewId((cur) => (cur === id ? null : cur))}
+                            onPlay={() => watchVideoEpisode(i)}
+                          />
+                        </div>
+                      ))}
+                </div>
+              </div>
             </section>
           )}
 

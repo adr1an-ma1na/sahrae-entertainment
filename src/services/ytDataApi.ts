@@ -342,6 +342,67 @@ export const ytDataApi = {
     return out;
   },
 
+  /**
+   * The newest uploads from several channels, with durations and view counts,
+   * for as little quota as the API allows.
+   *
+   * A channel's uploads playlist is its id with "UC" swapped for "UU", so no
+   * channels.list call is needed to find it. Then one playlistItems page per
+   * channel (1 unit each), and ONE videos.list for every video across all
+   * channels (1 unit per 50) — duration and statistics come back together, so
+   * a card's "1.2M views" costs nothing extra. Fifteen shows is ~16 units,
+   * cached locally for six hours and shared across listeners per channel.
+   */
+  latestUploads: async (channelIds: string[], perChannel = 6): Promise<Map<string, Track[]> | null> => {
+    const out = new Map<string, Track[]>();
+    const missing: string[] = [];
+    // Every lookup and fetch below runs in parallel. In series, eighteen shows
+    // took about twenty seconds to fill the shelf; the quota cost is the same.
+    await Promise.all(channelIds.map(async (id) => {
+      const key = `uploads.${id}.${perChannel}`;
+      const hit = cacheGet<Track[]>(key, TTL.chart);
+      if (hit) { out.set(id, repair(hit)); return; }
+      const shared = await sharedGet<Track[]>(key, TTL.chart);
+      if (shared) { const fixed = repair(shared); cacheSet(key, fixed); out.set(id, fixed); return; }
+      missing.push(id);
+    }));
+    if (!missing.length) return out;
+    if (!ytDataApi.available()) return out.size ? out : null;
+
+    const perChannelItems = new Map<string, Track[]>();
+    await Promise.all(missing.map(async (id) => {
+      if (!/^UC[\w-]{22}$/.test(id)) return;
+      const uploads = `UU${id.slice(2)}`;
+      const j = await get(`playlistItems?part=snippet,contentDetails&playlistId=${uploads}&maxResults=${Math.min(perChannel, 50)}`, COST.cheap);
+      if (!j) return;
+      const tracks = (j.items || [])
+        .filter((it: any) => it.snippet?.resourceId?.videoId && !/^(Deleted|Private|Unavailable) video$/.test(it.snippet?.title || ''))
+        .map((it: any) => mapVideo({ id: it.snippet.resourceId.videoId, snippet: it.snippet }))
+        .filter((t: Track | null): t is Track => !!t);
+      perChannelItems.set(id, tracks);
+    }));
+
+    // One batched details call for everything fetched above.
+    const all = [...perChannelItems.values()].flat();
+    const details = new Map<string, { duration: number; views?: number }>();
+    const batches: string[] = [];
+    for (let i = 0; i < all.length; i += 50) batches.push(all.slice(i, i + 50).map((t) => t.id).join(','));
+    await Promise.all(batches.map(async (ids) => {
+      const j = await get(`videos?part=contentDetails,statistics&id=${ids}`, COST.cheap);
+      for (const v of j?.items || []) {
+        details.set(v.id, { duration: parseISODuration(v.contentDetails?.duration), views: Number(v.statistics?.viewCount) || undefined });
+      }
+    }));
+    for (const [id, tracks] of perChannelItems) {
+      const withDetails = tracks.map((t) => ({ ...t, ...(details.get(t.id) || {}) }));
+      const key = `uploads.${id}.${perChannel}`;
+      cacheSet(key, withDetails);
+      sharedSet(key, withDetails);
+      out.set(id, withDetails);
+    }
+    return out;
+  },
+
   searchArtists: async (q: string): Promise<Artist[] | null> => {
     const key = `artists.${q.trim().toLowerCase()}`;
     const hit = cacheGet<Artist[]>(key, TTL.search);

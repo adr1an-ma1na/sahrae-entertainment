@@ -142,7 +142,10 @@ export default function MusicPlayer() {
   const relForId = useRef<string | null>(null);
 
   // Podcast controls: playback speed + sleep timer.
-  const isPodcast = queueSource === 'Podcasts';
+  // Any Podcasts queue ("Podcasts", "Podcasts · Video") or an episode flagged as
+  // one. Video podcasts play through the music engine, and without this they
+  // got shuffle/repeat instead of skip-15/30 and speed.
+  const isPodcast = queueSource.startsWith('Podcasts') || !!current?.isPodcast;
   const SPEEDS = [1, 1.25, 1.5, 1.75, 2, 0.75];
   const [speed, setSpeed] = useState(1);
   const [sleepMin, setSleepMin] = useState(0);
@@ -301,7 +304,7 @@ export default function MusicPlayer() {
             {canShowVideo && (
               <div className="flex justify-center mt-4 shrink-0">
                 <div role="tablist" aria-label="Song or video" className="glass inline-flex p-1 rounded-full">
-                  {([['song', 'Song', Disc3], ['video', 'Video', Clapperboard]] as const).map(([key, label, Icon]) => {
+                  {([['song', isPodcast ? 'Listen' : 'Song', Disc3], ['video', isPodcast ? 'Watch' : 'Video', Clapperboard]] as const).map(([key, label, Icon]) => {
                     const on = (key === 'video') === showingVideo;
                     return (
                       <button key={key} role="tab" aria-selected={on} tabIndex={0} data-tv-focusable

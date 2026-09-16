@@ -6,6 +6,7 @@ import { downloads } from '../services/downloads';
 import { attachEq, applyWebEq, resumeEq } from '../services/eqWeb';
 import { loadEq } from '../services/eq';
 import { cleanTrackText } from '../services/trackText.ts';
+import { Capacitor } from '@capacitor/core';
 
 type Repeat = 'off' | 'one' | 'all';
 
@@ -640,6 +641,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   //    active (keeps audio alive off-screen + drives the lock-screen/headset
   //    media controls), stop it when playback ends. No-ops on web. ──
   useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
     const on = active && !!current;
     const q = on
       ? `on=1&playing=${isPlaying ? 1 : 0}&title=${encodeURIComponent(current!.title)}&artist=${encodeURIComponent(current!.artist)}`
@@ -653,7 +655,12 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   //    might not fire in time. The in-page <audio> is suspended on background;
   //    native keeps it going, and onStart() hands the position back via
   //    window.__sauti.bgResume(). ──
+  //
+  // Native only: on the web there is nothing listening on https://localhost, so
+  // this was a beacon failing every 1.5 seconds for the whole session, whether
+  // or not anything was playing.
   useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
     const sync = () => {
       const url = (usingLocalRef.current && current?.audioUrl) ? current.audioUrl : '';
       const pos = Math.floor((liveRef.current.position || 0) * 1000);
@@ -870,7 +877,22 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     ro.observe(videoSlot);
     window.addEventListener('resize', place);
     document.addEventListener('scroll', place, true);
+    // The slot can also move without resizing or scrolling — the sheet's
+    // entrance transform, a title wrapping once artwork loads — and nothing above
+    // reports that. Opening straight into Watch left the video 13px off for
+    // several seconds. So while the video is visible, check the slot each frame:
+    // one rect read, and styles are only written when it has actually moved.
+    let raf = 0;
+    let last = '';
+    const follow = () => {
+      const r = videoSlot.getBoundingClientRect();
+      const sig = `${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.width)},${Math.round(r.height)}`;
+      if (sig !== last) { last = sig; place(); }
+      raf = requestAnimationFrame(follow);
+    };
+    raf = requestAnimationFrame(follow);
     return () => {
+      cancelAnimationFrame(raf);
       ro.disconnect();
       window.removeEventListener('resize', place);
       document.removeEventListener('scroll', place, true);

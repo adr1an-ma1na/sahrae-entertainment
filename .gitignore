@@ -24,3 +24,6 @@ local.properties
 .idea/
 .vscode/
 *.iml
+
+# Local preview launch config for the Claude Code browser pane
+.claude/

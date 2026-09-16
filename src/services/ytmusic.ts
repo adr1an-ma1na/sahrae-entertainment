@@ -31,6 +31,7 @@ export interface Track {
   description?: string; // podcast episode show-notes (HTML), for the episode detail page
   chaptersUrl?: string; // <podcast:chapters> JSON url (fetched on demand)
   chapters?: { start: number; title: string }[]; // inline <psc:chapter> chapters
+  isPodcast?: boolean;  // a podcast episode (audio file OR a YouTube video episode) — gets podcast transport
 }
 
 // Deterministic, pleasant "dominant colour" per track for CoverArt /
