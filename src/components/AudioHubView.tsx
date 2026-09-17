@@ -144,7 +144,7 @@ export default function AudioHubView({ onNav }: { onNav?: (tab: string) => void 
     <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-40 relative">
       {/* Aurora glow behind the header — warms to the now-playing station's colour */}
       <div aria-hidden className="pointer-events-none absolute -top-10 left-0 right-0 h-64 -z-10 opacity-70"
-        style={{ background: 'radial-gradient(60% 70% at 12% 0%, rgba(168,199,250,0.22), transparent 70%), radial-gradient(50% 60% at 80% 10%, rgba(168,199,250,0.12), transparent 72%)', filter: 'blur(8px)' }} />
+        style={{ background: 'radial-gradient(60% 70% at 12% 0%, rgba(251,191,36,0.22), transparent 70%), radial-gradient(50% 60% at 80% 10%, rgba(251,191,36,0.12), transparent 72%)', filter: 'blur(8px)' }} />
       {/* Header */}
       <div className="overline mb-1.5">Sahrae · Listen</div>
       <div className="flex items-center gap-3 mb-6">
@@ -198,7 +198,7 @@ export default function AudioHubView({ onNav }: { onNav?: (tab: string) => void 
                       {/* Stylus arm lines */}
                       <path d="M 35 5 L 35 45 L 20 65 L 12 60" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                       {/* Cartridge head */}
-                      <rect x="5" y="55" width="10" height="14" rx="2" fill="#7CACF8" transform="rotate(-15, 10, 62)" />
+                      <rect x="5" y="55" width="10" height="14" rx="2" fill="#F59E0B" transform="rotate(-15, 10, 62)" />
                     </svg>
                   </div>
                 </div>

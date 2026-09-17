@@ -85,7 +85,7 @@ export default function EqualizerPanel({ open, onClose }: { open: boolean; onClo
                 <input type="range" min={-1500} max={1500} step={100} value={eq.bands[i] ?? 0}
                   onChange={(e) => setBand(i, Number(e.target.value))}
                   tabIndex={0} data-tv-focusable
-                  className="flex-1 h-1.5 cursor-pointer accent-amber-500" style={{ accentColor: '#A8C7FA' }} aria-label={`${freq} gain`} />
+                  className="flex-1 h-1.5 cursor-pointer accent-amber-500" style={{ accentColor: '#FBBF24' }} aria-label={`${freq} gain`} />
                 <span className="w-12 text-right text-[11px] font-semibold text-zinc-300 tabular shrink-0">{fmtDb(eq.bands[i] ?? 0)}</span>
               </div>
             ))}
@@ -99,21 +99,21 @@ export default function EqualizerPanel({ open, onClose }: { open: boolean; onClo
               <span className="w-24 flex items-center gap-1.5 text-xs font-bold text-zinc-300 shrink-0"><Waves className="w-3.5 h-3.5 text-sauti" /> Bass Boost</span>
               <input type="range" min={0} max={1000} step={20} value={eq.bass}
                 onChange={(e) => commit({ ...eq, bass: Number(e.target.value), on: true })}
-                tabIndex={0} data-tv-focusable className="flex-1 h-1.5 cursor-pointer" style={{ accentColor: '#A8C7FA' }} aria-label="Bass boost" />
+                tabIndex={0} data-tv-focusable className="flex-1 h-1.5 cursor-pointer" style={{ accentColor: '#FBBF24' }} aria-label="Bass boost" />
               <span className="w-10 text-right text-[11px] font-semibold text-zinc-300 tabular shrink-0">{Math.round(eq.bass / 10)}%</span>
             </div>
             <div className="flex items-center gap-3">
               <span className="w-24 flex items-center gap-1.5 text-xs font-bold text-zinc-300 shrink-0"><Sparkles className="w-3.5 h-3.5 text-sauti" /> Spatial 3D</span>
               <input type="range" min={0} max={1000} step={20} value={eq.spatial}
                 onChange={(e) => commit({ ...eq, spatial: Number(e.target.value), on: true })}
-                tabIndex={0} data-tv-focusable className="flex-1 h-1.5 cursor-pointer" style={{ accentColor: '#A8C7FA' }} aria-label="Spatial audio" />
+                tabIndex={0} data-tv-focusable className="flex-1 h-1.5 cursor-pointer" style={{ accentColor: '#FBBF24' }} aria-label="Spatial audio" />
               <span className="w-10 text-right text-[11px] font-semibold text-zinc-300 tabular shrink-0">{Math.round(eq.spatial / 10)}%</span>
             </div>
             <div className="flex items-center gap-3">
               <span className="w-24 flex items-center gap-1.5 text-xs font-bold text-zinc-300 shrink-0"><Waves className="w-3.5 h-3.5 text-sauti" /> Loudness</span>
               <input type="range" min={0} max={2000} step={50} value={eq.loud ?? 0}
                 onChange={(e) => commit({ ...eq, loud: Number(e.target.value), on: true })}
-                tabIndex={0} data-tv-focusable className="flex-1 h-1.5 cursor-pointer" style={{ accentColor: '#A8C7FA' }} aria-label="Loudness" />
+                tabIndex={0} data-tv-focusable className="flex-1 h-1.5 cursor-pointer" style={{ accentColor: '#FBBF24' }} aria-label="Loudness" />
               <span className="w-10 text-right text-[11px] font-semibold text-zinc-300 tabular shrink-0">{Math.round((eq.loud ?? 0) / 20)}%</span>
             </div>
           </div>
@@ -129,7 +129,7 @@ export default function EqualizerPanel({ open, onClose }: { open: boolean; onClo
               <span className="w-24 flex items-center gap-1.5 text-xs font-bold text-zinc-300 shrink-0"><Timer className="w-3.5 h-3.5 text-sauti" /> Crossfade</span>
               <input type="range" min={0} max={12} step={1} value={crossfade}
                 onChange={(e) => setCrossfade(Number(e.target.value))}
-                tabIndex={0} data-tv-focusable className="flex-1 h-1.5 cursor-pointer" style={{ accentColor: '#A8C7FA' }} aria-label="Crossfade duration" />
+                tabIndex={0} data-tv-focusable className="flex-1 h-1.5 cursor-pointer" style={{ accentColor: '#FBBF24' }} aria-label="Crossfade duration" />
               <span className="w-10 text-right text-[11px] font-semibold text-zinc-300 tabular shrink-0">{crossfade > 0 ? `${crossfade}s` : 'Off'}</span>
             </div>
 

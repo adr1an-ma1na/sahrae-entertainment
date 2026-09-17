@@ -1,17 +1,17 @@
-/* Google Sans Flex — Google's own product typeface, now served by Google Fonts
-   (an earlier note here said Google Sans was unavailable; that stopped being
-   true, and was checked against the live API before this change).
+/* Typography — two geometric humanist faces, both variable, both from Google
+   Fonts, so the pair is one download each and no static-weight sprawl:
 
-   Loaded as a variable font on two axes:
-     wght 300–900  one file instead of four static weights
-     opsz 6–144    optical sizing — the letterforms re-draw for their size, so a
-                   48px headline gets tighter spacing and finer detail while 12px
-                   captions stay open and legible. This is most of what makes
-                   large type read as "premium" rather than "scaled up".
-   The ROND (roundness) axis was measured and left out: +54 KB for an effect
-   too subtle to justify on the low-end devices this app targets.
-   Latin payload: 117 KB, fetched once and cached. */
-@import url('https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,300..900&display=swap');
+     Figtree  wght 400–700  — body. Interface text, metadata, descriptions,
+              forms and inputs. Open apertures and a tall x-height, which is
+              what keeps 12px metadata legible on a phone in daylight.
+     Outfit   wght 400–800  — display. Titles, hero headlines, badges, section
+              headers and .overline kickers. Geometric and wide-set, so it
+              carries size without shouting.
+
+   Loaded as one stylesheet request (two families, one URL) with display=swap,
+   so text paints in the fallback immediately and re-renders when the faces
+   land rather than holding the first paint. */
+@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@400..700&family=Outfit:wght@400..800&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -32,135 +32,192 @@
   /* ── The accent, remapped in one place ──────────────────────────────────
      `amber-*` appears 411 times across 42 files. Rewriting every one of those
      by hand would be a long diff with a lot of room to miss a spot and leave a
-     stray gold button on one screen. Tailwind resolves its palette from these
-     variables, so pointing them at Material's primary tones converts the whole
-     app at once and keeps it converted — a new `bg-amber-500` written later is
-     automatically Google Blue too.
+     stray off-palette button on one screen. Tailwind resolves its palette from
+     these variables, so setting them here converts the whole app at once and
+     keeps it converted — a new `bg-amber-500` written later lands on the
+     current accent automatically.
 
-     The ramp is Material 3's tonal palette for Google Blue, not Tailwind's
-     amber with the hue rotated: dark themes take the accent from tone 80 and
-     put tone 20 on top of it, which is why the "500" here is LIGHTER than the
-     "400" would be in a normal ramp. */
-  --color-amber-50:  #ECF3FE;
-  --color-amber-100: #D3E3FD; /* on-primary-container */
-  --color-amber-200: #C2D7F8;
-  --color-amber-300: #A8C7FA; /* primary (dark) */
+     The ramp is molten gold: a warm amber core with a deep bronze container
+     end, so a filled accent is gold with near-black text on it and a
+     "container" accent is dark bronze with cream text. The 400/500 steps come
+     from the theme, because the gold that reads as an accent on obsidian is
+     too light to be legible as text on a sand or baby-blue canvas. */
+  --color-amber-50:  #FFFBEB;
+  --color-amber-100: #FEF3C7; /* text ON a bronze container */
+  --color-amber-200: #FDE68A;
+  --color-amber-300: #FCD34D;
   --color-amber-400: var(--gold-400);
   --color-amber-500: var(--gold-500);
-  --color-amber-600: #7CACF8;
-  --color-amber-700: #0842A0; /* primary-container */
-  --color-amber-800: #062E6F;
-  --color-amber-900: #041E49;
-  --color-amber-950: #062E6F; /* on-primary — dark text on a primary fill */
+  --color-amber-600: #D97706;
+  --color-amber-700: #A04A08; /* container — cream text sits on this, 5.2:1 */
+  --color-amber-800: #92400E;
+  --color-amber-900: #78350F;
+  --color-amber-950: #451A03; /* text ON a gold fill */
 
-  --font-sans: "Google Sans Flex", "Google Sans", Roboto, ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Google Sans Flex", "Google Sans", Roboto, ui-sans-serif, system-ui, sans-serif;
+  --font-sans: Figtree, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: Outfit, Figtree, ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
 
 @layer base {
+  /* Re-bind Tailwind's colour tokens inside every theme block.
+     @theme declares `--color-white: var(--white)` once, on :root — and a custom
+     property is substituted where it is DECLARED, not where it is used. So an
+     element deeper in the tree that redefines --white (the Now Playing sheet
+     does exactly this: it forces a dark context over album art) had no effect
+     on `text-white`, which had already resolved against :root. On a light theme
+     that put the page's dark ink on a dark artwork bleed — an invisible title.
+     Declaring the same mappings inside each theme block makes them resolve
+     again wherever a theme class appears, including on a nested element. */
+  :root, .dark, .midnight {
+    --color-zinc-950: var(--zinc-950);
+    --color-zinc-900: var(--zinc-900);
+    --color-zinc-800: var(--zinc-800);
+    --color-zinc-700: var(--zinc-700);
+    --color-zinc-600: var(--zinc-600);
+    --color-zinc-500: var(--zinc-500);
+    --color-zinc-400: var(--zinc-400);
+    --color-zinc-300: var(--zinc-300);
+    --color-zinc-200: var(--zinc-200);
+    --color-zinc-100: var(--zinc-100);
+    --color-zinc-50: var(--zinc-50);
+    --color-white: var(--white);
+    --color-black: var(--black);
+    --color-amber-400: var(--gold-400);
+    --color-amber-500: var(--gold-500);
+  }
+
   :root {
-    /* Material 3 light — Google's neutral surfaces.
+    /* SAND — the light theme. Warm sandstone rather than white: every surface
+       carries a little of the gold accent's own hue, which is what stops a
+       light theme from reading as a spreadsheet next to molten gold.
+
        The ramp runs backwards on purpose: the app writes `zinc-950` for its
        deepest surface and `zinc-50` for its brightest text, so in a light theme
        950 is the page and 50 is the ink. Inverting here rather than at 411 call
-       sites is what lets one token file serve both themes.
+       sites is what lets one token file serve every theme. */
+    --zinc-950: #FFFCF7; /* page */
+    --zinc-900: #FAF5EC; /* container-low */
+    --zinc-800: #F3EADC; /* container */
+    --zinc-700: #E4D7C2; /* container-high */
+    --zinc-600: #C6B399; /* outline-variant */
+    --zinc-500: #6E6354; /* outline — 5.6:1 on the page, AA for body text */
+    --zinc-400: #594F42;
+    --zinc-300: #443B30;
+    --zinc-200: #2E271E;
+    --zinc-100: #1F1A14; /* ink */
+    --zinc-50:  #14100A;
 
-       Surfaces carry the faint blue tint Google uses (#F8FAFD, #F0F4F9) rather
-       than pure grey — it is what stops a white Material surface reading as
-       clinical next to a blue accent. */
-    --zinc-950: #FFFFFF; /* surface */
-    --zinc-900: #F8FAFD; /* surface-container-low */
-    --zinc-800: #F0F4F9; /* surface-container */
-    --zinc-700: #DDE3EA; /* surface-container-high */
-    --zinc-600: #C4C7C5; /* outline-variant */
-    --zinc-500: #747775; /* outline — 4.6:1 on white, AA for body text */
-    --zinc-400: #5F6368; /* on-surface-variant */
-    --zinc-300: #444746;
-    --zinc-200: #2F3033;
-    --zinc-100: #1F1F1F; /* on-surface */
-    --zinc-50:  #131314;
+    --white: #1F1A14;
+    --black: #FFFCF7;
 
-    --white: #1F1F1F;
-    --black: #FFFFFF;
+    /* Accent on a light ground. The gold that glows on obsidian is far too
+       light to read as text here (#FBBF24 on sand is 1.7:1), so text and icons
+       take a deep bronze and only FILLED surfaces use the bright gold. */
+    --gold-100: #FEF3C7;
+    --gold-300: #FCD34D;
+    --gold-400: #96590A; /* text / icons — 5.3:1 on the page */
+    --gold-500: #F59E0B; /* filled surfaces */
+    --on-gold:  #2A1B05;
 
-    /* Liquid glass, light theme: frosted white. A higher fill than dark
-       because a light surface over a colourful poster needs more body to keep
-       dark text legible. */
+    /* Liquid glass, Sand: frosted light-refracting boundaries. A higher fill
+       than the dark themes, because a light pane over a colourful poster needs
+       more body before dark text stays legible on it. */
     --glass-alpha: 68%;
     --glass-alpha-strong: 52%;
     --glass-edge: rgba(255, 255, 255, 0.70);
-    --glass-rim: rgba(255, 255, 255, 0.85);
-    --glass-shadow: 0 8px 28px rgba(15, 23, 42, 0.12);
+    --glass-rim: rgba(255, 255, 255, 0.92);
+    --glass-shadow: 0 16px 44px rgba(61, 44, 20, 0.18);
     --glass-sheen: rgba(255, 255, 255, 0.55);
+    /* The specular glare — the curved reflection across the top-left of a
+       control. White here; tinted in the themes below. */
+    --glare-1: rgba(255, 255, 255, 0.85);
+    --glare-2: rgba(255, 255, 255, 0.30);
   }
 
   .dark {
-    /* Material 3 dark — Google's own surface-container ladder.
-       M3 separates layers by TONE rather than by shadow, which is why these
-       steps are close together: #1B1B1B to #333537 is the whole range, and
-       depth comes from the tonal step plus a hairline, not from a drop shadow.
+    /* OBSIDIAN — the default. A near-black #09090b base with molten gold on it.
+       Layers are separated by tone plus a hairline rather than by drop shadows,
+       so the steps are deliberately close together: #131316 to #3A3A40 is the
+       whole range.
 
-       The accessibility work already done here is preserved and improved on.
-       The previous notes recorded lifting the muted steps so secondary copy
-       cleared WCAG AA on a near-black surface — text-zinc-500 alone carries
-       ~109 labels (release years, runtimes, episode counts, artist names), so
-       failing it failed nearly every card, worst on a TV across a room or a
-       phone in daylight. Material's outline tones are lighter still:
-         zinc-500  #7d7d86 -> #8E918F   4.64:1 -> 5.31:1 on #131314
-         zinc-400  #a1a1aa -> #C4C7C5   7.16:1 -> 9.85:1
-       so the hierarchy is unchanged and the margin is larger. */
-    --zinc-950: #0E0E0F; /* surface-container-lowest */
-    --zinc-900: #1B1B1B; /* surface-container-low */
-    --zinc-800: #282A2C; /* surface-container-high */
-    --zinc-700: #444746; /* outline-variant */
-    --zinc-600: #6F7270;
-    --zinc-500: #8E918F; /* outline */
-    --zinc-400: #C4C7C5; /* on-surface-variant */
-    --zinc-300: #E3E3E3; /* on-surface */
-    --zinc-200: #EDEDED;
-    --zinc-100: #F5F5F5;
+       The accessibility work done in earlier passes is preserved. text-zinc-500
+       alone carries ~109 labels (release years, runtimes, episode counts,
+       artist names), so a muted step that fails WCAG AA fails nearly every card
+       — worst on a TV across a room or a phone in daylight. On this darker base
+       the same tones measure higher than they did:
+         zinc-500  #8E8E97  5.94:1 on #09090b
+         zinc-400  #C4C4CC  11.5:1 */
+    --zinc-950: #09090B; /* obsidian — the page itself */
+    --zinc-900: #131316; /* container-low */
+    --zinc-800: #1F1F23; /* container */
+    --zinc-700: #3A3A40; /* outline-variant */
+    --zinc-600: #5E5E66;
+    --zinc-500: #8E8E97; /* outline — 5.9:1 on obsidian */
+    --zinc-400: #C4C4CC;
+    --zinc-300: #E4E4E7;
+    --zinc-200: #EDEDF0;
+    --zinc-100: #F5F5F7;
     --zinc-50: #FFFFFF;
     --white: #ffffff;
     --black: #000000;
 
-    /* Liquid glass, dark theme: smoked glass. */
+    /* Molten gold, at full strength: obsidian gives it the contrast to glow. */
+    --gold-100: #FEF3C7;
+    --gold-300: #FCD34D;
+    --gold-400: #FBBF24; /* text / icons — 9.6:1 on obsidian */
+    --gold-500: #F59E0B; /* filled surfaces */
+    --on-gold:  #1A1205;
+
+    /* Liquid glass, Obsidian: smoked glass with white specular glares. */
     --glass-alpha: 58%;
     --glass-alpha-strong: 40%;
     --glass-edge: rgba(255, 255, 255, 0.14);
-    --glass-rim: rgba(255, 255, 255, 0.20);
-    --glass-shadow: 0 10px 34px rgba(0, 0, 0, 0.38);
-    --glass-sheen: rgba(255, 255, 255, 0.09);
+    --glass-rim: rgba(255, 255, 255, 0.22);
+    --glass-shadow: 0 16px 44px rgba(0, 0, 0, 0.50);
+    --glass-sheen: rgba(255, 255, 255, 0.10);
+    --glare-1: rgba(255, 255, 255, 0.60);
+    --glare-2: rgba(255, 255, 255, 0.12);
   }
 
   .midnight {
-    /* Material 3 dark, tinted toward the primary.
-       Still a distinctly different theme from `.dark`, but arrived at the
-       Material way — by pulling the neutral surfaces toward the accent hue
-       rather than switching to an unrelated violet. That is what M3 calls a
-       neutral-variant palette, and it is why this reads as the same design
-       language in a different mood instead of a different design. */
-    --zinc-950: #0B1220;
-    --zinc-900: #131C2B;
-    --zinc-800: #1E2A3C;
-    --zinc-700: #33425A;
-    --zinc-600: #5C6B84;
-    --zinc-500: #8A99B3; /* AA on the surfaces above */
-    --zinc-400: #BBC7DB;
-    --zinc-300: #DDE3EE;
-    --zinc-200: #E9EEF6;
-    --zinc-100: #F2F5FA;
-    --zinc-50:  #FBFCFE;
+    /* COSMIC — a baby-blue canvas with lavender and royal-blue light in the
+       glass. This is a LIGHT theme: the canvas is pale, so the ramp inverts the
+       same way Sand does (950 is the page, 50 is the ink) and --white becomes
+       the dark ink so the app's many hard-coded `text-white` labels stay
+       readable. Its identity lives in the glare colours, not in the surfaces:
+       every pane picks up lavender at its top-left and royal blue at its edge. */
+    --zinc-950: #EAF2FF; /* page */
+    --zinc-900: #E2ECFC; /* container-low */
+    --zinc-800: #D6E4F9; /* container */
+    --zinc-700: #C0D3F0; /* container-high */
+    --zinc-600: #9DB2D6; /* outline-variant */
+    --zinc-500: #5B6A8D; /* outline — 5.2:1 on the page */
+    --zinc-400: #47546F;
+    --zinc-300: #333F58;
+    --zinc-200: #232E45;
+    --zinc-100: #172033; /* ink */
+    --zinc-50:  #0E1526;
 
-    --white: #ffffff;
-    --black: #000000;
+    --white: #172033;
+    --black: #EAF2FF;
 
-    /* Liquid glass, midnight: glass tinted by the blue-slate surface. */
-    --glass-alpha: 56%;
-    --glass-alpha-strong: 38%;
-    --glass-edge: rgba(187, 199, 219, 0.18);
-    --glass-rim: rgba(221, 227, 238, 0.22);
-    --glass-shadow: 0 10px 34px rgba(3, 8, 20, 0.45);
-    --glass-sheen: rgba(221, 227, 238, 0.10);
+    /* Accent: the same molten gold, darkened until it is legible on pale blue. */
+    --gold-100: #FEF3C7;
+    --gold-300: #FCD34D;
+    --gold-400: #8A4E06; /* text / icons — 6.4:1 on the canvas */
+    --gold-500: #F59E0B; /* filled surfaces */
+    --on-gold:  #23180B;
+
+    /* Liquid glass, Cosmic: lavender glare at the top-left, royal blue in the
+       rim and the floor shadow. */
+    --glass-alpha: 62%;
+    --glass-alpha-strong: 46%;
+    --glass-edge: rgba(255, 255, 255, 0.66);
+    --glass-rim: rgba(237, 233, 254, 0.90);
+    --glass-shadow: 0 16px 44px rgba(30, 58, 138, 0.22);
+    --glass-sheen: rgba(237, 233, 254, 0.60);
+    --glare-1: rgba(221, 214, 254, 0.92); /* lavender */
+    --glare-2: rgba(96, 141, 235, 0.26);  /* soft royal blue */
   }
 }
 
@@ -178,20 +235,15 @@
     --hairline-2: rgba(255, 255, 255, 0.16);
     --scrim: rgba(0, 0, 0, 0.62);
 
-    /* The accent ramp. Names kept as `--gold-*` deliberately: they are
-       referenced across the stylesheet and by the Tailwind mapping above, and
-       renaming a token that is only ever read through a variable buys a large
-       diff and no behaviour. The VALUES are Material 3's Google Blue tones.
-
-       On a dark surface Material uses tone 80 for the accent and tone 20 for
-       anything sitting on it — so a filled button here is a light blue chip
-       with dark blue text, which is the inverse of the gold-on-dark it
-       replaces, and the reason --on-gold changes with it. */
-    --gold-100: #D3E3FD; /* on-primary-container */
-    --gold-300: #C2D7F8;
-    --gold-400: #A8C7FA; /* primary — text and icons on dark */
-    --gold-500: #A8C7FA; /* primary — filled surfaces */
-    --on-gold: #062E6F;  /* on-primary — text ON a filled surface */
+    /* The accent ramp, molten gold. Each theme above sets its own 400 / 500 /
+       on-gold, because the gold that glows on obsidian is illegible as text on
+       sand or pale blue; these are the fallbacks for a document with no theme
+       class on it at all (first paint before useTheme runs). */
+    --gold-100: #FEF3C7;
+    --gold-300: #FCD34D;
+    --gold-400: #FBBF24; /* text and icons */
+    --gold-500: #F59E0B; /* filled surfaces */
+    --on-gold: #1A1205;  /* text ON a filled surface */
 
     /* Text on dark */
     --text-1: rgba(255, 255, 255, 0.96);
@@ -207,7 +259,7 @@
     --e2: 0 4px 8px 3px rgba(0,0,0,.15), 0 1px 3px rgba(0,0,0,.30);
     /* The accent "glow" is now a Material state layer: a flat translucent
        overlay in the primary tone, not a bloom. */
-    --glow-gold: 0 0 0 1px rgba(168,199,250,.38), 0 2px 6px 2px rgba(0,0,0,.15);
+    --glow-gold: 0 0 0 1px rgba(251,191,36,.38), 0 2px 6px 2px rgba(0,0,0,.15);
     --edge-top: inset 0 1px 0 rgba(255,255,255,.05);
 
     /* Material 3 shape scale. */
@@ -222,36 +274,34 @@
     --radius-card: var(--m3-md);
   }
 
-  html, body { background-color: #131314; }
+  html, body { background-color: #09090b; }
   body {
     font-family: var(--font-sans);
-    /* Let the opsz axis follow font-size. Default in most engines; stated so an
-       older WebView does not pin every size to one optical master. */
-    font-optical-sizing: auto;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    /* Kerning and both ligature sets — Figtree carries contextual alternates
+       that fix pairs like "ti" and "fi" at interface sizes. */
     font-feature-settings: "kern", "liga", "calt";
   }
 
-  /* Headings. Optical sizing already tightens large type, so tracking is
-     lighter than a static face needed; the weight does the work. Balanced
+  /* Headings take the display face with tight optical tracking; balanced
      wrapping stops a two-line title ending on one orphaned word. */
   h1, h2, h3 {
     font-family: var(--font-display);
     font-weight: 700;
-    letter-spacing: -0.015em;
+    letter-spacing: -0.02em;
     text-wrap: balance;
   }
-  .font-display { font-family: var(--font-display); letter-spacing: -0.015em; }
+  .font-display { font-family: var(--font-display); letter-spacing: -0.02em; }
   /* Tabular figures where numbers line up — runtimes, scores, timestamps — so a
      ticking clock does not make the text beside it shuffle. */
   .tabular-nums, time { font-variant-numeric: tabular-nums; }
 
   /* On-brand text selection */
   ::selection {
-    background: rgba(168,199,250, 0.28);
-    color: #fff;
+    background: rgba(251,191,36, 0.30);
+    color: #1A1205;
   }
 
   /* Smooth, never-janky scrolling on big lists */
@@ -268,7 +318,7 @@
 @layer utilities {
   /* Brushed-gold gradient text — wordmark, key accents */
   .text-gold {
-    background-image: linear-gradient(180deg, #D3E3FD 0%, #A8C7FA 55%, #7CACF8 100%);
+    background-image: linear-gradient(180deg, #FDE68A 0%, #FBBF24 55%, #F59E0B 100%);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -347,10 +397,11 @@
     background-color: var(--zinc-900);
     background-color: color-mix(in srgb, var(--zinc-900) var(--glass-alpha), transparent);
     background-image: linear-gradient(180deg, var(--glass-sheen) 0%, transparent 38%);
-    -webkit-backdrop-filter: blur(24px) saturate(170%);
-    backdrop-filter: blur(24px) saturate(170%);
+    -webkit-backdrop-filter: blur(16px) saturate(135%);
+    backdrop-filter: blur(16px) saturate(135%);
     border: 1px solid var(--glass-edge);
-    box-shadow: inset 0 1px 0 var(--glass-rim), var(--glass-shadow);
+    /* Top specular edge, then the floor the pane is standing on. */
+    box-shadow: inset 0 1.5px 0 var(--glass-rim), var(--glass-shadow);
   }
 
   /* Navigation drawer — more body, because it holds long lists of text, and
@@ -359,8 +410,11 @@
   .sidebar-glass {
     background-color: var(--zinc-900) !important;
     background-color: color-mix(in srgb, var(--zinc-900) 72%, transparent) !important;
+    background-image: linear-gradient(180deg, var(--glass-sheen) 0%, transparent 30%);
+    -webkit-backdrop-filter: blur(16px) saturate(135%);
+    backdrop-filter: blur(16px) saturate(135%);
     border-color: var(--glass-edge) !important;
-    box-shadow: inset -1px 0 0 var(--glass-rim) !important;
+    box-shadow: inset 0 1.5px 0 var(--glass-rim), inset -1px 0 0 var(--glass-edge) !important;
   }
 
   /* Secondary button — a liquid glass pill. It sits over hero artwork, which is
@@ -371,13 +425,17 @@
     isolation: isolate;
     background-color: var(--zinc-800);
     background-color: color-mix(in srgb, var(--zinc-800) var(--glass-alpha-strong), transparent);
-    background-image: linear-gradient(180deg, var(--glass-sheen) 0%, transparent 55%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
-    backdrop-filter: blur(20px) saturate(180%);
+    /* 135° sheen: the diagonal is what reads as thickness rather than a tint. */
+    background-image: linear-gradient(135deg, var(--glass-sheen) 0%, transparent 62%);
+    -webkit-backdrop-filter: blur(14px) saturate(150%);
+    backdrop-filter: blur(14px) saturate(150%);
     border: 1px solid var(--glass-edge);
     color: var(--zinc-100);
     border-radius: 9999px;
-    box-shadow: inset 0 1px 0 var(--glass-rim), 0 4px 18px rgba(0, 0, 0, 0.22);
+    box-shadow:
+      inset 0 2px 0 var(--glass-rim),
+      inset 0 -10px 22px var(--glass-sheen),
+      0 12px 34px rgba(0, 0, 0, 0.32);
     transition: box-shadow .25s var(--ease-premium), border-color .25s var(--ease-premium);
   }
   .btn-glass::after {
@@ -393,11 +451,13 @@
   /* Overline — Material 3 label-small: 11px, 500, 0.5px tracking, uppercase.
      The old editorial version used a second typeface and 0.18em tracking, which
      is a magazine kicker rather than a Material label. */
+  /* Overline — the editorial kicker above a title. Display face, wide tracking:
+     at 0.18em the letters read as a deliberate label rather than small caps. */
   .overline {
-    font-family: var(--font-sans);
+    font-family: var(--font-display);
     font-size: 0.6875rem;
-    font-weight: 500;
-    letter-spacing: 0.05em;
+    font-weight: 600;
+    letter-spacing: 0.18em;
     text-transform: uppercase;
     color: var(--gold-400);
   }
@@ -444,10 +504,10 @@
      up colour that belongs to the palette. */
   .aurora-glow {
     background-image:
-      radial-gradient(55% 70% at 12% -8%, rgba(168,199,250,0.15), transparent 60%),
-      radial-gradient(50% 65% at 95% 4%, rgba(8,66,160,0.22), transparent 60%),
-      radial-gradient(60% 50% at 70% 60%, rgba(124,92,230,0.07), transparent 70%),
-      radial-gradient(75% 55% at 50% 112%, rgba(168,199,250,0.08), transparent 70%);
+      radial-gradient(55% 70% at 12% -8%, rgba(251,191,36,0.15), transparent 60%),
+      radial-gradient(50% 65% at 95% 4%, rgba(180,83,9,0.22), transparent 60%),
+      radial-gradient(60% 50% at 70% 60%, rgba(217,119,6,0.07), transparent 70%),
+      radial-gradient(75% 55% at 50% 112%, rgba(251,191,36,0.08), transparent 70%);
     animation: aurora-breathe 24s ease-in-out infinite alternate;
   }
 }
@@ -544,26 +604,50 @@
      over album art. Clearer than chrome glass (less fill, more saturation)
      because it sits on artwork you are meant to see. The highlight is one soft
      radial in the top-left, not a hard glare blob. */
+  /* Four layers, each modelling one optical property of a curved pane:
+       sheen    a 135° diagonal gradient — thickness and volume
+       glare    ::before, a top-left radial — the curved reflection that is what
+                actually sells the surface as physical rather than tinted
+       bevel    stacked insets: a hard top edge light, then a soft bounce off
+                the inner floor, so the rim has depth instead of a hairline
+       refract  backdrop blur with saturation above 100%, so album art and video
+                underneath come through richer than they are, not washed out */
   .glass-liquid {
     position: relative;
     isolation: isolate;
     background-color: var(--zinc-800);
     background-color: color-mix(in srgb, var(--zinc-800) var(--glass-alpha-strong), transparent);
-    background-image: radial-gradient(120% 80% at 25% 0%, var(--glass-sheen) 0%, transparent 60%);
-    -webkit-backdrop-filter: blur(18px) saturate(190%);
-    backdrop-filter: blur(18px) saturate(190%);
+    background-image: linear-gradient(135deg, var(--glass-sheen) 0%, transparent 70%);
+    -webkit-backdrop-filter: blur(14px) saturate(150%);
+    backdrop-filter: blur(14px) saturate(150%);
     border: 1px solid var(--glass-edge);
     color: var(--zinc-100);
-    box-shadow: inset 0 1px 0 var(--glass-rim), 0 6px 22px rgba(0, 0, 0, 0.26);
+    box-shadow:
+      inset 0 2px 0 var(--glass-rim),
+      inset 0 -12px 26px var(--glass-sheen),
+      0 12px 34px rgba(0, 0, 0, 0.42);
     transition: box-shadow .25s var(--ease-premium), transform .25s var(--ease-premium);
   }
+  /* Specular glare, painted with the theme's own light: white on obsidian and
+     sand, lavender on cosmic. pointer-events stay off so it never eats a tap.
+     Both pseudo-elements sit at z-index -1: inside a stacking context that is
+     above the element's own background and below its content, so the glare
+     lights the pane without ever washing over the icon or label on it. */
   .glass-liquid::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit;
+    z-index: -1; pointer-events: none;
+    background: radial-gradient(130% 90% at 28% 6%, var(--glare-1) 0%, var(--glare-2) 42%, transparent 70%);
+    opacity: .55;
+  }
+  /* State layer — the press/hover tint, kept separate from the glare so the
+     two never fight over one pseudo-element. */
+  .glass-liquid::after {
     content: ""; position: absolute; inset: 0; border-radius: inherit; z-index: -1;
     background: currentColor; opacity: 0; pointer-events: none;
     transition: opacity .2s var(--ease-premium);
   }
-  .glass-liquid:hover::before  { opacity: .08; }
-  .glass-liquid:active::before { opacity: .14; }
+  .glass-liquid:hover::after  { opacity: .08; }
+  .glass-liquid:active::after { opacity: .14; }
   .glass-liquid:active { transform: scale(.96); }
   .glass-liquid:focus-visible { outline: 2px solid var(--gold-400); outline-offset: 2px; }
 }
@@ -577,10 +661,10 @@
   outline: none !important;
   /* Brighter, larger ambient halo — reads clearly across a room and feels alive. */
   box-shadow:
-    0 0 0 3px #A8C7FA,
-    0 0 32px 6px rgba(168,199,250, 0.85),
-    0 0 70px 16px rgba(168,199,250, 0.5),
-    0 0 120px 30px rgba(168,199,250, 0.25) !important;
+    0 0 0 3px #FBBF24,
+    0 0 32px 6px rgba(251,191,36, 0.85),
+    0 0 70px 16px rgba(251,191,36, 0.5),
+    0 0 120px 30px rgba(251,191,36, 0.25) !important;
   border-radius: 0.75rem;
   position: relative;
   z-index: 40;
@@ -592,7 +676,7 @@ a:focus-visible,
 select:focus-visible,
 input:focus-visible,
 [role="button"]:focus-visible {
-  outline: 3px solid rgba(168,199,250, 0.9);
+  outline: 3px solid rgba(251,191,36, 0.9);
   outline-offset: 2px;
 }
 
@@ -635,7 +719,7 @@ html.tv-mode {
 }
 /* A touch more pop on the focused item for living-room legibility. */
 .tv-mode .tv-focused {
-  box-shadow: 0 0 0 4px #A8C7FA, 0 0 30px 6px rgba(168,199,250, 0.6) !important;
+  box-shadow: 0 0 0 4px #FBBF24, 0 0 30px 6px rgba(251,191,36, 0.6) !important;
 }
 
 @layer utilities {
@@ -693,7 +777,7 @@ html.tv-mode {
   html::-webkit-scrollbar-thumb,
   body::-webkit-scrollbar-thumb,
   .section-scroll-container::-webkit-scrollbar-thumb {
-    background: rgba(168,199,250, 0.6);
+    background: rgba(251,191,36, 0.6);
     border-radius: 7px;
     border: 2px solid transparent;
     background-clip: content-box;
@@ -702,7 +786,7 @@ html.tv-mode {
   html::-webkit-scrollbar-thumb:hover,
   body::-webkit-scrollbar-thumb:hover,
   .section-scroll-container::-webkit-scrollbar-thumb:hover {
-    background: rgba(168,199,250, 0.9);
+    background: rgba(251,191,36, 0.9);
     background-clip: content-box;
   }
 }
@@ -713,7 +797,7 @@ html.tv-mode {
 button:focus-visible,
 a:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(9, 9, 11, 0.9), 0 0 0 4px rgba(168,199,250, 0.85);
+  box-shadow: 0 0 0 2px rgba(9, 9, 11, 0.9), 0 0 0 4px rgba(251,191,36, 0.85);
   border-radius: 8px;
 }
 
@@ -723,18 +807,18 @@ a:focus-visible {
 .splash-aurora {
   position: absolute; inset: -20%;
   background:
-    radial-gradient(40% 40% at 30% 35%, rgba(168,199,250, 0.28), transparent 70%),
-    radial-gradient(45% 45% at 72% 65%, rgba(168,199,250, 0.18), transparent 72%),
+    radial-gradient(40% 40% at 30% 35%, rgba(251,191,36, 0.28), transparent 70%),
+    radial-gradient(45% 45% at 72% 65%, rgba(251,191,36, 0.18), transparent 72%),
     radial-gradient(60% 60% at 50% 50%, rgba(120, 80, 10, 0.12), transparent 75%);
   filter: blur(20px);
   animation: splash-breathe 3s var(--ease-premium) infinite alternate;
 }
 .splash-word {
-  background-image: linear-gradient(105deg, #7a5a12 0%, #D3E3FD 38%, #fffbe6 50%, #A8C7FA 62%, #7a5a12 100%);
+  background-image: linear-gradient(105deg, #7a5a12 0%, #FDE68A 38%, #fffbe6 50%, #FBBF24 62%, #7a5a12 100%);
   background-size: 220% 100%;
   -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent; color: transparent;
-  filter: drop-shadow(0 6px 40px rgba(168,199,250, 0.35));
+  filter: drop-shadow(0 6px 40px rgba(251,191,36, 0.35));
   opacity: 0;
   animation:
     splash-word-in 1.1s var(--ease-premium) forwards,
@@ -747,15 +831,15 @@ a:focus-visible {
 .splash-line {
   height: 2px; width: 0;
   border-radius: 2px;
-  background: linear-gradient(90deg, transparent, #A8C7FA, #A8C7FA, #A8C7FA, transparent);
-  box-shadow: 0 0 18px rgba(168,199,250, 0.6);
+  background: linear-gradient(90deg, transparent, #FBBF24, #FBBF24, #FBBF24, transparent);
+  box-shadow: 0 0 18px rgba(251,191,36, 0.6);
   animation: splash-line-in 1.1s var(--ease-premium) 1s forwards;
 }
 .splash-out { animation: splash-fade 0.7s ease forwards; }
 
 @keyframes splash-word-in {
-  0%   { opacity: 0; transform: translateY(14px) scale(0.96); filter: blur(10px) drop-shadow(0 6px 40px rgba(168,199,250,0.35)); letter-spacing: 0.1em; }
-  100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0) drop-shadow(0 6px 40px rgba(168,199,250,0.35)); letter-spacing: -0.02em; }
+  0%   { opacity: 0; transform: translateY(14px) scale(0.96); filter: blur(10px) drop-shadow(0 6px 40px rgba(251,191,36,0.35)); letter-spacing: 0.1em; }
+  100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0) drop-shadow(0 6px 40px rgba(251,191,36,0.35)); letter-spacing: -0.02em; }
 }
 @keyframes splash-shimmer {
   0% { background-position: 200% 0; }
@@ -792,8 +876,8 @@ a:focus-visible {
     box-shadow:
       0 2px 0 rgba(255,255,255,.10) inset,
       0 30px 90px rgba(0,0,0,.66),
-      0 0 0 1px rgba(168,199,250,.28),
-      0 0 60px rgba(168,199,250,.12);
+      0 0 0 1px rgba(251,191,36,.28),
+      0 0 60px rgba(251,191,36,.12);
   }
   .np-art::after {
     content: "";
@@ -832,7 +916,7 @@ a:focus-visible {
     -webkit-appearance: none; appearance: none;
     height: 6px; border-radius: 9999px;
     background: rgba(255,255,255,.16);
-    accent-color: #A8C7FA;
+    accent-color: #FBBF24;
     cursor: pointer;
   }
   input[type="range"].scrub::-webkit-slider-runnable-track { height: 6px; border-radius: 9999px; }
@@ -840,14 +924,14 @@ a:focus-visible {
     -webkit-appearance: none; appearance: none;
     width: 16px; height: 16px; margin-top: -5px;
     border-radius: 50%;
-    background: linear-gradient(180deg, #D3E3FD, #A8C7FA);
-    box-shadow: 0 0 0 4px rgba(168,199,250,.22), 0 2px 8px rgba(0,0,0,.5);
+    background: linear-gradient(180deg, #FDE68A, #FBBF24);
+    box-shadow: 0 0 0 4px rgba(251,191,36,.22), 0 2px 8px rgba(0,0,0,.5);
     transition: transform .15s var(--ease-premium), box-shadow .15s var(--ease-premium);
   }
   input[type="range"].scrub:hover::-webkit-slider-thumb,
   input[type="range"].scrub:active::-webkit-slider-thumb {
     transform: scale(1.25);
-    box-shadow: 0 0 0 7px rgba(168,199,250,.26), 0 3px 12px rgba(0,0,0,.6);
+    box-shadow: 0 0 0 7px rgba(251,191,36,.26), 0 3px 12px rgba(0,0,0,.6);
   }
 
   /* Marquee for long titles that would otherwise truncate. */
@@ -896,12 +980,12 @@ a:focus-visible {
 
 /* Podcast episode show-notes (HTML rendered from the feed). */
 .podcast-notes p { margin: 0 0 0.75rem; }
-.podcast-notes a { color: #A8C7FA; text-decoration: underline; word-break: break-word; }
+.podcast-notes a { color: #FBBF24; text-decoration: underline; word-break: break-word; }
 .podcast-notes ul, .podcast-notes ol { margin: 0 0 0.75rem 1.25rem; list-style: revert; }
 .podcast-notes li { margin: 0.15rem 0; }
 .podcast-notes img { max-width: 100%; height: auto; border-radius: 8px; margin: 0.5rem 0; }
 .podcast-notes h1, .podcast-notes h2, .podcast-notes h3 { font-weight: 700; color: #fff; margin: 0.5rem 0; }
-.podcast-notes .ts-seek { color: #A8C7FA; font-weight: 700; background: rgba(168,199,250, 0.12); border-radius: 4px; padding: 0 4px; cursor: pointer; }
+.podcast-notes .ts-seek { color: #FBBF24; font-weight: 700; background: rgba(251,191,36, 0.12); border-radius: 4px; padding: 0 4px; cursor: pointer; }
 
 /* ─────────────────────────────────────────────────────────────
    TV MODE — performance + Netflix-style navigation. TV boxes have weak GPUs,
@@ -966,6 +1050,20 @@ html.tv-mode .chip { background: transparent !important; }
   .glass, .sidebar-glass, .control-deck { background-color: var(--zinc-900) !important; }
   .btn-glass, .glass-liquid { background-color: var(--zinc-800) !important; }
 }
+
+/* The specular glare is the one glass layer that costs nothing to paint — it is
+   a static gradient, not a filter — so it is KEPT on weak graphics and TV,
+   where it is all that is left of the glass. It goes only where transparency
+   itself is unwanted: a viewer who asked for reduced transparency is asking for
+   flat, legible surfaces, and a bright reflection is the opposite of that.
+   Long-hand selectors, no :is(): an older WebView that cannot parse :is()
+   discards the whole rule, which here would mean a glare over opaque chrome. */
+@media (prefers-reduced-transparency: reduce) {
+  .glass-liquid::before { display: none; }
+  .glass-liquid, .btn-glass { box-shadow: var(--e1) !important; }
+}
+html.low-gfx .glass-liquid::before,
+html.tv-mode .glass-liquid::before { opacity: .35; }
 
 @media (prefers-reduced-transparency: reduce) {
   .glass, .sidebar-glass, .btn-glass, .glass-liquid, .control-deck {

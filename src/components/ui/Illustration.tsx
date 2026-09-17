@@ -42,18 +42,18 @@ export default function Illustration({
     <svg viewBox="0 0 240 180" className={`illo ${className}`} aria-hidden="true" focusable="false">
       <defs>
         <radialGradient id={id('glow')} cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#7CACF8" stopOpacity="0.38" />
+          <stop offset="0%" stopColor="#F59E0B" stopOpacity="0.38" />
           <stop offset="55%" stopColor="#4F7FE0" stopOpacity="0.12" />
           <stop offset="100%" stopColor="#4F7FE0" stopOpacity="0" />
         </radialGradient>
         <linearGradient id={id('subject')} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#C2D7F8" />
-          <stop offset="55%" stopColor="#7CACF8" />
+          <stop offset="0%" stopColor="#FCD34D" />
+          <stop offset="55%" stopColor="#F59E0B" />
           <stop offset="100%" stopColor="#0B57D0" />
         </linearGradient>
         <linearGradient id={id('deep')} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#1A5FD6" />
-          <stop offset="100%" stopColor="#0842A0" />
+          <stop offset="100%" stopColor="#92400E" />
         </linearGradient>
         <linearGradient id={id('sheen')} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" style={{ stopColor: 'var(--glass-sheen, rgba(255,255,255,.09))' }} />
@@ -83,8 +83,8 @@ export default function Illustration({
         <path transform="translate(196 58) scale(0.8)" d="M0-6 1.4-1.4 6 0 1.4 1.4 0 6-1.4 1.4-6 0-1.4-1.4Z" />
         <path transform="translate(186 146) scale(1)" d="M0-6 1.4-1.4 6 0 1.4 1.4 0 6-1.4 1.4-6 0-1.4-1.4Z" />
       </g>
-      <circle cx="40" cy="128" r="3" fill="#7CACF8" opacity="0.55" />
-      <circle cx="206" cy="104" r="2.2" fill="#C2D7F8" opacity="0.6" />
+      <circle cx="40" cy="128" r="3" fill="#F59E0B" opacity="0.55" />
+      <circle cx="206" cy="104" r="2.2" fill="#FCD34D" opacity="0.6" />
     </svg>
   );
 }
@@ -151,7 +151,7 @@ function subject(name: IllustrationName, url: (k: string) => string) {
       return (
         <>
           <circle cx="110" cy="100" r="28" fill={D} />
-          <circle cx="110" cy="100" r="18" fill="none" stroke="#7CACF8" strokeOpacity="0.4" strokeWidth="1.5" />
+          <circle cx="110" cy="100" r="18" fill="none" stroke="#F59E0B" strokeOpacity="0.4" strokeWidth="1.5" />
           <circle cx="110" cy="100" r="6" fill="#E8F0FE" />
           <path d="M136 58v40" stroke={S} strokeWidth="6" strokeLinecap="round" />
           <path d="M136 58c8 2 14 7 16 15" fill="none" stroke={S} strokeWidth="6" strokeLinecap="round" />
@@ -164,7 +164,7 @@ function subject(name: IllustrationName, url: (k: string) => string) {
           <rect x="106" y="56" width="28" height="48" rx="14" fill={S} />
           <path d="M96 92a24 24 0 0 0 48 0" fill="none" stroke={D} strokeWidth="6" strokeLinecap="round" />
           <path d="M120 116v12M108 128h24" stroke={D} strokeWidth="6" strokeLinecap="round" />
-          <path d="M84 72a40 40 0 0 0 0 36M156 72a40 40 0 0 1 0 36" fill="none" stroke="#7CACF8" strokeOpacity="0.6" strokeWidth="4" strokeLinecap="round" />
+          <path d="M84 72a40 40 0 0 0 0 36M156 72a40 40 0 0 1 0 36" fill="none" stroke="#F59E0B" strokeOpacity="0.6" strokeWidth="4" strokeLinecap="round" />
         </>
       );
     case 'radio':
@@ -173,7 +173,7 @@ function subject(name: IllustrationName, url: (k: string) => string) {
           <path d="m120 86-16 42h32Z" fill={D} />
           <circle cx="120" cy="82" r="8" fill={S} />
           <path d="M104 66a22 22 0 0 0 0 32M136 66a22 22 0 0 1 0 32" fill="none" stroke={S} strokeWidth="5" strokeLinecap="round" />
-          <path d="M92 56a38 38 0 0 0 0 52M148 56a38 38 0 0 1 0 52" fill="none" stroke="#7CACF8" strokeOpacity="0.55" strokeWidth="4" strokeLinecap="round" />
+          <path d="M92 56a38 38 0 0 0 0 52M148 56a38 38 0 0 1 0 52" fill="none" stroke="#F59E0B" strokeOpacity="0.55" strokeWidth="4" strokeLinecap="round" />
         </>
       );
     case 'tv':

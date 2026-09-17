@@ -78,7 +78,7 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
             className={`text-2xl md:text-3xl font-black tracking-tighter cursor-pointer whitespace-nowrap shrink-0 lg:hidden ${isSearchOpen ? 'hidden' : ''}`}
             onClick={() => setActiveTab('home')}
           >
-            <span className="text-gold drop-shadow-[0_1px_8px_rgba(168,199,250,0.25)]">SAHRAE</span> <span className="text-white font-light text-xl md:text-2xl tracking-normal hidden sm:inline-block">ENTERTAINMENT</span>
+            <span className="text-gold drop-shadow-[0_1px_8px_rgba(251,191,36,0.25)]">SAHRAE</span> <span className="text-white font-light text-xl md:text-2xl tracking-normal hidden sm:inline-block">ENTERTAINMENT</span>
           </h1>
           {/* Section nav now lives in the Sidebar (desktop) + BottomTabBar (mobile). */}
         </div>

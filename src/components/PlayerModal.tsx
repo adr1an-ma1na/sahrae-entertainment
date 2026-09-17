@@ -288,7 +288,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   // The accent handed to providers that accept a theme, so their player matches
   // the app rather than sitting in it as a differently-coloured rectangle.
   // Material 3 primary, minus the '#' these APIs expect.
-  const brand = 'A8C7FA';
+  const brand = 'FBBF24';
 
   const SERVERS = [
     { id: 'vidfast', name: '4K · Surround (VidFast)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidfast.pro/movie/${id}?theme=${brand}&autoPlay=true` : `https://vidfast.pro/tv/${id}/${s}/${e}?theme=${brand}&autoPlay=true&nextButton=true`, type: 'iframe' },
@@ -569,7 +569,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                     <div className="relative w-20 h-20">
                       <svg viewBox="0 0 48 48" className="w-20 h-20 -rotate-90">
                         <circle cx="24" cy="24" r="20" fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth="4" />
-                        <circle cx="24" cy="24" r="20" fill="none" stroke="#A8C7FA" strokeWidth="4" strokeLinecap="round" strokeDasharray={125.66} strokeDashoffset={125.66 * (1 - loadPct / 100)} style={{ transition: 'stroke-dashoffset 0.3s ease' }} />
+                        <circle cx="24" cy="24" r="20" fill="none" stroke="#FBBF24" strokeWidth="4" strokeLinecap="round" strokeDasharray={125.66} strokeDashoffset={125.66 * (1 - loadPct / 100)} style={{ transition: 'stroke-dashoffset 0.3s ease' }} />
                       </svg>
                       <span className="absolute inset-0 flex items-center justify-center text-white font-bold text-sm">{Math.round(loadPct)}%</span>
                     </div>
