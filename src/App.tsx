@@ -470,7 +470,7 @@ export default function App() {
             <div className="flex flex-col items-center justify-center min-h-[70vh] px-4 text-center">
               <Illustration name="offline" className="w-52 md:w-60 h-auto mb-5" />
               <h2 className="text-2xl font-bold text-white mb-2">Can't reach the catalogue</h2>
-              <p className="text-zinc-400 max-w-sm mb-8">The movie database didn't answer. Check your connection and try again — if you use an ad blocker, it may be blocking it.</p>
+              <p className="text-zinc-400 max-w-sm mb-8">The movie database didn't answer. Check your connection and try again. If you use an ad blocker, it may be blocking it.</p>
               <button 
                 onClick={loadInitialData}
                 disabled={loading}
@@ -689,7 +689,7 @@ export default function App() {
           }
         } catch { /* fall through to search */ }
         await handleSearch(intent.query);
-        return `I couldn't find ${intent.query} to play — here's what I found.`;
+        return `I couldn't find ${intent.query} to play, but here's what I found.`;
       }
 
       case 'playRadio': {

@@ -241,7 +241,7 @@ create policy "own row" on user_state
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 
--- 2. Shared YouTube search results. Public metadata only — no user data.
+-- 2. Shared YouTube search results. Public metadata only, no user data.
 --    Turns a 100-unit search into a one-off cost for the whole user base.
 create table if not exists search_cache (
   cache_key  text primary key,

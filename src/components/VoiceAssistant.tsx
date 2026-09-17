@@ -49,7 +49,7 @@ export default function VoiceAssistant({ catalog, onCommand }: VoiceAssistantPro
       const res = await onCommand(intent);
       if (res) line = res;
     } catch {
-      line = "Sorry — I couldn't do that.";
+      line = "Sorry, I couldn't do that.";
     }
     setReply(line);
     setPhase('done');
@@ -144,7 +144,7 @@ export default function VoiceAssistant({ catalog, onCommand }: VoiceAssistantPro
                 <AlertCircle className="w-9 h-9 text-amber-500/70 mx-auto mb-3" />
                 <p className="text-white font-bold mb-1">Voice isn't available in this browser</p>
                 <p className="text-sm text-zinc-400">
-                  Speech recognition isn't supported here — that includes Safari on iPhone and iPad.
+                  Speech recognition isn't supported here, including Safari on iPhone and iPad.
                   You can still type your command below, or use Chrome for voice.
                 </p>
               </div>

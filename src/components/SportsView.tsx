@@ -1122,8 +1122,8 @@ export default function SportsView() {
                       role="switch"
                       aria-checked={shieldOn}
                       title={shieldOn
-                        ? "Ad Shield on — pop-ups blocked. If this stream won't start, turn it off or try another server."
-                        : 'Ad Shield off — provider pop-ups are NOT blocked.'}
+                        ? "Ad Shield on: pop-ups blocked. If this stream won't start, turn it off or try another server."
+                        : 'Ad Shield off: provider pop-ups are NOT blocked.'}
                       className={`text-xs font-bold px-3 py-1.5 rounded-lg border flex items-center gap-1.5 shadow-sm transition-colors ${
                         shieldOn
                           ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20'
@@ -1269,8 +1269,8 @@ export default function SportsView() {
                       </p>
                       <p className="text-[11px] text-zinc-500">
                         {activeSrc.status === 'working' && `Verified${activeSrc.quality ? ` · ${activeSrc.quality}` : ''}${activeSrc.latencyMs ? ` · ${activeSrc.latencyMs}ms` : ''} · health ${activeSrc.healthScore}/100`}
-                        {activeSrc.status === 'degraded' && 'Reachable but slow — a better feed may be available below'}
-                        {activeSrc.status === 'unverified' && 'Not verifiable in a browser — playing unchecked'}
+                        {activeSrc.status === 'degraded' && 'Reachable but slow. A better feed may be available below'}
+                        {activeSrc.status === 'unverified' && 'Not verifiable in a browser, playing unchecked'}
                         {activeSrc.status === 'offline' && `Not responding${activeSrc.lastFailure ? ` (${activeSrc.lastFailure.reason})` : ''}`}
                         {activeSrc.status === 'checking' && 'Checking this feed…'}
                         {activeSrc.status === 'unknown' && 'Not checked yet'}
@@ -1337,8 +1337,8 @@ export default function SportsView() {
                     title={
                       s.status === 'working' ? `Verified · ${s.healthScore}/100${s.latencyMs ? ` · ${s.latencyMs}ms` : ''}`
                       : s.status === 'degraded' ? 'Reachable but slow or unstable'
-                      : s.status === 'unverified' ? 'Cannot be verified in a browser — may still play'
-                      : s.status === 'offline' ? `Failed${s.lastFailure ? ` (${s.lastFailure.reason})` : ''} — tap to re-check`
+                      : s.status === 'unverified' ? 'Cannot be verified in a browser, but may still play'
+                      : s.status === 'offline' ? `Failed${s.lastFailure ? ` (${s.lastFailure.reason})` : ''}. Tap to re-check`
                       : 'Not checked yet'
                     }
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors flex items-center gap-1.5 ${
@@ -1443,7 +1443,7 @@ export default function SportsView() {
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-4 text-[11px] text-zinc-500">
               <span>
                 {showAllFixtures
-                  ? `Showing the full schedule — ${withoutStreams} fixture${withoutStreams === 1 ? '' : 's'} have no match feed published yet.`
+                  ? `Showing the full schedule. ${withoutStreams} fixture${withoutStreams === 1 ? '' : 's'} have no match feed published yet.`
                   : `Showing only fixtures with a match feed. ${withoutStreams} more ${withoutStreams === 1 ? 'is' : 'are'} scheduled but have no stream yet.`}
               </span>
               <button

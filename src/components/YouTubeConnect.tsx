@@ -221,7 +221,7 @@ export default function YouTubeConnect() {
             <h3 className="text-xl font-display font-bold text-white">Connect YouTube</h3>
             <p className="text-sm text-zinc-400 mt-1 max-w-xl leading-relaxed">
               Bring your liked songs, liked videos and playlists into Sahrae. One sign-in covers both
-              YouTube Music and YouTube — they are the same account, so there is nothing separate to connect.
+              YouTube Music and YouTube. They are the same account, so there is nothing separate to connect.
             </p>
           </div>
         </div>
@@ -235,7 +235,7 @@ export default function YouTubeConnect() {
         </button>
 
         <p className="text-[11px] text-zinc-500 mt-4 max-w-xl leading-relaxed">
-          Sahrae reads your library. It cannot change anything — the permission requested is read-only.
+          Sahrae reads your library. It cannot change anything; the permission requested is read-only.
           Playback happens in YouTube's own player.
         </p>
 
@@ -249,7 +249,7 @@ export default function YouTubeConnect() {
         )}
         {keyBlocked && (
           <div className="mt-5 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
-            <p className="text-sm font-semibold text-amber-200 mb-1">Browsing is limited — the app key cannot call YouTube</p>
+            <p className="text-sm font-semibold text-amber-200 mb-1">Browsing is limited: the app key cannot call YouTube</p>
             <p className="text-xs text-amber-200/80 leading-relaxed mb-3">{KEY_BLOCKED_HELP}</p>
             <a href={CREDENTIALS_URL} target="_blank" rel="noreferrer"
               className="btn-sauti px-4 py-2 rounded-full text-xs font-black inline-block">Open Credentials</a>
@@ -329,7 +329,7 @@ export default function YouTubeConnect() {
           </select>
           {!canSearch() && (
             <span className="text-[11px] text-amber-300/80">
-              Search allowance spent for today — browsing still works.
+              Search allowance spent for today. Browsing still works.
             </span>
           )}
         </div>
@@ -441,7 +441,7 @@ export default function YouTubeConnect() {
             <p className="text-sm text-zinc-400 mb-1">Not enough to go on yet.</p>
             <p className="text-xs text-zinc-500 max-w-md mx-auto leading-relaxed">
               Mixes are built from what you like, follow and play. Like some songs on YouTube or play a
-              few here, and they will appear — a mix made from three tracks would not be worth showing.
+              few here, and they will appear. A mix made from three tracks would not be worth showing.
             </p>
           </div>
         ) : (

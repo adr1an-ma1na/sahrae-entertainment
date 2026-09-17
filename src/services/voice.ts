@@ -227,7 +227,7 @@ export function listen(handlers: ListenHandlers, forceLocal = false): () => void
         'network',
         navigator.onLine
           ? "This browser can't reach its speech service. Chrome sends audio to Google to transcribe it, and Brave/Vivaldi/Chromium builds ship without that key. Type your command below, or try Google Chrome."
-          : "You're offline — speech recognition needs a connection. Type your command below instead.",
+          : "You're offline, and speech recognition needs a connection. Type your command below instead.",
       );
     } else if (code === 'language-not-supported' || code === 'bad-grammar') {
       // Neither the cloud nor the local model covers this locale. Nothing left

@@ -477,7 +477,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
       }
       const id = importPlaylist(playlist.title, tracks);
       setImportUrl('');
-      setImportMsg({ ok: true, text: `Imported “${playlist.title}” — ${tracks.length} track${tracks.length === 1 ? '' : 's'}.` });
+      setImportMsg({ ok: true, text: `Imported “${playlist.title}”: ${tracks.length} track${tracks.length === 1 ? '' : 's'}.` });
       setOpenId(id);
     } catch (err) {
       setImportMsg({ ok: false, text: err instanceof Error ? err.message : 'Could not import that playlist.' });
@@ -807,7 +807,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
         {genreLoading ? (
           <div className="flex items-center gap-2 text-zinc-400 py-10"><Loader2 className="w-6 h-6 animate-spin text-amber-500" /> Loading {genre}…</div>
         ) : genreTracks.length === 0 ? (
-          <EmptyState compact illustration="search" title={`Nothing for ${genre} right now`} message="Try another mood or genre — these fill from YouTube and change through the day." />
+          <EmptyState compact illustration="search" title={`Nothing for ${genre} right now`} message="Try another mood or genre. These fill from YouTube and change through the day." />
         ) : (
           <div className="grid sm:grid-cols-2 gap-2">{shown.map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(shown, i, genre)} /></Fragment>)}</div>
         )}
@@ -1343,7 +1343,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
               <h3 className="font-display font-bold text-sm text-white">Import a YouTube Music playlist</h3>
             </div>
             <p className="text-xs text-zinc-400 mb-3">
-              Paste a playlist link and it lands in your library — same order, same artwork. The playlist has to be Public or Unlisted for Sahrae to read it.
+              Paste a playlist link and it lands in your library with the same order and artwork. The playlist has to be Public or Unlisted for Sahrae to read it.
             </p>
             <div className="flex flex-col sm:flex-row gap-2">
               <input

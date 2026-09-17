@@ -423,7 +423,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       setPlaybackError(
         code === 2 ? 'Lost the connection while loading this episode.'
           : code === 3 ? 'This episode is in a format the browser cannot play.'
-            : 'This episode could not be loaded — the file may have moved or been removed.',
+            : 'This episode could not be loaded. The file may have moved or been removed.',
       );
     };
     const onTime = () => { if (usingLocalRef.current) { setPosition(a.currentTime || 0); if (a.duration && isFinite(a.duration)) setDuration(a.duration); } };

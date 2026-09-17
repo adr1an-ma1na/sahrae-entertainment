@@ -654,7 +654,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                         {p.label} {eqPreset === p.key && <Check className="w-4 h-4"/>}
                       </button>
                     ))}
-                    <p className="text-[10px] text-zinc-500 px-2 pt-2 leading-snug">Enhances all app audio — movies, music &amp; podcasts.</p>
+                    <p className="text-[10px] text-zinc-500 px-2 pt-2 leading-snug">Enhances all app audio: movies, music &amp; podcasts.</p>
                   </div>
                 )}
 
@@ -769,7 +769,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                 <div className="flex items-center gap-2 mb-3 flex-wrap">
                   <Server className="w-4 h-4 text-amber-400 shrink-0" />
                   <h4 className="text-white font-bold text-sm">Choose your server</h4>
-                  <span className="text-xs text-zinc-500">Pick one before you play — switch anytime if a title won't load</span>
+                  <span className="text-xs text-zinc-500">Pick one before you play, and switch anytime if a title won't load</span>
                 </div>
                 <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar snap-x">
                   {dynamicServers.map((server, idx) => (
@@ -796,7 +796,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       </p>
                       <p className="text-xs text-zinc-400 leading-snug mt-0.5">
                         {shieldOn
-                          ? "Blocks this player's pop-ups and tab hijacks. A few servers refuse to run with it on — if a title won't start, pick another server above, or switch the shield off for it."
+                          ? "Blocks this player's pop-ups and tab hijacks. A few servers refuse to run with it on. If a title won't start, pick another server above, or switch the shield off for it."
                           : 'Pop-ups from the streaming provider are NOT blocked. Turn this back on unless a server needs it off.'}
                       </p>
                     </div>

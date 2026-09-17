@@ -36,6 +36,8 @@ jobs:
           done
           echo "── theme tokens ──"
           node theme-check.mjs
+          echo "── copy style ──"
+          node nodash-check.mjs
 
       - name: Connector suites
         working-directory: sahrae-connector

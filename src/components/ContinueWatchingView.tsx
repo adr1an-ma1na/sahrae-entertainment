@@ -13,7 +13,7 @@ export default function ContinueWatchingView({ onPlay, onBrowse }: ContinueWatch
 
   if (progress.length === 0) {
     return (
-      <EmptyState icon={Play} illustration="continue" title="Nothing to continue — yet"
+      <EmptyState icon={Play} illustration="continue" title="Nothing to continue yet"
         message="Movies and shows you start watching show up here, so you can pick up right where you left off."
         actionLabel={onBrowse ? 'Find something to watch' : undefined} onAction={onBrowse} />
     );

@@ -61,7 +61,7 @@ export default function EqualizerPanel({ open, onClose }: { open: boolean; onClo
             <p className="text-xs text-amber-200 leading-relaxed">
               These controls do not affect what is playing right now. YouTube plays inside its own
               player, so its audio never passes through Sahrae. The equaliser works on podcasts,
-              downloads and radio — your settings are saved and apply the moment one of those plays.
+              downloads and radio. Your settings are saved and apply the moment one of those plays.
             </p>
           </div>
         )}

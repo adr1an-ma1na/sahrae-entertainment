@@ -55,10 +55,10 @@ const GCP_PROJECT = firebaseConfig.projectId;
  */
 export const API_DISABLED_HELP =
   `YouTube Data API v3 is not enabled on this app's Google project (${GCP_PROJECT}). ` +
-  `Enable it at console.cloud.google.com/apis/library/youtube.googleapis.com — it is free.`;
+  `Enable it at console.cloud.google.com/apis/library/youtube.googleapis.com (it is free).`;
 
 export const KEY_BLOCKED_HELP =
-  `This app's API key is not allowed to call YouTube. The API itself may well be enabled — ` +
+  `This app's API key is not allowed to call YouTube. The API itself may well be enabled; ` +
   `the key has its own separate allow-list. Open Google Cloud → APIs & Services → Credentials, ` +
   `click the browser key for ${GCP_PROJECT}, and under "API restrictions" add "YouTube Data API v3" ` +
   `(or choose "Don't restrict key"). Signing in with Google is unaffected: that path uses an OAuth ` +

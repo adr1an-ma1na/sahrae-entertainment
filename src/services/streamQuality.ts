@@ -157,7 +157,7 @@ export function upscaleDecision(opts: {
   const no = (reason: string): UpscaleDecision => ({ shouldUpscale: false, targetHeight: sourceHeight || 0, reason });
 
   if (!enabled) return no('turned off');
-  if (!hardwareGpu) return no('no hardware GPU — a shader here would cost more than it returns');
+  if (!hardwareGpu) return no('no hardware GPU, so a shader here would cost more than it returns');
   if (!sourceHeight || sourceHeight <= 0) return no('source resolution unknown');
   if (!displayHeight || displayHeight <= 0) return no('display size unknown');
 

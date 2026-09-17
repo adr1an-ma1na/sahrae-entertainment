@@ -587,7 +587,7 @@ export default function PodcastsHome() {
         {showLoading ? (
           <div className="flex items-center gap-2 text-zinc-400 py-10"><Loader2 className="w-5 h-5 animate-spin text-amber-500" /> Loading episodes…</div>
         ) : showEpisodes.length === 0 ? (
-          <EmptyState compact illustration="podcast" title="No episodes to show" message="This show's feed didn't return any episodes. It may be moving hosts — try again later." />
+          <EmptyState compact illustration="podcast" title="No episodes to show" message="This show's feed didn't return any episodes. It may be moving hosts, so try again later." />
         ) : (
           <div className="space-y-2 pb-6">
             <div className="flex items-center justify-between mb-2 gap-3">
@@ -674,7 +674,7 @@ export default function PodcastsHome() {
               starts from the time. */}
           <section className="mb-10">
             <h3 className="text-xl font-display font-bold text-white tracking-tight mb-1">How long have you got?</h3>
-            <p className="text-xs text-zinc-500 mb-4">Episodes that actually fit the time — from the shows you follow.</p>
+            <p className="text-xs text-zinc-500 mb-4">Episodes that actually fit the time, from the shows you follow.</p>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
               {TIME_BUCKETS.map((b) => {
                 const on = bucket === b.id;
