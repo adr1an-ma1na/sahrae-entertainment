@@ -1,0 +1,68 @@
+name: APK smoke test
+
+# Installs the published release APK on a real Android emulator, launches it,
+# and checks it is still running with a WebView on screen. The build job can
+# succeed while the app itself exits on open, so this is the only check that
+# answers "does it install and open?".
+
+on:
+  workflow_run:
+    workflows: [Build Android APK]
+    types: [completed]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [34, 28]
+    steps:
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Download the published APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download preview --repo "${{ github.repository }}" --pattern Sahrae-release.apk --dir .
+          ls -l Sahrae-release.apk
+
+      - name: Install, launch, verify
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: |
+            adb install -r Sahrae-release.apk
+            adb logcat -c
+            adb shell monkey -p com.sahrae.entertainment -c android.intent.category.LAUNCHER 1
+            sleep 45
+            adb shell pidof com.sahrae.entertainment > pid.txt || true
+            adb shell dumpsys activity activities | grep -E "mResumedActivity|topResumedActivity|ResumedActivity" > resumed.txt || true
+            adb logcat -d > logcat.txt || true
+            adb exec-out screencap -p > screen.png || true
+            echo "pid: $(cat pid.txt)"; cat resumed.txt
+            grep -E "FATAL EXCEPTION|AndroidRuntime|has died|ANR in com.sahrae" logcat.txt | head -40 || true
+            test -s pid.txt || { echo "::error::App process is not running 45s after launch (API ${{ matrix.api }})"; exit 1; }
+            grep -q "com.sahrae.entertainment" resumed.txt || { echo "::error::App is running but not in the foreground (API ${{ matrix.api }})"; exit 1; }
+
+      - name: Keep evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-api${{ matrix.api }}
+          path: |
+            logcat.txt
+            screen.png
+            resumed.txt
+          if-no-files-found: ignore
