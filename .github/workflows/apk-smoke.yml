@@ -1,9 +1,14 @@
 name: APK smoke test
 
 # Installs the published release APK on a real Android emulator, launches it,
-# and checks it is still running with a WebView on screen. The build job can
-# succeed while the app itself exits on open, so this is the only check that
-# answers "does it install and open?".
+# and checks what is actually on screen. The build can succeed while the app
+# opens to a blank white page, and "the process is running" is true in that
+# case too — the first version of this test passed an Android 9 run that
+# showed nothing at all. So the check is about pixels and text:
+#
+#   modern WebView (>= 111)  the app must draw real content, not a blank page
+#   outdated WebView         the native "One quick update needed" dialog must
+#                            appear, instead of a silent white screen
 
 on:
   workflow_run:
@@ -33,6 +38,21 @@ jobs:
         run: |
           gh release download preview --repo "${{ github.repository }}" --pattern Sahrae-release.apk --dir .
           ls -l Sahrae-release.apk
+          pip install --quiet pillow
+
+      - name: Write the screen check
+        run: |
+          cat > blank.py <<'PY'
+          # Distinct colours below the status bar. A blank page is one or two;
+          # the app's welcome screen has hundreds (gradients, text, artwork).
+          import sys
+          from PIL import Image
+          im = Image.open(sys.argv[1]).convert('RGB')
+          w, h = im.size
+          body = im.crop((0, int(h * 0.06), w, h)).resize((160, 300))
+          n = len(set(body.getdata()))
+          print(n)
+          PY
 
       - name: Install, launch, verify
         uses: reactivecircus/android-emulator-runner@v2
@@ -44,17 +64,28 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
           script: |
             adb install -r Sahrae-release.apk
+            adb shell pm grant com.sahrae.entertainment android.permission.POST_NOTIFICATIONS || true
+            adb shell dumpsys webviewupdate | grep -i "current webview package" | tee webview.txt || true
             adb logcat -c
             adb shell monkey -p com.sahrae.entertainment -c android.intent.category.LAUNCHER 1
             sleep 45
             adb shell pidof com.sahrae.entertainment > pid.txt || true
-            adb shell dumpsys activity activities | grep -E "mResumedActivity|topResumedActivity|ResumedActivity" > resumed.txt || true
-            adb logcat -d > logcat.txt || true
             adb exec-out screencap -p > screen.png || true
-            echo "pid: $(cat pid.txt)"; cat resumed.txt
-            grep -E "FATAL EXCEPTION|AndroidRuntime|has died|ANR in com.sahrae" logcat.txt | head -40 || true
-            test -s pid.txt || { echo "::error::App process is not running 45s after launch (API ${{ matrix.api }})"; exit 1; }
-            grep -q "com.sahrae.entertainment" resumed.txt || { echo "::error::App is running but not in the foreground (API ${{ matrix.api }})"; exit 1; }
+            adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 || true
+            adb pull /sdcard/ui.xml ui.xml >/dev/null 2>&1 || true
+            adb logcat -d > logcat.txt || true
+            MAJOR=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' webview.txt | head -1 | cut -d. -f1)
+            COLOURS=$(python3 blank.py screen.png || echo 0)
+            echo "WebView major: ${MAJOR:-unknown}   distinct colours on screen: $COLOURS   pid: $(cat pid.txt)"
+            grep -E "FATAL EXCEPTION|ANR in com.sahrae" logcat.txt | head -20 || true
+            test -s pid.txt || { echo "::error::App process exited within 45s (API ${{ matrix.api }})"; exit 1; }
+            if [ -n "$MAJOR" ] && [ "$MAJOR" -lt 111 ]; then
+              grep -q "One quick update needed" ui.xml || { echo "::error::WebView $MAJOR is too old and the update dialog did not appear (API ${{ matrix.api }})"; exit 1; }
+              echo "Outdated WebView $MAJOR: update dialog shown, as intended."
+            else
+              [ "$COLOURS" -gt 40 ] || { echo "::error::Screen is blank 45s after launch (API ${{ matrix.api }}, $COLOURS colours)"; exit 1; }
+              echo "Modern WebView: app is drawing content."
+            fi
 
       - name: Keep evidence
         if: always()
@@ -64,5 +95,6 @@ jobs:
           path: |
             logcat.txt
             screen.png
-            resumed.txt
+            ui.xml
+            webview.txt
           if-no-files-found: ignore

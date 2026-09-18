@@ -62,6 +62,49 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Start-up watchdog. Deliberately ES5 and inline: its job is to run on the
+         engines the app itself cannot, so it must not use anything they lack.
+         If nothing has rendered after 12 seconds (an outdated WebView that cannot
+         parse the app, a failed download, anything), it replaces the blank white
+         screen with an explanation and a way forward. -->
+    <script>
+      (function () {
+        var shown = false;
+        function show() {
+          var root = document.getElementById('root');
+          if (shown || (root && root.children.length)) return;
+          shown = true;
+          var m = navigator.userAgent.match(/Chrome\/(\d+)/);
+          var ver = m ? parseInt(m[1], 10) : 0;
+          var old = ver && ver < 111;
+          var android = /Android/i.test(navigator.userAgent);
+          var box = document.createElement('div');
+          box.setAttribute('role', 'alert');
+          box.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:#09090b;color:#f5f5f7;' +
+            'font-family:sans-serif;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;z-index:2147483647';
+          var msg = old
+            ? (android
+                ? 'Sahrae needs a newer Android System WebView (this one is version ' + ver + '; 111 or newer is needed). Update "Android System WebView" and "Chrome" in the Play Store, then open Sahrae again.'
+                : 'This browser is too old for Sahrae (version ' + ver + '). Update Chrome, or open Sahrae in a current browser.')
+            : 'Sahrae is taking longer than usual to start. Check your connection and try again.';
+          box.innerHTML = '<div style="max-width:420px">' +
+            '<div style="font-size:22px;font-weight:700;color:#fbbf24;margin-bottom:12px">SAHRAE</div>' +
+            '<p style="font-size:15px;line-height:1.5;margin:0 0 20px">' + msg + '</p>' +
+            (old && android
+              ? '<a href="market://details?id=com.google.android.webview" style="display:inline-block;background:#f59e0b;color:#1a1205;font-weight:700;padding:12px 22px;border-radius:999px;text-decoration:none;margin:0 6px 10px">Update WebView</a>'
+              : '') +
+            '<a href="javascript:location.reload()" style="display:inline-block;border:1px solid #3a3a40;color:#f5f5f7;padding:12px 22px;border-radius:999px;text-decoration:none;margin:0 6px 10px">Try again</a>' +
+            '</div>';
+          document.body.appendChild(box);
+          // A slow first visit can pass 12 seconds and then finish loading. When
+          // the app does render, step aside rather than cover it.
+          var watch = setInterval(function () {
+            if (root && root.children.length) { clearInterval(watch); if (box.parentNode) box.parentNode.removeChild(box); }
+          }, 1000);
+        }
+        setTimeout(show, 12000);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

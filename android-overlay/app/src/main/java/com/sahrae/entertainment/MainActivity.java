@@ -1333,6 +1333,83 @@ public class MainActivity extends BridgeActivity {
         finishAffinity();
     }
 
+    /**
+     * The oldest WebView (Chromium major version) the web app runs on.
+     *
+     * The UI is built with Tailwind CSS v4, whose output needs Chrome 111+
+     * (cascade layers, :is/:where, color-mix), and the JavaScript uses syntax an
+     * older engine cannot parse. Below this the page does not degrade — it stays
+     * blank. Verified on an Android 9 emulator whose WebView is Chrome 69: the app
+     * process ran for 45 seconds and never drew a pixel.
+     */
+    private static final int MIN_WEBVIEW_MAJOR = 111;
+
+    /** Major version of the WebView this app will render with, or -1 if unknown. */
+    private int webViewMajor(String[] outPackage) {
+        PackageInfo info = null;
+        if (Build.VERSION.SDK_INT >= 26) {
+            try { info = WebView.getCurrentWebViewPackage(); } catch (Throwable ignore) {}
+        }
+        if (info == null) {
+            // Android 5–7 has no API for the active provider. Take the newest of the
+            // candidates: overestimating only means no warning, and the page's own
+            // start-up watchdog still catches a blank screen.
+            PackageManager pm = getPackageManager();
+            for (String pkg : new String[]{ "com.google.android.webview", "com.android.webview", "com.android.chrome" }) {
+                try {
+                    PackageInfo p = pm.getPackageInfo(pkg, 0);
+                    if (info == null || majorOf(p.versionName) > majorOf(info.versionName)) info = p;
+                } catch (Throwable ignore) {}
+            }
+        }
+        if (info == null) return -1;
+        outPackage[0] = info.packageName;
+        return majorOf(info.versionName);
+    }
+
+    private static int majorOf(String versionName) {
+        if (versionName == null) return -1;
+        try {
+            int dot = versionName.indexOf('.');
+            return Integer.parseInt(dot > 0 ? versionName.substring(0, dot) : versionName);
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
+    private void warnIfWebViewTooOld() {
+        final String[] pkg = new String[]{ "com.google.android.webview" };
+        final int major = webViewMajor(pkg);
+        if (major < 0 || major >= MIN_WEBVIEW_MAJOR) return;
+
+        final String provider = pkg[0];
+        final String name = "com.android.chrome".equals(provider) ? "Google Chrome" : "Android System WebView";
+        try {
+            new android.app.AlertDialog.Builder(this)
+                .setTitle("One quick update needed")
+                .setMessage("Sahrae needs a newer version of " + name + " to show its screens. "
+                    + "This phone has version " + major + "; Sahrae needs " + MIN_WEBVIEW_MAJOR + " or newer.\n\n"
+                    + "Tap Update, install the update from the Play Store (it's free), then open Sahrae again.")
+                .setCancelable(false)
+                .setPositiveButton("Update", (d, w) -> {
+                    try {
+                        startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW,
+                            Uri.parse("market://details?id=" + provider)));
+                    } catch (Throwable noStore) {
+                        try {
+                            startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW,
+                                Uri.parse("https://play.google.com/store/apps/details?id=" + provider)));
+                        } catch (Throwable ignore) {}
+                    }
+                    // The WebView version is fixed when the process starts, so the update
+                    // only takes effect on a fresh launch.
+                    finishAffinity();
+                })
+                .setNegativeButton("Try anyway", (d, w) -> d.dismiss())
+                .show();
+        } catch (Throwable ignore) {}
+    }
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -1347,6 +1424,11 @@ public class MainActivity extends BridgeActivity {
             try { WebView.setWebContentsDebuggingEnabled(false); } catch (Exception ignore) {}
             if (isTampered()) { blockTamperedAndExit(); return; }
         }
+
+        // An outdated system WebView cannot run the app at all, and the result is
+        // a silent white screen that looks exactly like "the app doesn't open".
+        // Say so, natively, and send the person to the one-tap fix.
+        warnIfWebViewTooOld();
 
         // Fold the large bundled ad/tracker blocklist in off the UI thread.
         loadBundledBlocklistAsync();
