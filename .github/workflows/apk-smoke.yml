@@ -32,6 +32,9 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Download the published APK
         env:
           GH_TOKEN: ${{ github.token }}
@@ -62,30 +65,7 @@ jobs:
           target: google_apis
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
-          script: |
-            adb install -r Sahrae-release.apk
-            adb shell pm grant com.sahrae.entertainment android.permission.POST_NOTIFICATIONS || true
-            adb shell dumpsys webviewupdate | grep -i "current webview package" | tee webview.txt || true
-            adb logcat -c
-            adb shell monkey -p com.sahrae.entertainment -c android.intent.category.LAUNCHER 1
-            sleep 45
-            adb shell pidof com.sahrae.entertainment > pid.txt || true
-            adb exec-out screencap -p > screen.png || true
-            adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 || true
-            adb pull /sdcard/ui.xml ui.xml >/dev/null 2>&1 || true
-            adb logcat -d > logcat.txt || true
-            MAJOR=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' webview.txt | head -1 | cut -d. -f1)
-            COLOURS=$(python3 blank.py screen.png || echo 0)
-            echo "WebView major: ${MAJOR:-unknown}   distinct colours on screen: $COLOURS   pid: $(cat pid.txt)"
-            grep -E "FATAL EXCEPTION|ANR in com.sahrae" logcat.txt | head -20 || true
-            test -s pid.txt || { echo "::error::App process exited within 45s (API ${{ matrix.api }})"; exit 1; }
-            if [ -n "$MAJOR" ] && [ "$MAJOR" -lt 111 ]; then
-              grep -q "One quick update needed" ui.xml || { echo "::error::WebView $MAJOR is too old and the update dialog did not appear (API ${{ matrix.api }})"; exit 1; }
-              echo "Outdated WebView $MAJOR: update dialog shown, as intended."
-            else
-              [ "$COLOURS" -gt 40 ] || { echo "::error::Screen is blank 45s after launch (API ${{ matrix.api }}, $COLOURS colours)"; exit 1; }
-              echo "Modern WebView: app is drawing content."
-            fi
+          script: bash .github/scripts/apk-smoke-verify.sh ${{ matrix.api }}
 
       - name: Keep evidence
         if: always()
