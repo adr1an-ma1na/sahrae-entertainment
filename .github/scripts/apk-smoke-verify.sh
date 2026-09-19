@@ -9,11 +9,29 @@ PKG=com.sahrae.entertainment
 adb install -r Sahrae-release.apk
 adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS 2>/dev/null || true
 adb shell dumpsys webviewupdate | grep -i "current webview package" | tee webview.txt || true
-adb logcat -c
-adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null
-sleep 45
 
-adb shell pidof "$PKG" > pid.txt || true
+# On a freshly booted CI emulator, Google Play services restarts itself within
+# the first minute or so. Android kills every app using its font provider when
+# it does, and the WebView uses it, so any WebView app launched in that window
+# dies with it. That is an emulator start-up artifact, not a Sahrae bug; wait it
+# out before launching.
+sleep 90
+
+launch() {
+  adb logcat -c
+  adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null
+  sleep 45
+  adb shell pidof "$PKG" > pid.txt || true
+}
+launch
+if ! [ -s pid.txt ]; then
+  adb logcat -d > logcat-first-launch.txt || true
+  if grep -q "depends on provider com.google.android.gms" logcat-first-launch.txt; then
+    echo "::warning::Play services restarted during launch and took the app with it (a platform behaviour for every WebView app). Relaunching once."
+    sleep 30
+    launch
+  fi
+fi
 adb exec-out screencap -p > screen.png || true
 adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 || true
 adb pull /sdcard/ui.xml ui.xml >/dev/null 2>&1 || true

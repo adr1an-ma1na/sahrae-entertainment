@@ -78,4 +78,5 @@ jobs:
             ui.xml
             webview.txt
             screen-after-renderer-loss.png
+            logcat-first-launch.txt
           if-no-files-found: ignore
