@@ -846,7 +846,7 @@ public class MainActivity extends BridgeActivity {
                     // renderer down, give up on this lookup — never the whole app.
                     @Override
                     public boolean onRenderProcessGone(WebView v, android.webkit.RenderProcessGoneDetail detail) {
-                        recordIncident("Background stream lookup " + (detail != null && detail.didCrash() ? "crashed" : "was closed for memory") + "; handled.");
+                        recordRecovery("Background stream lookup " + (detail != null && detail.didCrash() ? "crashed" : "was closed for memory") + "; handled.");
                         try {
                             ViewGroup parent = (ViewGroup) v.getParent();
                             if (parent != null) parent.removeView(v);
@@ -971,7 +971,7 @@ public class MainActivity extends BridgeActivity {
                     // renderer down, give up on this lookup — never the whole app.
                     @Override
                     public boolean onRenderProcessGone(WebView v, android.webkit.RenderProcessGoneDetail detail) {
-                        recordIncident("Background stream lookup " + (detail != null && detail.didCrash() ? "crashed" : "was closed for memory") + "; handled.");
+                        recordRecovery("Background stream lookup " + (detail != null && detail.didCrash() ? "crashed" : "was closed for memory") + "; handled.");
                         try {
                             ViewGroup parent = (ViewGroup) v.getParent();
                             if (parent != null) parent.removeView(v);
@@ -1494,9 +1494,20 @@ public class MainActivity extends BridgeActivity {
     }
 
     /** Append a note to the report that the next launch will show. */
-    private void recordIncident(String what) {
+    private void recordIncident(String what) { appendNote(CRASH_FILE, what); }
+
+    /**
+     * A problem the app recovered from by itself. Not worth interrupting anyone
+     * for — on a low-memory phone it can happen routinely — but kept, and
+     * attached to the report if a real crash follows.
+     */
+    private void recordRecovery(String what) { appendNote(RECOVERY_FILE, what); }
+
+    private static final String RECOVERY_FILE = "recoveries.txt";
+
+    private void appendNote(String file, String what) {
         try {
-            java.io.File f = new java.io.File(getFilesDir(), CRASH_FILE);
+            java.io.File f = new java.io.File(getFilesDir(), file);
             try (java.io.FileWriter w = new java.io.FileWriter(f, true)) {
                 w.write(new java.util.Date() + "  " + what + "\n");
             }
@@ -1571,7 +1582,19 @@ public class MainActivity extends BridgeActivity {
         }
         //noinspection ResultOfMethodCallIgnored
         f.delete();
-        final String report = deviceSummary() + "\n\n" + body;
+        // Silent recoveries before the crash are often the lead-up to it.
+        String recoveries = "";
+        java.io.File rf = new java.io.File(getFilesDir(), RECOVERY_FILE);
+        if (rf.exists()) {
+            try {
+                byte[] bytes = new byte[(int) Math.min(rf.length(), 4000)];
+                try (java.io.FileInputStream in = new java.io.FileInputStream(rf)) { int n = in.read(bytes); recoveries = new String(bytes, 0, Math.max(n, 0), StandardCharsets.UTF_8); }
+            } catch (Throwable ignore) {}
+            //noinspection ResultOfMethodCallIgnored
+            rf.delete();
+        }
+        final String report = deviceSummary() + "\n\n" + body
+            + (recoveries.isEmpty() ? "" : "\nEarlier recoveries:\n" + recoveries);
         try {
             new android.app.AlertDialog.Builder(this)
                 .setTitle("Sahrae closed unexpectedly")
@@ -1595,7 +1618,7 @@ public class MainActivity extends BridgeActivity {
      * Android kill it; if it keeps happening, stop looping and explain.
      */
     private void onMainRendererGone(WebView view, boolean crashed) {
-        recordIncident("Screen engine " + (crashed ? "crashed" : "was closed by Android to free memory") + "; the app reloaded itself.");
+        recordRecovery("Screen engine " + (crashed ? "crashed" : "was closed by Android to free memory") + "; the app reloaded itself.");
         try {
             ViewGroup parent = (ViewGroup) view.getParent();
             if (parent != null) parent.removeView(view);
