@@ -77,4 +77,5 @@ jobs:
             screen.png
             ui.xml
             webview.txt
+            screen-after-renderer-loss.png
           if-no-files-found: ignore
