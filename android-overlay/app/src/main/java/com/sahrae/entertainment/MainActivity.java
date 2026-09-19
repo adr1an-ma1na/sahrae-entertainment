@@ -266,6 +266,24 @@ public class MainActivity extends BridgeActivity {
      * Each line is a bare domain (lines starting with '#' or blank are skipped).
      */
     private void loadBundledBlocklistAsync() {
+        // Size the blocklist to the phone. The full set is ~70k hostnames plus
+        // ~88k EasyList rules, tens of megabytes of Java heap at its peak while
+        // the merged copy is built. On a low-memory phone that alone can exhaust
+        // the heap a few seconds after launch, and an OutOfMemoryError on any
+        // thread closes the app. memoryClass is the per-app heap limit in MB.
+        int memClass = 256;
+        boolean lowRam = false;
+        try {
+            android.app.ActivityManager am = (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
+            // The manifest asks for largeHeap, so the large class is the real limit.
+            memClass = am.getLargeMemoryClass();
+            lowRam = am.isLowRamDevice();
+        } catch (Throwable ignore) {}
+        final boolean loadHostsFile = !lowRam && memClass >= 128;
+        final boolean loadRuleEngine = !lowRam && memClass >= 256;
+
+        if (!loadHostsFile) return; // the built-in core list stays in effect
+
         new Thread(() -> {
             try {
                 Set<String> full = new HashSet<>(CORE_AD_HOSTS);
@@ -280,9 +298,12 @@ public class MainActivity extends BridgeActivity {
                 }
                 br.close();
                 adHosts = full; // atomic swap — readers see core or full, never a torn set
-            } catch (Exception ignore) {
-                // No bundled list (e.g. local build) — core set stays in effect.
+            } catch (Throwable ignore) {
+                // No bundled list (e.g. local build), or not enough memory for it:
+                // the core set stays in effect. Throwable, not Exception, so an
+                // OutOfMemoryError here is absorbed instead of closing the app.
             }
+            if (!loadRuleEngine) return;
             // Then the EasyList rule engine (see AdFilter). Loaded on the same
             // background thread because parsing tens of thousands of rules must
             // never touch the UI thread. Until it is ready, adFilter.isReady()
@@ -820,6 +841,22 @@ public class MainActivity extends BridgeActivity {
                 try { s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW); } catch (Exception ignore) {}
                 wv.setWebChromeClient(new WebChromeClient());
                 wv.setWebViewClient(new WebViewClient() {
+                    // A hidden resolver loads a third-party streaming page, the
+                    // heaviest thing the app ever renders. If that takes the shared
+                    // renderer down, give up on this lookup — never the whole app.
+                    @Override
+                    public boolean onRenderProcessGone(WebView v, android.webkit.RenderProcessGoneDetail detail) {
+                        recordIncident("Background stream lookup " + (detail != null && detail.didCrash() ? "crashed" : "was closed for memory") + "; handled.");
+                        try {
+                            ViewGroup parent = (ViewGroup) v.getParent();
+                            if (parent != null) parent.removeView(v);
+                            v.destroy();
+                        } catch (Throwable ignore) {}
+                        if (holder[0] == v) holder[0] = null;
+                        latch.countDown();
+                        return true;
+                    }
+
                     @Override
                     public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest req) {
                         try {
@@ -929,6 +966,22 @@ public class MainActivity extends BridgeActivity {
                 try { s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW); } catch (Exception ignore) {}
                 wv.setWebChromeClient(new WebChromeClient());
                 wv.setWebViewClient(new WebViewClient() {
+                    // A hidden resolver loads a third-party streaming page, the
+                    // heaviest thing the app ever renders. If that takes the shared
+                    // renderer down, give up on this lookup — never the whole app.
+                    @Override
+                    public boolean onRenderProcessGone(WebView v, android.webkit.RenderProcessGoneDetail detail) {
+                        recordIncident("Background stream lookup " + (detail != null && detail.didCrash() ? "crashed" : "was closed for memory") + "; handled.");
+                        try {
+                            ViewGroup parent = (ViewGroup) v.getParent();
+                            if (parent != null) parent.removeView(v);
+                            v.destroy();
+                        } catch (Throwable ignore) {}
+                        if (holder[0] == v) holder[0] = null;
+                        latch.countDown();
+                        return true;
+                    }
+
                     @Override
                     public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest req) {
                         try {
@@ -1410,8 +1463,167 @@ public class MainActivity extends BridgeActivity {
         } catch (Throwable ignore) {}
     }
 
+    // ── Crash resilience and diagnosis ────────────────────────────────────────
+    //
+    // Every WebView in an app shares one renderer process. When Android kills it
+    // to reclaim memory, or a page crashes it, each WebView gets
+    // onRenderProcessGone; if ANY of them does not handle it, Android kills the
+    // whole app. Nothing here handled it — including the hidden WebViews that load
+    // third-party streaming pages, the heaviest pages the app ever opens. On a
+    // phone with little memory that is an app that "closes by itself".
+    //
+    // And because it happened on people's phones and never on test machines,
+    // there was no way to see why. The pieces below record the reason and offer
+    // it back on the next launch.
+
+    private static final String CRASH_FILE = "last_crash.txt";
+    private static final String DIAG_PREFS = "sahrae.diagnostics";
+
+    /** Timestamps of recent renderer losses, to stop a reload loop. */
+    private static final java.util.ArrayDeque<Long> sRendererLosses = new java.util.ArrayDeque<>();
+
+    private String deviceSummary() {
+        String[] pkg = new String[]{ "?" };
+        int wv = webViewMajor(pkg);
+        String version = "?";
+        try { version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Throwable ignore) {}
+        return "Sahrae " + version
+            + "\nDevice: " + Build.MANUFACTURER + " " + Build.MODEL
+            + "\nAndroid: " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")"
+            + "\nWebView: " + pkg[0] + " " + wv;
+    }
+
+    /** Append a note to the report that the next launch will show. */
+    private void recordIncident(String what) {
+        try {
+            java.io.File f = new java.io.File(getFilesDir(), CRASH_FILE);
+            try (java.io.FileWriter w = new java.io.FileWriter(f, true)) {
+                w.write(new java.util.Date() + "  " + what + "\n");
+            }
+        } catch (Throwable ignore) {}
+    }
+
+    /** Write any uncaught Java exception to disk before the default handler kills us. */
+    private void installCrashRecorder() {
+        final Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler((thread, error) -> {
+            try {
+                java.io.StringWriter sw = new java.io.StringWriter();
+                error.printStackTrace(new java.io.PrintWriter(sw));
+                String trace = sw.toString();
+                if (trace.length() > 6000) trace = trace.substring(0, 6000);
+                recordIncident("Crash on thread " + thread.getName() + ":\n" + trace);
+            } catch (Throwable ignore) {}
+            if (previous != null) previous.uncaughtException(thread, error);
+        });
+    }
+
+    /**
+     * Android 11+ keeps the reason for each of the app's past exits, including
+     * the ones no Java handler can see: native crashes, the system killing it
+     * for memory, "app not responding". Report an abnormal one once.
+     */
+    private void collectLastExitReason() {
+        if (Build.VERSION.SDK_INT < 30) return;
+        try {
+            android.app.ActivityManager am = (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
+            java.util.List<android.app.ApplicationExitInfo> exits = am.getHistoricalProcessExitReasons(getPackageName(), 0, 1);
+            if (exits == null || exits.isEmpty()) return;
+            android.app.ApplicationExitInfo last = exits.get(0);
+            android.content.SharedPreferences prefs = getSharedPreferences(DIAG_PREFS, MODE_PRIVATE);
+            if (prefs.getLong("lastExitSeen", 0) >= last.getTimestamp()) return;
+            prefs.edit().putLong("lastExitSeen", last.getTimestamp()).apply();
+
+            String reason;
+            switch (last.getReason()) {
+                case android.app.ApplicationExitInfo.REASON_CRASH: reason = "crashed (Java)"; break;
+                case android.app.ApplicationExitInfo.REASON_CRASH_NATIVE: reason = "crashed (native code)"; break;
+                case android.app.ApplicationExitInfo.REASON_ANR: reason = "stopped responding"; break;
+                case android.app.ApplicationExitInfo.REASON_LOW_MEMORY:
+                    // Routine for an app sitting in the background; only a
+                    // problem if it happened on screen.
+                    if (last.getImportance() > android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND) return;
+                    reason = "was closed by Android to free memory"; break;
+                case android.app.ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE: reason = "was closed for using too many resources"; break;
+                case android.app.ApplicationExitInfo.REASON_INITIALIZATION_FAILURE: reason = "failed to start"; break;
+                case android.app.ApplicationExitInfo.REASON_SIGNALED:
+                    // The system kills background apps this way routinely; only
+                    // worth reporting if it happened while the person was using it.
+                    if (last.getImportance() > android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND) return;
+                    reason = "was stopped by the system (signal " + last.getStatus() + ")"; break;
+                default: return; // user closed it, app exited itself, update, etc.
+            }
+            String desc = last.getDescription();
+            recordIncident("Previous session " + reason + (desc != null ? ": " + desc : ""));
+        } catch (Throwable ignore) {}
+    }
+
+    /** If the last session ended badly, say so and offer to share the details. */
+    private void offerIncidentReport() {
+        final java.io.File f = new java.io.File(getFilesDir(), CRASH_FILE);
+        if (!f.exists()) return;
+        String body;
+        try {
+            byte[] bytes = new byte[(int) Math.min(f.length(), 12000)];
+            try (java.io.FileInputStream in = new java.io.FileInputStream(f)) { int n = in.read(bytes); body = new String(bytes, 0, Math.max(n, 0), StandardCharsets.UTF_8); }
+        } catch (Throwable t) {
+            body = "(report unreadable)";
+        }
+        //noinspection ResultOfMethodCallIgnored
+        f.delete();
+        final String report = deviceSummary() + "\n\n" + body;
+        try {
+            new android.app.AlertDialog.Builder(this)
+                .setTitle("Sahrae closed unexpectedly")
+                .setMessage("Sorry about that. Sahrae has recovered. If this keeps happening, tap Share and send the details to the Sahrae team so it can be fixed.")
+                .setPositiveButton("Share details", (d, w) -> {
+                    try {
+                        android.content.Intent send = new android.content.Intent(android.content.Intent.ACTION_SEND);
+                        send.setType("text/plain");
+                        send.putExtra(android.content.Intent.EXTRA_SUBJECT, "Sahrae crash report");
+                        send.putExtra(android.content.Intent.EXTRA_TEXT, report);
+                        startActivity(android.content.Intent.createChooser(send, "Share crash details"));
+                    } catch (Throwable ignore) {}
+                })
+                .setNegativeButton("Dismiss", null)
+                .show();
+        } catch (Throwable ignore) {}
+    }
+
+    /**
+     * The main WebView's renderer is gone. Reload the app instead of letting
+     * Android kill it; if it keeps happening, stop looping and explain.
+     */
+    private void onMainRendererGone(WebView view, boolean crashed) {
+        recordIncident("Screen engine " + (crashed ? "crashed" : "was closed by Android to free memory") + "; the app reloaded itself.");
+        try {
+            ViewGroup parent = (ViewGroup) view.getParent();
+            if (parent != null) parent.removeView(view);
+            view.destroy();
+        } catch (Throwable ignore) {}
+        long now = System.currentTimeMillis();
+        synchronized (sRendererLosses) {
+            while (!sRendererLosses.isEmpty() && now - sRendererLosses.peekFirst() > 60_000) sRendererLosses.pollFirst();
+            sRendererLosses.addLast(now);
+            if (sRendererLosses.size() > 2) {
+                try {
+                    new android.app.AlertDialog.Builder(this)
+                        .setTitle("Your phone is low on memory")
+                        .setMessage("Sahrae had to restart a few times because the phone ran out of memory. Close some other apps, then open Sahrae again.")
+                        .setCancelable(false)
+                        .setPositiveButton("Close Sahrae", (d, w) -> finishAffinity())
+                        .show();
+                } catch (Throwable t) { finishAffinity(); }
+                return;
+            }
+        }
+        recreate();
+    }
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        installCrashRecorder();
+        collectLastExitReason();
         super.onCreate(savedInstanceState);
 
         // ── Release hardening ──
@@ -1429,6 +1641,7 @@ public class MainActivity extends BridgeActivity {
         // a silent white screen that looks exactly like "the app doesn't open".
         // Say so, natively, and send the person to the one-tap fix.
         warnIfWebViewTooOld();
+        offerIncidentReport();
 
         // Fold the large bundled ad/tracker blocklist in off the UI thread.
         loadBundledBlocklistAsync();
@@ -1608,6 +1821,13 @@ public class MainActivity extends BridgeActivity {
                 super.onPageFinished(view, url);
                 // L4 — only inject into the top frame (this callback only fires there)
                 view.evaluateJavascript(ANTI_POPUP_SHIM, null);
+            }
+
+            // Returning true tells Android we handled it, so it does not kill the app.
+            @Override
+            public boolean onRenderProcessGone(WebView view, android.webkit.RenderProcessGoneDetail detail) {
+                onMainRendererGone(view, detail != null && detail.didCrash());
+                return true;
             }
         });
 
