@@ -47,8 +47,14 @@ else
   APP_PID=$(cat pid.txt | tr -d '\r ')
   adb root >/dev/null 2>&1 || true
   adb wait-for-device
-  # adbd restarts as root; give it a moment, then look for the renderer a few
-  # times. Its name varies by WebView version, so match broadly.
+  # Switching adbd to root makes Google Play services restart a few seconds
+  # later, and Android kills every app bound to its font provider when it does,
+  # which the WebView is. Seen in the first runs of this check: the app handled
+  # the renderer loss, then died to that restart. Let it settle first.
+  sleep 30
+  adb logcat -c
+  # Look for the renderer a few times. Its name varies by WebView version, so
+  # match broadly.
   RENDERER=""
   for attempt in 1 2 3 4 5 6; do
     sleep 3
@@ -68,7 +74,15 @@ else
     COLOURS2=$(python3 blank.py screen-after-renderer-loss.png 2>/dev/null || echo 0)
     adb logcat -d > logcat.txt || true
     echo "After renderer loss: pid $(cat pid2.txt | tr -d '\r')  colours $COLOURS2"
-    [ -s pid2.txt ] || { echo "::error::The app was killed when its WebView renderer died (API $API)"; exit 1; }
+    # Chromium's own verdict when an app does not handle renderer loss.
+    if grep -qiE "wasn.t hand(l)?ed by all associated webviews" logcat.txt; then
+      grep -iE "wasn.t hand(l)?ed by all associated webviews" logcat.txt | head -2
+      echo "::error::Renderer loss was not handled; Chromium killed the app (API $API)"; exit 1
+    fi
+    if ! [ -s pid2.txt ]; then
+      grep -E "Killing .*$PKG|$PKG.*has died" logcat.txt | head -5
+      echo "::error::The app is gone after renderer loss (API $API)"; exit 1
+    fi
     [ "${COLOURS2:-0}" -gt 40 ] || { echo "::error::The app survived renderer loss but the screen is blank (API $API)"; exit 1; }
     echo "Renderer loss handled: the app stayed open and drew again (was pid $APP_PID)."
   fi
