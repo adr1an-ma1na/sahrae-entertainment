@@ -47,10 +47,18 @@ else
   APP_PID=$(cat pid.txt | tr -d '\r ')
   adb root >/dev/null 2>&1 || true
   adb wait-for-device
-  sleep 3
-  RENDERER=$(adb shell ps -A -o PID,NAME 2>/dev/null | grep -iE "sandboxed_process|webview.*renderer|:sandboxed" | awk '{print $1}' | head -1 | tr -d '\r')
+  # adbd restarts as root; give it a moment, then look for the renderer a few
+  # times. Its name varies by WebView version, so match broadly.
+  RENDERER=""
+  for attempt in 1 2 3 4 5 6; do
+    sleep 3
+    adb shell ps -A > ps.txt 2>/dev/null || adb shell ps > ps.txt 2>/dev/null || true
+    RENDERER=$(grep -iE "sandboxed_process|:sandboxed|privileged_process" ps.txt | awk '{print $2}' | head -1 | tr -d '\r')
+    [ -n "$RENDERER" ] && break
+  done
   if [ -z "$RENDERER" ]; then
-    echo "::warning::Could not find the WebView renderer process; renderer-loss check skipped (API $API)"
+    echo "--- process list ---"; grep -iE "webview|chrome|sahrae" ps.txt || true
+    echo "::error::Could not find the WebView renderer process, so renderer loss was not tested (API $API)"; exit 1
   else
     echo "Killing WebView renderer pid $RENDERER"
     adb shell kill -9 "$RENDERER" || true
