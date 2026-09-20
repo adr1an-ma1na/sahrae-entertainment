@@ -84,6 +84,16 @@ jobs:
           sort -u -o "$OUT" "$OUT" || true
           echo "Bundled EasyList network rules: $(wc -l < "$OUT")"
 
+      # Every build gets a higher version code than the one before it. Capacitor
+      # generates versionCode 1 and leaves it there, so every APK claimed to be
+      # the same version as the installed one; Android then treats an update as a
+      # reinstall, and some installers refuse it outright ("app not installed").
+      - name: Stamp version
+        run: |
+          sed -i "s/versionCode 1$/versionCode ${{ github.run_number }}/" android/app/build.gradle
+          sed -i "s/versionName \"1.0\"$/versionName \"1.0.${{ github.run_number }}\"/" android/app/build.gradle
+          grep -E 'versionCode|versionName' android/app/build.gradle
+
       - name: Apply Android overlay (ad-blocking MainActivity, etc.)
         run: |
           if [ -d android-overlay ]; then
@@ -233,3 +243,107 @@ jobs:
             --title "Sahrae preview build" \
             --notes "Auto-built from ${{ github.sha }} on ${{ github.ref_name }}" \
             --target "${{ github.sha }}"
+
+  # ------------------------------------------------------------------
+  # Plain build: stock Capacitor, exactly the recipe that works in the
+  # sahrae-predictor project. No native overlay (no ad blocking, no
+  # anti-tamper, no hidden resolver WebViews) and no R8 shrinking or
+  # obfuscation, which is the usual way a release APK breaks while the
+  # debug one works, because Capacitor finds its plugins by reflection.
+  #
+  # It exists to answer one question on a phone that the emulators cannot:
+  # if this opens and the main APK does not, the fault is in the overlay or
+  # in R8, not in the web app.
+  # ------------------------------------------------------------------
+  plain:
+    name: Build plain APK
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Build web assets
+        run: npm run build
+
+      - name: Create the Android project
+        run: |
+          npx cap add android
+          npx cap sync android
+          sed -i "s/versionCode 1$/versionCode ${{ github.run_number }}/" android/app/build.gradle
+          sed -i "s/versionName \"1.0\"$/versionName \"1.0.${{ github.run_number }}-plain\"/" android/app/build.gradle
+
+      # Signed with the release key when it is available, so this APK and the
+      # main one replace each other on a phone instead of colliding. Without the
+      # secret, Gradle's throwaway debug key is used and the APK still installs.
+      - name: Check for the release signing key
+        id: key
+        run: |
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then echo 'present=true' >> "$GITHUB_OUTPUT"; else echo 'present=false' >> "$GITHUB_OUTPUT"; fi
+
+      - name: Use the release signing key for the debug build type
+        if: steps.key.outputs.present == 'true'
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/sahrae.jks
+          node -e "
+          const fs = require('fs');
+          const p = 'android/app/build.gradle';
+          let s = fs.readFileSync(p, 'utf8');
+          const cfg = [
+            '',
+            '    signingConfigs {',
+            '        debug {',
+            \"            storeFile file('sahrae.jks')\",
+            \"            storePassword System.getenv('KEYSTORE_PASSWORD')\",
+            \"            keyAlias System.getenv('KEY_ALIAS')\",
+            \"            keyPassword System.getenv('KEY_PASSWORD')\",
+            '        }',
+            '    }',
+            ''
+          ].join('\n');
+          if (!s.includes('signingConfigs')) s = s.replace(/^android \{/m, 'android {' + cfg);
+          fs.writeFileSync(p, s);
+          "
+          grep -A 8 'signingConfigs' android/app/build.gradle
+
+      - name: Build
+        working-directory: android
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Publish it next to the others
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APK=$(find android/app/build/outputs/apk/debug -name '*.apk' | head -n1)
+          cp "$APK" Sahrae-plain.apk
+          ls -l Sahrae-plain.apk
+          keytool -printcert -jarfile Sahrae-plain.apk | grep -i 'SHA256:' | head -1 || true
+          gh release upload preview Sahrae-plain.apk --clobber

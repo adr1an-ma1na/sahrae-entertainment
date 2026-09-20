@@ -1619,6 +1619,12 @@ public class MainActivity extends BridgeActivity {
      */
     private void onMainRendererGone(WebView view, boolean crashed) {
         recordRecovery("Screen engine " + (crashed ? "crashed" : "was closed by Android to free memory") + "; the app reloaded itself.");
+        // A crash is not a memory problem. On phone GPU drivers the usual cause is
+        // heavy compositing — backdrop blur above all — so drop to flat surfaces
+        // for this device rather than restarting into the same crash.
+        if (crashed) {
+            try { getSharedPreferences(DIAG_PREFS, MODE_PRIVATE).edit().putBoolean("safeGraphics", true).apply(); } catch (Throwable ignore) {}
+        }
         try {
             ViewGroup parent = (ViewGroup) view.getParent();
             if (parent != null) parent.removeView(view);
@@ -1628,13 +1634,29 @@ public class MainActivity extends BridgeActivity {
         synchronized (sRendererLosses) {
             while (!sRendererLosses.isEmpty() && now - sRendererLosses.peekFirst() > 60_000) sRendererLosses.pollFirst();
             sRendererLosses.addLast(now);
-            if (sRendererLosses.size() > 2) {
+            if (sRendererLosses.size() > 3) {
+                final String title = crashed ? "Sahrae keeps restarting" : "Your phone is low on memory";
+                final String message = crashed
+                    ? "Sahrae's display keeps failing on this phone. Visual effects have been turned off, which usually fixes it. Open Sahrae again, and if it still happens, tap Share details so it can be fixed properly."
+                    : "Android keeps closing Sahrae's screen to free memory. Close some other apps, then open Sahrae again.";
                 try {
                     new android.app.AlertDialog.Builder(this)
-                        .setTitle("Your phone is low on memory")
-                        .setMessage("Sahrae had to restart a few times because the phone ran out of memory. Close some other apps, then open Sahrae again.")
+                        .setTitle(title)
+                        .setMessage(message)
                         .setCancelable(false)
                         .setPositiveButton("Close Sahrae", (d, w) -> finishAffinity())
+                        .setNegativeButton("Share details", (d, w) -> {
+                            try {
+                                android.content.Intent send = new android.content.Intent(android.content.Intent.ACTION_SEND);
+                                send.setType("text/plain");
+                                send.putExtra(android.content.Intent.EXTRA_SUBJECT, "Sahrae display failure");
+                                send.putExtra(android.content.Intent.EXTRA_TEXT, deviceSummary()
+                                    + "\n\nScreen engine " + (crashed ? "crashed" : "was closed for memory")
+                                    + " " + sRendererLosses.size() + " times in a minute.");
+                                startActivity(android.content.Intent.createChooser(send, "Share details"));
+                            } catch (Throwable ignore) {}
+                            finishAffinity();
+                        })
                         .show();
                 } catch (Throwable t) { finishAffinity(); }
                 return;
@@ -1844,6 +1866,18 @@ public class MainActivity extends BridgeActivity {
                 super.onPageFinished(view, url);
                 // L4 — only inject into the top frame (this callback only fires there)
                 view.evaluateJavascript(ANTI_POPUP_SHIM, null);
+
+                // This device has crashed its renderer before: flatten the heavy
+                // compositing. `low-gfx` is the same switch the app's own graphics
+                // tier uses, and the localStorage flag keeps it on next launch,
+                // before any of this Java runs.
+                boolean safe = false;
+                try { safe = getSharedPreferences(DIAG_PREFS, MODE_PRIVATE).getBoolean("safeGraphics", false); } catch (Throwable ignore) {}
+                if (safe) {
+                    view.evaluateJavascript(
+                        "document.documentElement.classList.add('low-gfx');"
+                        + "try{localStorage.setItem('sahrae.gfx.safe.v1','1')}catch(e){}", null);
+                }
             }
 
             // Returning true tells Android we handled it, so it does not kill the app.

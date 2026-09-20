@@ -38,8 +38,30 @@ export function isLowGraphics(s: GraphicsSignals): boolean {
   return false;
 }
 
+/**
+ * Set when the app's rendering engine has crashed on this device. The Android
+ * shell writes it after a renderer crash (see MainActivity), and the web app
+ * writes it too so a browser tab that survives a renderer crash comes back
+ * flattened. Heavy compositing — backdrop blur above all — is the usual cause
+ * on phone GPU drivers, and it is exactly what `low-gfx` turns off.
+ */
+export const SAFE_GRAPHICS_KEY = 'sahrae.gfx.safe.v1';
+
+export function safeGraphicsRequested(): boolean {
+  try { return localStorage.getItem(SAFE_GRAPHICS_KEY) === '1'; } catch { return false; }
+}
+
+export function requestSafeGraphics(): void {
+  try { localStorage.setItem(SAFE_GRAPHICS_KEY, '1'); } catch { /* storage unavailable */ }
+  try { document.documentElement.classList.add('low-gfx'); } catch { /* no document */ }
+}
+
 export function applyGraphicsTier(): boolean {
   if (typeof document === 'undefined') return false;
+  if (safeGraphicsRequested()) {
+    document.documentElement.classList.add('low-gfx');
+    return true;
+  }
   let low = false;
   try {
     const nav = navigator as Navigator & { deviceMemory?: number };
