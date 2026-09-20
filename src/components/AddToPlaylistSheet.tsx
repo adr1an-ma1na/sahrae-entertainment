@@ -61,7 +61,7 @@ export default function AddToPlaylistSheet() {
         {/* Header */}
         <div className="flex items-center gap-3 p-4 border-b border-white/10">
           <div className="w-11 h-11 rounded-lg overflow-hidden bg-zinc-800 shrink-0">
-            {track.artwork ? <img src={track.artwork} alt="" className="w-full h-full object-cover" /> : <Music2 className="w-5 h-5 text-zinc-600 m-auto" />}
+            {track.artwork ? <img loading="lazy" decoding="async" src={track.artwork} alt="" className="w-full h-full object-cover" /> : <Music2 className="w-5 h-5 text-zinc-600 m-auto" />}
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-[11px] text-sauti font-semibold uppercase tracking-wide">Add to playlist</p>

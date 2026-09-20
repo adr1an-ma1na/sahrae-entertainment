@@ -24,7 +24,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api: [34, 28]
+        include:
+          - api: 34
+            ram: 4096
+          - api: 28
+            ram: 4096
+          # A 3 GB phone (Nokia C32) killed the renderer repeatedly here, which
+          # is what "the app closes by itself" looked like. Lite mode exists for
+          # this row.
+          - api: 30
+            ram: 2048
     steps:
       - name: Enable KVM
         run: |
@@ -64,14 +73,14 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot -memory ${{ matrix.ram }}
           script: bash .github/scripts/apk-smoke-verify.sh ${{ matrix.api }}
 
       - name: Keep evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: smoke-api${{ matrix.api }}
+          name: smoke-api${{ matrix.api }}-${{ matrix.ram }}mb
           path: |
             logcat.txt
             screen.png

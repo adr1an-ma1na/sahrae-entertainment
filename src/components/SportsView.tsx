@@ -137,7 +137,7 @@ const SPORT_EMOJI: Record<string, string> = {
  *  missing or 404s, draws the team's initials so every event has a logo. */
 function TeamLogo({ name, src }: { name: string; src?: string }) {
   const [err, setErr] = useState(false);
-  if (src && !err) return <img src={src} alt="" onError={() => setErr(true)} className="w-10 h-10 object-contain" loading="lazy" />;
+  if (src && !err) return <img loading="lazy" decoding="async" src={src} alt="" onError={() => setErr(true)} className="w-10 h-10 object-contain" />;
   return <div className="w-10 h-10 rounded-full bg-gradient-to-br from-zinc-700 to-zinc-800 border border-white/10 flex items-center justify-center text-[11px] font-extrabold text-white">{initials(name) || '?'}</div>;
 }
 

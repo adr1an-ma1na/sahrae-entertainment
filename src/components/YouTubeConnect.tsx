@@ -265,7 +265,7 @@ export default function YouTubeConnect() {
     <section>
       <div className="flex items-center gap-3 mb-6 rounded-2xl border border-white/10 bg-zinc-900/40 p-4">
         {profile?.picture
-          ? <img src={profile.picture} alt="" referrerPolicy="no-referrer" className="w-10 h-10 rounded-full border border-white/10" />
+          ? <img loading="lazy" decoding="async" src={profile.picture} alt="" referrerPolicy="no-referrer" className="w-10 h-10 rounded-full border border-white/10" />
           : <span className="w-10 h-10 rounded-full bg-red-600/20 text-red-400 flex items-center justify-center font-bold">
               {profile?.name?.charAt(0) || 'Y'}
             </span>}

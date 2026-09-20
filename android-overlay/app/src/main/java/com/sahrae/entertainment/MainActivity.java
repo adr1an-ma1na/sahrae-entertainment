@@ -1479,6 +1479,28 @@ public class MainActivity extends BridgeActivity {
     private static final String CRASH_FILE = "last_crash.txt";
     private static final String DIAG_PREFS = "sahrae.diagnostics";
 
+    /**
+     * Phones that cannot hold the full home screen in a WebView renderer.
+     *
+     * Measured on a 3 GB Nokia C32: the app installed and started, then Android
+     * killed the renderer repeatedly because a full-resolution backdrop plus a
+     * screenful of posters is hundreds of megabytes of decoded bitmap. Below
+     * this line the app asks for smaller artwork and drops the decoration.
+     * `isLowRamDevice` alone is not enough — it is only true on Android Go.
+     */
+    private boolean isSmallMemoryDevice() {
+        try {
+            android.app.ActivityManager am = (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
+            if (am.isLowRamDevice()) return true;
+            android.app.ActivityManager.MemoryInfo mi = new android.app.ActivityManager.MemoryInfo();
+            am.getMemoryInfo(mi);
+            // 4.5 GB, so a phone sold as "4 GB" (which reports ~3.7) counts.
+            return mi.totalMem > 0 && mi.totalMem < 4_500_000_000L;
+        } catch (Throwable ignore) {
+            return false;
+        }
+    }
+
     /** Timestamps of recent renderer losses, to stop a reload loop. */
     private static final java.util.ArrayDeque<Long> sRendererLosses = new java.util.ArrayDeque<>();
 
@@ -1622,9 +1644,15 @@ public class MainActivity extends BridgeActivity {
         // A crash is not a memory problem. On phone GPU drivers the usual cause is
         // heavy compositing — backdrop blur above all — so drop to flat surfaces
         // for this device rather than restarting into the same crash.
-        if (crashed) {
-            try { getSharedPreferences(DIAG_PREFS, MODE_PRIVATE).edit().putBoolean("safeGraphics", true).apply(); } catch (Throwable ignore) {}
-        }
+        // Either way the phone could not carry what was on screen, so drop to
+        // lite for good on this device: smaller artwork, no blur, no ambient
+        // animation. A crash also turns off the effects most likely to cause it.
+        try {
+            getSharedPreferences(DIAG_PREFS, MODE_PRIVATE).edit()
+                .putBoolean("liteForced", true)
+                .putBoolean("safeGraphics", crashed)
+                .apply();
+        } catch (Throwable ignore) {}
         try {
             ViewGroup parent = (ViewGroup) view.getParent();
             if (parent != null) parent.removeView(view);
@@ -1638,7 +1666,7 @@ public class MainActivity extends BridgeActivity {
                 final String title = crashed ? "Sahrae keeps restarting" : "Your phone is low on memory";
                 final String message = crashed
                     ? "Sahrae's display keeps failing on this phone. Visual effects have been turned off, which usually fixes it. Open Sahrae again, and if it still happens, tap Share details so it can be fixed properly."
-                    : "Android keeps closing Sahrae's screen to free memory. Close some other apps, then open Sahrae again.";
+                    : "Android keeps closing Sahrae's screen to free memory. Sahrae has switched to its lighter layout, which uses much less. Close some other apps, then open Sahrae again.";
                 try {
                     new android.app.AlertDialog.Builder(this)
                         .setTitle(title)
@@ -1971,6 +1999,16 @@ public class MainActivity extends BridgeActivity {
                     view.evaluateJavascript(
                         "document.documentElement.classList.add('low-gfx');"
                         + "try{localStorage.setItem('sahrae.gfx.safe.v1','1')}catch(e){}", null);
+                }
+
+                // Lite mode on a small phone. The page can only guess at memory
+                // (navigator.deviceMemory rounds to a power of two); here we know.
+                boolean liteForced = false;
+                try { liteForced = getSharedPreferences(DIAG_PREFS, MODE_PRIVATE).getBoolean("liteForced", false); } catch (Throwable ignore) {}
+                if (liteForced || isSmallMemoryDevice()) {
+                    view.evaluateJavascript(
+                        "document.documentElement.classList.add('lite','low-gfx');"
+                        + "try{localStorage.setItem('sahrae.lite.v1','1')}catch(e){}", null);
                 }
             }
 

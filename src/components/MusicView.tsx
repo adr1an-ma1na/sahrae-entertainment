@@ -851,7 +851,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
         <button onClick={() => setDetail(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-5 text-sm px-3.5 py-2 rounded-full bg-zinc-900/85 backdrop-blur-xl border border-white/10 shadow-lg"><ChevronLeft className="w-4 h-4" /> Back</button>
         <div className="flex items-end gap-5 mb-8">
           <div className={`w-32 h-32 md:w-40 md:h-40 ${detail.kind === 'artist' ? 'rounded-full' : 'rounded-2xl'} overflow-hidden bg-zinc-800 border border-white/10 shrink-0 shadow-xl`}>
-            {detail.thumbnail ? <img src={detail.thumbnail} alt="" className="w-full h-full object-cover" /> : (detail.kind === 'artist' ? <User className="w-14 h-14 text-zinc-600 absolute inset-0 m-auto" /> : <Disc3 className="w-14 h-14 text-zinc-600 absolute inset-0 m-auto" />)}
+            {detail.thumbnail ? <img loading="lazy" decoding="async" src={detail.thumbnail} alt="" className="w-full h-full object-cover" /> : (detail.kind === 'artist' ? <User className="w-14 h-14 text-zinc-600 absolute inset-0 m-auto" /> : <Disc3 className="w-14 h-14 text-zinc-600 absolute inset-0 m-auto" />)}
           </div>
           <div className="min-w-0">
             <div className="overline mb-1">{detail.subtitle}</div>
@@ -1151,7 +1151,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
               {/* ── Featured spotlight hero ── */}
               {featured && (
                 <section className="relative mb-9 rounded-3xl overflow-hidden border border-white/10 shadow-lg">
-                  <img aria-hidden alt="" src={featured.artworkLarge || featured.artwork} className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-40" />
+                  <img loading="lazy" decoding="async" aria-hidden alt="" src={featured.artworkLarge || featured.artwork} className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-40" />
                   <div className="absolute inset-0" style={{ background: 'linear-gradient(90deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.65) 50%, rgba(0,0,0,0.35) 100%)' }} />
                   <div className="relative flex items-center gap-4 md:gap-7 p-5 md:p-6">
                     <div className="relative w-24 h-24 md:w-36 md:h-36 shrink-0">
@@ -1277,7 +1277,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
             <div className="p-4 rounded-3xl bg-zinc-900/40 border border-white/5 mb-8 flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 {youtubeProfile?.picture ? (
-                  <img src={youtubeProfile.picture} alt="" className="w-10 h-10 rounded-full border border-white/10" referrerPolicy="no-referrer" />
+                  <img loading="lazy" decoding="async" src={youtubeProfile.picture} alt="" className="w-10 h-10 rounded-full border border-white/10" referrerPolicy="no-referrer" />
                 ) : (
                   <div className="w-10 h-10 rounded-full bg-red-600/20 text-red-400 flex items-center justify-center font-bold">
                     {youtubeProfile?.name?.charAt(0) || 'Y'}
@@ -1459,7 +1459,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                     <button key={p.id} onClick={() => setOpenId(`yt_${p.id}`)} tabIndex={0} data-tv-focusable className="card-lift text-left rounded-2xl overflow-hidden border border-white/10 bg-zinc-900">
                       <div className="aspect-square relative flex items-center justify-center overflow-hidden bg-zinc-800">
                         {p.thumbnail ? (
-                          <img src={p.thumbnail} alt="" className="w-full h-full object-cover" />
+                          <img loading="lazy" decoding="async" src={p.thumbnail} alt="" className="w-full h-full object-cover" />
                         ) : (
                           <div className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-black/20" />
                         )}
@@ -1480,7 +1480,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
             {playlists.length === 0 ? <EmptyState compact illustration="playlist" title="No playlists yet" message="Create one above, or tap + on any song to start one." /> : (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">{playlists.map((p) => (
                 <button key={p.id} onClick={() => setOpenId(p.id)} tabIndex={0} data-tv-focusable className="card-lift text-left rounded-2xl overflow-hidden border border-white/10 bg-zinc-900">
-                  <div className={`aspect-square relative flex items-center justify-center overflow-hidden ${p.tracks[0]?.artwork ? 'bg-zinc-800' : `bg-gradient-to-br ${gradFor(p.name)}`}`}>{p.tracks[0]?.artwork ? <img src={p.tracks[0].artwork} alt="" className="w-full h-full object-cover" /> : <><div aria-hidden className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-black/20" /><span className="relative font-display font-black text-white/95 text-3xl tracking-tight drop-shadow">{monogram(p.name)}</span></>}</div>
+                  <div className={`aspect-square relative flex items-center justify-center overflow-hidden ${p.tracks[0]?.artwork ? 'bg-zinc-800' : `bg-gradient-to-br ${gradFor(p.name)}`}`}>{p.tracks[0]?.artwork ? <img loading="lazy" decoding="async" src={p.tracks[0].artwork} alt="" className="w-full h-full object-cover" /> : <><div aria-hidden className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-black/20" /><span className="relative font-display font-black text-white/95 text-3xl tracking-tight drop-shadow">{monogram(p.name)}</span></>}</div>
                   <div className="p-2.5"><p className="text-sm font-semibold text-white truncate">{p.name}</p><p className="text-xs text-zinc-500 tabular">{p.tracks.length} songs</p></div>
                 </button>
               ))}</div>

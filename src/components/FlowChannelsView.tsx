@@ -288,7 +288,7 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
                       <div className="flex items-end gap-2.5 justify-end pointer-events-none">
                         {playlist.slice(playlistIndexRef.current + 1, playlistIndexRef.current + 4).map((item, idx) => (
                            <div key={item.id + idx} className={`relative rounded-lg overflow-hidden border border-white/10 shadow-lg ${idx === 0 ? 'w-28 aspect-video opacity-100' : 'w-20 aspect-video opacity-50'}`}>
-                             <img src={getImageUrl(item.backdrop_path, 'w300')} alt={item.title} className="w-full h-full object-cover" />
+                             <img loading="lazy" decoding="async" src={getImageUrl(item.backdrop_path, 'w300')} alt={item.title} className="w-full h-full object-cover" />
                              <div className="absolute inset-0 bg-gradient-to-t from-black/80 flex items-end p-1.5">
                                <p className="text-white text-[9px] font-bold line-clamp-1">{item.title}</p>
                              </div>
@@ -371,7 +371,7 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
           {/* Column 1: Poster and Essential Quick Info (3 cols) */}
           <div className="lg:col-span-3 flex flex-col gap-4 text-left">
             <div className="relative rounded-2xl overflow-hidden border border-white/10 shadow-xl aspect-[2/3] group bg-zinc-900">
-              <img
+              <img loading="lazy" decoding="async" 
                 src={getImageUrl(playingMedia.poster_path || playingMedia.backdrop_path, 'w500')}
                 alt={playingMedia.title}
                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-102"

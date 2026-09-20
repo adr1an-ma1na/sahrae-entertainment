@@ -1,4 +1,5 @@
 import { httpFetch } from './http.ts';
+import { isLiteDevice } from './deviceTier.ts';
 const API_KEY = 'f1a823e739bfce21511a8e2f8e42befc';
 const BASE_URL = 'https://api.themoviedb.org/3';
 
@@ -291,10 +292,29 @@ const POSTER_PLACEHOLDER =
     </svg>`,
   );
 
-export const getImageUrl = (path: string | null, size: 'w500' | 'original' | 'w780' | 'w185' | 'w300' = 'w500') => {
+/**
+ * One step down the TMDB size ladder for each request, used on low-memory
+ * phones. A decoded bitmap costs width × height × 4 bytes no matter how small
+ * the JPEG was: one `original` backdrop is ~8 MB in memory, a `w780` about
+ * 1.3 MB, and a home screen holds dozens of them. This is the single biggest
+ * lever on whether the renderer survives.
+ */
+const LITE_SIZE: Record<string, TmdbImageSize> = {
+  original: 'w780',
+  w780: 'w500',
+  w500: 'w342',
+  w342: 'w185',
+  w300: 'w185',
+  w185: 'w185',
+};
+
+export type TmdbImageSize = 'w500' | 'original' | 'w780' | 'w342' | 'w185' | 'w300';
+
+export const getImageUrl = (path: string | null, size: TmdbImageSize = 'w500') => {
   if (!path) return POSTER_PLACEHOLDER;
   if (path.startsWith('http')) return path;
-  return `https://image.tmdb.org/t/p/${size}${path}`;
+  const asked = isLiteDevice() ? (LITE_SIZE[size] || size) : size;
+  return `https://image.tmdb.org/t/p/${asked}${path}`;
 };
 
 export const searchPeople = async (query: string, page: number = 1): Promise<{results: any[], totalPages: number}> => {

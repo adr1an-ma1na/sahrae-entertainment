@@ -281,7 +281,7 @@ export default function MusicPlayer() {
           {/* Art-derived colour bleed — the immersive Apple-Music backdrop. */}
           {(hdArt || current.artworkLarge || current.artwork) && (
             <div aria-hidden className="absolute inset-0 overflow-hidden pointer-events-none">
-              <img src={hdArt || current.artworkLarge || current.artwork} alt="" className="np-bleed w-full h-full object-cover" />
+              <img loading="lazy" decoding="async" src={hdArt || current.artworkLarge || current.artwork} alt="" className="np-bleed w-full h-full object-cover" />
               <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.30) 0%, rgba(0,0,0,0.55) 55%, #000 100%)' }} />
             </div>
           )}
@@ -331,7 +331,7 @@ export default function MusicPlayer() {
                   style={{ transform: isPlaying ? 'scale(1)' : 'scale(0.94)', transition: 'transform 320ms cubic-bezier(0.22,1,0.36,1)' }}>
                   <CoverArt imageUrl={hdArt || current.artworkLarge || current.artwork} fallbackUrl={current.artwork} dominantColor={current.dominantColor} rounded="rounded-3xl"
                     className="np-art w-full aspect-square" />
-                  <img aria-hidden alt="" src={hdArt || current.artworkLarge || current.artwork} className="np-reflect absolute left-0 right-0 top-full mt-3 w-full h-1/3 object-cover object-top rounded-3xl pointer-events-none" />
+                  <img loading="lazy" decoding="async" aria-hidden alt="" src={hdArt || current.artworkLarge || current.artwork} className="np-reflect absolute left-0 right-0 top-full mt-3 w-full h-1/3 object-cover object-top rounded-3xl pointer-events-none" />
                 </div>
               ) : (
                 <div className="w-[78vw] max-w-[360px] aspect-square rounded-2xl bg-zinc-800 flex items-center justify-center"><Music2 className="w-20 h-20 text-zinc-600" /></div>

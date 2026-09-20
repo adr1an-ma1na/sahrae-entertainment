@@ -102,7 +102,7 @@ export default function ProfileSelection() {
                     onClick={() => setSelectedAvatar(avatar)}
                     className={`cursor-pointer rounded-full p-1 transition-all ${selectedAvatar === avatar ? 'bg-amber-500 scale-110' : 'hover:bg-white/10'}`}
                   >
-                    <img src={avatar} alt={`Avatar ${i}`} className="w-full h-full rounded-full bg-zinc-800" />
+                    <img loading="lazy" decoding="async" src={avatar} alt={`Avatar ${i}`} className="w-full h-full rounded-full bg-zinc-800" />
                   </div>
                 ))}
               </div>
@@ -177,7 +177,7 @@ export default function ProfileSelection() {
               className="relative rounded-xl overflow-hidden mb-4 transition-transform duration-300 group-hover:scale-105"
             >
               <div className={`w-24 h-24 md:w-32 md:h-32 rounded-xl border-2 transition-colors ${isEditing ? 'border-zinc-500 group-hover:border-white' : 'border-transparent group-hover:border-white'}`}>
-                <img src={profile.avatar} alt={profile.name} className="w-full h-full object-cover bg-zinc-800" />
+                <img loading="lazy" decoding="async" src={profile.avatar} alt={profile.name} className="w-full h-full object-cover bg-zinc-800" />
                 {isEditing && (
                   <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                     <Edit2 className="w-8 h-8 text-white" />

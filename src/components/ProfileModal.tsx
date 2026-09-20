@@ -167,7 +167,7 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
                       onClick={() => setSelectedAvatar(avatar)}
                       className={`cursor-pointer rounded-full p-1 transition-all ${selectedAvatar === avatar ? 'bg-amber-500 scale-110' : 'hover:bg-white/10'}`}
                     >
-                      <img src={avatar} alt={`Avatar ${i}`} className="w-full h-full rounded-full bg-zinc-800" />
+                      <img loading="lazy" decoding="async" src={avatar} alt={`Avatar ${i}`} className="w-full h-full rounded-full bg-zinc-800" />
                     </div>
                   ))}
                 </div>

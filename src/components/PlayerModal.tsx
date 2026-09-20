@@ -702,7 +702,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
               </div>
             ) : (
               <>
-                <img src={getImageUrl(details.backdrop_path, 'original')} className="w-full h-full object-cover opacity-80" />
+                <img loading="lazy" decoding="async" src={getImageUrl(details.backdrop_path, 'original')} className="w-full h-full object-cover opacity-80" />
                 {/* Tint drawn from the artwork itself, so every title feels
                     like its own page instead of the same grey chrome. Fades in
                     only once the colour resolves, and stays absent entirely if
@@ -894,7 +894,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                             {episode.episode_number}
                           </div>
                           <div className="w-full md:w-48 aspect-video shrink-0 relative rounded overflow-hidden bg-zinc-800">
-                            {episode.still_path ? <img src={getImageUrl(episode.still_path)} className="w-full h-full object-cover" /> : <div className="absolute inset-0 flex items-center justify-center opacity-50"><Play className="w-8 h-8 text-white"/></div>}
+                            {episode.still_path ? <img loading="lazy" decoding="async" src={getImageUrl(episode.still_path)} className="w-full h-full object-cover" /> : <div className="absolute inset-0 flex items-center justify-center opacity-50"><Play className="w-8 h-8 text-white"/></div>}
                             <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 transition-opacity"><Play className="w-8 h-8 text-white fill-current shadow-lg drop-shadow"/></div>
                           </div>
                           <div className="flex-1 min-w-0 md:pr-4">
@@ -919,7 +919,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {videos.filter(v => v.type === 'Trailer' || v.type === 'Teaser' || v.type === 'Clip').slice(0, 6).map(v => (
                       <div key={v.id} onClick={() => { setPlayingTrailer(v.key); document.getElementById('player-modal-container')?.scrollTo({top: 0, behavior: 'smooth'}); }} className="cursor-pointer group relative rounded overflow-hidden aspect-video bg-zinc-800">
-                         <img src={`https://img.youtube.com/vi/${v.key}/maxresdefault.jpg`} onError={(e) => { e.currentTarget.src = `https://img.youtube.com/vi/${v.key}/hqdefault.jpg`; e.currentTarget.onerror = null; }} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105 opacity-80 group-hover:opacity-100" />
+                         <img loading="lazy" decoding="async" src={`https://img.youtube.com/vi/${v.key}/maxresdefault.jpg`} onError={(e) => { e.currentTarget.src = `https://img.youtube.com/vi/${v.key}/hqdefault.jpg`; e.currentTarget.onerror = null; }} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105 opacity-80 group-hover:opacity-100" />
                          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 transition-all"><Play className="w-12 h-12 text-white fill-current shadow-lg drop-shadow"/></div>
                          <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent">
                            <p className="text-white text-sm font-bold line-clamp-1">{v.name}</p>

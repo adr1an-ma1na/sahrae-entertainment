@@ -323,7 +323,7 @@ export default function TalentExplorer({ onPlay }: TalentExplorerProps) {
           </button>
 
           <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-start mb-8">
-            <img
+            <img loading="lazy" decoding="async" 
               src={getImageUrl(selectedPerson.profile_path, 'w185')}
               alt={selectedPerson.name}
               referrerPolicy="no-referrer"
@@ -503,7 +503,7 @@ export default function TalentExplorer({ onPlay }: TalentExplorerProps) {
                         onClick={() => handleOpenPerson(dir.id)}
                         className="group bg-zinc-900/40 hover:bg-zinc-900/80 border border-white/5 hover:border-amber-500/30 rounded-xl p-3 flex items-center gap-3 cursor-pointer active:scale-95 transition-all shadow-md hover:shadow-lg"
                       >
-                        <img
+                        <img loading="lazy" decoding="async" 
                           src={getImageUrl(dir.profile_path, 'w185')}
                           alt={dir.name}
                           referrerPolicy="no-referrer"
@@ -538,7 +538,7 @@ export default function TalentExplorer({ onPlay }: TalentExplorerProps) {
                         onClick={() => handleOpenPerson(act.id)}
                         className="group bg-zinc-900/40 hover:bg-zinc-900/80 border border-white/5 hover:border-amber-500/30 rounded-xl p-3 flex items-center gap-3 cursor-pointer active:scale-95 transition-all shadow-md hover:shadow-lg"
                       >
-                        <img
+                        <img loading="lazy" decoding="async" 
                           src={getImageUrl(act.profile_path, 'w185')}
                           alt={act.name}
                           referrerPolicy="no-referrer"

@@ -156,7 +156,7 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
                         }}
                       >
                         {notif.posterPath ? (
-                          <img src={getImageUrl(notif.posterPath, 'w500')} alt="" className="w-12 h-16 object-cover rounded bg-zinc-800 shrink-0" />
+                          <img loading="lazy" decoding="async" src={getImageUrl(notif.posterPath, 'w500')} alt="" className="w-12 h-16 object-cover rounded bg-zinc-800 shrink-0" />
                         ) : (
                           <div className="w-12 h-16 bg-zinc-800 rounded shrink-0 flex items-center justify-center">
                             <Bell className="w-5 h-5 text-zinc-500" />
@@ -201,9 +201,9 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
                 title="Profile Settings"
               >
                 {activeProfile?.avatar ? (
-                  <img src={activeProfile.avatar} alt="User" className="w-full h-full object-cover" />
+                  <img loading="lazy" decoding="async" src={activeProfile.avatar} alt="User" className="w-full h-full object-cover" />
                 ) : user.photoURL ? (
-                  <img src={user.photoURL} alt="User" className="w-full h-full object-cover" />
+                  <img loading="lazy" decoding="async" src={user.photoURL} alt="User" className="w-full h-full object-cover" />
                 ) : (
                   <User className="w-5 h-5 text-white" />
                 )}
