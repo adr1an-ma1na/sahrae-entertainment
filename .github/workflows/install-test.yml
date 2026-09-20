@@ -1,0 +1,147 @@
+name: Build install-test APK
+
+# A deliberately tiny Android app, signed with the SAME key as Sahrae.
+#
+# It exists to split one question that no emulator here can answer: when a phone
+# refuses to install Sahrae, is it refusing Sahrae, or refusing sideloaded apps?
+#
+#   installs, Sahrae does not  ->  the phone accepts our signing key and
+#                                  sideloading; something about the Sahrae
+#                                  package itself is being rejected
+#   does not install either    ->  the phone (Play Protect, "install unknown
+#                                  apps", storage, policy) is blocking any APK
+#
+# It has one screen, one permission (none), and no libraries.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
+
+      - name: Write the project
+        run: |
+          mkdir -p it/app/src/main/java/com/sahrae/installtest
+          cat > it/settings.gradle <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositories { google(); mavenCentral() } }
+          include ':app'
+          EOF
+          cat > it/build.gradle <<'EOF'
+          plugins { id 'com.android.application' version '8.5.2' apply false }
+          EOF
+          cat > it/gradle.properties <<'EOF'
+          android.useAndroidX=true
+          org.gradle.jvmargs=-Xmx2g
+          EOF
+          cat > it/app/build.gradle <<'EOF'
+          plugins { id 'com.android.application' }
+          android {
+              namespace 'com.sahrae.installtest'
+              compileSdk 34
+              defaultConfig {
+                  applicationId "com.sahrae.installtest"
+                  minSdk 22
+                  targetSdk 34
+                  versionCode Integer.parseInt(System.getenv("RUN_NUMBER") ?: "1")
+                  versionName "1.0." + (System.getenv("RUN_NUMBER") ?: "1")
+              }
+              buildTypes { debug { } }
+          }
+          EOF
+          cat > it/app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application android:label="Sahrae Install Test" android:allowBackup="false">
+                  <activity android:name=".MainActivity" android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+          cat > it/app/src/main/java/com/sahrae/installtest/MainActivity.java <<'EOF'
+          package com.sahrae.installtest;
+
+          import android.app.Activity;
+          import android.os.Build;
+          import android.os.Bundle;
+          import android.widget.TextView;
+
+          /** One screen. If you can read it, this phone installs and runs our APKs. */
+          public class MainActivity extends Activity {
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  TextView t = new TextView(this);
+                  t.setPadding(48, 160, 48, 48);
+                  t.setTextSize(18);
+                  t.setText("Install test: OK\n\n"
+                      + Build.MANUFACTURER + " " + Build.MODEL + "\n"
+                      + "Android " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")\n\n"
+                      + "This phone installs and runs Sahrae-signed apps.");
+                  setContentView(t);
+              }
+          }
+          EOF
+
+      - name: Sign with the Sahrae key when available
+        id: key
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -z "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "::notice::No signing key; the test APK will use Gradle's throwaway debug key."
+            exit 0
+          fi
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > it/app/sahrae.jks
+          cat >> it/app/build.gradle <<'EOF'
+
+          android {
+              signingConfigs {
+                  debug {
+                      storeFile file('sahrae.jks')
+                      storePassword System.getenv('KEYSTORE_PASSWORD')
+                      keyAlias System.getenv('KEY_ALIAS')
+                      keyPassword System.getenv('KEY_PASSWORD')
+                  }
+              }
+          }
+          EOF
+
+      - name: Build
+        working-directory: it
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: gradle assembleDebug --no-daemon
+
+      - name: Publish next to the Sahrae APKs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APK=$(find it/app/build/outputs/apk/debug -name '*.apk' | head -n1)
+          cp "$APK" Sahrae-install-test.apk
+          ls -l Sahrae-install-test.apk
+          keytool -printcert -jarfile Sahrae-install-test.apk | grep -i 'SHA256:' | head -1 || true
+          gh release upload preview Sahrae-install-test.apk --clobber
