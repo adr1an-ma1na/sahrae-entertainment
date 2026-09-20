@@ -1665,11 +1665,105 @@ public class MainActivity extends BridgeActivity {
         recreate();
     }
 
+    /**
+     * Last resort when the app cannot start at all.
+     *
+     * Everything the app shows lives in a WebView, and creating one fails
+     * outright on a phone where Android System WebView is disabled, missing, or
+     * mid-update. That failure happens inside Capacitor's own onCreate, before
+     * any Sahrae screen exists, so the app simply vanished the instant it was
+     * tapped, with nothing on screen and nothing to send anyone. This replaces
+     * that with a plain native screen that names the cause and can share it.
+     */
+    private void showStartupFailure(Throwable error) {
+        String kind = String.valueOf(error);
+        boolean webViewMissing = kind.contains("WebView") || kind.contains("webview");
+        String advice = webViewMissing
+            ? "Sahrae draws its screens with Android System WebView, and this phone cannot start it.\n\n"
+              + "Open Settings, then Apps, find \"Android System WebView\" (and \"Chrome\"), and make sure both are enabled and updated in the Play Store. Then open Sahrae again."
+            : "Sahrae could not start on this phone.\n\nTap Share details and send the report so this can be fixed.";
+
+        java.io.StringWriter sw = new java.io.StringWriter();
+        error.printStackTrace(new java.io.PrintWriter(sw));
+        final String report = deviceSummary() + "\n\nStart-up failure:\n" + sw;
+        recordIncident("Start-up failure:\n" + sw);
+
+        try {
+            android.widget.LinearLayout root = new android.widget.LinearLayout(this);
+            root.setOrientation(android.widget.LinearLayout.VERTICAL);
+            root.setBackgroundColor(0xFF09090B);
+            int pad = (int) (24 * getResources().getDisplayMetrics().density);
+            root.setPadding(pad, pad * 3, pad, pad);
+
+            android.widget.TextView title = new android.widget.TextView(this);
+            title.setText("SAHRAE");
+            title.setTextColor(0xFFFBBF24);
+            title.setTextSize(24);
+            root.addView(title);
+
+            android.widget.TextView body = new android.widget.TextView(this);
+            body.setText(advice);
+            body.setTextColor(0xFFF5F5F7);
+            body.setTextSize(15);
+            body.setPadding(0, pad, 0, pad);
+            root.addView(body);
+
+            android.widget.Button share = new android.widget.Button(this);
+            share.setText("Share details");
+            share.setOnClickListener(v -> {
+                try {
+                    android.content.Intent send = new android.content.Intent(android.content.Intent.ACTION_SEND);
+                    send.setType("text/plain");
+                    send.putExtra(android.content.Intent.EXTRA_SUBJECT, "Sahrae cannot start");
+                    send.putExtra(android.content.Intent.EXTRA_TEXT, report);
+                    startActivity(android.content.Intent.createChooser(send, "Share details"));
+                } catch (Throwable ignore) {}
+            });
+            root.addView(share);
+
+            if (webViewMissing) {
+                android.widget.Button fix = new android.widget.Button(this);
+                fix.setText("Open Play Store");
+                fix.setOnClickListener(v -> {
+                    try {
+                        startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW,
+                            Uri.parse("market://details?id=com.google.android.webview")));
+                    } catch (Throwable noStore) {
+                        try {
+                            startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW,
+                                Uri.parse("https://play.google.com/store/apps/details?id=com.google.android.webview")));
+                        } catch (Throwable ignore) {}
+                    }
+                });
+                root.addView(fix);
+            }
+
+            android.widget.ScrollView scroller = new android.widget.ScrollView(this);
+            scroller.addView(root);
+            setContentView(scroller);
+        } catch (Throwable ignore) {
+            // Even the fallback screen failed: a toast is better than silence.
+            try { Toast.makeText(this, "Sahrae cannot start on this phone.", Toast.LENGTH_LONG).show(); } catch (Throwable ignore2) {}
+        }
+    }
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         installCrashRecorder();
         collectLastExitReason();
-        super.onCreate(savedInstanceState);
+        try {
+            super.onCreate(savedInstanceState);
+        } catch (Throwable startupFailure) {
+            showStartupFailure(startupFailure);
+            return;
+        }
+        // Capacitor can return from onCreate without a usable WebView on a phone
+        // whose WebView provider is being updated. Everything below would then
+        // throw, so stop here with something on screen instead.
+        if (this.bridge == null || this.bridge.getWebView() == null) {
+            showStartupFailure(new IllegalStateException("No WebView after start-up (provider missing, disabled or updating)"));
+            return;
+        }
 
         // ── Release hardening ──
         // On a shipped (non-debuggable) build: turn off remote WebView debugging
