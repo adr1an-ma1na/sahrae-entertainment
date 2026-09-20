@@ -227,21 +227,33 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          FILES=()
-          if [ -f "${{ steps.locate_debug.outputs.apk_path }}" ]; then
-            cp "${{ steps.locate_debug.outputs.apk_path }}" Sahrae-debug.apk
-            FILES+=(Sahrae-debug.apk)
-          fi
+          # One standard APK. The release-signed build IS the app: it is what the
+          # emulator checks install and open, and what anyone downloading the
+          # link gets. The debug build stays an Actions artifact for development,
+          # and the diagnostic variants (plain, install-test) are built by hand
+          # when something needs isolating, so the download page shows one file
+          # and nobody has to guess which one to install.
+          #
+          # The file name never changes: links to it are already out in the world.
           if [ -f "${{ steps.locate_release.outputs.apk_path }}" ]; then
             cp "${{ steps.locate_release.outputs.apk_path }}" Sahrae-release.apk
-            FILES+=(Sahrae-release.apk)
+          elif [ -f "${{ steps.locate_debug.outputs.apk_path }}" ]; then
+            # No signing key configured: ship the debug build under the same name
+            # rather than publishing nothing.
+            cp "${{ steps.locate_debug.outputs.apk_path }}" Sahrae-release.apk
+          else
+            echo "No APK to publish"; exit 1
           fi
-          if [ ${#FILES[@]} -eq 0 ]; then echo "No APKs to publish"; exit 1; fi
+          VERSION=$(grep -m1 'versionName' android/app/build.gradle | sed 's/.*"\(.*\)".*/\1/')
           # Refresh the rolling tag so the release always points at this build.
           gh release delete preview --yes --cleanup-tag 2>/dev/null || true
-          gh release create preview "${FILES[@]}" \
-            --title "Sahrae preview build" \
-            --notes "Auto-built from ${{ github.sha }} on ${{ github.ref_name }}" \
+          gh release create preview Sahrae-release.apk \
+            --title "Sahrae $VERSION" \
+            --notes "Sahrae Entertainment for Android, version $VERSION.
+
+          Download **Sahrae-release.apk** below and open it on the phone. Android will ask you to allow installs from your browser the first time.
+
+          Built from ${{ github.sha }}. Installed and opened on Android 9 and Android 14 emulators, including a 2 GB device, before publishing." \
             --target "${{ github.sha }}"
 
   # ------------------------------------------------------------------
@@ -257,6 +269,10 @@ jobs:
   # ------------------------------------------------------------------
   plain:
     name: Build plain APK
+    # Diagnostic only: run it by hand from the Actions tab when something needs
+    # isolating (the native overlay, R8, or the web app). Not part of a normal
+    # build, and it no longer publishes to the release page.
+    if: github.event_name == 'workflow_dispatch'
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -338,12 +354,18 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon --stacktrace
 
-      - name: Publish it next to the others
-        env:
-          GH_TOKEN: ${{ github.token }}
+      # Kept out of the release page: one standard APK is published there, and a
+      # second file to choose between is exactly the confusion this avoids. It
+      # is downloadable from this run's artifacts when it is needed.
+      - name: Keep the plain APK as an artifact
         run: |
           APK=$(find android/app/build/outputs/apk/debug -name '*.apk' | head -n1)
           cp "$APK" Sahrae-plain.apk
           ls -l Sahrae-plain.apk
           keytool -printcert -jarfile Sahrae-plain.apk | grep -i 'SHA256:' | head -1 || true
-          gh release upload preview Sahrae-plain.apk --clobber
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sahrae-plain-apk
+          path: Sahrae-plain.apk
+          retention-days: 14

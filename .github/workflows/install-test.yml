@@ -136,12 +136,17 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: gradle assembleDebug --no-daemon
 
-      - name: Publish next to the Sahrae APKs
-        env:
-          GH_TOKEN: ${{ github.token }}
+      # Not published to the release page: one standard APK lives there. This
+      # one is downloadable from this run's artifacts when it is needed.
+      - name: Keep the test APK as an artifact
         run: |
           APK=$(find it/app/build/outputs/apk/debug -name '*.apk' | head -n1)
           cp "$APK" Sahrae-install-test.apk
           ls -l Sahrae-install-test.apk
           keytool -printcert -jarfile Sahrae-install-test.apk | grep -i 'SHA256:' | head -1 || true
-          gh release upload preview Sahrae-install-test.apk --clobber
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sahrae-install-test-apk
+          path: Sahrae-install-test.apk
+          retention-days: 14
