@@ -4,6 +4,7 @@
 # variables set on one line are gone on the next.
 set -u
 API="$1"
+RAM="${2:-4096}"
 PKG=com.sahrae.entertainment
 
 adb install -r Sahrae-release.apk
@@ -56,6 +57,30 @@ else
     echo "Modern WebView: the app is drawing content."
   else
     echo "::error::Screen is blank 45s after launch (API $API, $COLOURS colours)"; exit 1
+  fi
+
+  # ── Small phone ──
+  # The failure a 3 GB Nokia C32 hit: the app starts, then Android kills its
+  # renderer for memory, over and over. Lite mode is what is supposed to prevent
+  # that, so on a small emulator sit with the app open and require that it is
+  # still the same process, still drawing, a minute later.
+  if [ "$RAM" -le 2048 ]; then
+    FIRST_PID=$(cat pid.txt | tr -d '\r ')
+    adb shell input swipe 500 1200 500 300 300 || true
+    sleep 20
+    adb shell input swipe 500 1200 500 300 300 || true
+    sleep 40
+    adb shell pidof "$PKG" > pid-idle.txt || true
+    adb exec-out screencap -p > screen-small-phone.png || true
+    IDLE_PID=$(cat pid-idle.txt | tr -d '\r ')
+    COLOURS_IDLE=$(python3 blank.py screen-small-phone.png 2>/dev/null || echo 0)
+    adb logcat -d > logcat.txt || true
+    KILLS=$(grep -c "Killing .*$PKG" logcat.txt || true)
+    echo "Small phone ($RAM MB): pid $FIRST_PID -> $IDLE_PID, colours $COLOURS_IDLE, kills $KILLS"
+    [ -n "$IDLE_PID" ] || { grep -E "Killing .*$PKG|$PKG.*has died" logcat.txt | head -5; echo "::error::The app was killed while open on a $RAM MB device (API $API)"; exit 1; }
+    [ "$IDLE_PID" = "$FIRST_PID" ] || { echo "::error::The app restarted while open on a $RAM MB device: its renderer is still being killed (API $API)"; exit 1; }
+    [ "${COLOURS_IDLE:-0}" -gt 40 ] || { echo "::error::Blank screen after a minute on a $RAM MB device (API $API)"; exit 1; }
+    echo "Small phone: the app held its process and kept drawing."
   fi
 
   # ── Renderer loss ──

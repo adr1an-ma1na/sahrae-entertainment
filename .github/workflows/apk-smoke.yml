@@ -32,7 +32,7 @@ jobs:
           # A 3 GB phone (Nokia C32) killed the renderer repeatedly here, which
           # is what "the app closes by itself" looked like. Lite mode exists for
           # this row.
-          - api: 30
+          - api: 34
             ram: 2048
     steps:
       - name: Enable KVM
@@ -74,7 +74,7 @@ jobs:
           target: google_apis
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot -memory ${{ matrix.ram }}
-          script: bash .github/scripts/apk-smoke-verify.sh ${{ matrix.api }}
+          script: bash .github/scripts/apk-smoke-verify.sh ${{ matrix.api }} ${{ matrix.ram }}
 
       - name: Keep evidence
         if: always()
@@ -88,4 +88,5 @@ jobs:
             webview.txt
             screen-after-renderer-loss.png
             logcat-first-launch.txt
+            screen-small-phone.png
           if-no-files-found: ignore
