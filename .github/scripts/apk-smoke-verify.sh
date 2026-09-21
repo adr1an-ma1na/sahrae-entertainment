@@ -88,8 +88,14 @@ else
   # Unhandled, Android then kills the whole app ("it closes by itself"). The app
   # must survive and draw again.
   APP_PID=$(cat pid.txt | tr -d '\r ')
-  adb root >/dev/null 2>&1 || true
-  adb wait-for-device
+  # Both of these can hang forever when adbd does not come back after switching
+  # to root, which cancelled two 35-minute jobs. Bounded, and the check is
+  # skipped rather than left hanging.
+  timeout 60 adb root >/dev/null 2>&1 || true
+  if ! timeout 120 adb wait-for-device; then
+    echo "::warning::adb did not come back after 'adb root'; renderer-loss check skipped (API $API)"
+    exit 0
+  fi
   # Switching adbd to root makes Google Play services restart a few seconds
   # later, and Android kills every app bound to its font provider when it does,
   # which the WebView is. Seen in the first runs of this check: the app handled
