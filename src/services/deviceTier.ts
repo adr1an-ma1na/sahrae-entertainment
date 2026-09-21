@@ -1,28 +1,33 @@
 /**
- * Lite mode: what the app does on a phone that cannot afford the full one.
+ * How much image a device should be asked to hold.
  *
- * Why this exists. On a 3 GB Android phone (a Nokia C32, Android's low-memory
- * configuration) Sahrae installed and started, then Android killed its renderer
- * over and over: the home screen asks for a full-resolution backdrop plus a
- * hundred posters, and the decoded bitmaps alone run to hundreds of megabytes.
- * A renderer that exceeds its share is killed, the app reloads, and it happens
- * again — which is what "the app closes by itself" looked like from outside.
+ * Why this exists. On a 3 GB Android phone (a Nokia C32) Sahrae installed and
+ * started, then Android killed its renderer over and over. The cause was not
+ * the visual design: it was artwork. A decoded bitmap costs width × height × 4
+ * bytes regardless of how small the JPEG was, and the app asked TMDB for
+ * `original` backdrops — up to 3840 px wide, about 60 MB in memory each — on a
+ * screen 720 px wide. Dozens of posters at w500 followed the same pattern.
  *
- * Lite mode is not a different app. It is the same screens with the artwork
- * asked for at a size the phone can hold, and the expensive decoration off.
+ * The fix is not to take features away. An image larger than the screen can
+ * show is waste in every case, so the size is chosen from the screen instead:
+ * on that phone a w780 backdrop fills the width exactly and looks identical to
+ * the `original` it replaces, at a twentieth of the memory. A laptop still gets
+ * the full-resolution artwork, because there it is visible.
  *
- * It turns on when any of these is true:
- *   - the Android shell measured the device as low-RAM and set the flag
- *   - the renderer has already been killed here for memory
- *   - the browser reports 4 GB or less (`navigator.deviceMemory`, rounded down
- *     to a power of two, so a 3 GB phone reports 4 and a 6 GB one reports 4 too;
- *     both are better served by smaller images than by a reload loop)
+ * Nothing here removes glass, glow or motion. Those are dropped only by
+ * `low-gfx`, which is set when the renderer has actually crashed on this
+ * device — evidence, not a guess about the phone's taste.
  */
 
 export const LITE_KEY = 'sahrae.lite.v1';
 
 let cached: boolean | null = null;
 
+/**
+ * A memory-constrained device: the Android shell measured it, or its renderer
+ * has already been lost here, or the browser reports 4 GB or less. It changes
+ * one thing — off-screen rows are not painted — and nothing you can see.
+ */
 export function isLiteDevice(): boolean {
   if (cached !== null) return cached;
   let lite = false;
@@ -47,14 +52,33 @@ export function markLiteDevice(): void {
   try { document.documentElement.classList.add('lite'); } catch { /* no document */ }
 }
 
-/** Stamp the class so CSS can drop the expensive decoration. */
+/**
+ * The widest artwork worth fetching, in device pixels.
+ *
+ * It is the screen's WIDTH, not its longest edge: a full-bleed backdrop spans
+ * the width, and a phone held upright is 720 CSS px across however tall it is.
+ * Times the pixel ratio, capped at 2×, because beyond that the extra detail is
+ * not resolvable at arm's length and the memory cost is real.
+ */
+export function screenPixels(): number {
+  try {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const cssWidth = Math.min(
+      window.screen?.width || Number.POSITIVE_INFINITY,
+      window.innerWidth || Number.POSITIVE_INFINITY,
+    );
+    const px = Number.isFinite(cssWidth) ? Math.round(cssWidth * dpr) : 0;
+    return px > 0 ? px : 1920;
+  } catch {
+    return 1920; // unknown: assume a desktop and keep the full-fat artwork
+  }
+}
+
+/** Stamp the class so off-screen rows can be skipped on a small device. */
 export function applyDeviceTier(): boolean {
   if (typeof document === 'undefined') return false;
   const lite = isLiteDevice();
   document.documentElement.classList.toggle('lite', lite);
-  // Blur and the ambient glow field are the two costliest effects; `low-gfx`
-  // already turns both off, so lite implies it.
-  if (lite) document.documentElement.classList.add('low-gfx');
   return lite;
 }
 

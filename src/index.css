@@ -1107,16 +1107,10 @@ html.tv-mode:not(.nav-collapsed) .tv-navbar { left: 16rem !important; }
 html.tv-mode .illo .illo-float, html.tv-mode .illo .illo-twinkle,
 html.low-gfx .illo .illo-float, html.low-gfx .illo .illo-twinkle { animation: none; }
 
-/* ── Lite mode ───────────────────────────────────────────────────────────────
-   Set on phones with little memory (see services/deviceTier.ts). `low-gfx` is
-   applied alongside it, so blur and the ambient glow are already gone; what is
-   left here is everything else that costs memory or continuous compositing on a
-   device that was killing its own renderer to stay alive. */
-html.lite .aurora-glow { display: none; }
-html.lite .kenburns { animation: none; transform: none; }
-html.lite .skeleton::after { animation: none; }
-html.lite .illo .illo-float, html.lite .illo .illo-twinkle { animation: none; }
-html.lite .np-bleed { display: none; }
-/* Off-screen rows are not painted until they are scrolled near, so a home
-   screen of a dozen rails holds a few decoded images rather than all of them. */
+/* ── Small-memory devices ────────────────────────────────────────────────────
+   Set on phones with little memory (see services/deviceTier.ts). It costs
+   nothing visible: the glass, the glow and the motion all stay. Rows that are
+   off-screen simply are not painted until they are scrolled near, so a home
+   screen of a dozen rails holds a few decoded images instead of all of them.
+   That, plus artwork sized to the screen, is what keeps the renderer alive. */
 html.lite section { content-visibility: auto; contain-intrinsic-size: auto 320px; }

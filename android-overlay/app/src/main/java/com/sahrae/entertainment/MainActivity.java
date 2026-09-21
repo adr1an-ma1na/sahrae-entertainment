@@ -2007,7 +2007,7 @@ public class MainActivity extends BridgeActivity {
                 try { liteForced = getSharedPreferences(DIAG_PREFS, MODE_PRIVATE).getBoolean("liteForced", false); } catch (Throwable ignore) {}
                 if (liteForced || isSmallMemoryDevice()) {
                     view.evaluateJavascript(
-                        "document.documentElement.classList.add('lite','low-gfx');"
+                        "document.documentElement.classList.add('lite');"
                         + "try{localStorage.setItem('sahrae.lite.v1','1')}catch(e){}", null);
                 }
             }

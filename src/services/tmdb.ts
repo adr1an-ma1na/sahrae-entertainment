@@ -1,5 +1,5 @@
 import { httpFetch } from './http.ts';
-import { isLiteDevice } from './deviceTier.ts';
+import { screenPixels } from './deviceTier.ts';
 const API_KEY = 'f1a823e739bfce21511a8e2f8e42befc';
 const BASE_URL = 'https://api.themoviedb.org/3';
 
@@ -292,28 +292,37 @@ const POSTER_PLACEHOLDER =
     </svg>`,
   );
 
-/**
- * One step down the TMDB size ladder for each request, used on low-memory
- * phones. A decoded bitmap costs width × height × 4 bytes no matter how small
- * the JPEG was: one `original` backdrop is ~8 MB in memory, a `w780` about
- * 1.3 MB, and a home screen holds dozens of them. This is the single biggest
- * lever on whether the renderer survives.
- */
-const LITE_SIZE: Record<string, TmdbImageSize> = {
-  original: 'w780',
-  w780: 'w500',
-  w500: 'w342',
-  w342: 'w185',
-  w300: 'w185',
-  w185: 'w185',
+export type TmdbImageSize = 'w500' | 'original' | 'w1280' | 'w780' | 'w342' | 'w185' | 'w300';
+
+/** How wide each named size actually is, in pixels. `original` is unbounded. */
+const SIZE_PX: Record<TmdbImageSize, number> = {
+  w185: 185, w300: 300, w342: 342, w500: 500, w780: 780, w1280: 1280, original: 4096,
 };
 
-export type TmdbImageSize = 'w500' | 'original' | 'w780' | 'w342' | 'w185' | 'w300';
-
+/**
+ * Never ask for artwork wider than the screen can show.
+ *
+ * A full-bleed backdrop is the one image asked for at `original`: up to 3840 px
+ * and ~60 MB decoded, on phones whose screens are 720 px wide. Capping it at
+ * the screen's own pixel width is invisible — the image still fills the display
+ * edge to edge — and it is what stopped a 3 GB phone killing its own renderer.
+ *
+ * Smaller sizes are left exactly as asked. A poster requested at w500 is being
+ * drawn on a card a couple of hundred pixels wide, so it is already modest, and
+ * second-guessing it would cost visible sharpness for very little memory.
+ */
 export const getImageUrl = (path: string | null, size: TmdbImageSize = 'w500') => {
   if (!path) return POSTER_PLACEHOLDER;
   if (path.startsWith('http')) return path;
-  const asked = isLiteDevice() ? (LITE_SIZE[size] || size) : size;
+  let asked: TmdbImageSize = size;
+  if (SIZE_PX[size] >= 780) {
+    const budget = screenPixels();
+    // A 720 px phone at 2x wants ~1440 px across: w1280 fills it, and costs
+    // about 3.7 MB decoded where `original` costs 60. A laptop's 3000 px keeps
+    // the full file, because at that width the difference is visible.
+    const fits: TmdbImageSize = budget < 800 ? 'w780' : budget < 2000 ? 'w1280' : 'original';
+    if (SIZE_PX[fits] < SIZE_PX[size]) asked = fits;
+  }
   return `https://image.tmdb.org/t/p/${asked}${path}`;
 };
 
