@@ -690,6 +690,12 @@ html.tv-mode {
   scroll-padding-top: 7rem;     /* focused items never hide under the navbar */
   scroll-padding-bottom: 3rem;
   scroll-behavior: auto;        /* instant — never animate remote moves */
+  /* Everything sized in rem — nearly all Tailwind spacing, icon and text-scale
+     utilities in this codebase — grows with it: nav labels, buttons, modal
+     padding, headings. Scoped to the root so it can never reach a video
+     surface or iframe, which are sized in px/vw/vh, not rem. Chosen to read
+     comfortably from a couch (~10 ft) without the grid feeling cramped. */
+  font-size: 118%;
 }
 .tv-mode [data-tv-focusable],
 .tv-mode a,
@@ -721,6 +727,14 @@ html.tv-mode {
 .tv-mode .tv-focused {
   box-shadow: 0 0 0 4px #FBBF24, 0 0 30px 6px rgba(251,191,36, 0.6) !important;
 }
+/* Poster titles/years/ratings are set in literal px (Tailwind arbitrary
+   values), so the root font-size bump above skips them — the whole point of
+   the browse grid is reading these from the couch, so they get their own
+   raise here rather than being left at phone-reading size. */
+.tv-mode .poster-card-title { font-size: 16px; }
+.tv-mode .poster-card-year { font-size: 13px; }
+.tv-mode .poster-card-rating { font-size: 11px; padding: 0.25rem 0.4rem; }
+.tv-mode .poster-card-rating svg { width: 0.85rem; height: 0.85rem; }
 
 @layer utilities {
   .scrollbar-hide {

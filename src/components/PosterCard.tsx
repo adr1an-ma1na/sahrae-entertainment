@@ -39,7 +39,7 @@ export default function PosterCard({ item, type, onPlay, onRemove }: {
           onError={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = '1'; }}
         />
         {item.vote_average ? (
-          <div className="absolute top-1.5 right-1.5 bg-black/60 backdrop-blur-md px-1.5 py-0.5 rounded text-[9px] font-bold text-amber-400 border border-white/10 flex items-center gap-0.5">
+          <div className="poster-card-rating absolute top-1.5 right-1.5 bg-black/60 backdrop-blur-md px-1.5 py-0.5 rounded text-[9px] font-bold text-amber-400 border border-white/10 flex items-center gap-0.5">
             <Star className="w-2.5 h-2.5 fill-current" /><span>{item.vote_average.toFixed(1)}</span>
           </div>
         ) : null}
@@ -58,8 +58,8 @@ export default function PosterCard({ item, type, onPlay, onRemove }: {
           <span className="btn-gold w-9 h-9 rounded-full flex items-center justify-center shadow-lg scale-90 group-hover:scale-100 group-focus-visible:scale-100 transition-transform duration-300"><Play className="w-4 h-4 fill-current ml-0.5" /></span>
         </div>
       </div>
-      <p className="mt-1.5 text-[13px] font-semibold text-white truncate leading-tight group-hover:text-amber-300 transition-colors">{item.title || item.name}</p>
-      {year ? <p className="text-[11px] text-zinc-400 truncate">{year}</p> : null}
+      <p className="poster-card-title mt-1.5 text-[13px] font-semibold text-white truncate leading-tight group-hover:text-amber-300 transition-colors">{item.title || item.name}</p>
+      {year ? <p className="poster-card-year text-[11px] text-zinc-400 truncate">{year}</p> : null}
     </div>
   );
 }
