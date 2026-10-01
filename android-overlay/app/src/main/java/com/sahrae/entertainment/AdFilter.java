@@ -215,9 +215,14 @@ final class AdFilter {
                 case "media":       if (negate) rule.notTypes |= TYPE_MEDIA;      else rule.types |= TYPE_MEDIA; break;
                 case "font":        if (negate) rule.notTypes |= TYPE_FONT;       else rule.types |= TYPE_FONT; break;
                 case "document":    if (negate) rule.notTypes |= TYPE_DOCUMENT;   else rule.types |= TYPE_DOCUMENT; break;
-                // Harmless to honour as plain blocks.
+                // Request types this matcher cannot tell apart. Dropping the option
+                // and keeping the rule WIDENS it: EasyPrivacy's `*$ping,third-party`
+                // became `*$third-party` and emptied every request the app made
+                // (catalog, posters, sign-in, fonts, streams). Discard the rule. A
+                // negated one (`~ping`, "all but pings") only gains pings, so keep it.
                 case "popup": case "other": case "object": case "websocket": case "ping":
-                    break;
+                    if (negate) break;
+                    return false;
                 // Everything else ($csp, $redirect, $removeparam, $replace, …)
                 // changes semantics in ways this matcher does not implement.
                 default:

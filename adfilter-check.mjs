@@ -35,7 +35,8 @@ function applyOptions(rule, opts) {
     const map = { script:T.SCRIPT, image:T.IMAGE, stylesheet:T.STYLESHEET, xmlhttprequest:T.XHR, subdocument:T.SUBDOCUMENT, media:T.MEDIA, font:T.FONT, document:T.DOCUMENT };
     if (opt === 'third-party') { rule.thirdParty = !negate; continue; }
     if (map[opt] !== undefined) { negate ? (rule.notTypes |= map[opt]) : (rule.types |= map[opt]); continue; }
-    if (['popup','other','object','websocket','ping'].includes(opt)) continue;
+    // A type we cannot detect must discard the rule, never widen it (see AdFilter.java).
+    if (['popup','other','object','websocket','ping'].includes(opt)) { if (negate) continue; return false; }
     return false;
   }
   return true;
@@ -116,6 +117,8 @@ const LIST = [
   // match `/safe/ok.js` (o is not a separator) — in ABP either. The realistic
   // exception form uses a wildcard.
   '@@||doubleclick.net/safe/*',
+  '*$ping,third-party',
+  '||popuponly.example^$popup',
 ];
 const match = makeEngine(LIST);
 
@@ -145,6 +148,11 @@ const cases = [
   // subdomain semantics
   ['subdomain of ad host blocked', 'https://a.b.popads.net/x', 'a.b.popads.net', 'vidsrc.to', T.SCRIPT, true],
   ['lookalike host NOT blocked', 'https://notpopads.net/x', 'notpopads.net', 'vidsrc.to', T.SCRIPT, false],
+  // `*$ping,third-party` once became `*$third-party` and blocked everything the app fetched.
+  ['ping-only rule spares the catalog API', 'https://api.themoviedb.org/3/trending/movie/week', 'api.themoviedb.org', 'localhost', T.UNKNOWN, false],
+  ['ping-only rule spares posters', 'https://image.tmdb.org/t/p/w500/a.jpg', 'image.tmdb.org', 'localhost', T.IMAGE, false],
+  ['ping-only rule spares fonts', 'https://fonts.googleapis.com/css2?family=figtree', 'fonts.googleapis.com', 'localhost', T.STYLESHEET, false],
+  ['popup-only rule does not block the host outright', 'https://popuponly.example/x.png', 'popuponly.example', 'vidsrc.to', T.IMAGE, false],
 ];
 
 let pass = 0, fail = 0;

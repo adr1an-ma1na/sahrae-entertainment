@@ -164,6 +164,7 @@ public class MainActivity extends BridgeActivity {
     /** Hosts the top frame is allowed to navigate to. Everything else is refused. */
     private static final Set<String> TRUSTED_MAIN_FRAME_HOSTS = new HashSet<>(Arrays.asList(
         "localhost",                  // Capacitor's bundled app
+        "supabase.co",                // Supabase auth (the app's sign-in backend)
         "firebaseapp.com",            // Firebase auth + hosting (matches *.firebaseapp.com)
         "google.com",                 // accounts.google.com, etc. (Google sign-in redirect)
         "googleapis.com",             // Firebase Auth REST endpoints
@@ -190,6 +191,7 @@ public class MainActivity extends BridgeActivity {
         // a player wiring up its own CDN iframe during page load is not one.
         // ─────────────────────────────────────────────────────────────────
         // Movie / TV embed providers — current PlayerModal list
+        "vidfast.pro","videasy.net",
         "vidvault.ru","multiembed.mov","vidsrc.cc","smashystream.com",
         "vidsrc.to","vidbinge.com","moviesapi.club","autoembed.co",
         "vidsrc.pro","2embed.cc","vidsrc.net","vidsrc.me","embed.su",
@@ -415,6 +417,17 @@ public class MainActivity extends BridgeActivity {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /** Host of the document that made this request (Referer, else Origin), or null. */
+    private static String initiatorHost(WebResourceRequest request) {
+        Map<String, String> h = request.getRequestHeaders();
+        if (h == null) return null;
+        String src = h.get("Referer");
+        if (src == null) src = h.get("referer");
+        if (src == null) src = h.get("Origin");
+        if (src == null) src = h.get("origin");
+        return src != null ? uriHost(src) : null;
     }
 
     /** Our own Capacitor app shell — never intercept/rewrite it. */
@@ -1925,6 +1938,13 @@ public class MainActivity extends BridgeActivity {
                         }
                     }
 
+                    // Everything our own page asks for — catalog and auth calls,
+                    // posters, fonts, and the player iframes it creates — passes
+                    // through untouched, exactly as it does in the PWA. The ad
+                    // defences below act only on what a third-party frame loads.
+                    String initiator = initiatorHost(request);
+                    if (isLocalAppHost(initiator)) return super.shouldInterceptRequest(view, request);
+
                     // L1 — network blocklist (hostname), now also fed by
                     // EasyList's plain domain rules. An @@ exception still wins.
                     if (isAdHost(host) && !isExceptedByRule(request, host)) return blockedResponse();
@@ -1932,7 +1952,9 @@ public class MainActivity extends BridgeActivity {
                     // uBlock use. This is what catches an ad or popunder script
                     // served from the streaming provider's OWN domain, which a
                     // hostname list can never block without killing the player.
-                    if (isAdByRule(request, host)) return blockedResponse();
+                    // Skipped when the initiator is unknown: a rule that cannot see
+                    // who asked can't tell an ad from the app.
+                    if (initiator != null && isAdByRule(request, host)) return blockedResponse();
 
                     // L1.5 — DOM-level eradication: rewrite embed HTML documents,
                     // injecting the anti-popup shim inside the hostile iframe.

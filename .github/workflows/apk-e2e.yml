@@ -1,0 +1,114 @@
+name: APK end-to-end
+
+# Builds the APK exactly as it ships (same native layer, same bundled ad lists),
+# installs it on an emulator, attaches to its WebView over DevTools and drives
+# the web app through the flows in e2e/lib.mjs: the same ones the PWA passes.
+#
+# The `baseline` leg swaps in main's native layer, so every run is a before /
+# after on identical hardware. Debug builds are used because a release build
+# switches WebView DevTools off; the web app and native layer are the same code.
+on:
+  push:
+    branches: ['fix/**']
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [fixed, baseline]
+    steps:
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use main's native layer (before)
+        if: matrix.variant == 'baseline'
+        run: git checkout origin/main -- android-overlay
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
+
+      - name: Build the web app
+        run: |
+          npm install --legacy-peer-deps
+          npm run build
+
+      - name: Create the Android project
+        run: npx cap add android
+
+      # Same recipe as android.yml: the over-blocking only exists with these bundled.
+      - name: Bundle the ad lists
+        run: |
+          mkdir -p android-overlay/app/src/main/assets
+          OUT=android-overlay/app/src/main/assets/adhosts.txt
+          if curl -fsSL --retry 3 --max-time 120 https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts -o /tmp/hosts.txt; then
+            grep -E '^(0\.0\.0\.0|127\.0\.0\.1)[[:space:]]+' /tmp/hosts.txt | awk '{print $2}' \
+              | grep -vE '^(localhost|localhost\.localdomain|local|broadcasthost|0\.0\.0\.0|ip6-.*)$' \
+              | tr 'A-Z' 'a-z' | sort -u > "$OUT" || true
+          fi
+          touch "$OUT"
+          OUT=android-overlay/app/src/main/assets/easylist.txt
+          : > "$OUT"
+          for URL in https://easylist.to/easylist/easylist.txt https://easylist.to/easylist/easyprivacy.txt; do
+            if curl -fsSL --retry 3 --max-time 120 "$URL" -o /tmp/list.txt; then
+              grep -vE '^[!\[]' /tmp/list.txt | grep -vE '#(#|@#|\?#)' | grep -vE '^[[:space:]]*$' >> "$OUT" || true
+            fi
+          done
+          sort -u -o "$OUT" "$OUT" || true
+          wc -l android-overlay/app/src/main/assets/*.txt
+
+      - name: Apply the native layer
+        run: |
+          rm -f android/app/src/main/java/com/sahrae/entertainment/MainActivity.java
+          cp -r android-overlay/. android/
+
+      - name: Build the debug APK
+        run: |
+          npx cap sync android
+          chmod +x android/gradlew
+          cd android && ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Install the test driver
+        working-directory: e2e
+        run: npm ci
+
+      - name: Run the flows on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -no-snapshot -memory 4096
+          script: bash .github/scripts/apk-e2e.sh ${{ matrix.variant }}
+
+      - name: Keep the evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-${{ matrix.variant }}
+          path: e2e/results/
+          retention-days: 14
+          if-no-files-found: warn
