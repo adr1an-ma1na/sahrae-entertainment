@@ -245,15 +245,23 @@ jobs:
             echo "No APK to publish"; exit 1
           fi
           VERSION=$(grep -m1 'versionName' android/app/build.gradle | sed 's/.*"\(.*\)".*/\1/')
-          # Refresh the rolling tag so the release always points at this build.
-          gh release delete preview --yes --cleanup-tag 2>/dev/null || true
-          gh release create preview Sahrae-release.apk \
-            --title "Sahrae $VERSION" \
+          # main refreshes the public rolling `preview` link. Any other branch is a
+          # test build: it gets its own pre-release so the public link is never
+          # replaced by something unproven.
+          TAG=preview; TITLE="Sahrae $VERSION"; PRE=""
+          if [ "${{ github.ref_name }}" != "main" ]; then
+            TAG="test-$(echo '${{ github.ref_name }}' | tr '/' '-')"
+            TITLE="Sahrae $VERSION (test build from ${{ github.ref_name }})"
+            PRE="--prerelease"
+          fi
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" Sahrae-release.apk $PRE \
+            --title "$TITLE" \
             --notes "Sahrae Entertainment for Android, version $VERSION.
 
           Download **Sahrae-release.apk** below and open it on the phone. Android will ask you to allow installs from your browser the first time.
 
-          Built from ${{ github.sha }}. Installed and opened on Android 9 and Android 14 emulators, including a 2 GB device, before publishing." \
+          Built from ${{ github.sha }}." \
             --target "${{ github.sha }}"
 
   # ------------------------------------------------------------------
