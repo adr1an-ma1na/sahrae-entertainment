@@ -328,6 +328,10 @@ export function initSpatialNavigation() {
 
       // Enter / "OK" — activate the focused element.
       if (e.key === 'Enter') {
+        // Enter in a text field is a phone keyboard's Go key, not a remote's OK.
+        // Treating it as a TV signal laid the TV sidebar over the phone layout
+        // for anyone who searched.
+        if (isTypingTarget(active)) return;
         enableTvMode();
         if (active && active !== document.body && !isTypingTarget(active)) {
           const tag = active.tagName.toLowerCase();

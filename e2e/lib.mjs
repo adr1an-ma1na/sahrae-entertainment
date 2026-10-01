@@ -176,7 +176,13 @@ export const FLOWS = [
       const input = await p.$('input[placeholder="Titles, people, genres"]');
       if (!input) return { opened, typed: false };
       await input.focus();
-      await p.keyboard.type('batman', { delay: 40 });
+      // Set the value the way a keyboard commit does. Per-character IME input
+      // scrambles in a WebView ("batman" arrived as "tmana").
+      await p.evaluate(() => {
+        const el = document.querySelector('input[placeholder="Titles, people, genres"]');
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, 'batman');
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      });
       await p.keyboard.press('Enter');
       await settle(p, 6000);
       const results = await p.evaluate(() => document.querySelectorAll('.poster-card').length);
