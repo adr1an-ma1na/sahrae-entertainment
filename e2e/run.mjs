@@ -59,8 +59,9 @@ if (target === 'pwa') {
   console.log('attached to', page.url());
   await page.evaluateOnNewDocument(MEDIA_HOOK);
   const rec = attachRecorder(page);
-  // Reload so boot-time requests (fonts, config, first catalog calls) are captured too.
-  await page.reload({ timeout: 60000 });
+  // No reload: the app's own beforeunload guards (player, Sports) are auto-
+  // cancelled by the native layer, so a reload can be refused. The device
+  // script launches the app fresh instead.
   await runFlows(page, rec, out, { only });
   page.close();
   process.exit(0);

@@ -22,7 +22,9 @@ export async function connectPage(devtoolsHttp, match = (t) => t.type === 'page'
   let target;
   for (let i = 0; i < 60 && !target; i++) {
     const list = await fetch(`${devtoolsHttp}/json/list`).then((r) => r.json()).catch(() => []);
-    target = list.find(match);
+    // The app also runs hidden WebViews (stream resolvers); prefer the one on screen.
+    const isVisible = (t) => { try { return JSON.parse(t.description || '{}').visible === true; } catch { return false; } };
+    target = list.filter(match).sort((a, b) => isVisible(b) - isVisible(a))[0];
     if (!target) await sleep(1000);
   }
   if (!target) throw new Error('no matching page in /json/list');
@@ -148,7 +150,12 @@ export async function connectPage(devtoolsHttp, match = (t) => t.type === 'page'
   Object.assign(page, {
     url: () => mainUrl,
     evaluate: (fn, ...args) => evaluateIn(null, fn, args),
-    evaluateOnNewDocument: (fn) => send('Page.addScriptToEvaluateOnNewDocument', { source: `(${fn.toString()})()` }),
+    // Also run it in the current document: the WebView ignores Page.reload, so a
+    // 'future documents only' script might never run at all.
+    evaluateOnNewDocument: async (fn) => {
+      await send('Page.addScriptToEvaluateOnNewDocument', { source: `(${fn.toString()})()` });
+      await evaluateIn(null, fn, []).catch(() => {});
+    },
     frames: () => [...frameUrl.keys()].map((fid) => ({
       url: () => frameUrl.get(fid) || '',
       name: () => fid,
@@ -176,10 +183,12 @@ export async function connectPage(devtoolsHttp, match = (t) => t.type === 'page'
       const { data } = await send('Page.captureScreenshot', { format: 'png' }, 30000);
       fs.writeFileSync(path, Buffer.from(data, 'base64'));
     },
+    // Page.reload is silently ignored by Android WebView; reload from inside.
     reload: async ({ timeout = 60000 } = {}) => {
-      const loaded = new Promise((r) => bus.once('Page.domContentEventFired', r));
-      await send('Page.reload', {});
-      await Promise.race([loaded, sleep(timeout)]);
+      const fresh = new Promise((r) => bus.once('Runtime.executionContextsCleared', r));
+      await send('Runtime.evaluate', { expression: 'setTimeout(() => location.reload(), 0)' }).catch(() => {});
+      await Promise.race([fresh, sleep(timeout)]);
+      await sleep(2000);
     },
     waitForNetworkIdle: async ({ idleTime = 1000, timeout = 15000 } = {}) => {
       const end = Date.now() + timeout;
