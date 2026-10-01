@@ -7,7 +7,8 @@ PKG=com.sahrae.entertainment
 OUT="e2e/results/android-$LABEL"
 mkdir -p "$OUT"
 
-APK=$(find android/app/build/outputs/apk/debug -name '*.apk' | head -n1)
+APK=$(find android/app/build/outputs/apk -name '*.apk' | head -n1)
+echo "APK: $APK"
 timeout 180 adb install -r "$APK"
 # The app asks for this on first launch; pre-granting keeps a system dialog off the screen.
 adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS 2>/dev/null || true

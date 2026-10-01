@@ -19,7 +19,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [fixed, baseline]
+        # release: the shipped build type (R8 on), debuggable only so DevTools can attach
+        variant: [fixed, baseline, release]
     steps:
       - name: Enable KVM
         run: |
@@ -83,11 +84,16 @@ jobs:
           rm -f android/app/src/main/java/com/sahrae/entertainment/MainActivity.java
           cp -r android-overlay/. android/
 
-      - name: Build the debug APK
+      - name: Release build type, as shipped
+        if: matrix.variant == 'release'
+        run: node .github/scripts/release-debuggable.cjs
+
+      - name: Build the APK
         run: |
           npx cap sync android
           chmod +x android/gradlew
-          cd android && ./gradlew assembleDebug --no-daemon --stacktrace
+          TASK=assembleDebug; [ "${{ matrix.variant }}" = release ] && TASK=assembleRelease
+          cd android && ./gradlew $TASK --no-daemon --stacktrace
 
       - name: Install the test driver
         working-directory: e2e

@@ -39,37 +39,33 @@ if (target === 'pwa') {
   const rec = attachRecorder(page);
   await page.goto(opt('--url', 'https://adr1an-ma1na.github.io/sahrae-entertainment/'), { waitUntil: 'domcontentloaded', timeout: 60000 });
   await runFlows(page, rec, out, { only });
+} else if (target === 'cdp') {
+  // Same raw-socket path the Android run uses, against any DevTools endpoint
+  // (e.g. desktop Chrome with --remote-debugging-port) to check the adapter.
+  const { connectPage } = await import('./cdp-page.mjs');
+  const url = opt('--url', 'https://adr1an-ma1na.github.io/sahrae-entertainment/');
+  page = await connectPage(opt('--devtools', 'http://127.0.0.1:9333'), (t) => t.type === 'page' && t.url.startsWith(url));
+  await page.evaluateOnNewDocument(MEDIA_HOOK);
+  const rec = attachRecorder(page);
+  await page.reload({ timeout: 60000 });
+  await runFlows(page, rec, out, { only });
+  page.close();
+  process.exit(0);
 } else if (target === 'android') {
-  const devtools = opt('--devtools', 'http://127.0.0.1:9222');
-  browser = await puppeteer.connect({ browserURL: devtools, defaultViewport: null, protocolTimeout: 120000 });
-  // A WebView does not auto-attach its page the way desktop Chrome does, so
-  // browser.pages() can be empty. Attach to the app's target explicitly.
-  for (let i = 0; i < 30 && !page; i++) {
-    const targets = browser.targets();
-    if (i === 0) console.log('targets:', targets.map((t) => `${t.type()} ${t.url()}`).join(' | ') || '(none)');
-    for (const t of targets) {
-      if (!t.url().startsWith('https://localhost')) continue;
-      page = (await t.page().catch(() => null)) || (await t.asPage?.().catch(() => null));
-      if (page) break;
-    }
-    if (!page) page = (await browser.pages()).find((p) => p.url().startsWith('https://localhost'));
-    if (!page) await sleep(1000);
-  }
-  if (!page) {
-    const list = await (await fetch(`${devtools}/json/list`)).json().catch(() => []);
-    console.log('/json/list:', JSON.stringify(list.map((x) => ({ type: x.type, url: x.url }))));
-    throw new Error('No https://localhost page in the WebView');
-  }
+  // Raw page socket: WebView never announces its page to a browser-level
+  // session, so Puppeteer's discovery finds nothing (see cdp-page.mjs).
+  const { connectPage } = await import('./cdp-page.mjs');
+  page = await connectPage(opt('--devtools', 'http://127.0.0.1:9222'));
   console.log('attached to', page.url());
   await page.evaluateOnNewDocument(MEDIA_HOOK);
   const rec = attachRecorder(page);
   // Reload so boot-time requests (fonts, config, first catalog calls) are captured too.
-  await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+  await page.reload({ timeout: 60000 });
   await runFlows(page, rec, out, { only });
+  page.close();
+  process.exit(0);
 } else {
   console.error('usage: node run.mjs pwa|android [--out DIR]');
   process.exit(2);
 }
-// Never close a connected WebView: Browser.close would take the app down with it.
-if (target === 'pwa') await browser.close();
-else await browser.disconnect();
+await browser.close();

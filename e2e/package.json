@@ -4,6 +4,7 @@
   "type": "module",
   "description": "Runs the same user flows against the PWA and the Android APK (via WebView DevTools) and diffs what breaks.",
   "dependencies": {
-    "puppeteer-core": "^25.12.0"
+    "puppeteer-core": "^25.12.0",
+    "ws": "^8.22.0"
   }
 }
