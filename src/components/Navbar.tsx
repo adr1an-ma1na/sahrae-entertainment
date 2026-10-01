@@ -212,6 +212,7 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
           ) : (
             <button
               onClick={() => setIsAuthModalOpen(true)}
+              aria-label="Sign In"
               className="btn-gold flex items-center gap-2 px-4 py-1.5 rounded-full font-semibold text-sm"
             >
               <LogIn className="w-4 h-4" />
