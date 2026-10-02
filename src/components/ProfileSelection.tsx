@@ -2,6 +2,7 @@ import { useState, FormEvent } from 'react';
 import { Plus, Edit2, Check } from 'lucide-react';
 import { useAuth, Profile } from '../hooks/useAuth';
 import { Suspense, lazy } from 'react';
+import { isLiteDevice } from '../services/deviceTier';
 
 /**
  * The shader background pulls in three.js — 112 KB gzipped for a decorative
@@ -153,10 +154,22 @@ export default function ProfileSelection() {
     );
   }
 
+  // The animated WebGL ambience is the heaviest thing on the first screen a
+  // signed-in person sees. On a Nokia C32 (3 GB) Android closed the app's
+  // screen engine four times in a minute right here. Small-memory phones, weak
+  // graphics and reduced motion get a still golden glow instead.
+  const richBackdrop = !isLiteDevice()
+    && !document.documentElement.classList.contains('low-gfx')
+    && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
   return (
     <div className="fixed inset-0 z-[200] isolate bg-zinc-950 flex flex-col items-center justify-center p-4 animate-in fade-in duration-300">
+      {!richBackdrop && (
+        <div className="absolute inset-0 -z-10 pointer-events-none"
+          style={{ background: 'radial-gradient(ellipse at 50% 42%, rgba(251,191,36,0.16), rgba(251,191,36,0.05) 38%, transparent 70%)' }} />
+      )}
       {/* Premium golden shader ambience behind the profiles */}
-      <div
+      {richBackdrop && <div
         className="absolute inset-0 -z-10 opacity-50 pointer-events-none"
         style={{
           WebkitMaskImage: 'radial-gradient(ellipse at 50% 45%, black 25%, transparent 75%)',
@@ -166,7 +179,7 @@ export default function ProfileSelection() {
         <Suspense fallback={null}>
           <ShaderAnimation className="h-full w-full" />
         </Suspense>
-      </div>
+      </div>}
       <h1 className="text-4xl md:text-5xl font-bold text-white mb-12 text-center">Who's watching?</h1>
       
       <div className="flex flex-wrap justify-center gap-6 md:gap-10 max-w-4xl">

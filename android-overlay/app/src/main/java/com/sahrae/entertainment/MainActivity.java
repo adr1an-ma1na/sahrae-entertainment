@@ -281,8 +281,12 @@ public class MainActivity extends BridgeActivity {
             memClass = am.getLargeMemoryClass();
             lowRam = am.isLowRamDevice();
         } catch (Throwable ignore) {}
-        final boolean loadHostsFile = !lowRam && memClass >= 128;
-        final boolean loadRuleEngine = !lowRam && memClass >= 256;
+        // A phone under ~4.5 GB (a Nokia C32 reports a 512 MB heap class yet Android
+        // kept closing the screen engine for memory) keeps the built-in core list:
+        // the popup, navigation and dialog guards still apply in full.
+        final boolean small = isSmallMemoryDevice();
+        final boolean loadHostsFile = !lowRam && !small && memClass >= 128;
+        final boolean loadRuleEngine = !lowRam && !small && memClass >= 256;
 
         if (!loadHostsFile) return; // the built-in core list stays in effect
 
@@ -1695,7 +1699,10 @@ public class MainActivity extends BridgeActivity {
         try {
             getSharedPreferences(DIAG_PREFS, MODE_PRIVATE).edit()
                 .putBoolean("liteForced", true)
-                .putBoolean("safeGraphics", crashed)
+                // Flat surfaces after a memory kill too: on a Nokia C32 the screen
+                // engine was closed four times in a minute, so this phone cannot
+                // carry the compositing either.
+                .putBoolean("safeGraphics", true)
                 .apply();
         } catch (Throwable ignore) {}
         try {

@@ -61,7 +61,9 @@ export function ShaderAnimation({ className }: ShaderAnimationProps) {
 
     let renderer: THREE.WebGLRenderer;
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      // No antialiasing: multisampling roughly quadruples the GPU buffers, and
+      // this is a blurred, masked, half-opacity ambience where it cannot be seen.
+      renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, powerPreference: 'low-power' });
     } catch {
       return; // WebGL unavailable — leave the underlying background untouched
     }
@@ -79,7 +81,9 @@ export function ShaderAnimation({ className }: ShaderAnimationProps) {
     const mesh = new THREE.Mesh(geometry, material);
     scene.add(mesh);
 
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); // cap for mobile/TV
+    // 1x: soft filaments under a radial mask look identical at full resolution,
+    // and a 2x full-screen canvas redrawn every frame is four times the pixels.
+    renderer.setPixelRatio(1);
     renderer.setClearColor(0x000000, 0); // transparent clear → only the filaments show
     container.appendChild(renderer.domElement);
 
