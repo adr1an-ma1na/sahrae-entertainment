@@ -9,6 +9,8 @@ import MovieDownloadModal from './MovieDownloadModal';
 import { posterColor, cachedPosterColor } from '../services/posterColor';
 import { playerSandbox, isShieldOn, setShieldOn as persistShield, shieldAppliesHere } from '../services/adShield';
 import { suppressPopups } from '../services/popupGuard';
+import { Capacitor } from '@capacitor/core';
+import { NO_START_LIMIT_MS, COUNTDOWN_S, isPlaybackEvidence, markWorking, markDown, startServer, nextServer } from '../services/serverHealth';
 
 interface PlayerModalProps {
   isOpen: boolean;
@@ -89,6 +91,15 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const loadTimerRef = useRef<NodeJS.Timeout | null>(null);
   const slowTimerRef = useRef<NodeJS.Timeout | null>(null);
   const autoRetriedRef = useRef(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const heardRef = useRef(false);
+  const engagedRef = useRef(false);
+  const noStartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const keepTryingRef = useRef<() => void>(() => {});
+  const [countdown, setCountdown] = useState<{ from: string; to: string; left: number } | null>(null);
+  const failedServersRef = useRef<string[]>([]);
+  const [switchNotice, setSwitchNotice] = useState<{ from: string; to: string } | null>(null);
 
   // Go fullscreen AFTER the embed has loaded and started playing (fired from the
   // iframe's onLoad), not the instant Play is tapped. Tapping Play then waiting
@@ -191,6 +202,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     haptics.tap();
     const currentServerId = SERVERS[selectedServer]?.id;
     if (!currentServerId) return;
+    markDown(currentServerId);
 
     setFailedServers(prev => {
       if (prev.includes(currentServerId)) return prev;
@@ -303,6 +315,124 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     { id: 'vidsrcme', name: 'Fast Stream 2 (VidSrc.me)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.me/embed/movie?tmdb=${id}` : `https://vidsrc.me/embed/tv?tmdb=${id}&season=${s}&episode=${e}`, type: 'iframe' },
   ];
 
+  useEffect(() => { failedServersRef.current = failedServers; }, [failedServers]);
+
+  // Move on from a server that never started, so the viewer does not have to
+  // diagnose it. The failed one is skipped for this title and remembered, and
+  // when every server has been tried the manual Reload / Next buttons appear.
+  const autoSwitch = () => {
+    const ids = SERVERS.map((sv) => sv.id);
+    const current = ids[selectedServer];
+    if (!current) return;
+    markDown(current);
+    const failed = new Set([...failedServersRef.current, current]);
+    failedServersRef.current = [...failed];
+    setFailedServers([...failed]);
+    const next = nextServer(ids, selectedServer, failed);
+    if (next === null) { setSlowLoad(true); return; }
+    setSwitchNotice({ from: SERVERS[selectedServer].name, to: SERVERS[next].name });
+    setSelectedServer(next);
+  };
+
+  useEffect(() => {
+    if (!switchNotice) return;
+    const t = setTimeout(() => setSwitchNotice(null), 6000);
+    return () => clearTimeout(t);
+  }, [switchNotice]);
+
+  // Move on from a server that never shows it has the film. Proof is a real
+  // media event from the player or, in the APK, the player fetching its video
+  // stream (seen natively, so it covers players that never post a message, and
+  // ready-but-paused ones). Chatter is not proof: a refusing VidFast and Videasy
+  // both kept posting MEDIA_DATA. Without proof after NO_START_LIMIT_MS the
+  // viewer gets a countdown they can stop, because some players wait for a tap
+  // on their own play button and are working fine.
+  useEffect(() => {
+    if (!isOpen || !isPlaying || playingTrailer) return;
+    const id = SERVERS[selectedServer]?.id;
+    const native = Capacitor.isNativePlatform();
+    heardRef.current = false;
+    engagedRef.current = false;
+    setCountdown(null);
+    const stopCountdown = () => {
+      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+      countdownTimerRef.current = null;
+      setCountdown(null);
+    };
+    const clearTimers = () => {
+      if (noStartTimerRef.current) clearTimeout(noStartTimerRef.current);
+      noStartTimerRef.current = null;
+      stopCountdown();
+    };
+    const armedAt = Date.now();
+    const proven = () => {
+      // Stragglers from the previous server (a last event or stream request in
+      // flight as it was torn down) must not count for this one. No real player
+      // loads its page and starts playing within this window.
+      if (heardRef.current || Date.now() - armedAt < 1500) return;
+      heardRef.current = true;
+      clearTimers();
+      if (id) markWorking(id);
+    };
+    const fromPlayer = (src: MessageEventSource | null) => {
+      const root = iframeRef.current?.contentWindow;
+      if (!root || !src) return false;
+      const within = (w: Window, depth: number): boolean => {
+        if (w === src) return true;
+        if (depth >= 3) return false;
+        try {
+          for (let k = 0; k < w.frames.length; k++) if (within(w.frames[k] as Window, depth + 1)) return true;
+        } catch { /* a frame that is going away */ }
+        return false;
+      };
+      return within(root, 0);
+    };
+    const onMessage = (e: MessageEvent) => { if (fromPlayer(e.source) && isPlaybackEvidence(e.data)) proven(); };
+    const onStream = () => proven();
+    const onNoStart = () => {
+      if (heardRef.current) return;
+      // The web cannot see a silent player's stream, so once the viewer has
+      // tapped into the player they are trusted to judge it themselves.
+      if (!native && engagedRef.current) return;
+      const ids = SERVERS.map((sv) => sv.id);
+      const next = nextServer(ids, selectedServer, new Set([...failedServersRef.current, ids[selectedServer]]));
+      if (next === null) return;
+      // Take focus back, so a later tap inside the player registers as a tap.
+      try { iframeRef.current?.blur(); window.focus(); } catch { /* noop */ }
+      let left = COUNTDOWN_S;
+      setCountdown({ from: SERVERS[selectedServer].name, to: SERVERS[next].name, left });
+      countdownTimerRef.current = setInterval(() => {
+        left -= 1;
+        if (left <= 0) { clearTimers(); autoSwitch(); }
+        else setCountdown((c) => (c ? { ...c, left } : c));
+      }, 1000);
+    };
+    const arm = () => {
+      if (noStartTimerRef.current) clearTimeout(noStartTimerRef.current);
+      noStartTimerRef.current = setTimeout(onNoStart, NO_START_LIMIT_MS);
+    };
+    keepTryingRef.current = () => {
+      engagedRef.current = true;
+      stopCountdown();
+      arm();
+    };
+    // A tap inside the player moves focus into its iframe, which the page sees
+    // as its own window losing focus.
+    const onBlur = () => setTimeout(() => {
+      if (!heardRef.current && document.activeElement === iframeRef.current) keepTryingRef.current();
+    }, 0);
+    window.addEventListener('message', onMessage);
+    window.addEventListener('sahrae:embed-media', onStream);
+    window.addEventListener('blur', onBlur);
+    arm();
+    return () => {
+      window.removeEventListener('message', onMessage);
+      window.removeEventListener('sahrae:embed-media', onStream);
+      window.removeEventListener('blur', onBlur);
+      clearTimers();
+    };
+  }, [isOpen, isPlaying, playingTrailer, selectedServer, selectedSeason, selectedEpisode, refreshKey, currentMediaId]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -312,7 +442,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
       document.body.style.overflow = 'hidden';
       setIsPlaying(!startInInfo && !playTrailer); 
       setPlayingTrailer(null);
-      setSelectedServer(0); 
+      setSelectedServer(startServer(SERVERS.map((sv) => sv.id)));
       setSelectedSeason(initialSeason || 1);
       setSelectedEpisode(initialEpisode || 1);
       setRating(null);
@@ -450,7 +580,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     // like closing/reopening the app). If it STILL fails, show manual recovery.
     slowTimerRef.current = setTimeout(() => {
       if (!autoRetriedRef.current) { autoRetriedRef.current = true; setRefreshKey(k => k + 1); }
-      else { setSlowLoad(true); }
+      else { autoSwitch(); }
     }, 10000);
     return () => { if (loadTimerRef.current) clearInterval(loadTimerRef.current); if (slowTimerRef.current) clearTimeout(slowTimerRef.current); };
   }, [isPlaying, selectedServer, selectedSeason, selectedEpisode, refreshKey]);
@@ -521,8 +651,12 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                 <div className="absolute top-4 right-16 md:right-32 z-20 flex gap-2">
                   {/* External YouTube link removed to keep users on platform */}
                 </div>
-                <button onClick={() => setPlayingTrailer(null)} className="absolute top-4 right-4 md:right-16 z-20 p-2 bg-black/50 hover:bg-black/80 text-white rounded-full transition-colors border border-white/20 shadow-lg">
-                  <X className="w-5 h-5"/>
+                {/* Back to the details, top-left like the player's Back. A second ✕
+                    beside the modal's own ✕ looked like a duplicate yet did
+                    something different. */}
+                <button onClick={() => setPlayingTrailer(null)} data-tv-focusable tabIndex={0} title="Back to details"
+                  className="absolute top-4 left-4 z-20 flex items-center gap-1.5 px-3.5 py-2 bg-black/60 hover:bg-black/85 backdrop-blur rounded-full text-white text-sm font-semibold border border-white/20 shadow-lg transition-colors active:scale-95">
+                  <ArrowLeft className="w-4 h-4" /> Back
                 </button>
               </div>
             ) : isPlaying ? (
@@ -537,7 +671,8 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                 </button>
                 {(
                   <iframe
-                    key={`player-${refreshKey}-${shieldOn ? 'shield' : 'open'}`}
+                    key={`player-${refreshKey}-${shieldOn ? 'shield' : 'open'}-${currentServerObj.id}`}
+                    ref={iframeRef}
                     src={src}
                     frameBorder="0"
                     // `clipboard-write` was granted to the embeds and is now gone:
@@ -679,6 +814,40 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                   </div>
                 )}
 
+                {countdown && (
+                  <div role="alert" className="absolute bottom-24 left-4 right-4 md:right-auto z-[100] max-w-md bg-zinc-950/95 border border-amber-400/40 text-white rounded-xl p-4 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-4 duration-300">
+                    <div className="flex items-start gap-3">
+                      <div className="p-1.5 rounded-lg bg-amber-400/15 text-amber-300">
+                        <Server className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-sm font-bold text-amber-300">{countdown.from} isn't starting</h4>
+                        <p className="text-xs text-zinc-300 mt-1 leading-relaxed">Switching to {countdown.to} in {countdown.left}…</p>
+                        <div className="flex gap-2 mt-3">
+                          <button onClick={() => { if (countdownTimerRef.current) clearInterval(countdownTimerRef.current); countdownTimerRef.current = null; setCountdown(null); autoSwitch(); }} data-tv-focusable data-tv-autofocus
+                            className="px-3.5 py-1.5 rounded-full bg-amber-400 text-amber-950 text-xs font-bold active:scale-95">Switch now</button>
+                          <button onClick={() => keepTryingRef.current()} data-tv-focusable
+                            className="px-3.5 py-1.5 rounded-full bg-zinc-800 text-white text-xs font-bold border border-white/15 active:scale-95">Keep trying</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {switchNotice && (
+                  <div role="status" aria-live="polite" className="absolute bottom-24 left-4 z-[100] max-w-sm bg-zinc-950/95 border border-amber-400/30 text-white rounded-xl p-4 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-4 duration-300">
+                    <div className="flex items-start gap-3">
+                      <div className="p-1.5 rounded-lg bg-amber-400/15 text-amber-300">
+                        <Server className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-sm font-bold text-amber-300">Switched server</h4>
+                        <p className="text-xs text-zinc-300 mt-1 leading-relaxed">
+                          {switchNotice.from} didn't start, so you're now on {switchNotice.to}.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {showServerDeadNotice && (
                   <div className="absolute bottom-24 left-4 z-[100] max-w-sm bg-zinc-950/95 border border-red-500/30 text-white rounded-xl p-4 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-4 duration-300">
                     <div className="flex items-start gap-3">

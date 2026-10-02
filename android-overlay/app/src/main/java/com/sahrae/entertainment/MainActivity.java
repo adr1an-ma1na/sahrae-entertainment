@@ -419,6 +419,38 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    /** A video manifest or media segment, by path. */
+    private static final Pattern STREAM_PATH = Pattern.compile(
+        "\\.(m3u8|mpd|m4s|ts|mp4|webm|mkv)$|/hls/|/playlist|/manifest|videoplayback");
+    private static volatile long lastEmbedStreamNotice = 0;
+
+    /**
+     * Tell the page that a player inside an embed is fetching its video stream.
+     * It is the one sign every working movie server gives, whether it plays at
+     * once or sits ready behind its own play button, and it is invisible from
+     * JavaScript (cross-origin). PlayerModal counts it as proof the server
+     * works. YouTube is excluded: trailers and the music player are not the
+     * movie player.
+     */
+    private static void noteEmbedStream(WebResourceRequest request, String host) {
+        if (host == null) return;
+        String h = host.toLowerCase(java.util.Locale.US);
+        if (h.endsWith("youtube.com") || h.endsWith("youtube-nocookie.com")
+            || h.endsWith("googlevideo.com") || h.endsWith("ytimg.com")) return;
+        String path = request.getUrl().getPath();
+        boolean stream = path != null && STREAM_PATH.matcher(path.toLowerCase(java.util.Locale.US)).find();
+        if (!stream) {
+            Map<String, String> hd = request.getRequestHeaders();
+            stream = hd != null && (hd.containsKey("Range") || hd.containsKey("range"));
+        }
+        if (!stream) return;
+        long now = android.os.SystemClock.uptimeMillis();
+        if (now - lastEmbedStreamNotice < 1500) return;
+        lastEmbedStreamNotice = now;
+        final WebView wv = sWebView;
+        if (wv != null) wv.post(() -> wv.evaluateJavascript("window.dispatchEvent(new Event('sahrae:embed-media'))", null));
+    }
+
     /** Host of the document that made this request (Referer, else Origin), or null. */
     private static String initiatorHost(WebResourceRequest request) {
         Map<String, String> h = request.getRequestHeaders();
@@ -1789,6 +1821,37 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
+    private boolean firstPaintSeen = false;
+
+    /**
+     * Keep the branded launch image on screen until the page paints. Capacitor
+     * swaps the launch theme for a plain one as soon as the WebView exists, and an
+     * empty WebView is white, so a cold start showed seconds of blank white (12 s
+     * on the first launch after an update), which reads as "the app is broken".
+     * With the launch image as the window background and the WebView transparent,
+     * the image shows through until the page's own dark background covers it.
+     */
+    private void holdLaunchScreen(WebView webView) {
+        try {
+            getWindow().setBackgroundDrawableResource(R.drawable.splash);
+            webView.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        } catch (Throwable ignore) {}
+        // Never wait forever on a page that does not report.
+        webView.postDelayed(() -> onFirstPaint(webView), 20000);
+    }
+
+    private void onFirstPaint(WebView webView) {
+        if (firstPaintSeen) return;
+        firstPaintSeen = true;
+        try {
+            // Opaque again: a transparent WebView is composited over the window on
+            // every frame for nothing once the page covers it.
+            webView.setBackgroundColor(0xFF09090B);
+            getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0xFF09090B));
+        } catch (Throwable ignore) {}
+        loadBundledBlocklistAsync();
+    }
+
     public void onCreate(Bundle savedInstanceState) {
         installCrashRecorder();
         collectLastExitReason();
@@ -1823,12 +1886,14 @@ public class MainActivity extends BridgeActivity {
         warnIfWebViewTooOld();
         offerIncidentReport();
 
-        // Fold the large bundled ad/tracker blocklist in off the UI thread.
-        loadBundledBlocklistAsync();
-
         final Bridge bridge = this.bridge;
         final WebView webView = bridge.getWebView();
         sWebView = webView;
+
+        // Loading screen. The ad blocklist is folded in once the page has painted
+        // (see onFirstPaint), not here: it is only needed when a video plays, and
+        // parsing it during start-up competed with the first paint for CPU and memory.
+        holdLaunchScreen(webView);
 
         // Capture in-app file downloads (e.g. a movie from the download browser)
         // into the app's OWN private storage + Downloads section, instead of the
@@ -1945,6 +2010,8 @@ public class MainActivity extends BridgeActivity {
                     String initiator = initiatorHost(request);
                     if (isLocalAppHost(initiator)) return super.shouldInterceptRequest(view, request);
 
+                    noteEmbedStream(request, host);
+
                     // L1 — network blocklist (hostname), now also fed by
                     // EasyList's plain domain rules. An @@ exception still wins.
                     if (isAdHost(host) && !isExceptedByRule(request, host)) return blockedResponse();
@@ -2008,6 +2075,17 @@ public class MainActivity extends BridgeActivity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                // Release the loading screen once this state is actually on screen,
+                // not merely loaded, so no blank frame slips between the two.
+                if (!firstPaintSeen) {
+                    if (Build.VERSION.SDK_INT >= 23) {
+                        view.postVisualStateCallback(1, new WebView.VisualStateCallback() {
+                            @Override public void onComplete(long requestId) { onFirstPaint(view); }
+                        });
+                    } else {
+                        view.postDelayed(() -> onFirstPaint(view), 500);
+                    }
+                }
                 // L4 — only inject into the top frame (this callback only fires there)
                 view.evaluateJavascript(ANTI_POPUP_SHIM, null);
 
