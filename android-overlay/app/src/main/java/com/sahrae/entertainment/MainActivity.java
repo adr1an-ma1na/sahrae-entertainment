@@ -1820,7 +1820,6 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
-    @Override
     private boolean firstPaintSeen = false;
 
     /**
@@ -1852,6 +1851,7 @@ public class MainActivity extends BridgeActivity {
         loadBundledBlocklistAsync();
     }
 
+    @Override
     public void onCreate(Bundle savedInstanceState) {
         installCrashRecorder();
         collectLastExitReason();
