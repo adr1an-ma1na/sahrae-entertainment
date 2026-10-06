@@ -1,0 +1,73 @@
+name: Repack the June APK
+
+# The owner's Nokia C32 only runs the APK built on 7 June (native layer of
+# commit 0ba15bd). This keeps that exact binary (native code, manifest,
+# resources) and swaps in today's web app, then signs it with the release key
+# so it installs over earlier release builds. See apk-repack/repack.mjs.
+on:
+  push:
+    branches: [fix/june-shell]
+  workflow_dispatch:
+
+jobs:
+  repack:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Build web app
+        run: |
+          npm install --legacy-peer-deps
+          npm run lint
+          npm run build
+
+      - name: Fetch the June APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download base-apk-june --pattern base.apk --dir "$RUNNER_TEMP"
+
+      - name: Repack
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Continue android.yml's version sequence so this updates every APK
+          # built before it.
+          LAST=$(gh run list --workflow android.yml --limit 1 --json number --jq '.[0].number')
+          CODE=$((LAST + 1))
+          echo "CODE=$CODE" >> "$GITHUB_ENV"
+          cd apk-repack && npm install --no-audit --no-fund
+          node repack.mjs "$RUNNER_TEMP/base.apk" ../dist "$RUNNER_TEMP/unsigned.apk" "$CODE"
+
+      - name: Align and sign
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          BT="$ANDROID_HOME/build-tools/34.0.0"
+          [ -x "$BT/zipalign" ] || BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/release.jks"
+          "$BT/zipalign" -p -f 4 "$RUNNER_TEMP/unsigned.apk" "$RUNNER_TEMP/aligned.apk"
+          "$BT/apksigner" sign --ks "$RUNNER_TEMP/release.jks" --ks-pass env:KEYSTORE_PASSWORD \
+            --ks-key-alias "$KEY_ALIAS" --key-pass env:KEY_PASSWORD \
+            --out Sahrae-release.apk "$RUNNER_TEMP/aligned.apk"
+          rm -f "$RUNNER_TEMP/release.jks"
+          "$BT/apksigner" verify --verbose --print-certs Sahrae-release.apk | grep -E 'Verified using|SHA-256'
+
+      - name: Publish pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=test-repack
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" Sahrae-release.apk --prerelease \
+            --title "Sahrae (June APK + today's app, build $CODE)" \
+            --notes "The 7 June APK that works on the Nokia C32, with today's web app inside. Uninstall Sahrae first, then install this. Built from ${{ github.sha }}." \
+            --target "${{ github.sha }}"

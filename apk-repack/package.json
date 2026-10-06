@@ -1,0 +1,9 @@
+{
+  "name": "sahrae-apk-repack",
+  "private": true,
+  "type": "module",
+  "description": "Rebuilds the APK that works on the phone with today's web app: same native code and resources, new assets/public, higher versionCode.",
+  "dependencies": {
+    "adm-zip": "^0.5.18"
+  }
+}
