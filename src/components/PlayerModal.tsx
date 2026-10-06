@@ -9,7 +9,6 @@ import MovieDownloadModal from './MovieDownloadModal';
 import { posterColor, cachedPosterColor } from '../services/posterColor';
 import { playerSandbox, isShieldOn, setShieldOn as persistShield, shieldAppliesHere } from '../services/adShield';
 import { suppressPopups } from '../services/popupGuard';
-import { Capacitor } from '@capacitor/core';
 import { NO_START_LIMIT_MS, COUNTDOWN_S, isPlaybackEvidence, markWorking, markDown, startServer, nextServer } from '../services/serverHealth';
 
 interface PlayerModalProps {
@@ -350,7 +349,10 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   useEffect(() => {
     if (!isOpen || !isPlaying || playingTrailer) return;
     const id = SERVERS[selectedServer]?.id;
-    const native = Capacitor.isNativePlatform();
+    // Only a native shell that reports the player's stream fetches can see a
+    // silent player working (it sets window.__sahraeCaps.streams). Without that,
+    // as in the PWA and the June 7 shell, a viewer who taps the player is trusted.
+    const canSeeStreams = (window as unknown as { __sahraeCaps?: { streams?: boolean } }).__sahraeCaps?.streams === true;
     heardRef.current = false;
     engagedRef.current = false;
     setCountdown(null);
@@ -393,7 +395,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
       if (heardRef.current) return;
       // The web cannot see a silent player's stream, so once the viewer has
       // tapped into the player they are trusted to judge it themselves.
-      if (!native && engagedRef.current) return;
+      if (!canSeeStreams && engagedRef.current) return;
       const ids = SERVERS.map((sv) => sv.id);
       const next = nextServer(ids, selectedServer, new Set([...failedServersRef.current, ids[selectedServer]]));
       if (next === null) return;

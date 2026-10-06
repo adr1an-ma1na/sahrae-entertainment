@@ -1,14 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- allowBackup=false: the WebView's localStorage holds Supabase session
-         tokens, a Google OAuth access token and account records. With backup on,
-         `adb backup` (and cloud backup) can extract all of it off an unlocked
-         device. Nothing stored here is worth restoring across installs. -->
     <application
-        android:allowBackup="false"
-        android:largeHeap="true"
+        android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -44,54 +38,11 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
-
-        <!-- Keeps Sauti audio alive in the background + owns the media session
-             that the lock screen and headset/earbud buttons talk to. -->
-        <service
-            android:name="com.sahrae.entertainment.BackgroundAudioService"
-            android:exported="false"
-            android:foregroundServiceType="mediaPlayback" />
-
-        <!-- No EmojiCompat. androidx.appcompat pulls it in, and at start-up it binds
-             to Google Play services' font provider to fetch an emoji font. Android
-             kills every app bound to a provider whose process dies, so whenever
-             Play services restarts (it updates itself in the background) Sahrae
-             was killed with it: seen in CI as "depends on provider
-             com.google.android.gms/.fonts.provider.FontsProvider in dying proc".
-             All of Sahrae's text is drawn by the WebView, which has its own emoji
-             font, so the only loss is emoji in native dialogs. -->
-        <provider
-            android:name="androidx.startup.InitializationProvider"
-            android:authorities="${applicationId}.androidx-startup"
-            android:exported="false"
-            tools:node="merge">
-            <meta-data
-                android:name="androidx.emoji2.text.EmojiCompatInitializer"
-                tools:node="remove" />
-        </provider>
     </application>
 
     <!-- Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- Tactile feedback (@capacitor/haptics). Without this Android silently
-         denies all vibration, so the app never "feels" anything. -->
-    <uses-permission android:name="android.permission.VIBRATE" />
-    <!-- Background music playback (foreground media service) + media notification -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Global audio effects (equalizer / bass / spatial) -->
-    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-    <!-- Voice assistant. RECORD_AUDIO is only ever requested when the user taps
-         the mic — the assistant is push-to-talk, never an open hot mic. -->
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <!-- Lets the WebView reach the speech recogniser service. -->
-    <queries>
-        <intent>
-            <action android:name="android.speech.RecognitionService" />
-        </intent>
-    </queries>
 
     <!-- Run on phones, tablets, laptops (Chromebook) AND Android TV.
          Declaring these as NOT required keeps the app installable everywhere. -->

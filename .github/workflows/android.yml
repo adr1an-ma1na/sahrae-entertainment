@@ -106,7 +106,10 @@ jobs:
             echo "No android-overlay directory; skipping."
           fi
 
+      # No R8 here: this branch rebuilds the June 7 native shell exactly as the
+      # APK that worked on the phone was built, and that APK was not shrunk.
       - name: Enable R8 shrink + obfuscation (release only)
+        if: false
         run: |
           # Capacitor generates `minifyEnabled false` in the release buildType and
           # already wires in proguard-rules.pro (supplied by our overlay). Flip it on
