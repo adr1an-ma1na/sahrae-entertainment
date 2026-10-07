@@ -1,0 +1,187 @@
+name: June APK + features — test
+
+# The June 7 native shell with the post-June native features added
+# (downloads, EasyList, sports resolver, crash recovery, voice mic).
+# Every run is a before/after on identical emulators:
+#   june      the June shell as it was rebuilt on fix/june-shell (d56f902)
+#   features  this branch
+# on Android 14 at 4 GB and 2 GB (flows), and Android 9 + Android 14 2 GB
+# (install, launch, survive a renderer kill).
+on:
+  push:
+    branches: [june-plus]
+  workflow_dispatch:
+
+jobs:
+  flows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [features, june]
+        ram: [4096, 2048]
+    steps:
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use the June shell (before)
+        if: matrix.variant == 'june'
+        run: git checkout d56f902 -- android-overlay
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
+
+      - name: Build the web app
+        run: |
+          npm install --legacy-peer-deps
+          npm run build
+
+      - name: Create the Android project
+        run: npx cap add android
+
+      - name: Bundle the ad lists
+        run: |
+          mkdir -p android-overlay/app/src/main/assets
+          OUT=android-overlay/app/src/main/assets/adhosts.txt
+          if curl -fsSL --retry 3 --max-time 120 https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts -o /tmp/hosts.txt; then
+            grep -E '^(0\.0\.0\.0|127\.0\.0\.1)[[:space:]]+' /tmp/hosts.txt | awk '{print $2}' \
+              | grep -vE '^(localhost|localhost\.localdomain|local|broadcasthost|0\.0\.0\.0|ip6-.*)$' \
+              | tr 'A-Z' 'a-z' | sort -u > "$OUT" || true
+          fi
+          touch "$OUT"
+          OUT=android-overlay/app/src/main/assets/easylist.txt
+          : > "$OUT"
+          for URL in https://easylist.to/easylist/easylist.txt https://easylist.to/easylist/easyprivacy.txt; do
+            if curl -fsSL --retry 3 --max-time 120 "$URL" -o /tmp/list.txt; then
+              grep -vE '^[!\[]' /tmp/list.txt | grep -vE '#(#|@#|\?#)' | grep -vE '^[[:space:]]*$' >> "$OUT" || true
+            fi
+          done
+          sort -u -o "$OUT" "$OUT" || true
+          wc -l android-overlay/app/src/main/assets/*.txt
+
+      - name: Apply the native layer
+        run: |
+          rm -f android/app/src/main/java/com/sahrae/entertainment/MainActivity.java
+          cp -r android-overlay/. android/
+
+      - name: Build the APK
+        run: |
+          npx cap sync android
+          chmod +x android/gradlew
+          cd android && ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Install the test driver
+        working-directory: e2e
+        run: npm ci
+
+      - name: Run the flows on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -no-snapshot -memory ${{ matrix.ram }}
+          script: bash .github/scripts/apk-e2e.sh ${{ matrix.variant }}-${{ matrix.ram }}
+
+      - name: Keep the APK for the device checks
+        if: matrix.variant == 'features' && matrix.ram == 4096
+        uses: actions/upload-artifact@v4
+        with:
+          name: june-plus-debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          retention-days: 7
+
+      - name: Keep the evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-${{ matrix.variant }}-${{ matrix.ram }}
+          path: e2e/results/
+          retention-days: 14
+          if-no-files-found: warn
+
+  device:
+    needs: flows
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - api: 28
+            ram: 4096
+          - api: 34
+            ram: 2048
+    steps:
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: june-plus-debug-apk
+          path: apk
+
+      - name: Prepare
+        run: |
+          cp "$(ls apk/*.apk | head -1)" Sahrae-release.apk
+          pip install --quiet pillow
+          cat > blank.py <<'PY'
+          import sys
+          from PIL import Image
+          im = Image.open(sys.argv[1]).convert('RGB')
+          w, h = im.size
+          body = im.crop((0, int(h * 0.06), w, h)).resize((160, 300))
+          print(len(set(body.getdata())))
+          PY
+
+      - name: Install, launch, survive
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot -memory ${{ matrix.ram }}
+          script: bash .github/scripts/apk-smoke-verify.sh ${{ matrix.api }} ${{ matrix.ram }}
+
+      - name: Keep evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: device-api${{ matrix.api }}-${{ matrix.ram }}mb
+          path: |
+            logcat.txt
+            screen.png
+            ui.xml
+            webview.txt
+            screen-after-renderer-loss.png
+            logcat-first-launch.txt
+            screen-small-phone.png
+          if-no-files-found: ignore

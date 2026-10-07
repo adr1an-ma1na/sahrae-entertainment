@@ -1,10 +1,13 @@
 package com.sahrae.entertainment;
 
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Message;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
@@ -13,7 +16,10 @@ import android.webkit.JsResult;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
+import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.Toast;
 
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
@@ -34,6 +40,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.zip.GZIPInputStream;
 
 /**
@@ -148,7 +157,17 @@ public class MainActivity extends BridgeActivity {
     private static boolean isAdHost(String host) {
         if (host == null) return false;
         String h = host.toLowerCase();
-        Set<String> set = adHosts;
+        return hostInSet(h, adHosts);
+    }
+
+    /** EasyList's own domain rules ("||ads.example^"), loaded only on phones with room for them. */
+    private static boolean isEasyListHost(String host) {
+        if (host == null) return false;
+        Set<String> easy = easyListHosts;
+        return !easy.isEmpty() && hostInSet(host.toLowerCase(), easy);
+    }
+
+    private static boolean hostInSet(String h, Set<String> set) {
         int idx = 0;
         while (idx >= 0 && idx < h.length()) {
             if (set.contains(idx == 0 ? h : h.substring(idx))) return true;
@@ -182,6 +201,40 @@ public class MainActivity extends BridgeActivity {
                 // No bundled list (e.g. local build) — core set stays in effect.
             }
         }, "adhosts-loader").start();
+    }
+
+    /** EasyList's plain "||domain^" rules, kept apart from adHosts so neither loader overwrites the other. */
+    private static volatile Set<String> easyListHosts = new HashSet<>();
+
+    /**
+     * The EasyList rule engine (see AdFilter), parsed on a background thread once
+     * the first screen has been drawn, so it never competes with start-up.
+     * Tens of thousands of rules are tens of megabytes of heap while parsing, so a
+     * phone under ~4.5 GB, or with a small per-app heap, keeps the hostname list
+     * alone: the popup, navigation and dialog guards still apply in full.
+     */
+    private void loadEasyListAsync() {
+        int memClass = 0;
+        boolean lowRam = true;
+        try {
+            android.app.ActivityManager am = (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
+            memClass = am.getMemoryClass();
+            lowRam = am.isLowRamDevice();
+        } catch (Throwable ignore) {}
+        if (lowRam || isSmallMemoryDevice() || memClass < 256) return;
+
+        new Thread(() -> {
+            try {
+                AdFilter f = new AdFilter();
+                f.loadFromAsset(getApplicationContext(), "easylist.txt");
+                if (f.size() > 0 || !f.domainRules().isEmpty()) {
+                    easyListHosts = new HashSet<>(f.domainRules());
+                    adFilter = f;
+                }
+            } catch (Throwable ignore) {
+                // Rule engine unavailable (or out of memory) — hostname blocking continues alone.
+            }
+        }, "easylist-loader").start();
     }
 
     private static boolean isTrustedMainFrameHost(String host) {
@@ -219,6 +272,161 @@ public class MainActivity extends BridgeActivity {
         if (host == null) return false;
         String h = host.toLowerCase();
         return h.equals("localhost") || h.endsWith(".localhost");
+    }
+
+    /** Does an EasyList {@code @@} exception protect this request? */
+    private static boolean isExceptedByRule(WebResourceRequest request, String host) {
+        AdFilter f = adFilter;
+        if (f == null || !f.isReady() || host == null) return false;
+        try {
+            Uri uri = request.getUrl();
+            String docHost = null;
+            Map<String, String> h = request.getRequestHeaders();
+            if (h != null) {
+                String ref = h.get("Referer");
+                if (ref == null) ref = h.get("referer");
+                if (ref != null) docHost = uriHost(ref);
+            }
+            return f.isExcepted(uri.toString(), host.toLowerCase(),
+                                docHost, AdFilter.typeOf(request, uri));
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /**
+     * EasyList rule engine. Volatile so the background loader can publish it
+     * atomically; null until (and unless) a list is successfully parsed.
+     */
+    private static volatile AdFilter adFilter = null;
+
+    /**
+     * Rule-based ad check, layered on top of the hostname blocklist.
+     *
+     * Guarded hard against breaking playback, because an over-blocking rule is
+     * indistinguishable from a dead player:
+     *   • our own app origin is never filtered;
+     *   • main-frame and sub-frame DOCUMENTS are never blocked, so an embed can
+     *     always load — popups are stopped by onCreateWindow and the navigation
+     *     guards, not by refusing the page;
+     *   • MEDIA (the actual video segments and playlists) is never blocked.
+     */
+    private static boolean isAdByRule(WebResourceRequest request, String host) {
+        AdFilter f = adFilter;
+        if (f == null || !f.isReady() || host == null) return false;
+        try {
+            Uri uri = request.getUrl();
+            if (isLocalAppHost(host)) return false;
+
+            int type = AdFilter.typeOf(request, uri);
+            if (type == AdFilter.TYPE_DOCUMENT || type == AdFilter.TYPE_SUBDOCUMENT) return false;
+            if (type == AdFilter.TYPE_MEDIA) return false;
+
+            String docHost = null;
+            Map<String, String> h = request.getRequestHeaders();
+            if (h != null) {
+                String ref = h.get("Referer");
+                if (ref == null) ref = h.get("referer");
+                if (ref != null) docHost = uriHost(ref);
+            }
+            return f.shouldBlock(uri.toString(), host.toLowerCase(), docHost, type);
+        } catch (Throwable t) {
+            return false; // never let the filter itself break a request
+        }
+    }
+
+    /** Host of the document that made this request (Referer, else Origin), or null. */
+    private static String initiatorHost(WebResourceRequest request) {
+        Map<String, String> h = request.getRequestHeaders();
+        if (h == null) return null;
+        String src = h.get("Referer");
+        if (src == null) src = h.get("referer");
+        if (src == null) src = h.get("Origin");
+        if (src == null) src = h.get("origin");
+        return src != null ? uriHost(src) : null;
+    }
+
+
+    /**
+     * Hosts /__openext is allowed to hand to the external browser. Deliberately
+     * tiny: only the download portal the Download button uses. Anything else is
+     * refused, so the endpoint cannot be turned back into an arbitrary-URL popup.
+     */
+    private static final Set<String> DOWNLOAD_HOSTS = new HashSet<>(Arrays.asList(
+        "vidvault.ru"
+    ));
+
+    private static boolean isAllowedDownloadHost(String host) {
+        if (host == null) return false;
+        String h = host.toLowerCase();
+        if (DOWNLOAD_HOSTS.contains(h)) return true;
+        for (String d : DOWNLOAD_HOSTS) if (h.endsWith("." + d)) return true;
+        return false;
+    }
+
+    /**
+     * Open an allow-listed download page in the external browser, where the
+     * provider's real file download completes. Any non-allow-listed or malformed
+     * URL is dropped — this is the strict-allow-list gate the earlier, removed
+     * /__openext lacked.
+     */
+    private void openDownloadUrl(String url) {
+        if (url == null) return;
+        final String u = url.trim();
+        if (!(u.startsWith("http://") || u.startsWith("https://"))) return;
+        if (!isAllowedDownloadHost(uriHost(u))) return;
+        runOnUiThread(() -> {
+            try {
+                android.content.Intent i = new android.content.Intent(
+                    android.content.Intent.ACTION_VIEW, android.net.Uri.parse(u));
+                i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(i);
+            } catch (Throwable ignore) {}
+        });
+    }
+
+    /**
+     * L0 — FIRST-PARTY GATE on the private {@code /__*} bridge.
+     *
+     * {@link WebView#shouldInterceptRequest} fires for EVERY frame, including the
+     * hostile third-party streaming embeds we deliberately load. Without this
+     * check any ad script inside vidsrc/multiembed/etc. could simply
+     * {@code fetch("https://localhost/__ddfetch?u=…")} and use the device as an
+     * open proxy on the user's home network (SSRF from a residential IP), read
+     * their download list, or trigger side effects — the bridge was reachable by
+     * anything that could reach the URL.
+     *
+     * Our own code always calls the bridge from the top document at
+     * {@code https://localhost}. A same-origin GET sends either no Origin header
+     * or {@code Origin: https://localhost}; a call from an embed always carries
+     * that embed's origin. Referer is checked the same way as a second signal.
+     * So: allow only requests that prove they came from our own origin.
+     */
+    private static boolean isFirstPartyBridgeCall(WebResourceRequest request) {
+        Map<String, String> h = request.getRequestHeaders();
+        if (h == null) return true; // no headers to inspect — same-origin navigation
+        String origin = h.get("Origin");
+        if (origin == null) origin = h.get("origin");
+        if (origin != null && !origin.isEmpty() && !"null".equalsIgnoreCase(origin)) {
+            String o = origin.trim().toLowerCase();
+            if (!o.equals("https://localhost") && !o.equals("http://localhost")) return false;
+        }
+        String referer = h.get("Referer");
+        if (referer == null) referer = h.get("referer");
+        if (referer != null && !referer.isEmpty()) {
+            String host = uriHost(referer);
+            if (!isLocalAppHost(host)) return false;
+        }
+        return true;
+    }
+
+    /** 403 for a {@code /__*} bridge call that did not come from our own origin. */
+    private static WebResourceResponse bridgeForbidden() {
+        Map<String, String> h = new HashMap<>();
+        h.put("Access-Control-Allow-Origin", "https://localhost");
+        h.put("Cache-Control", "no-store");
+        return new WebResourceResponse("application/json", "utf-8", 403, "Forbidden", h,
+            new ByteArrayInputStream("{\"error\":\"forbidden\"}".getBytes(StandardCharsets.UTF_8)));
     }
 
     /**
@@ -417,6 +625,320 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    // ─────────────────────────────────────────────────────────────
+    //  On-device embed resolver (THE fix for IP-locked sports streams).
+    //
+    //  streamed.su/embed.st hands out .m3u8 tokens that are LOCKED to the IP
+    //  that resolved them — so a stream resolved in CI 403s on the user's phone.
+    //  The embed's playlist URL is computed by a 510 KB obfuscated JWPlayer
+    //  bundle, so we can't replicate it natively. Instead — exactly like Cricfy —
+    //  we spin up a throwaway WebView HERE on the device, load the embed as a
+    //  TOP-LEVEL page (no anti-framing), let its JS run, and capture the .m3u8 it
+    //  requests. Because the device's own IP did the handshake, the token is
+    //  valid for this device, and the HLS proxy can then play it.
+    //
+    //  URL form: https://localhost/__embed2m3u8?u={encoded embed url}
+    //  Returns:  {"m3u8":"<url>"}  (or {"m3u8":null} on failure → app falls back)
+    // ─────────────────────────────────────────────────────────────
+    private static final Map<String, String> EMBED_CACHE = new ConcurrentHashMap<>();
+    private static final Map<String, Long> EMBED_EXPIRY = new ConcurrentHashMap<>();
+
+    /** Kick playback in the throwaway WebView so the player requests its stream. */
+    private static final String PLAY_KICK =
+        "(function(){try{document.querySelectorAll('video').forEach(function(v){try{v.muted=true;var p=v.play();if(p&&p.catch)p.catch(function(){});}catch(e){}});" +
+        "var b=document.querySelector('.vjs-big-play-button,.play-button,[class*=\"play\"],button');" +
+        "try{(b||document.getElementById('player')||document.body).click();}catch(e){}}catch(e){}})();";
+
+    /** True for HLS playlist URLs (incl. extensionless streamed /secure/ masters), false for segments/assets. */
+    private static boolean looksLikeStreamUrl(String u) {
+        if (u == null) return false;
+        String l = u.toLowerCase();
+        if (l.matches(".*\\.(ts|m4s|mp4|aac|mpd|jpg|jpeg|png|gif|webp|ico|css|js|woff2?|svg|json|html?|txt|map)(\\?.*)?$")) return false;
+        return l.contains(".m3u8") || l.contains("/secure/");
+    }
+
+    private static String jsonStr(String s) {
+        StringBuilder b = new StringBuilder("\"");
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '"' || c == '\\') b.append('\\').append(c);
+            else if (c == '\n') b.append("\\n");
+            else if (c == '\r') b.append("\\r");
+            else if (c == '\t') b.append("\\t");
+            else if (c < 0x20) b.append(String.format("\\u%04x", (int) c));
+            else b.append(c);
+        }
+        return b.append('"').toString();
+    }
+
+    private static WebResourceResponse jsonResponse(String body) {
+        Map<String, String> h = new HashMap<>();
+        h.put("Access-Control-Allow-Origin", "https://localhost");
+        h.put("Cache-Control", "no-cache");
+        return new WebResourceResponse("application/json", "utf-8", 200, "OK", h,
+            new ByteArrayInputStream(body.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    private WebResourceResponse embedResolve(Uri uri) {
+        final String embed = uri.getQueryParameter("u");
+        if (embed == null || embed.isEmpty()) return null;
+
+        Long exp = EMBED_EXPIRY.get(embed);
+        String m3u8 = (exp != null && exp > System.currentTimeMillis()) ? EMBED_CACHE.get(embed) : null;
+        if (m3u8 == null) {
+            m3u8 = runEmbedResolver(embed);
+            if (m3u8 != null) {
+                EMBED_CACHE.put(embed, m3u8);
+                EMBED_EXPIRY.put(embed, System.currentTimeMillis() + 120000); // 2 min
+            }
+        }
+        return jsonResponse(m3u8 != null ? "{\"m3u8\":" + jsonStr(m3u8) + "}" : "{\"m3u8\":null}");
+    }
+
+    /** Load the embed in a hidden WebView and capture the first playlist URL it fetches. */
+    private String runEmbedResolver(final String embed) {
+        final String[] result = new String[1];
+        final WebView[] holder = new WebView[1];
+        final CountDownLatch latch = new CountDownLatch(1);
+
+        runOnUiThread(() -> {
+            try {
+                WebView wv = new WebView(MainActivity.this);
+                holder[0] = wv;
+                WebSettings s = wv.getSettings();
+                s.setJavaScriptEnabled(true);
+                s.setDomStorageEnabled(true);
+                s.setMediaPlaybackRequiresUserGesture(false);
+                s.setUserAgentString(PROXY_UA);
+                try { s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW); } catch (Exception ignore) {}
+                wv.setWebChromeClient(new WebChromeClient());
+                wv.setWebViewClient(new WebViewClient() {
+                    // A hidden resolver loads a third-party streaming page, the
+                    // heaviest thing the app ever renders. If that takes the shared
+                    // renderer down, give up on this lookup — never the whole app.
+                    @Override
+                    public boolean onRenderProcessGone(WebView v, android.webkit.RenderProcessGoneDetail detail) {
+                        recordRecovery("Background stream lookup " + (detail != null && detail.didCrash() ? "crashed" : "was closed for memory") + "; handled.");
+                        try {
+                            ViewGroup parent = (ViewGroup) v.getParent();
+                            if (parent != null) parent.removeView(v);
+                            v.destroy();
+                        } catch (Throwable ignore) {}
+                        if (holder[0] == v) holder[0] = null;
+                        latch.countDown();
+                        return true;
+                    }
+
+                    @Override
+                    public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest req) {
+                        try {
+                            if (req != null && req.getUrl() != null) {
+                                String us = req.getUrl().toString();
+                                if (isAdHost(req.getUrl().getHost())) return blockedResponse();
+                                if (result[0] == null && looksLikeStreamUrl(us)) {
+                                    result[0] = us;
+                                    latch.countDown();
+                                    return blockedResponse(); // don't waste bandwidth in the throwaway view
+                                }
+                            }
+                        } catch (Exception ignore) {}
+                        return null;
+                    }
+                    @Override
+                    public void onPageFinished(WebView v, String url) {
+                        try {
+                            v.evaluateJavascript(PLAY_KICK, null);
+                            v.postDelayed(() -> { try { v.evaluateJavascript(PLAY_KICK, null); } catch (Exception e) {} }, 1500);
+                            v.postDelayed(() -> { try { v.evaluateJavascript(PLAY_KICK, null); } catch (Exception e) {} }, 4000);
+                        } catch (Exception ignore) {}
+                    }
+                });
+                // Attach off-screen (1x1, transparent) so the player gets a real
+                // surface and actually initialises + fetches its manifest.
+                try {
+                    ViewGroup root = findViewById(android.R.id.content);
+                    if (root != null) {
+                        wv.setLayoutParams(new ViewGroup.LayoutParams(1, 1));
+                        wv.setAlpha(0f);
+                        wv.setEnabled(false);
+                        root.addView(wv);
+                    }
+                } catch (Exception ignore) {}
+
+                Map<String, String> hdrs = new HashMap<>();
+                hdrs.put("Referer", "https://streamed.pk/");
+                wv.loadUrl(embed, hdrs);
+            } catch (Exception e) {
+                latch.countDown();
+            }
+        });
+
+        try { latch.await(14, TimeUnit.SECONDS); } catch (InterruptedException ignore) {}
+        runOnUiThread(() -> {
+            try {
+                if (holder[0] != null) {
+                    holder[0].stopLoading();
+                    holder[0].loadUrl("about:blank");
+                    ViewGroup parent = (ViewGroup) holder[0].getParent();
+                    if (parent != null) parent.removeView(holder[0]);
+                    holder[0].destroy();
+                }
+            } catch (Exception ignore) {}
+        });
+        return result[0];
+    }
+
+    //  On-device YouTube AUDIO resolver (powers background playback + downloads).
+    //  Piped audio URLs are flaky/CORS-locked on-device, so we load the YouTube
+    //  embed in a hidden WebView (residential IP), autoplay it muted, and capture
+    //  the first audio-only googlevideo stream it fetches: a real, IP-bound URL
+    //  that plays in an <audio> element and downloads via /__ddfetch.
+    //  URL form: https://localhost/__ytaudio?v={videoId}  ->  {"url":"..."} | {"url":null}
+    private static final Map<String, String> YT_AUDIO_CACHE = new ConcurrentHashMap<>();
+    private static final Map<String, Long> YT_AUDIO_EXPIRY = new ConcurrentHashMap<>();
+
+    private static boolean looksLikeYtAudio(String u) {
+        if (u == null) return false;
+        String l = u.toLowerCase();
+        if (!l.contains("googlevideo.com/videoplayback")) return false;
+        // Adaptive audio-only (mime=audio: itags 139/140/251) OR a combined
+        // progressive stream (itag 18/22) which still carries the audio track —
+        // both play in an <audio> element and download fine. Avoid video-only DASH.
+        return l.contains("mime=audio") || l.contains("itag=18&") || l.contains("itag=22&");
+    }
+
+    private WebResourceResponse ytAudioResolve(Uri uri) {
+        final String vid = uri.getQueryParameter("v");
+        if (vid == null || vid.isEmpty()) return jsonResponse("{\"url\":null}");
+        Long exp = YT_AUDIO_EXPIRY.get(vid);
+        String url = (exp != null && exp > System.currentTimeMillis()) ? YT_AUDIO_CACHE.get(vid) : null;
+        if (url == null) {
+            url = runYtAudioResolver(vid);
+            if (url != null) {
+                YT_AUDIO_CACHE.put(vid, url);
+                YT_AUDIO_EXPIRY.put(vid, System.currentTimeMillis() + 90 * 60 * 1000L); // ~90 min
+            }
+        }
+        return jsonResponse(url != null ? "{\"url\":" + jsonStr(url) + "}" : "{\"url\":null}");
+    }
+
+    private String runYtAudioResolver(final String vid) {
+        final String[] result = new String[1];
+        final WebView[] holder = new WebView[1];
+        final CountDownLatch latch = new CountDownLatch(1);
+        runOnUiThread(() -> {
+            try {
+                WebView wv = new WebView(MainActivity.this);
+                holder[0] = wv;
+                WebSettings s = wv.getSettings();
+                s.setJavaScriptEnabled(true);
+                s.setDomStorageEnabled(true);
+                s.setMediaPlaybackRequiresUserGesture(false);
+                s.setUserAgentString(PROXY_UA);
+                try { s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW); } catch (Exception ignore) {}
+                wv.setWebChromeClient(new WebChromeClient());
+                wv.setWebViewClient(new WebViewClient() {
+                    // A hidden resolver loads a third-party streaming page, the
+                    // heaviest thing the app ever renders. If that takes the shared
+                    // renderer down, give up on this lookup — never the whole app.
+                    @Override
+                    public boolean onRenderProcessGone(WebView v, android.webkit.RenderProcessGoneDetail detail) {
+                        recordRecovery("Background stream lookup " + (detail != null && detail.didCrash() ? "crashed" : "was closed for memory") + "; handled.");
+                        try {
+                            ViewGroup parent = (ViewGroup) v.getParent();
+                            if (parent != null) parent.removeView(v);
+                            v.destroy();
+                        } catch (Throwable ignore) {}
+                        if (holder[0] == v) holder[0] = null;
+                        latch.countDown();
+                        return true;
+                    }
+
+                    @Override
+                    public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest req) {
+                        try {
+                            if (req != null && req.getUrl() != null) {
+                                String us = req.getUrl().toString();
+                                if (result[0] == null && looksLikeYtAudio(us)) {
+                                    result[0] = us;
+                                    latch.countDown();
+                                    return blockedResponse(); // capture only; don't pull the whole stream
+                                }
+                            }
+                        } catch (Exception ignore) {}
+                        return null;
+                    }
+                    @Override
+                    public void onPageFinished(WebView v, String url) {
+                        try {
+                            v.evaluateJavascript(PLAY_KICK, null);
+                            v.postDelayed(() -> { try { v.evaluateJavascript(PLAY_KICK, null); } catch (Exception e) {} }, 1500);
+                            v.postDelayed(() -> { try { v.evaluateJavascript(PLAY_KICK, null); } catch (Exception e) {} }, 4000);
+                        } catch (Exception ignore) {}
+                    }
+                });
+                try {
+                    ViewGroup root = findViewById(android.R.id.content);
+                    if (root != null) {
+                        // YouTube's player won't start at 1x1, so give it a real
+                        // surface but keep it off-screen + near-transparent.
+                        wv.setLayoutParams(new ViewGroup.LayoutParams(320, 180));
+                        wv.setTranslationX(-10000f);
+                        wv.setAlpha(0.01f);
+                        root.addView(wv);
+                    }
+                } catch (Exception ignore) {}
+                wv.loadUrl("https://www.youtube.com/embed/" + vid + "?autoplay=1&mute=1&playsinline=1");
+            } catch (Exception e) {
+                latch.countDown();
+            }
+        });
+        try { latch.await(15, TimeUnit.SECONDS); } catch (InterruptedException ignore) {}
+        runOnUiThread(() -> {
+            try {
+                if (holder[0] != null) {
+                    holder[0].stopLoading();
+                    holder[0].loadUrl("about:blank");
+                    ViewGroup parent = (ViewGroup) holder[0].getParent();
+                    if (parent != null) parent.removeView(holder[0]);
+                    holder[0].destroy();
+                }
+            } catch (Exception ignore) {}
+        });
+        return result[0];
+    }
+
+    /** Passthrough fetch (raw bytes, CORS *) — used for the no-CORS schedule JSON. */
+    private static WebResourceResponse passthroughFetch(Uri uri) {
+        HttpURLConnection conn = null;
+        try {
+            String target = uri.getQueryParameter("u");
+            if (target == null || target.isEmpty()) return null;
+            String ref = uri.getQueryParameter("r");
+            conn = (HttpURLConnection) new URL(target).openConnection();
+            conn.setInstanceFollowRedirects(true);
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(30000); // large podcast RSS feeds can be MBs
+            conn.setRequestProperty("User-Agent", PROXY_UA);
+            conn.setRequestProperty("Accept", "*/*");
+            conn.setRequestProperty("Accept-Encoding", "identity");
+            if (ref != null && !ref.isEmpty()) conn.setRequestProperty("Referer", ref);
+            int code = conn.getResponseCode();
+            if (code < 200 || code >= 400) return null;
+            byte[] body = readAll(conn.getInputStream());
+            String ct = conn.getContentType();
+            String mime = (ct != null) ? ct.split(";")[0].trim() : "application/json";
+            Map<String, String> h = new HashMap<>();
+            h.put("Access-Control-Allow-Origin", "https://localhost");
+            h.put("Cache-Control", "no-cache");
+            return new WebResourceResponse(mime, "utf-8", 200, "OK", h, new ByteArrayInputStream(body));
+        } catch (Exception e) {
+            return null;
+        } finally {
+            if (conn != null) try { conn.disconnect(); } catch (Exception ignore) {}
+        }
+    }
+
     /**
      * L1.5 — fetch a 3rd-party HTML *document*, inject the embed shim into its
      * <head>, strip CSP/X-Frame-Options so the shim runs and the frame embeds,
@@ -551,6 +1073,402 @@ public class MainActivity extends BridgeActivity {
     }
 
 
+    /** True while a video/element is in WebView fullscreen, so Back can exit it. */
+    private boolean inFullscreen = false;
+    private WebChromeClient.CustomViewCallback fsCallback;
+
+    /**
+     * The oldest WebView (Chromium major version) the web app runs on.
+     *
+     * The UI is built with Tailwind CSS v4, whose output needs Chrome 111+
+     * (cascade layers, :is/:where, color-mix), and the JavaScript uses syntax an
+     * older engine cannot parse. Below this the page does not degrade — it stays
+     * blank. Verified on an Android 9 emulator whose WebView is Chrome 69: the app
+     * process ran for 45 seconds and never drew a pixel.
+     */
+    private static final int MIN_WEBVIEW_MAJOR = 111;
+
+    /** Major version of the WebView this app will render with, or -1 if unknown. */
+    private int webViewMajor(String[] outPackage) {
+        PackageInfo info = null;
+        if (Build.VERSION.SDK_INT >= 26) {
+            try { info = WebView.getCurrentWebViewPackage(); } catch (Throwable ignore) {}
+        }
+        if (info == null) {
+            // Android 5–7 has no API for the active provider. Take the newest of the
+            // candidates: overestimating only means no warning, and the page's own
+            // start-up watchdog still catches a blank screen.
+            PackageManager pm = getPackageManager();
+            for (String pkg : new String[]{ "com.google.android.webview", "com.android.webview", "com.android.chrome" }) {
+                try {
+                    PackageInfo p = pm.getPackageInfo(pkg, 0);
+                    if (info == null || majorOf(p.versionName) > majorOf(info.versionName)) info = p;
+                } catch (Throwable ignore) {}
+            }
+        }
+        if (info == null) return -1;
+        outPackage[0] = info.packageName;
+        return majorOf(info.versionName);
+    }
+
+    private static int majorOf(String versionName) {
+        if (versionName == null) return -1;
+        try {
+            int dot = versionName.indexOf('.');
+            return Integer.parseInt(dot > 0 ? versionName.substring(0, dot) : versionName);
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
+    private void warnIfWebViewTooOld() {
+        final String[] pkg = new String[]{ "com.google.android.webview" };
+        final int major = webViewMajor(pkg);
+        if (major < 0 || major >= MIN_WEBVIEW_MAJOR) return;
+
+        final String provider = pkg[0];
+        final String name = "com.android.chrome".equals(provider) ? "Google Chrome" : "Android System WebView";
+        try {
+            new android.app.AlertDialog.Builder(this)
+                .setTitle("One quick update needed")
+                .setMessage("Sahrae needs a newer version of " + name + " to show its screens. "
+                    + "This phone has version " + major + "; Sahrae needs " + MIN_WEBVIEW_MAJOR + " or newer.\n\n"
+                    + "Tap Update, install the update from the Play Store (it's free), then open Sahrae again.")
+                .setCancelable(false)
+                .setPositiveButton("Update", (d, w) -> {
+                    try {
+                        startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW,
+                            Uri.parse("market://details?id=" + provider)));
+                    } catch (Throwable noStore) {
+                        try {
+                            startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW,
+                                Uri.parse("https://play.google.com/store/apps/details?id=" + provider)));
+                        } catch (Throwable ignore) {}
+                    }
+                    // The WebView version is fixed when the process starts, so the update
+                    // only takes effect on a fresh launch.
+                    finishAffinity();
+                })
+                .setNegativeButton("Try anyway", (d, w) -> d.dismiss())
+                .show();
+        } catch (Throwable ignore) {}
+    }
+
+    // ── Crash resilience and diagnosis ────────────────────────────────────────
+    //
+    // Every WebView in an app shares one renderer process. When Android kills it
+    // to reclaim memory, or a page crashes it, each WebView gets
+    // onRenderProcessGone; if ANY of them does not handle it, Android kills the
+    // whole app. Nothing here handled it — including the hidden WebViews that load
+    // third-party streaming pages, the heaviest pages the app ever opens. On a
+    // phone with little memory that is an app that "closes by itself".
+    //
+    // And because it happened on people's phones and never on test machines,
+    // there was no way to see why. The pieces below record the reason and offer
+    // it back on the next launch.
+
+    private static final String CRASH_FILE = "last_crash.txt";
+    private static final String DIAG_PREFS = "sahrae.diagnostics";
+
+    /**
+     * Phones that cannot hold the full home screen in a WebView renderer.
+     *
+     * Measured on a 3 GB Nokia C32: the app installed and started, then Android
+     * killed the renderer repeatedly because a full-resolution backdrop plus a
+     * screenful of posters is hundreds of megabytes of decoded bitmap. Below
+     * this line the app asks for smaller artwork and drops the decoration.
+     * `isLowRamDevice` alone is not enough — it is only true on Android Go.
+     */
+    private boolean isSmallMemoryDevice() {
+        try {
+            android.app.ActivityManager am = (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
+            if (am.isLowRamDevice()) return true;
+            android.app.ActivityManager.MemoryInfo mi = new android.app.ActivityManager.MemoryInfo();
+            am.getMemoryInfo(mi);
+            // 4.5 GB, so a phone sold as "4 GB" (which reports ~3.7) counts.
+            return mi.totalMem > 0 && mi.totalMem < 4_500_000_000L;
+        } catch (Throwable ignore) {
+            return false;
+        }
+    }
+
+    /** Timestamps of recent renderer losses, to stop a reload loop. */
+    private static final java.util.ArrayDeque<Long> sRendererLosses = new java.util.ArrayDeque<>();
+
+    private String deviceSummary() {
+        String[] pkg = new String[]{ "?" };
+        int wv = webViewMajor(pkg);
+        String version = "?";
+        try { version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Throwable ignore) {}
+        return "Sahrae " + version
+            + "\nDevice: " + Build.MANUFACTURER + " " + Build.MODEL
+            + "\nAndroid: " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")"
+            + "\nWebView: " + pkg[0] + " " + wv;
+    }
+
+    /** Append a note to the report that the next launch will show. */
+    private void recordIncident(String what) { appendNote(CRASH_FILE, what); }
+
+    /**
+     * A problem the app recovered from by itself. Not worth interrupting anyone
+     * for — on a low-memory phone it can happen routinely — but kept, and
+     * attached to the report if a real crash follows.
+     */
+    private void recordRecovery(String what) { appendNote(RECOVERY_FILE, what); }
+
+    private static final String RECOVERY_FILE = "recoveries.txt";
+
+    private void appendNote(String file, String what) {
+        try {
+            java.io.File f = new java.io.File(getFilesDir(), file);
+            try (java.io.FileWriter w = new java.io.FileWriter(f, true)) {
+                w.write(new java.util.Date() + "  " + what + "\n");
+            }
+        } catch (Throwable ignore) {}
+    }
+
+    /** Write any uncaught Java exception to disk before the default handler kills us. */
+    private void installCrashRecorder() {
+        final Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler((thread, error) -> {
+            try {
+                java.io.StringWriter sw = new java.io.StringWriter();
+                error.printStackTrace(new java.io.PrintWriter(sw));
+                String trace = sw.toString();
+                if (trace.length() > 6000) trace = trace.substring(0, 6000);
+                recordIncident("Crash on thread " + thread.getName() + ":\n" + trace);
+            } catch (Throwable ignore) {}
+            if (previous != null) previous.uncaughtException(thread, error);
+        });
+    }
+
+    /**
+     * Android 11+ keeps the reason for each of the app's past exits, including
+     * the ones no Java handler can see: native crashes, the system killing it
+     * for memory, "app not responding". Report an abnormal one once.
+     */
+    private void collectLastExitReason() {
+        if (Build.VERSION.SDK_INT < 30) return;
+        try {
+            android.app.ActivityManager am = (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
+            java.util.List<android.app.ApplicationExitInfo> exits = am.getHistoricalProcessExitReasons(getPackageName(), 0, 1);
+            if (exits == null || exits.isEmpty()) return;
+            android.app.ApplicationExitInfo last = exits.get(0);
+            android.content.SharedPreferences prefs = getSharedPreferences(DIAG_PREFS, MODE_PRIVATE);
+            if (prefs.getLong("lastExitSeen", 0) >= last.getTimestamp()) return;
+            prefs.edit().putLong("lastExitSeen", last.getTimestamp()).apply();
+
+            String reason;
+            switch (last.getReason()) {
+                case android.app.ApplicationExitInfo.REASON_CRASH: reason = "crashed (Java)"; break;
+                case android.app.ApplicationExitInfo.REASON_CRASH_NATIVE: reason = "crashed (native code)"; break;
+                case android.app.ApplicationExitInfo.REASON_ANR: reason = "stopped responding"; break;
+                case android.app.ApplicationExitInfo.REASON_LOW_MEMORY:
+                    // Routine for an app sitting in the background; only a
+                    // problem if it happened on screen.
+                    if (last.getImportance() > android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND) return;
+                    reason = "was closed by Android to free memory"; break;
+                case android.app.ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE: reason = "was closed for using too many resources"; break;
+                case android.app.ApplicationExitInfo.REASON_INITIALIZATION_FAILURE: reason = "failed to start"; break;
+                case android.app.ApplicationExitInfo.REASON_SIGNALED:
+                    // The system kills background apps this way routinely; only
+                    // worth reporting if it happened while the person was using it.
+                    if (last.getImportance() > android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND) return;
+                    reason = "was stopped by the system (signal " + last.getStatus() + ")"; break;
+                default: return; // user closed it, app exited itself, update, etc.
+            }
+            String desc = last.getDescription();
+            recordIncident("Previous session " + reason + (desc != null ? ": " + desc : ""));
+        } catch (Throwable ignore) {}
+    }
+
+    /** If the last session ended badly, say so and offer to share the details. */
+    private void offerIncidentReport() {
+        final java.io.File f = new java.io.File(getFilesDir(), CRASH_FILE);
+        if (!f.exists()) return;
+        String body;
+        try {
+            byte[] bytes = new byte[(int) Math.min(f.length(), 12000)];
+            try (java.io.FileInputStream in = new java.io.FileInputStream(f)) { int n = in.read(bytes); body = new String(bytes, 0, Math.max(n, 0), StandardCharsets.UTF_8); }
+        } catch (Throwable t) {
+            body = "(report unreadable)";
+        }
+        //noinspection ResultOfMethodCallIgnored
+        f.delete();
+        // Silent recoveries before the crash are often the lead-up to it.
+        String recoveries = "";
+        java.io.File rf = new java.io.File(getFilesDir(), RECOVERY_FILE);
+        if (rf.exists()) {
+            try {
+                byte[] bytes = new byte[(int) Math.min(rf.length(), 4000)];
+                try (java.io.FileInputStream in = new java.io.FileInputStream(rf)) { int n = in.read(bytes); recoveries = new String(bytes, 0, Math.max(n, 0), StandardCharsets.UTF_8); }
+            } catch (Throwable ignore) {}
+            //noinspection ResultOfMethodCallIgnored
+            rf.delete();
+        }
+        final String report = deviceSummary() + "\n\n" + body
+            + (recoveries.isEmpty() ? "" : "\nEarlier recoveries:\n" + recoveries);
+        try {
+            new android.app.AlertDialog.Builder(this)
+                .setTitle("Sahrae closed unexpectedly")
+                .setMessage("Sorry about that. Sahrae has recovered. If this keeps happening, tap Share and send the details to the Sahrae team so it can be fixed.")
+                .setPositiveButton("Share details", (d, w) -> {
+                    try {
+                        android.content.Intent send = new android.content.Intent(android.content.Intent.ACTION_SEND);
+                        send.setType("text/plain");
+                        send.putExtra(android.content.Intent.EXTRA_SUBJECT, "Sahrae crash report");
+                        send.putExtra(android.content.Intent.EXTRA_TEXT, report);
+                        startActivity(android.content.Intent.createChooser(send, "Share crash details"));
+                    } catch (Throwable ignore) {}
+                })
+                .setNegativeButton("Dismiss", null)
+                .show();
+        } catch (Throwable ignore) {}
+    }
+
+    /**
+     * The main WebView's renderer is gone. Reload the app instead of letting
+     * Android kill it; if it keeps happening, stop looping and explain.
+     */
+    private void onMainRendererGone(WebView view, boolean crashed) {
+        recordRecovery("Screen engine " + (crashed ? "crashed" : "was closed by Android to free memory") + "; the app reloaded itself.");
+        // A crash is not a memory problem. On phone GPU drivers the usual cause is
+        // heavy compositing — backdrop blur above all — so drop to flat surfaces
+        // for this device rather than restarting into the same crash.
+        // Either way the phone could not carry what was on screen, so drop to
+        // lite for good on this device: smaller artwork, no blur, no ambient
+        // animation. A crash also turns off the effects most likely to cause it.
+        try {
+            getSharedPreferences(DIAG_PREFS, MODE_PRIVATE).edit()
+                .putBoolean("liteForced", true)
+                // Flat surfaces after a memory kill too: on a Nokia C32 the screen
+                // engine was closed four times in a minute, so this phone cannot
+                // carry the compositing either.
+                .putBoolean("safeGraphics", true)
+                .apply();
+        } catch (Throwable ignore) {}
+        try {
+            ViewGroup parent = (ViewGroup) view.getParent();
+            if (parent != null) parent.removeView(view);
+            view.destroy();
+        } catch (Throwable ignore) {}
+        long now = System.currentTimeMillis();
+        synchronized (sRendererLosses) {
+            while (!sRendererLosses.isEmpty() && now - sRendererLosses.peekFirst() > 60_000) sRendererLosses.pollFirst();
+            sRendererLosses.addLast(now);
+            if (sRendererLosses.size() > 3) {
+                final String title = crashed ? "Sahrae keeps restarting" : "Your phone is low on memory";
+                final String message = crashed
+                    ? "Sahrae's display keeps failing on this phone. Visual effects have been turned off, which usually fixes it. Open Sahrae again, and if it still happens, tap Share details so it can be fixed properly."
+                    : "Android keeps closing Sahrae's screen to free memory. Sahrae has switched to its lighter layout, which uses much less. Close some other apps, then open Sahrae again.";
+                try {
+                    new android.app.AlertDialog.Builder(this)
+                        .setTitle(title)
+                        .setMessage(message)
+                        .setCancelable(false)
+                        .setPositiveButton("Close Sahrae", (d, w) -> finishAffinity())
+                        .setNegativeButton("Share details", (d, w) -> {
+                            try {
+                                android.content.Intent send = new android.content.Intent(android.content.Intent.ACTION_SEND);
+                                send.setType("text/plain");
+                                send.putExtra(android.content.Intent.EXTRA_SUBJECT, "Sahrae display failure");
+                                send.putExtra(android.content.Intent.EXTRA_TEXT, deviceSummary()
+                                    + "\n\nScreen engine " + (crashed ? "crashed" : "was closed for memory")
+                                    + " " + sRendererLosses.size() + " times in a minute.");
+                                startActivity(android.content.Intent.createChooser(send, "Share details"));
+                            } catch (Throwable ignore) {}
+                            finishAffinity();
+                        })
+                        .show();
+                } catch (Throwable t) { finishAffinity(); }
+                return;
+            }
+        }
+        recreate();
+    }
+
+    /**
+     * Last resort when the app cannot start at all.
+     *
+     * Everything the app shows lives in a WebView, and creating one fails
+     * outright on a phone where Android System WebView is disabled, missing, or
+     * mid-update. That failure happens inside Capacitor's own onCreate, before
+     * any Sahrae screen exists, so the app simply vanished the instant it was
+     * tapped, with nothing on screen and nothing to send anyone. This replaces
+     * that with a plain native screen that names the cause and can share it.
+     */
+    private void showStartupFailure(Throwable error) {
+        String kind = String.valueOf(error);
+        boolean webViewMissing = kind.contains("WebView") || kind.contains("webview");
+        String advice = webViewMissing
+            ? "Sahrae draws its screens with Android System WebView, and this phone cannot start it.\n\n"
+              + "Open Settings, then Apps, find \"Android System WebView\" (and \"Chrome\"), and make sure both are enabled and updated in the Play Store. Then open Sahrae again."
+            : "Sahrae could not start on this phone.\n\nTap Share details and send the report so this can be fixed.";
+
+        java.io.StringWriter sw = new java.io.StringWriter();
+        error.printStackTrace(new java.io.PrintWriter(sw));
+        final String report = deviceSummary() + "\n\nStart-up failure:\n" + sw;
+        recordIncident("Start-up failure:\n" + sw);
+
+        try {
+            android.widget.LinearLayout root = new android.widget.LinearLayout(this);
+            root.setOrientation(android.widget.LinearLayout.VERTICAL);
+            root.setBackgroundColor(0xFF09090B);
+            int pad = (int) (24 * getResources().getDisplayMetrics().density);
+            root.setPadding(pad, pad * 3, pad, pad);
+
+            android.widget.TextView title = new android.widget.TextView(this);
+            title.setText("SAHRAE");
+            title.setTextColor(0xFFFBBF24);
+            title.setTextSize(24);
+            root.addView(title);
+
+            android.widget.TextView body = new android.widget.TextView(this);
+            body.setText(advice);
+            body.setTextColor(0xFFF5F5F7);
+            body.setTextSize(15);
+            body.setPadding(0, pad, 0, pad);
+            root.addView(body);
+
+            android.widget.Button share = new android.widget.Button(this);
+            share.setText("Share details");
+            share.setOnClickListener(v -> {
+                try {
+                    android.content.Intent send = new android.content.Intent(android.content.Intent.ACTION_SEND);
+                    send.setType("text/plain");
+                    send.putExtra(android.content.Intent.EXTRA_SUBJECT, "Sahrae cannot start");
+                    send.putExtra(android.content.Intent.EXTRA_TEXT, report);
+                    startActivity(android.content.Intent.createChooser(send, "Share details"));
+                } catch (Throwable ignore) {}
+            });
+            root.addView(share);
+
+            if (webViewMissing) {
+                android.widget.Button fix = new android.widget.Button(this);
+                fix.setText("Open Play Store");
+                fix.setOnClickListener(v -> {
+                    try {
+                        startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW,
+                            Uri.parse("market://details?id=com.google.android.webview")));
+                    } catch (Throwable noStore) {
+                        try {
+                            startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW,
+                                Uri.parse("https://play.google.com/store/apps/details?id=com.google.android.webview")));
+                        } catch (Throwable ignore) {}
+                    }
+                });
+                root.addView(fix);
+            }
+
+            android.widget.ScrollView scroller = new android.widget.ScrollView(this);
+            scroller.addView(root);
+            setContentView(scroller);
+        } catch (Throwable ignore) {
+            // Even the fallback screen failed: a toast is better than silence.
+            try { Toast.makeText(this, "Sahrae cannot start on this phone.", Toast.LENGTH_LONG).show(); } catch (Throwable ignore2) {}
+        }
+    }
+
     private boolean firstPaintSeen = false;
 
     /**
@@ -575,11 +1493,31 @@ public class MainActivity extends BridgeActivity {
             webView.setBackgroundColor(0xFF09090B);
             getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0xFF09090B));
         } catch (Throwable ignore) {}
+        loadEasyListAsync();
     }
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+        installCrashRecorder();
+        collectLastExitReason();
+        try {
+            super.onCreate(savedInstanceState);
+        } catch (Throwable startupFailure) {
+            showStartupFailure(startupFailure);
+            return;
+        }
+        // Capacitor can return from onCreate without a usable WebView on a phone
+        // whose WebView provider is being updated. Everything below would then
+        // throw, so stop here with something on screen instead.
+        if (this.bridge == null || this.bridge.getWebView() == null) {
+            showStartupFailure(new IllegalStateException("No WebView after start-up (provider missing, disabled or updating)"));
+            return;
+        }
+
+        // An outdated system WebView cannot run the app at all, and the result is
+        // a silent white screen that looks exactly like "the app doesn't open".
+        warnIfWebViewTooOld();
+        offerIncidentReport();
 
         // Fold the large bundled ad/tracker blocklist in off the UI thread.
         loadBundledBlocklistAsync();
@@ -587,6 +1525,19 @@ public class MainActivity extends BridgeActivity {
         final Bridge bridge = this.bridge;
         final WebView webView = bridge.getWebView();
         holdLaunchScreen(webView);
+
+        // In-app downloads: a file the WebView is asked to download is saved into
+        // the app's own storage and listed on the Downloads screen via /__dllist.
+        webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
+            try {
+                DownloadStore.enqueue(getApplicationContext(), url, userAgent, contentDisposition, mimetype);
+                runOnUiThread(() -> Toast.makeText(
+                    getApplicationContext(), "Saving to your in-app Downloads…", Toast.LENGTH_SHORT).show());
+            } catch (Throwable t) {
+                runOnUiThread(() -> Toast.makeText(
+                    getApplicationContext(), "Couldn't start the download.", Toast.LENGTH_SHORT).show());
+            }
+        });
 
         // ── L1 + L1.5 + L2 — custom WebViewClient
         webView.setWebViewClient(new BridgeWebViewClient(bridge) {
@@ -599,13 +1550,42 @@ public class MainActivity extends BridgeActivity {
                     // are fetched here from the device with the right headers and
                     // re-served same-origin, so they play despite CORS / referer locks.
                     String path = request.getUrl().getPath();
-                    if (path != null && path.startsWith("/__hlsproxy") && "localhost".equals(host)) {
-                        WebResourceResponse proxied = hlsProxy(request.getUrl());
-                        if (proxied != null) return proxied;
+                    if (path != null && path.startsWith("/__") && "localhost".equals(host)) {
+                        // The bridge is private to our own page. An embed iframe
+                        // reaching it would be an open proxy on the user's network.
+                        if (!isFirstPartyBridgeCall(request)) return bridgeForbidden();
+                        Uri u = request.getUrl();
+                        if (path.startsWith("/__hlsproxy")) {
+                            WebResourceResponse proxied = hlsProxy(u);
+                            if (proxied != null) return proxied;
+                        } else if (path.startsWith("/__embed2m3u8")) {
+                            // Sports stream resolver (IP-locked embeds resolved on the phone).
+                            WebResourceResponse r = embedResolve(u);
+                            if (r != null) return r;
+                        } else if (path.startsWith("/__ytaudio")) {
+                            // Song downloads: the audio stream of a YouTube track.
+                            return ytAudioResolve(u);
+                        } else if (path.startsWith("/__ddfetch")) {
+                            // Download bytes / feeds the page cannot fetch itself (CORS).
+                            WebResourceResponse r = passthroughFetch(u);
+                            if (r != null) return r;
+                        } else if (path.startsWith("/__dllist")) {
+                            return DownloadStore.json(DownloadStore.listJson(getApplicationContext()));
+                        } else if (path.startsWith("/__dlremove")) {
+                            try { DownloadStore.remove(getApplicationContext(), Long.parseLong(u.getQueryParameter("id"))); } catch (Throwable ignore) {}
+                            return DownloadStore.json("{\"ok\":true}");
+                        } else if (path.startsWith("/__dltitle")) {
+                            DownloadStore.setPendingTitle(u.getQueryParameter("t"));
+                            return DownloadStore.json("{\"ok\":true}");
+                        } else if (path.startsWith("/__openext")) {
+                            // A movie download page, opened in the browser. Allow-listed hosts only.
+                            openDownloadUrl(u.getQueryParameter("url"));
+                            return DownloadStore.json("{\"ok\":true}");
+                        }
                     }
 
                     // Any other /__ path is a bridge this shell does not have (the web
-                    // app also calls /__ddfetch, /__eq, /__bgsync, ...). Without this the
+                    // app also calls /__eq, /__bgsync, ...). Without this the
                     // local server answers with the app's own index.html and a 200, so the
                     // app would parse a web page as a podcast feed instead of falling
                     // back to a direct request the way the PWA does.
@@ -616,6 +1596,18 @@ public class MainActivity extends BridgeActivity {
 
                     // L1 — network blocklist
                     if (isAdHost(host)) return blockedResponse();
+
+                    // L1.2 — EasyList (domain rules + rule matching), the mechanism
+                    // Brave and uBlock use: it can stop an ad script served from a
+                    // streaming provider's own domain without touching the player.
+                    // Only what a third-party frame loads is filtered. Our own page's
+                    // requests (catalog, posters, sign-in, fonts) never are, and a
+                    // request whose initiator is unknown is left alone.
+                    String initiator = initiatorHost(request);
+                    if (initiator != null && !isLocalAppHost(initiator)) {
+                        if (isEasyListHost(host) && !isExceptedByRule(request, host)) return blockedResponse();
+                        if (isAdByRule(request, host)) return blockedResponse();
+                    }
 
                     // L1.5 — DOM-level eradication: rewrite embed HTML documents,
                     // injecting the anti-popup shim inside the hostile iframe.
@@ -681,6 +1673,35 @@ public class MainActivity extends BridgeActivity {
                 }
                 // L4 — only inject into the top frame (this callback only fires there)
                 view.evaluateJavascript(ANTI_POPUP_SHIM, null);
+
+                // This phone has lost its screen engine before: flatten the heavy
+                // compositing. `low-gfx` is the switch the app's graphics tier uses,
+                // and the localStorage flag keeps it on from the next launch.
+                boolean safe = false;
+                try { safe = getSharedPreferences(DIAG_PREFS, MODE_PRIVATE).getBoolean("safeGraphics", false); } catch (Throwable ignore) {}
+                if (safe) {
+                    view.evaluateJavascript(
+                        "document.documentElement.classList.add('low-gfx');"
+                        + "try{localStorage.setItem('sahrae.gfx.safe.v1','1')}catch(e){}", null);
+                }
+
+                // Lite mode on a small phone. The page can only guess at memory
+                // (navigator.deviceMemory rounds to a power of two); here we know.
+                boolean liteForced = false;
+                try { liteForced = getSharedPreferences(DIAG_PREFS, MODE_PRIVATE).getBoolean("liteForced", false); } catch (Throwable ignore) {}
+                if (liteForced || isSmallMemoryDevice()) {
+                    view.evaluateJavascript(
+                        "document.documentElement.classList.add('lite');"
+                        + "try{localStorage.setItem('sahrae.lite.v1','1')}catch(e){}", null);
+                }
+            }
+
+            // The screen engine (renderer) was closed for memory or crashed.
+            // Returning true stops Android killing the whole app; we reload instead.
+            @Override
+            public boolean onRenderProcessGone(WebView view, android.webkit.RenderProcessGoneDetail detail) {
+                onMainRendererGone(view, detail != null && detail.didCrash());
+                return true;
             }
         });
 
@@ -690,6 +1711,35 @@ public class MainActivity extends BridgeActivity {
         // onShowCustomView/onHideCustomView (HTML5 fullscreen), the file chooser,
         // permission prompts, etc. A bare client silently breaks fullscreen.
         webView.setWebChromeClient(new BridgeWebChromeClient(bridge) {
+            /**
+             * Voice search: grant the microphone to OUR OWN page only. Any other
+             * origin (a streaming embed) is denied outright.
+             */
+            @Override
+            public void onPermissionRequest(final android.webkit.PermissionRequest request) {
+                runOnUiThread(() -> {
+                    try {
+                        String host = request.getOrigin() != null ? request.getOrigin().getHost() : null;
+                        boolean wantsMic = false;
+                        for (String r : request.getResources()) {
+                            if (android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(r)) wantsMic = true;
+                        }
+                        boolean granted = Build.VERSION.SDK_INT < 23
+                            || checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
+                        if (wantsMic && isLocalAppHost(host) && granted) {
+                            request.grant(new String[]{ android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE });
+                        } else {
+                            request.deny();
+                            if (wantsMic && isLocalAppHost(host) && Build.VERSION.SDK_INT >= 23) {
+                                requestPermissions(new String[]{ android.Manifest.permission.RECORD_AUDIO }, 9912);
+                            }
+                        }
+                    } catch (Throwable t) {
+                        try { request.deny(); } catch (Throwable ignore) {}
+                    }
+                });
+            }
+
             @Override
             public boolean onCreateWindow(WebView view, boolean isDialog,
                                           boolean isUserGesture, Message resultMsg) {
@@ -740,12 +1790,16 @@ public class MainActivity extends BridgeActivity {
             // it when fullscreen ends.
             @Override
             public void onShowCustomView(View view, CustomViewCallback callback) {
+                fsCallback = callback;
+                inFullscreen = true;
                 super.onShowCustomView(view, callback);
                 enterImmersiveFullscreen();
             }
 
             @Override
             public void onHideCustomView() {
+                inFullscreen = false;
+                fsCallback = null;
                 super.onHideCustomView();
                 exitImmersiveFullscreen();
             }
@@ -805,5 +1859,46 @@ public class MainActivity extends BridgeActivity {
                 window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             } catch (Exception ignore) {}
         });
+    }
+
+
+    /**
+     * Hardware Back / gesture: if a video is fullscreen, exit fullscreen instead
+     * of closing the player — a guaranteed escape even when the embed's own
+     * video element grabbed fullscreen (where the in-page button can't reach it).
+     */
+    @Override
+    public void onBackPressed() {
+        if (inFullscreen) {
+            try {
+                WebView wv = (this.bridge != null) ? this.bridge.getWebView() : null;
+                if (wv != null) {
+                    wv.evaluateJavascript(
+                        "(function(){try{if(document.fullscreenElement&&document.exitFullscreen){document.exitFullscreen();}}catch(e){}})();",
+                        null);
+                }
+            } catch (Exception ignore) {}
+            WebChromeClient.CustomViewCallback cb = fsCallback;
+            if (cb != null) {
+                try { cb.onCustomViewHidden(); } catch (Exception ignore) {}
+            }
+            return;
+        }
+        // Ask the web layer to close any open modal/sheet/player first; only if
+        // nothing was open do we perform the default Back (navigate / exit).
+        WebView wv = (this.bridge != null) ? this.bridge.getWebView() : null;
+        if (wv != null) {
+            try {
+                wv.evaluateJavascript(
+                    "(function(){try{return (window.__sahraeBack&&window.__sahraeBack())?1:0;}catch(e){return 0;}})();",
+                    value -> {
+                        if (value == null || value.indexOf('1') < 0) {
+                            try { MainActivity.super.onBackPressed(); } catch (Exception ignore) {}
+                        }
+                    });
+                return;
+            } catch (Exception ignore) {}
+        }
+        super.onBackPressed();
     }
 }
