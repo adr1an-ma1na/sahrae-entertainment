@@ -97,7 +97,9 @@ export const downloads = {
       // Capacitor's web Filesystem keeps files as base64 text in IndexedDB and
       // this path used to append to it thousands of times, which blew the origin
       // quota on anything podcast-length and left Downloads mysteriously empty.
-      if (!Capacitor.isNativePlatform()) {
+      // Also the Android app's path when it is built without the native
+      // Filesystem plugin: the WebView has IndexedDB too.
+      if (!Capacitor.isNativePlatform() || !Capacitor.isPluginAvailable('Filesystem')) {
         const room = await freeBytes();
         if (room !== null && total > 0 && total > room) {
           throw new Error(`Not enough space in the browser for this one (needs ${Math.round(total / 1e6)} MB, ${Math.round(room / 1e6)} MB free). Remove a download and try again.`);

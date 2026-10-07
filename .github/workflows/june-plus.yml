@@ -2,11 +2,8 @@ name: June APK + features — test
 
 # The June 7 native shell with the post-June native features added
 # (downloads, EasyList, sports resolver, crash recovery, voice mic).
-# Every run is a before/after on identical emulators:
-#   june      the June shell as it was rebuilt on fix/june-shell (d56f902)
-#   features  this branch
-# on Android 14 at 4 GB and 2 GB (flows), and Android 9 + Android 14 2 GB
-# (install, launch, survive a renderer kill).
+# The 21 user flows on Android 14 at 4 GB and 2 GB, then install / launch /
+# survive-a-renderer-kill on Android 9 and on a 2 GB Android 14.
 on:
   push:
     branches: [june-plus]
@@ -19,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [features, june]
+        variant: [features]
         ram: [4096, 2048]
     steps:
       - name: Enable KVM
@@ -31,10 +28,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Use the June shell (before)
-        if: matrix.variant == 'june'
-        run: git checkout d56f902 -- android-overlay
 
       - uses: actions/setup-node@v4
         with:
@@ -105,7 +98,7 @@ jobs:
           script: bash .github/scripts/apk-e2e.sh ${{ matrix.variant }}-${{ matrix.ram }}
 
       - name: Keep the APK for the device checks
-        if: matrix.variant == 'features' && matrix.ram == 4096
+        if: always() && matrix.ram == 4096
         uses: actions/upload-artifact@v4
         with:
           name: june-plus-debug-apk
