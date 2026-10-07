@@ -1471,28 +1471,10 @@ public class MainActivity extends BridgeActivity {
 
     private boolean firstPaintSeen = false;
 
-    /**
-     * Keep the branded launch image on screen until the page paints. Capacitor
-     * swaps the launch theme for a plain one as soon as the WebView exists, and
-     * an empty WebView is white: seconds of blank white at start-up. With the
-     * launch image as the window background and the WebView transparent, the
-     * image shows through until the page's own background covers it.
-     */
-    private void holdLaunchScreen(WebView webView) {
-        try {
-            getWindow().setBackgroundDrawableResource(R.drawable.splash);
-            webView.setBackgroundColor(android.graphics.Color.TRANSPARENT);
-        } catch (Throwable ignore) {}
-        webView.postDelayed(() -> onFirstPaint(webView), 20000);
-    }
-
+    /** The first screen is drawn: only now load the EasyList rules, so they never compete with start-up. */
     private void onFirstPaint(WebView webView) {
         if (firstPaintSeen) return;
         firstPaintSeen = true;
-        try {
-            webView.setBackgroundColor(0xFF09090B);
-            getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0xFF09090B));
-        } catch (Throwable ignore) {}
         loadEasyListAsync();
     }
 
@@ -1524,7 +1506,8 @@ public class MainActivity extends BridgeActivity {
 
         final Bridge bridge = this.bridge;
         final WebView webView = bridge.getWebView();
-        holdLaunchScreen(webView);
+        // Never wait forever on a page that does not report its first paint.
+        webView.postDelayed(() -> onFirstPaint(webView), 20000);
 
         // In-app downloads: a file the WebView is asked to download is saved into
         // the app's own storage and listed on the Downloads screen via /__dllist.
