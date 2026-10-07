@@ -95,7 +95,11 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -no-snapshot -memory ${{ matrix.ram }}
-          script: bash .github/scripts/apk-e2e.sh ${{ matrix.variant }}-${{ matrix.ram }}
+          # A fresh emulator restarts Google Play services a couple of minutes after
+          # boot, and Android closes every WebView app with it (they all use its
+          # font provider). Wait that out, as apk-smoke-verify.sh does, so the
+          # flows test the app and not the emulator warming up.
+          script: sleep 180 && bash .github/scripts/apk-e2e.sh ${{ matrix.variant }}-${{ matrix.ram }}
 
       - name: Keep the APK for the device checks
         if: always() && matrix.ram == 4096
@@ -118,7 +122,7 @@ jobs:
     needs: flows
     if: always()
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
