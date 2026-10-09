@@ -1796,33 +1796,10 @@ public class MainActivity extends BridgeActivity {
         // onShowCustomView/onHideCustomView (HTML5 fullscreen), the file chooser,
         // permission prompts, etc. A bare client silently breaks fullscreen.
         webView.setWebChromeClient(new BridgeWebChromeClient(bridge) {
-            /**
-             * Voice search: grant the microphone to OUR OWN page only. Any other
-             * origin (a streaming embed) is denied outright.
-             */
+            /** No page or embed gets the camera or microphone: the app has no feature that uses them. */
             @Override
             public void onPermissionRequest(final android.webkit.PermissionRequest request) {
-                runOnUiThread(() -> {
-                    try {
-                        String host = request.getOrigin() != null ? request.getOrigin().getHost() : null;
-                        boolean wantsMic = false;
-                        for (String r : request.getResources()) {
-                            if (android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(r)) wantsMic = true;
-                        }
-                        boolean granted = Build.VERSION.SDK_INT < 23
-                            || checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
-                        if (wantsMic && isLocalAppHost(host) && granted) {
-                            request.grant(new String[]{ android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE });
-                        } else {
-                            request.deny();
-                            if (wantsMic && isLocalAppHost(host) && Build.VERSION.SDK_INT >= 23) {
-                                requestPermissions(new String[]{ android.Manifest.permission.RECORD_AUDIO }, 9912);
-                            }
-                        }
-                    } catch (Throwable t) {
-                        try { request.deny(); } catch (Throwable ignore) {}
-                    }
-                });
+                try { request.deny(); } catch (Throwable ignore) {}
             }
 
             @Override

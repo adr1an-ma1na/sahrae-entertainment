@@ -61,12 +61,6 @@
     <!-- Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- Voice search. Only requested when the user taps the mic, and only our own
-         page (never a streaming embed) is ever given the microphone. -->
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-    <!-- Microphone is optional: TV boxes and some tablets have none. -->
-    <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <!-- Run on phones, tablets, laptops (Chromebook) AND Android TV.
          Declaring these as NOT required keeps the app installable everywhere. -->

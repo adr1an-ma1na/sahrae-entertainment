@@ -35,8 +35,15 @@ const themes = {
   Obsidian: block('.dark'),
   Cosmic: block('.midnight'),
 };
-// `amber-700` and the text on it live in @theme, shared by all three.
-const theme = block('@theme');
+/** Follow var(--x) references inside one theme block to the colour they name. */
+const resolve = (t, v) => {
+  for (let i = 0; i < 6 && v; i++) {
+    const m = /^var\((--[\w-]+)\)$/.exec(v.trim());
+    if (!m) break;
+    v = t[m[1]];
+  }
+  return v;
+};
 
 const hex = (h) => { h = h.replace('#', ''); return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255); };
 const lin = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
@@ -58,19 +65,32 @@ for (const [name, t] of Object.entries(themes)) {
   // Every theme must define its own copy of these, or it inherits another
   // theme's accent and silently looks wrong.
   for (const key of ['--zinc-950', '--zinc-800', '--zinc-500', '--zinc-100', '--white', '--black',
-    '--gold-400', '--gold-500', '--on-gold', '--glare-1', '--glare-2', '--glass-alpha']) {
+    '--gold-400', '--gold-500', '--on-gold', '--glare-1', '--glare-2', '--glass-alpha',
+    '--acc-100', '--acc-400', '--acc-500', '--acc-700', '--acc-950', '--acc-rgb', '--logo-1', '--logo-2', '--logo-3']) {
     if (!t[key]) { fail++; console.log(`  FAIL missing ${key}`); }
   }
-  atLeast('muted body text on the page', t['--zinc-500'], t['--zinc-950']);
-  atLeast('primary text on the page', t['--zinc-100'], t['--zinc-950']);
-  atLeast('primary text on a container', t['--zinc-100'], t['--zinc-800']);
-  atLeast('accent text on the page', t['--gold-400'], t['--zinc-950']);
-  atLeast('accent text on a container', t['--gold-400'], t['--zinc-800']);
-  atLeast('label on a gold fill', t['--on-gold'], t['--gold-500']);
+  const c = (k) => resolve(t, t[k]);
+  atLeast('muted body text on the page', c('--zinc-500'), c('--zinc-950'));
+  atLeast('primary text on the page', c('--zinc-100'), c('--zinc-950'));
+  atLeast('primary text on a container', c('--zinc-100'), c('--zinc-800'));
+  atLeast('accent text on the page', c('--gold-400'), c('--zinc-950'));
+  atLeast('accent text on a container', c('--gold-400'), c('--zinc-800'));
+  atLeast('label on a gold fill', c('--on-gold'), c('--gold-500'));
   // `text-white` is written literally all over the app; in a light theme it is
   // remapped to dark ink, and this is the check that it really was.
-  atLeast('text-white on the page', t['--white'], t['--zinc-950']);
-  atLeast('cream on the bronze container', theme['--color-amber-100'], theme['--color-amber-700']);
+  atLeast('text-white on the page', c('--white'), c('--zinc-950'));
+  // The active-tab pill: amber-100 text on an amber-700 container, per theme.
+  atLeast('label on the active pill', c('--acc-100'), c('--acc-700'));
+  // The logo must read on the page in every theme (large text: 3:1).
+  atLeast('logo on the page', c('--logo-2'), c('--zinc-950'), 3);
+}
+
+// A later `:root` block once re-declared the bright gold and silently overrode
+// Sand's darker accent. Only the three theme blocks may declare it.
+{
+  const golds = [...css.matchAll(/--gold-400:/g)].length;
+  if (golds !== 3) { fail++; console.log(`\n  FAIL --gold-400 declared ${golds} times (expected once per theme)`); }
+  else { pass++; console.log('\n  ok   the accent is declared once per theme'); }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

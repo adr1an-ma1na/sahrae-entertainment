@@ -637,241 +637,226 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     <>
       <div id="player-modal-container" role="dialog" data-tv-layer className="fixed inset-0 z-[100] flex justify-center bg-black/60 backdrop-blur-sm overflow-y-auto scroll-smooth py-[5vh] px-4 custom-scrollbar" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
         <div className="relative w-full max-w-[900px] bg-zinc-950 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300 ring-1 ring-zinc-800 h-fit">
-          <button onClick={onClose} data-tv-close className="absolute top-4 right-4 z-50 w-10 h-10 flex items-center justify-center bg-zinc-950/60 hover:bg-zinc-800 backdrop-blur rounded-full text-white ring-1 ring-white/20 transition-all">
+          {!(isPlaying || playingTrailer) && <button onClick={onClose} data-tv-close className="absolute top-4 right-4 z-50 w-10 h-10 flex items-center justify-center bg-zinc-950/60 hover:bg-zinc-800 backdrop-blur rounded-full text-white ring-1 ring-white/20 transition-all">
             <X className="w-5 h-5"/>
-          </button>
+          </button>}
 
-          <div className="relative w-full aspect-video md:aspect-[2.2/1] bg-black">
-            {playingTrailer ? (
-              <div className="absolute inset-0 z-10 bg-black flex items-center justify-center">
-                <iframe
-                  src={`https://www.youtube-nocookie.com/embed/${playingTrailer}?autoplay=1&rel=0&showinfo=0&modestbranding=1&iv_load_policy=3`}
-                  className="w-full h-full border-none bg-black"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
-                <div className="absolute top-4 right-16 md:right-32 z-20 flex gap-2">
-                  {/* External YouTube link removed to keep users on platform */}
-                </div>
-                {/* Back to the details, top-left like the player's Back. A second ✕
-                    beside the modal's own ✕ looked like a duplicate yet did
-                    something different. */}
-                <button onClick={() => setPlayingTrailer(null)} data-tv-focusable tabIndex={0} title="Back to details"
-                  className="absolute top-4 left-4 z-20 flex items-center gap-1.5 px-3.5 py-2 bg-black/60 hover:bg-black/85 backdrop-blur rounded-full text-white text-sm font-semibold border border-white/20 shadow-lg transition-colors active:scale-95">
-                  <ArrowLeft className="w-4 h-4" /> Back
-                </button>
-              </div>
-            ) : isPlaying ? (
-              <div ref={playerContainerRef} className="absolute inset-0 z-10 bg-black group" onMouseMove={handleMouseMove} onMouseLeave={() => setShowControls(false)}>
-                {/* Always-visible Back — reverses an accidental Play / lets you bail
-                    out anytime. Drops out of fullscreen and returns to details. */}
-                <button onClick={() => { setIsPlaying(false); const d = document as any; if (d.fullscreenElement || d.webkitFullscreenElement) { try { (d.exitFullscreen || d.webkitExitFullscreen)?.call(document); } catch { /* noop */ } } }}
-                  data-tv-focusable tabIndex={0}
-                  className="absolute top-4 left-4 z-40 flex items-center gap-1.5 px-3.5 py-2 bg-black/60 hover:bg-black/85 backdrop-blur rounded-full text-white text-sm font-semibold border border-white/20 shadow-lg transition-colors active:scale-95"
-                  title="Back to details">
-                  <ArrowLeft className="w-4 h-4" /> Back
-                </button>
-                {(
+          {(isPlaying || playingTrailer) ? (
+            // Two zones that never overlap. The server's player owns the whole
+            // video frame, its own controls included; Sahrae's controls live in
+            // the bar beneath it. They used to float over the frame, on top of
+            // the provider's buttons, and on a phone (no hover) they stayed
+            // invisible yet still took the taps meant for the player.
+            <div ref={playingTrailer ? undefined : playerContainerRef} className="player-shell flex flex-col bg-black">
+              <div className="player-frame relative w-full aspect-video bg-black">
+                {playingTrailer ? (
                   <iframe
-                    key={`player-${refreshKey}-${shieldOn ? 'shield' : 'open'}-${currentServerObj.id}`}
-                    ref={iframeRef}
-                    src={src}
-                    frameBorder="0"
-                    // `clipboard-write` was granted to the embeds and is now gone:
-                    // it let a hostile ad script silently replace the contents of
-                    // the user's clipboard, and no player needs it.
-                    allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                    src={`https://www.youtube-nocookie.com/embed/${playingTrailer}?autoplay=1&rel=0&showinfo=0&modestbranding=1&iv_load_policy=3`}
+                    className="w-full h-full border-none bg-black"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
-                    referrerPolicy="no-referrer"
-                    // Ad Shield. On the WEB this sandbox is the only thing that
-                    // can actually stop a cross-origin embed popping windows or
-                    // hijacking the tab — no parent-page JS can reach inside it.
-                    // On ANDROID it is left off: the native shell already blocks
-                    // popups properly, and sandboxing there only trips the
-                    // providers' anti-tamper check for no gain. Some providers
-                    // refuse to play when sandboxed, which is why this is a
-                    // toggle and why the server picker sits right below.
-                    sandbox={playerSandbox(shieldOn)}
-                    // Auto-fullscreen once the embed has loaded + autostarted
-                    // (media playback no longer needs a separate gesture), so a
-                    // single Play tap ends up fullscreen and playing.
-                    onLoad={() => { setVideoLoaded(true); setLoadPct(100); if (loadTimerRef.current) clearInterval(loadTimerRef.current); if (slowTimerRef.current) clearTimeout(slowTimerRef.current); setTimeout(enterFullscreen, 600); }}
-                    className="w-full h-full absolute inset-0 bg-black"
-                    title="Video Player"
                   />
-                )}
-                {/* Netflix-style loading ring + slow-load recovery (Reload / Next server) */}
-                {!videoLoaded && (
-                  <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/85 pointer-events-none">
-                    <div className="relative w-20 h-20">
-                      <svg viewBox="0 0 48 48" className="w-20 h-20 -rotate-90">
-                        <circle cx="24" cy="24" r="20" fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth="4" />
-                        <circle cx="24" cy="24" r="20" fill="none" stroke="#FBBF24" strokeWidth="4" strokeLinecap="round" strokeDasharray={125.66} strokeDashoffset={125.66 * (1 - loadPct / 100)} style={{ transition: 'stroke-dashoffset 0.3s ease' }} />
-                      </svg>
-                      <span className="absolute inset-0 flex items-center justify-center text-white font-bold text-sm">{Math.round(loadPct)}%</span>
-                    </div>
-                    <p className="text-zinc-300 text-sm mt-4 font-medium px-6 text-center max-w-full truncate">Loading {details.title || details.name}…</p>
-                    {slowLoad && (
-                      <div className="pointer-events-auto mt-5 flex flex-col items-center gap-3 px-6">
-                        <p className="text-zinc-400 text-xs text-center max-w-xs">Still loading? Reload, or switch to another server.</p>
-                        <div className="flex gap-2">
-                          <button onClick={() => setRefreshKey(k => k + 1)} data-tv-focusable className="px-4 py-2 bg-white text-black text-sm font-bold rounded-full flex items-center gap-2 active:scale-95"><RefreshCw className="w-4 h-4" /> Reload</button>
-                          <button onClick={() => setSelectedServer(s => (s + 1) % dynamicServers.length)} data-tv-focusable className="px-4 py-2 bg-zinc-800 text-white text-sm font-bold rounded-full flex items-center gap-2 border border-white/15 active:scale-95"><Server className="w-4 h-4" /> Next server</button>
+                ) : (
+                  <>
+                    <iframe
+                      key={`player-${refreshKey}-${shieldOn ? 'shield' : 'open'}-${currentServerObj.id}`}
+                      ref={iframeRef}
+                      src={src}
+                      frameBorder="0"
+                      // `clipboard-write` was granted to the embeds and is now gone:
+                      // it let a hostile ad script silently replace the contents of
+                      // the user's clipboard, and no player needs it.
+                      allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                      allowFullScreen
+                      referrerPolicy="no-referrer"
+                      // Ad Shield. On the WEB this sandbox is the only thing that
+                      // can actually stop a cross-origin embed popping windows or
+                      // hijacking the tab — no parent-page JS can reach inside it.
+                      // On ANDROID it is left off: the native shell already blocks
+                      // popups properly, and sandboxing there only trips the
+                      // providers' anti-tamper check for no gain. Some providers
+                      // refuse to play when sandboxed, which is why this is a
+                      // toggle and why the server picker sits right below.
+                      sandbox={playerSandbox(shieldOn)}
+                      // Auto-fullscreen once the embed has loaded + autostarted
+                      // (media playback no longer needs a separate gesture), so a
+                      // single Play tap ends up fullscreen and playing.
+                      onLoad={() => { setVideoLoaded(true); setLoadPct(100); if (loadTimerRef.current) clearInterval(loadTimerRef.current); if (slowTimerRef.current) clearTimeout(slowTimerRef.current); setTimeout(enterFullscreen, 600); }}
+                      className="w-full h-full absolute inset-0 bg-black"
+                      title="Video Player"
+                    />
+                    {/* Netflix-style loading ring + slow-load recovery (Reload / Next server) */}
+                    {!videoLoaded && (
+                      <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/85 pointer-events-none">
+                        <div className="relative w-20 h-20">
+                          <svg viewBox="0 0 48 48" className="w-20 h-20 -rotate-90">
+                            <circle cx="24" cy="24" r="20" fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth="4" />
+                            <circle cx="24" cy="24" r="20" fill="none" style={{ stroke: 'var(--acc-400)', transition: 'stroke-dashoffset 0.3s ease' }} strokeWidth="4" strokeLinecap="round" strokeDasharray={125.66} strokeDashoffset={125.66 * (1 - loadPct / 100)} />
+                          </svg>
+                          <span className="absolute inset-0 flex items-center justify-center text-white font-bold text-sm">{Math.round(loadPct)}%</span>
                         </div>
+                        <p className="text-zinc-300 text-sm mt-4 font-medium px-6 text-center max-w-full truncate">Loading {details.title || details.name}…</p>
+                        {slowLoad && (
+                          <div className="pointer-events-auto mt-5 flex flex-col items-center gap-3 px-6">
+                            <p className="text-zinc-400 text-xs text-center max-w-xs">Still loading? Reload, or switch to another server.</p>
+                            <div className="flex gap-2">
+                              <button onClick={() => setRefreshKey(k => k + 1)} data-tv-focusable className="px-4 py-2 bg-white text-black text-sm font-bold rounded-full flex items-center gap-2 active:scale-95"><RefreshCw className="w-4 h-4" /> Reload</button>
+                              <button onClick={() => setSelectedServer(s => (s + 1) % dynamicServers.length)} data-tv-focusable className="px-4 py-2 bg-zinc-800 text-white text-sm font-bold rounded-full flex items-center gap-2 border border-white/15 active:scale-95"><Server className="w-4 h-4" /> Next server</button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
-                )}
-                {isSandboxed && (['superembed', 'vidsrcpro', '2embed', 'vidbinge', 'multiembed', 'vidsrcnet', 'vidsrcme', 'embedsu'].includes(currentServerObj.id)) && (
-                  <div className="absolute top-0 left-0 w-full z-40 bg-[#e50914]/95 text-white text-xs md:text-sm font-bold px-4 py-3 flex flex-col md:flex-row items-center justify-center gap-3 md:gap-4 text-center backdrop-blur shadow-2xl border-b border-white/20 animate-in slide-in-from-top-2">
-                    <AlertCircle className="w-5 h-5 shrink-0" />
-                    <span>Google AI Studio's preview window secretly blocks this server. <b>Sahrae works perfectly on its own tab!</b></span>
-                    <a href={window.location.href} target="_blank" rel="noopener noreferrer" className="bg-white text-[#e50914] px-4 py-1.5 rounded-full whitespace-nowrap hover:bg-zinc-200 transition-colors shadow-lg active:scale-95 flex items-center gap-1">
-                      Open Sahrae App Natively <ExternalLink className="w-3 h-3" />
-                    </a>
-                  </div>
-                )}
-                
-                {/* Floating "Next Episode" button overlay at 90% completion (for APIs that emit progress) or on hover for TV shows */}
-                {currentMediaType === 'tv' && hasNextEpisode() && currentServerObj.type !== 'youtube' && (
-                  <div className={`absolute bottom-24 right-4 z-50 transition-all duration-500 ${
-                    (currentServerObj.id === 'vidsrcpro' || currentServerObj.id === 'multiembed')
-                      ? (showNextEpisodeOverlay ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-4 pointer-events-none')
-                      : 'opacity-50 hover:opacity-100 translate-y-0 pointer-events-auto'
-                  }`}>
-                    <button 
-                      onClick={() => handleSkipEpisode('next')}
-                      className="flex items-center gap-2 px-4 py-2 md:px-5 md:py-3 bg-[#e50914] text-white font-bold rounded-lg shadow-2xl hover:bg-[#b8070f] hover:scale-105 transition-all text-sm md:text-base border border-red-500/50"
-                    >
-                      Next Episode <SkipForward className="w-4 h-4 md:w-5 md:h-5"/>
-                    </button>
-                  </div>
-                )}
-                
-                {/* Floating Top Controls */}
-                <div className={`absolute top-4 right-4 md:right-16 z-20 flex gap-2 items-center transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0'}`}>
-                  {/* Switch server WHILE watching — the fix for "content isn't available". */}
-                  <select value={selectedServer} onChange={e => setSelectedServer(Number(e.target.value))} data-tv-focusable aria-label="Switch server" title="Switch server if it won't play"
-                    className="bg-black/50 hover:bg-black/80 text-white text-xs font-bold rounded-full px-3 py-1.5 border border-white/20 outline-none cursor-pointer backdrop-blur appearance-none">
-                    {dynamicServers.map((server, idx) => {
-                      const isDown = failedServers.includes(server.id);
-                      return (
-                        <option key={server.id} value={idx} className="bg-zinc-900 text-white">
-                          {`Server ${idx + 1}${isDown ? ' (🔴 Down)' : ''}`}
-                        </option>
-                      );
-                    })}
-                  </select>
-                  {currentServerObj.type !== 'youtube' && (
-                    <button
-                      onClick={reportCurrentMovieServerDead}
-                      className="px-3 py-1.5 text-xs font-bold bg-black/50 hover:bg-red-500/20 border border-white/20 hover:border-red-500/50 text-zinc-300 hover:text-red-400 rounded-full flex items-center gap-1.5 transition-all shadow-md active:scale-95 backdrop-blur"
-                      title="Report server dead/broken and switch to next server"
-                    >
-                      <AlertTriangle className="w-3.5 h-3.5" /> Dead Server?
-                    </button>
-                  )}
-                  {currentMediaType === 'tv' && currentServerObj.type !== 'youtube' && (
-                    <>
-                      <button onClick={() => handleSkipEpisode('prev')} disabled={!hasPrevEpisode()} className="p-2 bg-black/50 hover:bg-black/80 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-full transition-colors backdrop-blur border border-white/20" title="Previous Episode"><SkipBack className="w-4 h-4"/></button>
-                      <button onClick={() => handleSkipEpisode('next')} disabled={!hasNextEpisode()} className="p-2 bg-black/50 hover:bg-black/80 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-full transition-colors backdrop-blur border border-white/20" title="Next Episode"><SkipForward className="w-4 h-4"/></button>
-                    </>
-                  )}
-                  <button onClick={() => setShowAudioMenu(v => !v)} data-tv-focusable className={`p-2 rounded-full transition-colors backdrop-blur border ${audioOn ? 'bg-amber-500 text-amber-950 border-amber-500' : 'bg-black/50 hover:bg-black/80 text-white border-white/20'}`} title="Audio enhancement"><Waves className="w-4 h-4"/></button>
-                  <button onClick={toggleFullScreen} className="p-2 bg-black/50 hover:bg-black/80 text-white rounded-full transition-colors backdrop-blur border border-white/20" title="Full Screen"><Maximize className="w-4 h-4"/></button>
-                  <button onClick={() => setRefreshKey(prev=>prev+1)} className="p-2 bg-black/50 hover:bg-black/80 text-white rounded-full transition-colors backdrop-blur border border-white/20" title="Reload Video"><RefreshCw className="w-4 h-4"/></button>
-                  <button onClick={() => setIsPlaying(false)} className="p-2 bg-black/50 hover:bg-black/80 text-white rounded-full transition-colors backdrop-blur border border-white/20" title="Back to Details"><ArrowLeft className="w-4 h-4"/></button>
-                </div>
-                {/* Audio-enhancement presets — enables spatial/EQ on the global native mix */}
-                {showAudioMenu && (
-                  <div className="absolute top-16 right-4 md:right-16 z-50 w-56 bg-zinc-950/95 backdrop-blur rounded-xl border border-white/15 shadow-2xl p-2 animate-in fade-in slide-in-from-top-2 duration-200">
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 px-2 pt-1 pb-2 flex items-center gap-1.5"><Waves className="w-3.5 h-3.5" /> Audio Enhancement</p>
-                    {AUDIO_PRESETS.map(p => (
-                      <button key={p.key} onClick={() => applyAudioPreset(p.key)} data-tv-focusable className={`w-full text-left px-3 py-2 rounded-lg text-sm font-semibold flex items-center justify-between transition-colors ${eqPreset === p.key ? 'bg-amber-500 text-amber-950' : 'text-white hover:bg-white/10'}`}>
-                        {p.label} {eqPreset === p.key && <Check className="w-4 h-4"/>}
-                      </button>
-                    ))}
-                    <p className="text-[10px] text-zinc-500 px-2 pt-2 leading-snug">Enhances all app audio: movies, music &amp; podcasts.</p>
-                  </div>
-                )}
-
-                {showAdNotice && (
-                  <div className="absolute bottom-24 right-4 z-[100] max-w-sm bg-zinc-950/95 border border-amber-500/30 text-white rounded-xl p-4 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-4 duration-300">
-                    <div className="flex items-start gap-3">
-                      <div className="p-1.5 rounded-lg bg-amber-500/15 text-amber-500">
-                        <ShieldCheck className="w-5 h-5" />
+                    {isSandboxed && (['superembed', 'vidsrcpro', '2embed', 'vidbinge', 'multiembed', 'vidsrcnet', 'vidsrcme', 'embedsu'].includes(currentServerObj.id)) && (
+                      <div className="absolute top-0 left-0 w-full z-40 bg-[#e50914]/95 text-white text-xs md:text-sm font-bold px-4 py-3 flex flex-col md:flex-row items-center justify-center gap-3 md:gap-4 text-center backdrop-blur shadow-2xl border-b border-white/20 animate-in slide-in-from-top-2">
+                        <AlertCircle className="w-5 h-5 shrink-0" />
+                        <span>Google AI Studio's preview window secretly blocks this server. <b>Sahrae works perfectly on its own tab!</b></span>
+                        <a href={window.location.href} target="_blank" rel="noopener noreferrer" className="bg-white text-[#e50914] px-4 py-1.5 rounded-full whitespace-nowrap hover:bg-zinc-200 transition-colors shadow-lg active:scale-95 flex items-center gap-1">
+                          Open Sahrae App Natively <ExternalLink className="w-3 h-3" />
+                        </a>
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between">
-                          <h4 className="text-sm font-bold text-amber-400">Ad Shield protected you</h4>
-                          <button onClick={() => setShowAdNotice(false)} className="text-zinc-400 hover:text-white transition-colors ml-2">
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                        <p className="text-xs text-zinc-300 mt-1 leading-relaxed">
-                          A background pop-up was blocked or opened. <b>Simply close the ad tab</b> to resume watching without interruption!
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {countdown && (
-                  <div role="alert" className="absolute bottom-24 left-4 right-4 md:right-auto z-[100] max-w-md bg-zinc-950/95 border border-amber-400/40 text-white rounded-xl p-4 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-4 duration-300">
-                    <div className="flex items-start gap-3">
-                      <div className="p-1.5 rounded-lg bg-amber-400/15 text-amber-300">
-                        <Server className="w-5 h-5" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <h4 className="text-sm font-bold text-amber-300">{countdown.from} isn't starting</h4>
-                        <p className="text-xs text-zinc-300 mt-1 leading-relaxed">Switching to {countdown.to} in {countdown.left}…</p>
-                        <div className="flex gap-2 mt-3">
-                          <button onClick={() => { if (countdownTimerRef.current) clearInterval(countdownTimerRef.current); countdownTimerRef.current = null; setCountdown(null); autoSwitch(); }} data-tv-focusable data-tv-autofocus
-                            className="px-3.5 py-1.5 rounded-full bg-amber-400 text-amber-950 text-xs font-bold active:scale-95">Switch now</button>
-                          <button onClick={() => keepTryingRef.current()} data-tv-focusable
-                            className="px-3.5 py-1.5 rounded-full bg-zinc-800 text-white text-xs font-bold border border-white/15 active:scale-95">Keep trying</button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {switchNotice && (
-                  <div role="status" aria-live="polite" className="absolute bottom-24 left-4 z-[100] max-w-sm bg-zinc-950/95 border border-amber-400/30 text-white rounded-xl p-4 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-4 duration-300">
-                    <div className="flex items-start gap-3">
-                      <div className="p-1.5 rounded-lg bg-amber-400/15 text-amber-300">
-                        <Server className="w-5 h-5" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <h4 className="text-sm font-bold text-amber-300">Switched server</h4>
-                        <p className="text-xs text-zinc-300 mt-1 leading-relaxed">
-                          {switchNotice.from} didn't start, so you're now on {switchNotice.to}.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {showServerDeadNotice && (
-                  <div className="absolute bottom-24 left-4 z-[100] max-w-sm bg-zinc-950/95 border border-red-500/30 text-white rounded-xl p-4 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-4 duration-300">
-                    <div className="flex items-start gap-3">
-                      <div className="p-1.5 rounded-lg bg-red-500/15 text-red-400">
-                        <AlertTriangle className="w-5 h-5 animate-pulse" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between">
-                          <h4 className="text-sm font-bold text-red-400">Server marked offline</h4>
-                          <button onClick={() => setShowServerDeadNotice(false)} className="text-zinc-400 hover:text-white transition-colors ml-2">
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                        <p className="text-xs text-zinc-300 mt-1 leading-relaxed">
-                          We've flagged that server down in your session and successfully switched you to the next server.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
+                    )}
+                  </>
                 )}
               </div>
-            ) : (
+
+              {!playingTrailer && (
+                <div className="flex flex-col gap-2 px-2 pt-2 empty:hidden">
+                  {showAdNotice && (
+                    <div className="bg-zinc-950/95 border border-amber-500/30 text-white rounded-xl p-4 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-4 duration-300">
+                      <div className="flex items-start gap-3">
+                        <div className="p-1.5 rounded-lg bg-amber-500/15 text-amber-500">
+                          <ShieldCheck className="w-5 h-5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-sm font-bold text-amber-400">Ad Shield protected you</h4>
+                            <button onClick={() => setShowAdNotice(false)} className="text-zinc-400 hover:text-white transition-colors ml-2">
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <p className="text-xs text-zinc-300 mt-1 leading-relaxed">
+                            A background pop-up was blocked or opened. <b>Simply close the ad tab</b> to resume watching without interruption!
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {countdown && (
+                    <div role="alert" className="bg-zinc-950/95 border border-amber-400/40 text-white rounded-xl p-4 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-4 duration-300">
+                      <div className="flex items-start gap-3">
+                        <div className="p-1.5 rounded-lg bg-amber-400/15 text-amber-300">
+                          <Server className="w-5 h-5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h4 className="text-sm font-bold text-amber-300">{countdown.from} isn't starting</h4>
+                          <p className="text-xs text-zinc-300 mt-1 leading-relaxed">Switching to {countdown.to} in {countdown.left}…</p>
+                          <div className="flex gap-2 mt-3">
+                            <button onClick={() => { if (countdownTimerRef.current) clearInterval(countdownTimerRef.current); countdownTimerRef.current = null; setCountdown(null); autoSwitch(); }} data-tv-focusable data-tv-autofocus
+                              className="px-3.5 py-1.5 rounded-full bg-amber-400 text-amber-950 text-xs font-bold active:scale-95">Switch now</button>
+                            <button onClick={() => keepTryingRef.current()} data-tv-focusable
+                              className="px-3.5 py-1.5 rounded-full bg-zinc-800 text-white text-xs font-bold border border-white/15 active:scale-95">Keep trying</button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {switchNotice && (
+                    <div role="status" aria-live="polite" className="bg-zinc-950/95 border border-amber-400/30 text-white rounded-xl p-4 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-4 duration-300">
+                      <div className="flex items-start gap-3">
+                        <div className="p-1.5 rounded-lg bg-amber-400/15 text-amber-300">
+                          <Server className="w-5 h-5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h4 className="text-sm font-bold text-amber-300">Switched server</h4>
+                          <p className="text-xs text-zinc-300 mt-1 leading-relaxed">
+                            {switchNotice.from} didn't start, so you're now on {switchNotice.to}.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {showServerDeadNotice && (
+                    <div className="bg-zinc-950/95 border border-red-500/30 text-white rounded-xl p-4 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-4 duration-300">
+                      <div className="flex items-start gap-3">
+                        <div className="p-1.5 rounded-lg bg-red-500/15 text-red-400">
+                          <AlertTriangle className="w-5 h-5 animate-pulse" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-sm font-bold text-red-400">Server marked offline</h4>
+                            <button onClick={() => setShowServerDeadNotice(false)} className="text-zinc-400 hover:text-white transition-colors ml-2">
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <p className="text-xs text-zinc-300 mt-1 leading-relaxed">
+                            We've flagged that server down in your session and successfully switched you to the next server.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="relative flex flex-wrap items-center gap-1.5 px-2 py-2 bg-zinc-950 border-t border-white/10">
+                <button onClick={() => { if (playingTrailer) { setPlayingTrailer(null); return; } setIsPlaying(false); const d = document as any; if (d.fullscreenElement || d.webkitFullscreenElement) { try { (d.exitFullscreen || d.webkitExitFullscreen)?.call(document); } catch { /* noop */ } } }}
+                  data-tv-focusable tabIndex={0} title="Back to details" className="h-9 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed">
+                  <ArrowLeft className="w-4 h-4" /><span className="hidden sm:inline">Back</span>
+                </button>
+                {playingTrailer ? <div className="flex-1" /> : (
+                  <>
+                    <div className="contents">
+                      {/* Switch server while watching: the fix for "content isn't available". */}
+                      <select value={selectedServer} onChange={e => setSelectedServer(Number(e.target.value))} data-tv-focusable aria-label="Switch server" title="Switch server if it won't play"
+                        className="h-9 shrink-0 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold rounded-full px-3 border-none outline-none cursor-pointer appearance-none">
+                        {dynamicServers.map((server, idx) => {
+                          const isDown = failedServers.includes(server.id);
+                          return (
+                            <option key={server.id} value={idx} className="bg-zinc-900 text-white">
+                              {`Server ${idx + 1}${isDown ? ' (down)' : ''}`}
+                            </option>
+                          );
+                        })}
+                      </select>
+                      {currentMediaType === 'tv' && currentServerObj.type !== 'youtube' && (
+                        <>
+                          <button onClick={() => handleSkipEpisode('prev')} disabled={!hasPrevEpisode()} data-tv-focusable title="Previous episode" className="w-9 h-9 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"><SkipBack className="w-4 h-4" /></button>
+                          <button onClick={() => handleSkipEpisode('next')} disabled={!hasNextEpisode()} data-tv-focusable title="Next episode"
+                            className={`h-9 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed ${showNextEpisodeOverlay && hasNextEpisode() ? '!bg-amber-500 !text-amber-950' : ''}`}>
+                            Next <SkipForward className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
+                      {currentServerObj.type !== 'youtube' && (
+                        <button onClick={reportCurrentMovieServerDead} data-tv-focusable title="Report this server broken and switch to the next one" className="h-9 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed">
+                          <AlertTriangle className="w-3.5 h-3.5" /><span className="hidden sm:inline">Not working?</span>
+                        </button>
+                      )}
+                    </div>
+                    <button onClick={() => setShowAudioMenu(v => !v)} data-tv-focusable title="Audio enhancement"
+                      className={`ml-auto w-9 h-9 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed ${audioOn ? '!bg-amber-500 !text-amber-950' : ''}`}><Waves className="w-4 h-4" /></button>
+                    <button onClick={() => setRefreshKey(prev => prev + 1)} data-tv-focusable title="Reload video" className="w-9 h-9 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"><RefreshCw className="w-4 h-4" /></button>
+                    <button onClick={toggleFullScreen} data-tv-focusable title="Full screen" className="w-9 h-9 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"><Maximize className="w-4 h-4" /></button>
+                  </>
+                )}
+                <button onClick={onClose} data-tv-focusable data-tv-close title="Close" className="w-9 h-9 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"><X className="w-4 h-4" /></button>
+                {!playingTrailer && showAudioMenu && (
+                    <div className="absolute bottom-full right-2 mb-2 z-50 w-56 bg-zinc-950/95 backdrop-blur rounded-xl border border-white/15 shadow-2xl p-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 px-2 pt-1 pb-2 flex items-center gap-1.5"><Waves className="w-3.5 h-3.5" /> Audio Enhancement</p>
+                      {AUDIO_PRESETS.map(p => (
+                        <button key={p.key} onClick={() => applyAudioPreset(p.key)} data-tv-focusable className={`w-full text-left px-3 py-2 rounded-lg text-sm font-semibold flex items-center justify-between transition-colors ${eqPreset === p.key ? 'bg-amber-500 text-amber-950' : 'text-white hover:bg-white/10'}`}>
+                          {p.label} {eqPreset === p.key && <Check className="w-4 h-4"/>}
+                        </button>
+                      ))}
+                      <p className="text-[10px] text-zinc-500 px-2 pt-2 leading-snug">Enhances all app audio: movies, music &amp; podcasts.</p>
+                    </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="relative w-full aspect-video md:aspect-[2.2/1] bg-black">
               <>
                 <img loading="lazy" decoding="async" src={getImageUrl(details.backdrop_path, 'original')} className="w-full h-full object-cover opacity-80" />
                 {/* Tint drawn from the artwork itself, so every title feels
@@ -892,7 +877,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 md:via-zinc-950/20 to-transparent" />
                 <div className="absolute inset-0 bg-gradient-to-r from-zinc-950/80 via-zinc-950/40 md:via-transparent to-transparent" />
-                
+  
                 <div className="absolute bottom-8 left-8 md:bottom-10 md:left-10 pr-12 flex flex-col gap-4 z-10 w-full max-w-2xl">
                   <h1 className="text-3xl md:text-5xl lg:text-6xl font-display font-extrabold text-white tracking-tight leading-none drop-shadow-2xl">
                     {details.title || details.name}
@@ -927,8 +912,8 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                   </div>
                 </div>
               </>
-            )}
-          </div>
+            </div>
+          )}
 
             <div className="p-8 md:p-10 pb-16">
               {/* Pick-a-server-before-you-play. Shown for BOTH movies and series

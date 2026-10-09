@@ -198,7 +198,7 @@ export default function AudioHubView({ onNav }: { onNav?: (tab: string) => void 
                       {/* Stylus arm lines */}
                       <path d="M 35 5 L 35 45 L 20 65 L 12 60" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                       {/* Cartridge head */}
-                      <rect x="5" y="55" width="10" height="14" rx="2" fill="#F59E0B" transform="rotate(-15, 10, 62)" />
+                      <rect x="5" y="55" width="10" height="14" rx="2" style={{ fill: 'var(--acc-500)' }} transform="rotate(-15, 10, 62)" />
                     </svg>
                   </div>
                 </div>

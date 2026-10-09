@@ -19,7 +19,7 @@ export default function SplashIntro() {
 
   return (
     <div
-      className={`fixed inset-0 z-[200] flex items-center justify-center overflow-hidden bg-[#070708] ${phase === 'out' ? 'splash-out' : ''}`}
+      className={`fixed inset-0 z-[200] flex items-center justify-center overflow-hidden bg-zinc-950 ${phase === 'out' ? 'splash-out' : ''}`}
       aria-hidden
     >
       <div className="splash-aurora" />

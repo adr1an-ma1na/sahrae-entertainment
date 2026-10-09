@@ -4,7 +4,6 @@ import { useHls } from '../services/hlsLoader';
 import { X, Maximize, Search, Heart, RadioTower, Loader2, WifiOff } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import Coachmark from './Coachmark';
-import { onChannelRequest } from '../services/voiceBus';
 import Illustration from './ui/Illustration';
 
 interface Channel { name: string; country: string; category: Category; url: string; kind?: 'hls' | 'yt' }
@@ -229,15 +228,6 @@ export default function LiveTVView() {
     setActive(ch); setOffline(false);
     setRecent((prev) => { const n = [ch.name, ...prev.filter((x) => x !== ch.name)].slice(0, 8); try { localStorage.setItem(RECENT_KEY, JSON.stringify(n)); } catch { /* */ } return n; });
   };
-
-  // "Watch Sky News" opens that channel here. Subscribing (rather than reading
-  // once on mount) means it works whether the command arrived before this view
-  // existed or while the user was already looking at it.
-  useEffect(() => onChannelRequest((wanted) => {
-    const ch = CHANNELS.find((c) => c.name === wanted);
-    if (ch) open(ch);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), []);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
