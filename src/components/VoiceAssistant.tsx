@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Mic, X, Volume2, VolumeX, Loader2, AlertCircle, CornerDownLeft } from 'lucide-react';
-import { listen, speak, shutUp, stopListening, voiceSupported, voiceDiagnostics } from '../services/voice';
+import { listen, speak, shutUp, stopListening, voiceSupported, voiceDiagnostics, probeLocalRecognition } from '../services/voice';
 import { parseVoiceCommand, VoiceIntent, VoiceCatalog } from '../services/voiceIntents';
 import { haptics } from '../services/haptics';
 
@@ -76,6 +76,9 @@ export default function VoiceAssistant({ catalog, onCommand }: VoiceAssistantPro
     haptics.press();
     setOpen(true);
     begin();
+    // After begin(): start() has used the tap's activation, so the probe can't
+    // spend it. Its answer serves this person's next use of the mic.
+    probeLocalRecognition();
   };
 
   const close = () => {

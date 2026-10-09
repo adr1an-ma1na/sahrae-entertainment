@@ -97,7 +97,22 @@ function candidateLangs(): string[] {
   return out;
 }
 
-(function probeLocalRecognition() {
+let probed = false;
+
+/**
+ * Ask the platform whether it can recognise speech on the device.
+ *
+ * Called when the assistant is first opened, never at start-up. It used to run
+ * when this module loaded, on every launch, and when the answer was
+ * "downloadable" it went on to install a speech model in the background, before
+ * anyone had touched the mic. Only the newest WebViews (Chrome 138+) have this
+ * API, so no test device ever ran it while every current phone did. Nothing is
+ * installed any more: the cloud path works without it, and a model download is
+ * not something to start unasked.
+ */
+export function probeLocalRecognition(): void {
+  if (probed) return;
+  probed = true;
   try {
     const SR = getCtor() as any;
     diag.hasSR = !!SR;
@@ -112,21 +127,13 @@ function candidateLangs(): string[] {
         .then((state: string) => {
           diag.probes[lang] = String(state);
           if (state === 'available') { preferLocal = true; localLang = lang; return; }
-          if ((state === 'downloadable' || state === 'downloading')
-              && typeof SR.installOnDevice === 'function') {
-            // Fetch in the background so a later session gets local recognition;
-            // never blocks this one, and never claims support before it lands.
-            Promise.resolve(SR.installOnDevice({ langs: [lang] }))
-              .then((ok: boolean) => { if (ok && !preferLocal) { preferLocal = true; localLang = lang; } })
-              .catch(() => {});
-          }
           tryNext(langs, i + 1);
         })
         .catch((e: any) => { diag.probes[lang] = 'threw: ' + (e?.message || e); tryNext(langs, i + 1); });
     };
     tryNext(candidateLangs(), 0);
   } catch { /* API absent — cloud path, then the typed fallback */ }
-})();
+}
 
 /** True when recognition can run without contacting a speech server. */
 export const localRecognitionReady = (): boolean => preferLocal;

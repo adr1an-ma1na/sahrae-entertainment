@@ -10,6 +10,10 @@ import { initSpatialNavigation } from './tv/spatialNavigation.ts';
 import { startErrorReporting } from './services/errorReporter';
 import { applyGraphicsTier } from './services/graphicsTier.ts';
 import { applyDeviceTier } from './services/deviceTier.ts';
+import { crumb, startHeartbeat } from './services/bootCrumbs.ts';
+
+crumb('boot');
+startHeartbeat();
 
 // Before anything else mounts, so a crash during boot is caught too — that is
 // the failure least likely to be reported and hardest to reproduce.

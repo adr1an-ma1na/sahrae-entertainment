@@ -1,23 +1,18 @@
 import { useState, useEffect } from 'react';
-import { 
-  collection, 
-  doc, 
-  setDoc, 
-  deleteDoc, 
-  query, 
-  orderBy, 
-  limit, 
-  onSnapshot 
-} from 'firebase/firestore';
 import { MediaItem } from '../services/tmdb';
 import { useAuth } from './useAuth';
-import { 
-  db, 
-  fbAuth, 
-  syncFirebaseAuth, 
-  handleFirestoreError, 
-  OperationType 
-} from '../services/firebase-real';
+
+/**
+ * Firebase (app, auth and Firestore: ~540 kB, plus an anonymous sign-in and a
+ * live connection) is loaded on demand, not at start-up. It used to initialise
+ * when this module was imported, on every launch, before the first screen. The
+ * on-device copy in localStorage is the source of truth either way.
+ */
+const cloud = () => Promise.all([import('firebase/firestore'), import('../services/firebase-real')])
+  .then(([store, real]) => ({ ...store, ...real }));
+
+/** Cloud sync waits until the first screen has had time to settle. */
+const SYNC_DELAY_MS = 8000;
 
 export interface WatchProgress {
   mediaId: number;
@@ -57,6 +52,10 @@ export function useWatchProgress() {
     let isCancelled = false;
 
     async function setupSync() {
+      await new Promise((r) => setTimeout(r, SYNC_DELAY_MS));
+      if (isCancelled) return;
+      const { collection, query, orderBy, limit, onSnapshot, db, syncFirebaseAuth, handleFirestoreError, OperationType } = await cloud();
+      if (isCancelled) return;
       // Authenticate to real Firebase
       const fbUid = await syncFirebaseAuth(user);
       if (isCancelled || !fbUid) return;
@@ -104,7 +103,7 @@ export function useWatchProgress() {
       );
     }
 
-    setupSync();
+    setupSync().catch(() => { /* offline or blocked: the local copy stands */ });
 
     return () => {
       isCancelled = true;
@@ -153,7 +152,10 @@ export function useWatchProgress() {
     });
 
     // Save to Firestore in background
+    let c: Awaited<ReturnType<typeof cloud>> | null = null;
     try {
+      c = await cloud();
+      const { fbAuth, syncFirebaseAuth, setDoc, doc, db } = c;
       const fbUid = fbAuth.currentUser?.uid || await syncFirebaseAuth(user);
       if (fbUid) {
         const profileId = activeProfile?.id || 'default';
@@ -170,9 +172,10 @@ export function useWatchProgress() {
         await setDoc(doc(db, 'users', fbUid, 'profiles', profileId, 'watchProgress', String(mediaId)), payload);
       }
     } catch (e) {
+      if (!c) return; // Firebase did not load (offline): the local copy stands
       const profileId = activeProfile?.id || 'default';
-      const docPath = `users/${fbAuth.currentUser?.uid || 'unknown'}/profiles/${profileId}/watchProgress/${mediaId}`;
-      handleFirestoreError(e, OperationType.WRITE, docPath);
+      const docPath = `users/${c.fbAuth.currentUser?.uid || 'unknown'}/profiles/${profileId}/watchProgress/${mediaId}`;
+      c.handleFirestoreError(e, c.OperationType.WRITE, docPath);
     }
   };
 
@@ -190,7 +193,10 @@ export function useWatchProgress() {
     });
 
     // Delete from Firestore in background
+    let c: Awaited<ReturnType<typeof cloud>> | null = null;
     try {
+      c = await cloud();
+      const { fbAuth, syncFirebaseAuth, deleteDoc, doc, db } = c;
       const fbUid = fbAuth.currentUser?.uid || await syncFirebaseAuth(user);
       if (fbUid) {
         const profileId = activeProfile?.id || 'default';
@@ -198,9 +204,10 @@ export function useWatchProgress() {
         await deleteDoc(doc(db, 'users', fbUid, 'profiles', profileId, 'watchProgress', String(mediaId)));
       }
     } catch (e) {
+      if (!c) return; // Firebase did not load (offline): the local copy stands
       const profileId = activeProfile?.id || 'default';
-      const docPath = `users/${fbAuth.currentUser?.uid || 'unknown'}/profiles/${profileId}/watchProgress/${mediaId}`;
-      handleFirestoreError(e, OperationType.DELETE, docPath);
+      const docPath = `users/${c.fbAuth.currentUser?.uid || 'unknown'}/profiles/${profileId}/watchProgress/${mediaId}`;
+      c.handleFirestoreError(e, c.OperationType.DELETE, docPath);
     }
   };
 

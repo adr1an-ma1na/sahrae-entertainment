@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Trophy, Play, X, Maximize, Loader2, Radio, Tv, Clapperboard, CalendarClock, Search, ShieldCheck, AlertCircle, ExternalLink, AlertTriangle } from 'lucide-react';
-import Hls from 'hls.js';
+import type HlsT from 'hls.js';
+import { useHls } from '../services/hlsLoader';
 import { Capacitor } from '@capacitor/core';
 import { haptics } from '../services/haptics';
 import { playerSandbox, isShieldOn, setShieldOn as persistShield, shieldAppliesHere } from '../services/adShield';
@@ -200,7 +201,8 @@ const HLSPlayer = ({ src, onUnplayable }: { src: string; onUnplayable?: () => vo
   deadRef.current = onUnplayable;
   // Renditions the stream offers, plus which one is pinned (-1 = automatic).
   // Exposed so the viewer can force max quality instead of trusting ABR.
-  const hlsRef = useRef<Hls | null>(null);
+  const Hls = useHls();
+  const hlsRef = useRef<HlsT | null>(null);
   const [levels, setLevels] = useState<{ height: number; index: number }[]>([]);
   const [pinnedLevel, setPinnedLevel] = useState(-1);
   /** What the manifest actually declares for audio — null until known. */
@@ -257,7 +259,7 @@ const HLSPlayer = ({ src, onUnplayable }: { src: string; onUnplayable?: () => vo
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !Hls) return;
     let dead = false;
     const giveUp = () => { if (!dead) { dead = true; deadRef.current?.(); } };
 
@@ -366,7 +368,7 @@ const HLSPlayer = ({ src, onUnplayable }: { src: string; onUnplayable?: () => vo
       const watchdog = setTimeout(() => { if (video.readyState < 2) giveUp(); }, 14000);
       return () => { clearTimeout(watchdog); video.removeEventListener('loadedmetadata', onMeta); video.removeEventListener('error', onErr); };
     }
-  }, [src]);
+  }, [src, Hls]);
   /** Pin a rendition, or -1 to hand control back to ABR. */
   const pick = (index: number) => {
     const hls = hlsRef.current;

@@ -1,6 +1,4 @@
 import { httpFetch } from './http.ts';
-import { initializeApp, getApp, getApps } from 'firebase/app';
-import { getAuth, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { Track } from './ytmusic';
 import { parseISODuration, parsePlaylistId, dominantColor } from './youtubeParse';
@@ -32,8 +30,16 @@ export { parseISODuration, parsePlaylistId } from './youtubeParse';
  *     it returns 403 API_KEY_SERVICE_BLOCKED even when the API is enabled.
  */
 
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-const auth = getAuth(app);
+/**
+ * Firebase Auth, loaded the first time someone links YouTube. It used to be
+ * initialised when this module loaded, which put ~460 kB of Firebase and its
+ * start-up work on every launch for a feature most people never open.
+ */
+async function googleAuth() {
+  const [{ initializeApp, getApp, getApps }, fa] = await Promise.all([import('firebase/app'), import('firebase/auth')]);
+  const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+  return { auth: fa.getAuth(app), signInWithPopup: fa.signInWithPopup, GoogleAuthProvider: fa.GoogleAuthProvider };
+}
 
 // Same Google Cloud project as Firebase Auth, so enabling the Data API once
 // covers both routes. An explicit key wins if one is configured.
@@ -152,6 +158,7 @@ class YoutubeService {
   isConnected(): boolean { return this.getToken() !== null; }
 
   async signInWithGoogle(): Promise<string> {
+    const { auth, signInWithPopup, GoogleAuthProvider } = await googleAuth();
     const provider = new GoogleAuthProvider();
     provider.addScope('https://www.googleapis.com/auth/youtube.readonly');
     provider.addScope('https://www.googleapis.com/auth/userinfo.profile');

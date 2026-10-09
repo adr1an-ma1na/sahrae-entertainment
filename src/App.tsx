@@ -52,9 +52,12 @@ import Coachmark from './components/Coachmark';
 import { applyEq, loadEq } from './services/eq';
 import { startSync } from './services/cloudSync';
 import Illustration from './components/ui/Illustration';
+import { crumb } from './services/bootCrumbs';
 
 export default function App() {
   const { user, activeProfile, loading: authLoading } = useAuth();
+  const screen = authLoading ? 'starting' : (user && !activeProfile) ? 'profiles' : user ? 'app:signed-in' : 'app:guest';
+  useEffect(() => { crumb(`screen:${screen}`); }, [screen]);
 
   /**
    * Sync the signed-in listener's library to the server.
@@ -71,6 +74,7 @@ export default function App() {
   }, [user, authLoading]);
   const radio = useRadio(); // voice commands drive radio playback
   const [activeTab, setActiveTab] = useState('home');
+  useEffect(() => { crumb(`tab:${activeTab}`); }, [activeTab]);
   const [searchQuery, setSearchQuery] = useState('');
   // Desktop/TV sidebar can be hidden to reclaim the full width; the CSS class
   // `nav-collapsed` (index.css) zeroes the lg:pl-64 / lg:left-64 shell offsets.

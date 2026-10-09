@@ -1326,24 +1326,110 @@ public class MainActivity extends BridgeActivity {
         } catch (Throwable ignore) {}
     }
 
+    // ── Breadcrumbs from the page (/__crumb) and the report a renderer loss
+    //    produces. The report is shown on screen, so a screenshot of it says
+    //    why the screen engine stopped on a phone no test device reproduces.
+    private static final long sProcessStart = android.os.SystemClock.elapsedRealtime();
+    private static final java.util.ArrayDeque<String> sCrumbs = new java.util.ArrayDeque<>();
+
+    static void addCrumb(String stage, String heapMb) {
+        if (stage == null) return;
+        long t = (android.os.SystemClock.elapsedRealtime() - sProcessStart) / 1000;
+        String line = "+" + t + "s " + stage + (heapMb != null ? " (js " + heapMb + " MB)" : "");
+        synchronized (sCrumbs) {
+            // Consecutive heartbeats collapse into the latest one.
+            if (stage.equals("tick") && !sCrumbs.isEmpty() && sCrumbs.peekLast().contains(" tick")) sCrumbs.pollLast();
+            sCrumbs.addLast(line);
+            while (sCrumbs.size() > 12) sCrumbs.pollFirst();
+        }
+    }
+
+    /** True between onResume and onPause: the person is looking at the app. */
+    private static volatile boolean sOnScreen = false;
+    /** The renderer went while the app was in the background: reload on return. */
+    private boolean reloadOnReturn = false;
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        sOnScreen = true;
+        if (reloadOnReturn) {
+            reloadOnReturn = false;
+            recreate();
+        }
+    }
+
+    @Override
+    public void onPause() {
+        sOnScreen = false;
+        super.onPause();
+    }
+
+    private static String priorityName(int p) {
+        switch (p) {
+            case WebView.RENDERER_PRIORITY_WAIVED: return "waived (treated as background)";
+            case WebView.RENDERER_PRIORITY_BOUND: return "bound";
+            case WebView.RENDERER_PRIORITY_IMPORTANT: return "important (foreground)";
+            default: return String.valueOf(p);
+        }
+    }
+
+    /** What is known at the moment the screen engine went. */
+    private String lossReport(android.webkit.RenderProcessGoneDetail detail, boolean onScreen) {
+        StringBuilder b = new StringBuilder();
+        boolean crashed = detail != null && detail.didCrash();
+        b.append("Screen engine ").append(crashed ? "CRASHED" : "was ENDED by Android (not a crash)");
+        if (detail != null && Build.VERSION.SDK_INT >= 26) {
+            b.append("\nIts priority then: ").append(priorityName(detail.rendererPriorityAtExit()));
+        }
+        b.append("\nSahrae on screen: ").append(onScreen ? "yes" : "no (in the background)");
+        b.append("\nRunning for: ").append((android.os.SystemClock.elapsedRealtime() - sProcessStart) / 1000).append(" s");
+        try {
+            android.app.ActivityManager am = (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
+            android.app.ActivityManager.MemoryInfo mi = new android.app.ActivityManager.MemoryInfo();
+            am.getMemoryInfo(mi);
+            b.append("\nPhone memory: ").append(mi.totalMem >> 20).append(" MB, free ")
+             .append(mi.availMem >> 20).append(" MB").append(mi.lowMemory ? " (LOW)" : "");
+            android.os.Debug.MemoryInfo dm = new android.os.Debug.MemoryInfo();
+            android.os.Debug.getMemoryInfo(dm);
+            b.append("\nSahrae itself: ").append(dm.getTotalPss() >> 10).append(" MB");
+        } catch (Throwable ignore) {}
+        b.append("\nLast steps:");
+        synchronized (sCrumbs) {
+            if (sCrumbs.isEmpty()) b.append(" none reported (it went before the page started)");
+            for (String c : sCrumbs) b.append("\n  ").append(c);
+        }
+        return b.toString();
+    }
+
+    private void shareText(String subject, String text) {
+        try {
+            android.content.Intent send = new android.content.Intent(android.content.Intent.ACTION_SEND);
+            send.setType("text/plain");
+            send.putExtra(android.content.Intent.EXTRA_SUBJECT, subject);
+            send.putExtra(android.content.Intent.EXTRA_TEXT, text);
+            startActivity(android.content.Intent.createChooser(send, "Share details"));
+        } catch (Throwable ignore) {}
+    }
+
     /**
-     * The main WebView's renderer is gone. Reload the app instead of letting
-     * Android kill it; if it keeps happening, stop looping and explain.
+     * The main WebView's renderer is gone. Returning true from
+     * onRenderProcessGone already stopped Android closing the app; here the
+     * screen comes back.
+     *
+     * In the background this is routine (Android ends the screen engine of apps
+     * nobody is looking at), so it is not counted: the app reloads when the
+     * person returns. On screen, it reloads at once, in the lighter layout from
+     * then on. Only a third loss within a minute stops reloading, and then the
+     * report is shown rather than a guess about the cause.
      */
-    private void onMainRendererGone(WebView view, boolean crashed) {
-        recordRecovery("Screen engine " + (crashed ? "crashed" : "was closed by Android to free memory") + "; the app reloaded itself.");
-        // A crash is not a memory problem. On phone GPU drivers the usual cause is
-        // heavy compositing — backdrop blur above all — so drop to flat surfaces
-        // for this device rather than restarting into the same crash.
-        // Either way the phone could not carry what was on screen, so drop to
-        // lite for good on this device: smaller artwork, no blur, no ambient
-        // animation. A crash also turns off the effects most likely to cause it.
+    private void onMainRendererGone(WebView view, android.webkit.RenderProcessGoneDetail detail) {
+        final boolean onScreen = sOnScreen;
+        final String report = lossReport(detail, onScreen);
+        recordRecovery(report.replace('\n', '|'));
         try {
             getSharedPreferences(DIAG_PREFS, MODE_PRIVATE).edit()
                 .putBoolean("liteForced", true)
-                // Flat surfaces after a memory kill too: on a Nokia C32 the screen
-                // engine was closed four times in a minute, so this phone cannot
-                // carry the compositing either.
                 .putBoolean("safeGraphics", true)
                 .apply();
         } catch (Throwable ignore) {}
@@ -1352,39 +1438,52 @@ public class MainActivity extends BridgeActivity {
             if (parent != null) parent.removeView(view);
             view.destroy();
         } catch (Throwable ignore) {}
+
+        if (!onScreen) {
+            reloadOnReturn = true;
+            return;
+        }
+
         long now = System.currentTimeMillis();
+        int recent;
         synchronized (sRendererLosses) {
             while (!sRendererLosses.isEmpty() && now - sRendererLosses.peekFirst() > 60_000) sRendererLosses.pollFirst();
             sRendererLosses.addLast(now);
-            if (sRendererLosses.size() > 3) {
-                final String title = crashed ? "Sahrae keeps restarting" : "Your phone is low on memory";
-                final String message = crashed
-                    ? "Sahrae's display keeps failing on this phone. Visual effects have been turned off, which usually fixes it. Open Sahrae again, and if it still happens, tap Share details so it can be fixed properly."
-                    : "Android keeps closing Sahrae's screen to free memory. Sahrae has switched to its lighter layout, which uses much less. Close some other apps, then open Sahrae again.";
-                try {
-                    new android.app.AlertDialog.Builder(this)
-                        .setTitle(title)
-                        .setMessage(message)
-                        .setCancelable(false)
-                        .setPositiveButton("Close Sahrae", (d, w) -> finishAffinity())
-                        .setNegativeButton("Share details", (d, w) -> {
-                            try {
-                                android.content.Intent send = new android.content.Intent(android.content.Intent.ACTION_SEND);
-                                send.setType("text/plain");
-                                send.putExtra(android.content.Intent.EXTRA_SUBJECT, "Sahrae display failure");
-                                send.putExtra(android.content.Intent.EXTRA_TEXT, deviceSummary()
-                                    + "\n\nScreen engine " + (crashed ? "crashed" : "was closed for memory")
-                                    + " " + sRendererLosses.size() + " times in a minute.");
-                                startActivity(android.content.Intent.createChooser(send, "Share details"));
-                            } catch (Throwable ignore) {}
-                            finishAffinity();
-                        })
-                        .show();
-                } catch (Throwable t) { finishAffinity(); }
-                return;
-            }
+            recent = sRendererLosses.size();
         }
-        recreate();
+        if (recent < 3) {
+            recreate();
+            return;
+        }
+        final String full = deviceSummary() + "\n\n" + report;
+        try {
+            android.widget.TextView body = new android.widget.TextView(this);
+            body.setText("Sahrae's screen stopped " + recent + " times in a minute, so it has paused reloading.\n\n"
+                + "Tap Try again to reload it. If it stops again, tap Share details and send the report: "
+                + "it records exactly how it stopped.\n\n" + full);
+            body.setTextIsSelectable(true);
+            body.setTextSize(13);
+            int pad = (int) (20 * getResources().getDisplayMetrics().density);
+            body.setPadding(pad, pad / 2, pad, 0);
+            android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+            scroll.addView(body);
+            new android.app.AlertDialog.Builder(this)
+                .setTitle("Sahrae's screen stopped")
+                .setView(scroll)
+                .setCancelable(false)
+                .setPositiveButton("Try again", (d, w) -> {
+                    synchronized (sRendererLosses) { sRendererLosses.clear(); }
+                    recreate();
+                })
+                .setNegativeButton("Share details", (d, w) -> {
+                    synchronized (sRendererLosses) { sRendererLosses.clear(); }
+                    reloadOnReturn = true;
+                    shareText("Sahrae screen report", full);
+                })
+                .show();
+        } catch (Throwable t) {
+            recreate();
+        }
     }
 
     /**
@@ -1560,6 +1659,9 @@ public class MainActivity extends BridgeActivity {
                         } else if (path.startsWith("/__dltitle")) {
                             DownloadStore.setPendingTitle(u.getQueryParameter("t"));
                             return DownloadStore.json("{\"ok\":true}");
+                        } else if (path.startsWith("/__crumb")) {
+                            addCrumb(u.getQueryParameter("s"), u.getQueryParameter("h"));
+                            return DownloadStore.json("{\"ok\":true}");
                         } else if (path.startsWith("/__openext")) {
                             // A movie download page, opened in the browser. Allow-listed hosts only.
                             openDownloadUrl(u.getQueryParameter("url"));
@@ -1683,7 +1785,7 @@ public class MainActivity extends BridgeActivity {
             // Returning true stops Android killing the whole app; we reload instead.
             @Override
             public boolean onRenderProcessGone(WebView view, android.webkit.RenderProcessGoneDetail detail) {
-                onMainRendererGone(view, detail != null && detail.didCrash());
+                onMainRendererGone(view, detail);
                 return true;
             }
         });

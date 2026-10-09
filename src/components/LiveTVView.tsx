@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import Hls from 'hls.js';
+import type HlsT from 'hls.js';
+import { useHls } from '../services/hlsLoader';
 import { X, Maximize, Search, Heart, RadioTower, Loader2, WifiOff } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import Coachmark from './Coachmark';
@@ -146,10 +147,11 @@ function HLSPlayer({ src, onOffline }: { src: string; onOffline: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const offRef = useRef(onOffline);
   offRef.current = onOffline;
+  const Hls = useHls();
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
-    let hls: Hls | null = null;
+    if (!video || !Hls) return;
+    let hls: HlsT | null = null;
     let started = false;
     let attempt = 0;
     // Proxy FIRST — the native HLS proxy binds the CDN token to this device and
@@ -200,7 +202,7 @@ function HLSPlayer({ src, onOffline }: { src: string; onOffline: () => void }) {
     load(urls[0]);
     return cleanup;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [src]);
+  }, [src, Hls]);
   return <video ref={videoRef} className="absolute inset-0 w-full h-full object-contain bg-black" controls autoPlay playsInline />;
 }
 
