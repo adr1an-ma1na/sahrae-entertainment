@@ -1,5 +1,6 @@
 import { X, ExternalLink, AlertCircle, Info, Star, Calendar, Clock, Play, RefreshCw, Plus, Check, Maximize, ArrowLeft, SkipBack, SkipForward, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { useEffect, useState, useRef, useCallback } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { fetchMediaDetails, MediaDetails, getImageUrl, fetchSimilar, MediaItem, SeasonDetails, fetchSeasonDetails } from '../services/tmdb';
 import { useWatchProgress } from '../hooks/useWatchProgress';
 import { useMyList } from '../hooks/useMyList';
@@ -21,6 +22,8 @@ interface PlayerModalProps {
   initialEpisode?: number;
   playTrailer?: boolean;
 }
+
+const nativeShell = (() => { try { return Capacitor.isNativePlatform(); } catch { return false; } })();
 
 export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, startInInfo = false, initialSeason, initialEpisode, playTrailer = false }: PlayerModalProps) {
   const [details, setDetails] = useState<MediaDetails | null>(null);
@@ -105,9 +108,21 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   // for the embed to autostart and only then fullscreening avoids the old
   // "fullscreen first → tap play → drops out of fullscreen" double-tap mess.
   const enterFullscreen = useCallback(() => {
+    if (nativeShell) { setMaxed(true); return; }
     if (document.fullscreenElement) return; // already fullscreen — don't re-request
     playerContainerRef.current?.requestFullscreen?.().catch(() => {});
   }, []);
+
+  // ── Full screen is the PLAYER's, never the provider's ────────────────────
+  // A provider's own full-screen button used to put just its iframe over the
+  // whole screen, hiding Sahrae's bar; some providers drop out of it on pause,
+  // so the bar flickered in and out. In the Android app the shell declines the
+  // provider's request and calls __sahraePlayerFullscreen instead, so every
+  // route to full screen (theirs, ours, the automatic one) lands on the same
+  // view: the provider's frame filling the screen above Sahrae's bar.
+  const [maxed, setMaxed] = useState(false);
+  const maxedRef = useRef(false);
+  maxedRef.current = maxed;
 
   useEffect(() => {
     setIsSandboxed(window.self !== window.top);
@@ -185,6 +200,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const playerContainerRef = useRef<HTMLDivElement>(null);
 
   const toggleFullScreen = () => {
+    if (nativeShell) { setMaxed((m) => !m); return; }
     const doc = document as any;
     const el = playerContainerRef.current as any;
     const fsEl = doc.fullscreenElement || doc.webkitFullscreenElement;
@@ -196,6 +212,49 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
        try { const p = req?.call(el); if (p && p.catch) p.catch(() => {}); } catch { /* noop */ }
     }
   };
+
+  // Tell the Android shell when the movie/series player is up, so it knows a
+  // provider's full-screen request is to be taken over (trailers, Live TV and
+  // Sports keep the WebView's own full screen).
+  const playerUp = isOpen && isPlaying && !playingTrailer;
+  useEffect(() => {
+    if (!nativeShell) return;
+    fetch(`https://localhost/__player?open=${playerUp ? 1 : 0}`, { cache: 'no-store' }).catch(() => {});
+    if (!playerUp) setMaxed(false);
+  }, [playerUp]);
+
+  // System bars hide with the full-screen player and come back with it.
+  useEffect(() => {
+    if (!nativeShell) return;
+    fetch(`https://localhost/__immersive?on=${maxed ? 1 : 0}`, { cache: 'no-store' }).catch(() => {});
+  }, [maxed]);
+
+  useEffect(() => {
+    const w = window as unknown as {
+      __sahraePlayerFullscreen?: (on: boolean) => void;
+      __sahraeExitPlayerFs?: () => boolean;
+    };
+    w.__sahraePlayerFullscreen = (on: boolean) => setMaxed(on);
+    // Back leaves full screen before it leaves the player.
+    w.__sahraeExitPlayerFs = () => { if (maxedRef.current) { setMaxed(false); return true; } return false; };
+    return () => { delete w.__sahraePlayerFullscreen; delete w.__sahraeExitPlayerFs; };
+  }, []);
+
+  // In a browser the provider's iframe can take full screen itself; hand it
+  // straight to the whole player so the bar stays with it.
+  useEffect(() => {
+    if (nativeShell || !playerUp) return;
+    const onFs = () => {
+      const el = document.fullscreenElement;
+      const shell = playerContainerRef.current;
+      if (!el || !shell || el === shell || el.tagName !== 'IFRAME' || !shell.contains(el)) return;
+      document.exitFullscreen()
+        .then(() => shell.requestFullscreen())
+        .catch(() => setMaxed(true));
+    };
+    document.addEventListener('fullscreenchange', onFs);
+    return () => document.removeEventListener('fullscreenchange', onFs);
+  }, [playerUp]);
 
   const reportCurrentMovieServerDead = () => {
     haptics.tap();
@@ -647,7 +706,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
             // the bar beneath it. They used to float over the frame, on top of
             // the provider's buttons, and on a phone (no hover) they stayed
             // invisible yet still took the taps meant for the player.
-            <div ref={playingTrailer ? undefined : playerContainerRef} className="player-shell flex flex-col bg-black">
+            <div ref={playingTrailer ? undefined : playerContainerRef} className={`player-shell flex flex-col bg-black${maxed && !playingTrailer ? ' is-max' : ''}`}>
               <div className="player-frame relative w-full aspect-video bg-black">
                 {playingTrailer ? (
                   <iframe
@@ -820,15 +879,6 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                           );
                         })}
                       </select>
-                      {currentMediaType === 'tv' && currentServerObj.type !== 'youtube' && (
-                        <>
-                          <button onClick={() => handleSkipEpisode('prev')} disabled={!hasPrevEpisode()} data-tv-focusable title="Previous episode" className="w-9 h-9 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"><SkipBack className="w-4 h-4" /></button>
-                          <button onClick={() => handleSkipEpisode('next')} disabled={!hasNextEpisode()} data-tv-focusable title="Next episode"
-                            className={`h-9 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed ${showNextEpisodeOverlay && hasNextEpisode() ? '!bg-amber-500 !text-amber-950' : ''}`}>
-                            Next <SkipForward className="w-4 h-4" />
-                          </button>
-                        </>
-                      )}
                       {currentServerObj.type !== 'youtube' && (
                         <button onClick={reportCurrentMovieServerDead} data-tv-focusable title="Report this server broken and switch to the next one" className="h-9 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed">
                           <AlertTriangle className="w-3.5 h-3.5" /><span className="hidden sm:inline">Not working?</span>

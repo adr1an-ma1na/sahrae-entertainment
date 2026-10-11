@@ -1193,3 +1193,7 @@ html.lite section { content-visibility: auto; contain-intrinsic-size: auto 320px
 .player-shell:-webkit-full-screen .player-frame { aspect-ratio: auto; flex: 1 1 auto; min-height: 0; }
 .no-scrollbar { scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
+/* The same view without the Fullscreen API: what the Android app uses, since
+   it hides the system bars natively and declines the provider's own full screen. */
+.player-shell.is-max { position: fixed; inset: 0; z-index: 400; width: 100vw; height: 100vh; height: 100dvh; }
+.player-shell.is-max .player-frame { aspect-ratio: auto; flex: 1 1 auto; min-height: 0; }

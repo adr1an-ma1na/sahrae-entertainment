@@ -483,9 +483,8 @@ const HLSPlayer = ({ src, onUnplayable }: { src: string; onUnplayable?: () => vo
   );
 };
 
-// Cricfy-style: every server is listed up-front and stays put. A reliable
-// channel plays instantly while match servers resolve in the background; the
-// user can switch to any server at any time, and a dead source is marked (not
+// Cricfy-style: every server is listed up-front and stays put. Only the
+// match's own feeds are offered (no unrelated TV channels); the user can switch to any server at any time, and a dead source is marked (not
 // removed) so the list never collapses to nothing.
 /**
  * The player now holds engine `Stream` objects (services/sportsStreams.ts):
@@ -499,6 +498,8 @@ interface Playing {
   sources: Stream[];
   idx: number;
   failed: Set<string>;
+  /** Every source was asked and none had a stream for this match. */
+  noFeeds?: boolean;
 }
 
 export default function SportsView() {
@@ -704,7 +705,7 @@ export default function SportsView() {
     // tapped Watch, saw Server 1..5, and none of them ever opened. That is the
     // "the event says it starts at 8 but nothing plays" complaint: the app was
     // manufacturing links it had no reason to believe in. If there are no
-    // embeds, we say so instead — the real fallback channels below still play.
+    // embeds, we say so instead ("No stream for this match yet").
     const rawEmbeds = m.embeds && m.embeds.length > 0 ? [...m.embeds] : [];
 
     // When the API can give us the real per-stream list, do NOT also seed a
@@ -716,11 +717,13 @@ export default function SportsView() {
     const sources = buildStreams(
       m.id,
       hasApiDetail ? [] : rawEmbeds.slice(0, 8),
-      fallbackChannels(m.category).map((ch) => ({ name: `📺 ${ch.name}`, url: ch.url })),
+      // No TV channels: an event plays its own match feeds or nothing. A sports
+      // channel showing something else is not the game the person tapped.
+      [],
     );
 
     const idx = initialServerIdx !== undefined && initialServerIdx < sources.length ? initialServerIdx : 0;
-    setPlaying({ title: matchTitle(m), tokens, sources, idx, failed: new Set() });
+    setPlaying({ title: matchTitle(m), tokens, sources, idx, failed: new Set(), noFeeds: sources.length === 0 && !(sourcesById.get(m.id)?.length) });
 
     // Expand the API's per-stream detail for this match: exact embed URLs plus
     // REAL hd/language flags. Quality is only ever labelled from what the
@@ -739,7 +742,10 @@ export default function SportsView() {
         const metas = (await Promise.all(
           apiSources.slice(0, 6).map((src) => fetchStreamsFor(src.source, src.id)),
         )).flat().filter(Boolean) as NonNullable<FeedEvent['streamMeta']>;
-        if (!metas.length) return; // fallback channels seeded above still play
+        if (!metas.length) {
+          setPlaying((prev) => (prev && prev.sources.length === 0 ? { ...prev, noFeeds: true } : prev));
+          return;
+        }
         // Build the merged list from the ref, not inside a state updater, so the
         // ids we then validate are the SAME objects that land in state. Deriving
         // ids separately silently validated streams that did not exist.
@@ -1186,11 +1192,17 @@ export default function SportsView() {
                 </div>
               ) : (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center px-6">
-                  {activeSrc?.status === 'offline' ? (
+                  {!activeSrc && playing.noFeeds ? (
+                    <>
+                      <Radio className="w-9 h-9 text-zinc-500" />
+                      <p className="text-white font-semibold">No stream for this match yet</p>
+                      <p className="text-zinc-400 text-sm">Streams usually appear shortly before kick-off. Check back closer to the start.</p>
+                    </>
+                  ) : activeSrc?.status === 'offline' ? (
                     <>
                       <Radio className="w-9 h-9 text-zinc-500" />
                       <p className="text-white font-semibold">This server isn't responding</p>
-                      <p className="text-zinc-400 text-sm">Pick another server below; the 📺 channel always works.</p>
+                      <p className="text-zinc-400 text-sm">Pick another server below.</p>
                     </>
                   ) : (
                     <>
@@ -1389,7 +1401,7 @@ export default function SportsView() {
         </div>
       </div>
 
-      <Coachmark id="sports" text="Tap any event: a reliable channel plays instantly while the exact match servers load. Switch servers any time." />
+      <Coachmark id="sports" text="Tap any event to watch the match. If a feed stalls, switch to another one below the player." />
 
       {tab === 'channels' ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">

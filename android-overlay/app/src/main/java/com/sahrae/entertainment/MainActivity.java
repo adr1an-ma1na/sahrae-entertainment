@@ -1075,6 +1075,8 @@ public class MainActivity extends BridgeActivity {
 
     /** True while a video/element is in WebView fullscreen, so Back can exit it. */
     private boolean inFullscreen = false;
+    /** The movie/series player is on screen (reported by the page via /__player). */
+    private static volatile boolean sPlayerOpen = false;
     private WebChromeClient.CustomViewCallback fsCallback;
 
     /**
@@ -1659,6 +1661,13 @@ public class MainActivity extends BridgeActivity {
                         } else if (path.startsWith("/__dltitle")) {
                             DownloadStore.setPendingTitle(u.getQueryParameter("t"));
                             return DownloadStore.json("{\"ok\":true}");
+                        } else if (path.startsWith("/__player")) {
+                            sPlayerOpen = "1".equals(u.getQueryParameter("open"));
+                            return DownloadStore.json("{\"ok\":true}");
+                        } else if (path.startsWith("/__immersive")) {
+                            if ("1".equals(u.getQueryParameter("on"))) enterImmersiveFullscreen();
+                            else exitImmersiveFullscreen();
+                            return DownloadStore.json("{\"ok\":true}");
                         } else if (path.startsWith("/__crumb")) {
                             addCrumb(u.getQueryParameter("s"), u.getQueryParameter("h"));
                             return DownloadStore.json("{\"ok\":true}");
@@ -1852,6 +1861,18 @@ public class MainActivity extends BridgeActivity {
             // it when fullscreen ends.
             @Override
             public void onShowCustomView(View view, CustomViewCallback callback) {
+                if (sPlayerOpen) {
+                    // A movie/series provider asked for full screen from inside
+                    // its iframe. Shown as asked, it would cover Sahrae's player
+                    // bar (and some providers leave it on pause, so the bar
+                    // flickered). Decline it and let the player itself fill the
+                    // screen instead, bar included, with the system bars hidden.
+                    webView.post(() -> { try { callback.onCustomViewHidden(); } catch (Throwable ignore) {} });
+                    enterImmersiveFullscreen();
+                    webView.post(() -> webView.evaluateJavascript(
+                        "window.__sahraePlayerFullscreen&&window.__sahraePlayerFullscreen(true)", null));
+                    return;
+                }
                 fsCallback = callback;
                 inFullscreen = true;
                 super.onShowCustomView(view, callback);
@@ -1952,7 +1973,7 @@ public class MainActivity extends BridgeActivity {
         if (wv != null) {
             try {
                 wv.evaluateJavascript(
-                    "(function(){try{return (window.__sahraeBack&&window.__sahraeBack())?1:0;}catch(e){return 0;}})();",
+                    "(function(){try{if(window.__sahraeExitPlayerFs&&window.__sahraeExitPlayerFs())return 1;return (window.__sahraeBack&&window.__sahraeBack())?1:0;}catch(e){return 0;}})();",
                     value -> {
                         if (value == null || value.indexOf('1') < 0) {
                             try { MainActivity.super.onBackPressed(); } catch (Exception ignore) {}
