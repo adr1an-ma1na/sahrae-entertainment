@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useRef, useEffect, ReactNode } from 'react';
+import { notePlayed } from '../services/musicLibrary';
 import { Track, ytmusic } from '../services/ytmusic';
 import { songRadio, diverseSample } from '../services/recommend';
 import { haptics } from '../services/haptics';
@@ -231,6 +232,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const c = queue[index];
     if (!c) return;
+    // Every play teaches the catalogue which genres this listener is into.
+    notePlayed(c);
     setRecentlyPlayed((prev) => {
       const nextList = [c, ...prev.filter((t) => t.id !== c.id)].slice(0, 40);
       saveLS(RECENT_KEY, nextList);

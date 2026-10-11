@@ -319,10 +319,22 @@ export const ytDataApi = {
   },
 
   /** Any public playlist — albums (OLAK5uy_…), curated lists, channel uploads. */
-  playlistTracks: async (playlistId: string, cap = 100): Promise<Track[] | null> => {
+  /**
+   * A playlist's songs. `local: false` keeps a large catalogue playlist out of
+   * this device's localStorage (a few MB shared with everything else the app
+   * keeps there); it is still held in memory and in the shared cache, so the
+   * next listener to ask gets it without spending quota.
+   */
+  playlistTracks: async (playlistId: string, cap = 100, opts: { local?: boolean } = {}): Promise<Track[] | null> => {
     const key = `pl.${playlistId}.${cap}`;
     const hit = cacheGet<Track[]>(key, TTL.playlist);
     if (hit) return repair(hit);
+    const shared = await sharedGet<Track[]>(key, TTL.playlist);
+    if (shared) {
+      const fixed = repair(shared);
+      if (opts.local === false) mem.set(key, { at: Date.now(), data: fixed }); else cacheSet(key, fixed);
+      return fixed;
+    }
     const items: any[] = [];
     let pageToken = '';
     do {
@@ -332,13 +344,24 @@ export const ytDataApi = {
       pageToken = j.nextPageToken || '';
     } while (pageToken && items.length < cap);
 
-    // playlistItems nests the video id differently and omits duration.
+    // playlistItems nests the video id differently and omits duration. Its
+    // snippet also describes the PLAYLIST entry: channelId is whoever made the
+    // playlist and publishedAt is when the song was added to it. The artist's
+    // channel and the release date are videoOwnerChannelId and videoPublishedAt.
     const tracks = items
       .filter((it) => it.snippet?.resourceId?.videoId && !/^(Deleted|Private|Unavailable) video$/.test(it.snippet?.title || ''))
-      .map((it) => mapVideo({ id: it.snippet.resourceId.videoId, snippet: it.snippet }))
+      .map((it) => mapVideo({
+        id: it.snippet.resourceId.videoId,
+        snippet: {
+          ...it.snippet,
+          channelId: it.snippet.videoOwnerChannelId || it.snippet.channelId,
+          publishedAt: it.contentDetails?.videoPublishedAt || it.snippet.publishedAt,
+        },
+      }))
       .filter((t): t is Track => !!t);
     const out = await withDurations(tracks);
-    cacheSet(key, out);
+    if (opts.local === false) mem.set(key, { at: Date.now(), data: out }); else cacheSet(key, out);
+    sharedSet(key, out);
     return out;
   },
 
@@ -399,6 +422,32 @@ export const ytDataApi = {
       cacheSet(key, withDetails);
       sharedSet(key, withDetails);
       out.set(id, withDetails);
+    }
+    return out;
+  },
+
+  /** Channel avatars, 50 channels per unit, cached a day and shared. */
+  channelThumbs: async (channelIds: string[]): Promise<Map<string, string>> => {
+    const out = new Map<string, string>();
+    const missing: string[] = [];
+    for (const id of new Set(channelIds)) {
+      if (!/^UC[\w-]{22}$/.test(id)) continue;
+      const hit = cacheGet<string>(`thumb.${id}`, TTL.search);
+      if (hit) out.set(id, hit); else missing.push(id);
+    }
+    if (!missing.length || !ytDataApi.available()) return out;
+    for (let i = 0; i < missing.length; i += 50) {
+      const ids = missing.slice(i, i + 50);
+      const key = `thumbs.${ids.join(',')}`;
+      let rows = await sharedGet<[string, string][]>(key, TTL.search);
+      if (!rows) {
+        const j = await get(`channels?part=snippet&maxResults=50&id=${ids.join(',')}`, COST.cheap);
+        rows = (j?.items || [])
+          .map((c: any) => [c.id, c.snippet?.thumbnails?.medium?.url || c.snippet?.thumbnails?.default?.url] as [string, string])
+          .filter((r: [string, string]) => !!r[1]);
+        if (rows.length) sharedSet(key, rows);
+      }
+      for (const [id, url] of rows) { out.set(id, url); mem.set(`thumb.${id}`, { at: Date.now(), data: url }); }
     }
     return out;
   },

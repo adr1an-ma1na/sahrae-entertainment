@@ -1,4 +1,7 @@
 import { useState, useEffect, useRef, Fragment, ReactNode, type MouseEvent as RMouseEvent } from 'react';
+import { isSong } from '../services/musicCatalog';
+import { dailyMixes, releaseRadar, artistsIn, genrePage, myGenres, catalogueSongsBy, GENRES as CATALOG_GENRES, genreById, type GenrePage } from '../services/musicLibrary';
+import { ytDataApi } from '../services/ytDataApi';
 import { Search, Play, Pause, Heart, Loader2, Music2, Plus, X, ListMusic, Shuffle, Trash2, ChevronLeft, Library, Sparkles, Disc3, User, Youtube, Link2 as LinkIcon } from 'lucide-react';
 import { ytmusic, Track, Artist, Album, GENRES, SECTIONS } from '../services/ytmusic';
 import { getApiState, ENABLE_URL, type ApiState } from '../services/ytDataApi';
@@ -347,6 +350,27 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   const [genreTracks, setGenreTracks] = useState<Track[]>([]);
   const [genreLoading, setGenreLoading] = useState(false);
   const openMood = (name: string, tint?: string) => { setGenreTint(tint || null); setGenre(name); };
+  // Catalogue genres (Afrobeats, Amapiano, ...): their own pages, built from
+  // the genre's playlists rather than searches.
+  const [catGenre, setCatGenre] = useState<string | null>(null);
+  const [catPage, setCatPage] = useState<GenrePage | null>(null);
+  const [catTab, setCatTab] = useState<'popular' | 'new' | 'artists'>('popular');
+  const [artistsForYou, setArtistsForYou] = useState<Artist[]>([]);
+  useEffect(() => {
+    if (!catGenre) return;
+    let cancelled = false;
+    setCatPage(null); setCatTab('popular');
+    genrePage(catGenre).then((p) => { if (!cancelled) setCatPage(p); }).catch(() => { if (!cancelled) setCatPage({ popular: [], fresh: [], artists: [], total: 0 }); });
+    return () => { cancelled = true; };
+  }, [catGenre]);
+  useEffect(() => {
+    let cancelled = false;
+    // After the home shelves, so the first screen is never waiting on this.
+    const t = setTimeout(() => {
+      artistsIn(myGenres(4), 30).then((a) => { if (!cancelled) setArtistsForYou(a); }).catch(() => {});
+    }, 2500);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, []);
 
 
   const [query, setQuery] = useState('');
@@ -606,8 +630,8 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   //    the first track + home shelves get priority, and globally throttled (see
   //    ytmusic pipedGet limiter) so it can never starve playback. ──
   useEffect(() => {
-    if (recentlyPlayed.length === 0 && likedTracks.length === 0 && tasteSeeds.length === 0) return;
     let cancelled = false;
+    const hasHistory = recentlyPlayed.length > 0 || likedTracks.length > 0 || tasteSeeds.length > 0;
     const timer = setTimeout(() => {
       (async () => {
         // Seeds: explicit taste (liked) first, then recent rotation. Unique.
@@ -616,6 +640,22 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
         for (const t of [...likedTracks, ...tasteSeeds, ...recentlyPlayed]) { if (!seedSeen.has(t.id)) { seedSeen.add(t.id); seeds.push(t); } }
         const topSeeds = seeds.slice(0, 8);
         const known = new Set(seeds.map((t) => t.id));
+
+        // Daily Mixes first: one per genre this listener plays, a fresh set
+        // every day (no song back within 30 days), from the genre catalogue.
+        const daily = await dailyMixes(seeds).catch(() => []);
+        if (cancelled) return;
+        const dailyCards = daily.map((m) => ({ id: m.id, title: m.title, subtitle: m.subtitle, tracks: m.tracks }));
+        setMadeForYou(dailyCards);
+
+        // Release Radar: up to 100 new songs in their genres, new each Friday.
+        releaseRadar(seeds).then(({ tracks, genres }) => {
+          if (cancelled || tracks.length < 6) return;
+          const names = genres.slice(0, 3).map((g) => genreById(g)?.name).filter(Boolean).join(', ');
+          setMadeForYou((prev) => [...prev.filter((m) => m.id !== 'radar'), { id: 'radar', title: 'Release Radar', subtitle: `New in ${names} · this week`, tracks }]);
+        }).catch(() => {});
+
+        if (!hasHistory) return; // the rest needs something they have played
 
         // YouTube's own "related" is its recommendation engine. Pull it per seed.
         const related = await Promise.all(topSeeds.map((s) => ytmusic.related(s.id).catch(() => [] as Track[])));
@@ -643,34 +683,12 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
           out.push({ id: 'repeat', title: 'On Repeat', subtitle: 'The songs you keep coming back to', tracks: recentlyPlayed.slice(0, 30) });
         }
 
-        // Daily Mixes — one per distinct top artist, coherent (that artist + its
-        // related), so each mix has a clear identity like YT Music's mixes.
-        const byArtist = new Map<string, Track[]>();
-        for (const t of seeds) { const k = (t.artist || '').toLowerCase(); if (!k) continue; if (!byArtist.has(k)) byArtist.set(k, []); byArtist.get(k)!.push(t); }
-        let dm = 1;
-        for (const ak of [...byArtist.keys()].slice(0, 3)) {
-          const aSeeds = byArtist.get(ak)!;
-          const idx = topSeeds.findIndex((s) => (s.artist || '').toLowerCase() === ak);
-          const rel = idx >= 0 ? related[idx] : [];
-          // Blend familiar (your plays of this artist) with discovery (its related),
-          // interleaved in blocks and artist-diversified (spec §1.3.3).
-          const tracks = buildMix(aSeeds, rel.filter((t) => !aSeeds.some((s) => s.id === t.id)), 30);
-          if (tracks.length >= 6) { out.push({ id: `daily-${dm}`, title: `Daily Mix ${dm}`, subtitle: `${aSeeds[0].artist} & similar`, tracks }); dm++; }
-        }
-
         // Discover Weekly — highest cross-seed-agreement songs you haven't heard.
         const discover = diverseSample(ranked.filter((t) => !known.has(t.id)), 30);
         if (discover.length >= 8) out.push({ id: 'discover', title: 'Discover Weekly', subtitle: "Fresh picks your taste agrees on", tracks: discover });
 
-        if (!cancelled) setMadeForYou(out);
+        if (!cancelled) setMadeForYou((prev) => [...prev.filter((m) => m.id.startsWith('daily-') || m.id === 'radar'), ...out]);
 
-        // Release Radar — newest from your top artists.
-        const artists = Array.from(new Set(seeds.map((t) => t.artist).filter(Boolean))).slice(0, 5);
-        const radarLists = await Promise.all(artists.map((a) => ytmusic.search(`${a} new song`).catch(() => [] as Track[])));
-        if (cancelled) return;
-        const radar: Track[] = []; const rseen = new Set<string>();
-        for (const list of radarLists) for (const t of list.slice(0, 3)) if (!rseen.has(t.id)) { rseen.add(t.id); radar.push(t); }
-        if (radar.length >= 6 && !cancelled) setMadeForYou((prev) => [...prev, { id: 'radar', title: 'Release Radar', subtitle: 'New from artists you love', tracks: radar.slice(0, 30) }]);
       })();
     }, 3000);
     return () => { cancelled = true; clearTimeout(timer); };
@@ -714,6 +732,18 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
     setDetailLoading(true); setDetailTracks([]); setDetailAlbums([]);
     const name = a.name.toLowerCase();
     const byArtist = (s?: string) => { const ar = (s || '').toLowerCase(); return !!ar && (ar.includes(name) || name.includes(ar)); };
+    if (/^UC[\w-]{22}$/.test(a.id)) {
+      const uploads = (await ytDataApi.channelUploads(a.id, 50).catch(() => null)) || [];
+      // A label channel uploads many artists: keep this artist's songs, plus
+      // what the catalogue already holds for them.
+      const theirs = uploads.filter((t) => byArtist(t.artist) && isSong(t));
+      const seen = new Set<string>();
+      const merged = [...theirs, ...catalogueSongsBy(a.name)].filter((t) => !seen.has(t.id) && seen.add(t.id));
+      if (merged.length >= 3) {
+        setDetailTracks(merged); setDetailAlbums([]); setDetailLoading(false);
+        return;
+      }
+    }
     const [songs, albums] = await Promise.all([ytmusic.search(`${a.name} songs`), ytmusic.searchAlbums(a.name)]);
     // Show only THIS artist's songs/albums (fall back to all if filtering is too aggressive).
     const mineSongs = songs.filter((t) => byArtist(t.artist));
@@ -787,6 +817,45 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
     </select>
   );
 
+
+  // An artist or mix opened FROM a genre page shows over it; Back returns to it.
+  if (catGenre && !detail && !viewMix) {
+    const g = genreById(catGenre);
+    const list = catPage ? (catTab === 'new' ? catPage.fresh : catPage.popular) : [];
+    const title = g?.name || 'Genre';
+    return (
+      <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
+        <div aria-hidden className="absolute inset-x-0 top-0 h-80 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${g?.tint || '#555'} 0%, transparent 100%)`, opacity: 0.45 }} />
+        <button onClick={() => setCatGenre(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-5 text-sm px-3.5 py-2 rounded-full bg-zinc-900/85 backdrop-blur-xl border border-white/10 shadow-lg"><ChevronLeft className="w-4 h-4" /> Back</button>
+        <div className="overline mb-1">Genre</div>
+        <h2 className="text-3xl md:text-5xl font-display font-bold text-white mb-1">{title}</h2>
+        {catPage && <p className="text-sm text-zinc-400 mb-4">{catPage.total} songs · {catPage.artists.length} artists</p>}
+        {catPage && catPage.popular.length > 0 && (
+          <div className="flex gap-2 mb-6">
+            <button onClick={() => playQueue(catPage.popular, 0, title)} className="btn-sauti px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Play className="w-4 h-4 fill-current" /> Play</button>
+            <button onClick={() => { const arr = [...catPage.popular].sort(() => Math.random() - 0.5); playQueue(arr, 0, title); }} className="btn-glass px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Shuffle className="w-4 h-4" /> Shuffle</button>
+          </div>
+        )}
+        <div className="flex gap-2 mb-6" role="tablist">
+          {([['popular', 'Popular'], ['new', 'New releases'], ['artists', 'Artists']] as const).map(([k, label]) => (
+            <button key={k} role="tab" aria-selected={catTab === k} onClick={() => setCatTab(k)} tabIndex={0} data-tv-focusable
+              className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${catTab === k ? 'bg-amber-500 text-amber-950' : 'bg-zinc-900 text-zinc-300 hover:text-white border border-white/10'}`}>{label}</button>
+          ))}
+        </div>
+        {!catPage ? (
+          <div className="flex items-center gap-2 text-zinc-400 py-10"><Loader2 className="w-6 h-6 animate-spin text-amber-500" /> Loading {title}…</div>
+        ) : catTab === 'artists' ? (
+          catPage.artists.length === 0
+            ? <EmptyState compact illustration="search" title="No artists yet" message="This genre's catalogue could not be loaded. Check your connection and try again." />
+            : <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-4">{catPage.artists.map((a) => artistTile(a))}</div>
+        ) : list.length === 0 ? (
+          <EmptyState compact illustration="search" title={catTab === 'new' ? 'No new releases in the last four weeks' : `Nothing for ${title} right now`} message={catTab === 'new' ? 'Try Popular, or check back after Friday.' : 'This genre could not be loaded. Check your connection and try again.'} />
+        ) : (
+          <div className="grid sm:grid-cols-2 gap-2">{list.map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(list, i, title)} /></Fragment>)}</div>
+        )}
+      </div>
+    );
+  }
 
   if (genre) {
     const shown = sortTracks(genreTracks);
@@ -1194,6 +1263,26 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                   </div>
                 </section>
               )}
+
+              {artistsForYou.length > 0 && (
+                <section className="mb-9">
+                  <SectionHead icon={<User className="w-5 h-5 text-sauti" />}>Artists for you</SectionHead>
+                  <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{artistsForYou.map((a) => artistTile(a))}</div>
+                </section>
+              )}
+
+              <section className="mb-9">
+                <SectionHead icon={<Music2 className="w-5 h-5 text-sauti" />}>Browse all genres</SectionHead>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                  {CATALOG_GENRES.map((g) => (
+                    <button key={g.id} onClick={() => setCatGenre(g.id)} tabIndex={0} data-tv-focusable
+                      className="card-lift relative h-20 md:h-24 rounded-2xl overflow-hidden text-left p-3 focus:outline-none"
+                      style={{ background: `linear-gradient(135deg, ${g.tint} 0%, ${g.tint}B3 100%)` }}>
+                      <span className="relative font-display font-bold text-base md:text-lg leading-tight" style={{ color: '#fff' }}>{g.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
 
               {mix.length > 0 && (
                 <section className="mb-10">
