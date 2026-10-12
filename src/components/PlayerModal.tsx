@@ -1,4 +1,4 @@
-import { X, ExternalLink, AlertCircle, Info, Star, Calendar, Clock, Play, RefreshCw, Plus, Check, Maximize, ArrowLeft, SkipBack, SkipForward, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { ChevronDown, X, ExternalLink, AlertCircle, Info, Star, Calendar, Clock, Play, RefreshCw, Plus, Check, Maximize, ArrowLeft, SkipBack, SkipForward, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { fetchMediaDetails, MediaDetails, getImageUrl, fetchSimilar, MediaItem, SeasonDetails, fetchSeasonDetails } from '../services/tmdb';
@@ -21,6 +21,18 @@ interface PlayerModalProps {
   initialSeason?: number;
   initialEpisode?: number;
   playTrailer?: boolean;
+}
+
+/** True when `src` is the provider's frame or a frame inside it. */
+function fromFrame(root: Window | null | undefined, src: MessageEventSource | null): boolean {
+  if (!root || !src) return false;
+  const within = (w: Window, depth: number): boolean => {
+    if (w === src) return true;
+    if (depth >= 3) return false;
+    try { for (let k = 0; k < w.frames.length; k++) if (within(w.frames[k] as Window, depth + 1)) return true; } catch { /* frame going away */ }
+    return false;
+  };
+  return within(root, 0);
 }
 
 const nativeShell = (() => { try { return Capacitor.isNativePlatform(); } catch { return false; } })();
@@ -255,6 +267,50 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     document.addEventListener('fullscreenchange', onFs);
     return () => document.removeEventListener('fullscreenchange', onFs);
   }, [playerUp]);
+
+  // ── In full screen the bar gets out of the way ──────────────────────────
+  // It covered the bottom of the picture. Now, in full screen, the picture
+  // takes the whole screen and the bar is an overlay at the TOP (the provider's
+  // own controls live at the bottom): shown for a moment on entering, hidden
+  // while the film plays, back whenever it is paused.
+  const [docFs, setDocFs] = useState(false);
+  useEffect(() => {
+    const onFs = () => setDocFs(!!document.fullscreenElement && document.fullscreenElement === playerContainerRef.current);
+    document.addEventListener('fullscreenchange', onFs);
+    return () => document.removeEventListener('fullscreenchange', onFs);
+  }, []);
+  const fsActive = (maxed || docFs) && !playingTrailer;
+
+  /** true = paused, false = playing, null = this server does not say. */
+  const [paused, setPaused] = useState<boolean | null>(null);
+  useEffect(() => {
+    setPaused(null);
+    if (!playerUp) return;
+    const onMsg = (e: MessageEvent) => {
+      let d: unknown = e.data;
+      if (typeof d === 'string') { try { d = JSON.parse(d); } catch { return; } }
+      const m = d as { type?: string; event?: string; data?: { event?: string } } | null;
+      if (!m || m.type !== 'PLAYER_EVENT') return;
+      if (!fromFrame(iframeRef.current?.contentWindow, e.source)) return;
+      const ev = m.data?.event ?? m.event;
+      if (ev === 'pause' || ev === 'ended') setPaused(true);
+      else if (ev === 'play' || ev === 'playing' || ev === 'timeupdate') setPaused(false);
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, [playerUp, selectedServer, refreshKey]);
+
+  // A short look at the bar when full screen starts, or when asked for.
+  const [peek, setPeek] = useState(false);
+  const peekTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const peekBar = useCallback((ms = 3000) => {
+    setPeek(true);
+    if (peekTimer.current) clearTimeout(peekTimer.current);
+    peekTimer.current = setTimeout(() => setPeek(false), ms);
+  }, []);
+  useEffect(() => { if (fsActive) peekBar(3000); }, [fsActive, peekBar]);
+  useEffect(() => () => { if (peekTimer.current) clearTimeout(peekTimer.current); }, []);
+  const barVisible = !fsActive || peek || paused === true || showAudioMenu;
 
   const reportCurrentMovieServerDead = () => {
     haptics.tap();
@@ -706,7 +762,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
             // the bar beneath it. They used to float over the frame, on top of
             // the provider's buttons, and on a phone (no hover) they stayed
             // invisible yet still took the taps meant for the player.
-            <div ref={playingTrailer ? undefined : playerContainerRef} className={`player-shell flex flex-col bg-black${maxed && !playingTrailer ? ' is-max' : ''}`}>
+            <div ref={playingTrailer ? undefined : playerContainerRef} className={`player-shell relative flex flex-col bg-black${maxed && !playingTrailer ? ' is-max' : ''}`}>
               <div className="player-frame relative w-full aspect-video bg-black">
                 {playingTrailer ? (
                   <iframe
@@ -859,7 +915,16 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                 </div>
               )}
 
-              <div className="relative flex flex-wrap items-center gap-1.5 px-2 py-2 bg-zinc-950 border-t border-white/10">
+              {fsActive && !barVisible && paused === null && (
+                // This server does not report pause, so offer a quiet way back to the bar.
+                <button onClick={() => peekBar(5000)} data-tv-focusable title="Show controls" aria-label="Show controls"
+                  className="dark absolute top-2 left-2 z-30 w-8 h-8 grid place-items-center rounded-full bg-black/40 text-white/70 hover:text-white">
+                  <ChevronDown className="w-4 h-4" />
+                </button>
+              )}
+              <div className={`flex flex-wrap items-center gap-1.5 px-2 py-2 ${fsActive
+                ? `dark absolute inset-x-0 top-0 z-30 pb-8 bg-gradient-to-b from-black/90 via-black/60 to-transparent transition-opacity duration-300 ${barVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`
+                : 'relative bg-zinc-950 border-t border-white/10'}`}>
                 <button onClick={() => { if (playingTrailer) { setPlayingTrailer(null); return; } setIsPlaying(false); const d = document as any; if (d.fullscreenElement || d.webkitFullscreenElement) { try { (d.exitFullscreen || d.webkitExitFullscreen)?.call(document); } catch { /* noop */ } } }}
                   data-tv-focusable tabIndex={0} title="Back to details" className="h-9 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed">
                   <ArrowLeft className="w-4 h-4" /><span className="hidden sm:inline">Back</span>
@@ -893,7 +958,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                 )}
                 <button onClick={onClose} data-tv-focusable data-tv-close title="Close" className="w-9 h-9 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"><X className="w-4 h-4" /></button>
                 {!playingTrailer && showAudioMenu && (
-                    <div className="absolute bottom-full right-2 mb-2 z-50 w-56 bg-zinc-950/95 backdrop-blur rounded-xl border border-white/15 shadow-2xl p-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className={`absolute ${fsActive ? 'top-full mt-1' : 'bottom-full mb-2'} right-2 z-50 w-56 bg-zinc-950/95 backdrop-blur rounded-xl border border-white/15 shadow-2xl p-2 animate-in fade-in slide-in-from-top-2 duration-200`}>
                       <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 px-2 pt-1 pb-2 flex items-center gap-1.5"><Waves className="w-3.5 h-3.5" /> Audio Enhancement</p>
                       {AUDIO_PRESETS.map(p => (
                         <button key={p.key} onClick={() => applyAudioPreset(p.key)} data-tv-focusable className={`w-full text-left px-3 py-2 rounded-lg text-sm font-semibold flex items-center justify-between transition-colors ${eqPreset === p.key ? 'bg-amber-500 text-amber-950' : 'text-white hover:bg-white/10'}`}>
