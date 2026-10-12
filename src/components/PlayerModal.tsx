@@ -1,4 +1,4 @@
-import { ChevronDown, X, ExternalLink, AlertCircle, Info, Star, Calendar, Clock, Play, RefreshCw, Plus, Check, Maximize, ArrowLeft, SkipBack, SkipForward, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { EyeOff, ChevronDown, X, ExternalLink, AlertCircle, Info, Star, Calendar, Clock, Play, RefreshCw, Plus, Check, Maximize, ArrowLeft, SkipBack, SkipForward, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { fetchMediaDetails, MediaDetails, getImageUrl, fetchSimilar, MediaItem, SeasonDetails, fetchSeasonDetails } from '../services/tmdb';
@@ -248,7 +248,11 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     };
     w.__sahraePlayerFullscreen = (on: boolean) => setMaxed(on);
     // Back leaves full screen before it leaves the player.
-    w.__sahraeExitPlayerFs = () => { if (maxedRef.current) { setMaxed(false); return true; } return false; };
+    w.__sahraeExitPlayerFs = () => {
+      if (barHiddenRef.current) { setBarHidden(false); return true; }
+      if (maxedRef.current) { setMaxed(false); return true; }
+      return false;
+    };
     return () => { delete w.__sahraePlayerFullscreen; delete w.__sahraeExitPlayerFs; };
   }, []);
 
@@ -275,7 +279,11 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   // while the film plays, back whenever it is paused.
   const [docFs, setDocFs] = useState(false);
   useEffect(() => {
-    const onFs = () => setDocFs(!!document.fullscreenElement && document.fullscreenElement === playerContainerRef.current);
+    const onFs = () => {
+      const on = !!document.fullscreenElement && document.fullscreenElement === playerContainerRef.current;
+      setDocFs(on);
+      if (!on) setBarHidden(false);
+    };
     document.addEventListener('fullscreenchange', onFs);
     return () => document.removeEventListener('fullscreenchange', onFs);
   }, []);
@@ -310,7 +318,15 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   }, []);
   useEffect(() => { if (fsActive) peekBar(3000); }, [fsActive, peekBar]);
   useEffect(() => () => { if (peekTimer.current) clearTimeout(peekTimer.current); }, []);
-  const barVisible = !fsActive || peek || paused === true || showAudioMenu;
+  // The viewer can hide the bar altogether ("Hide"); a pause, Escape, Back,
+  // or leaving full screen brings it back.
+  const [barHidden, setBarHidden] = useState(false);
+  const barHiddenRef = useRef(false);
+  barHiddenRef.current = barHidden;
+  useEffect(() => { if (paused === true) setBarHidden(false); }, [paused]);
+  useEffect(() => { if (!playerUp) setBarHidden(false); }, [playerUp]);
+  const barVisible = !barHidden && (!fsActive || peek || paused === true || showAudioMenu);
+  const showBar = () => { setBarHidden(false); peekBar(5000); };
 
   const reportCurrentMovieServerDead = () => {
     haptics.tap();
@@ -552,7 +568,10 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        if (barHiddenRef.current) { setBarHidden(false); return; }
+        onClose();
+      }
     };
     if (isOpen) {
       window.addEventListener('keydown', handleKeyDown);
@@ -915,16 +934,16 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                 </div>
               )}
 
-              {fsActive && !barVisible && paused === null && (
+              {!barVisible && paused === null && (barHidden || fsActive) && (
                 // This server does not report pause, so offer a quiet way back to the bar.
-                <button onClick={() => peekBar(5000)} data-tv-focusable title="Show controls" aria-label="Show controls"
+                <button onClick={showBar} data-tv-focusable title="Show controls" aria-label="Show controls"
                   className="dark absolute top-2 left-2 z-30 w-8 h-8 grid place-items-center rounded-full bg-black/40 text-white/70 hover:text-white">
                   <ChevronDown className="w-4 h-4" />
                 </button>
               )}
               <div className={`flex flex-wrap items-center gap-1.5 px-2 py-2 ${fsActive
                 ? `dark absolute inset-x-0 top-0 z-30 pb-8 bg-gradient-to-b from-black/90 via-black/60 to-transparent transition-opacity duration-300 ${barVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`
-                : 'relative bg-zinc-950 border-t border-white/10'}`}>
+                : barHidden ? 'hidden' : 'relative bg-zinc-950 border-t border-white/10'}`}>
                 <button onClick={() => { if (playingTrailer) { setPlayingTrailer(null); return; } setIsPlaying(false); const d = document as any; if (d.fullscreenElement || d.webkitFullscreenElement) { try { (d.exitFullscreen || d.webkitExitFullscreen)?.call(document); } catch { /* noop */ } } }}
                   data-tv-focusable tabIndex={0} title="Back to details" className="h-9 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed">
                   <ArrowLeft className="w-4 h-4" /><span className="hidden sm:inline">Back</span>
@@ -949,6 +968,11 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                           <AlertTriangle className="w-3.5 h-3.5" /><span className="hidden sm:inline">Not working?</span>
                         </button>
                       )}
+                      <button onClick={() => { setShowAudioMenu(false); setPeek(false); setBarHidden(true); }} data-tv-focusable
+                        title="Hide these controls. Pause, Escape or Back brings them back."
+                        className="h-9 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors active:scale-95">
+                        <EyeOff className="w-3.5 h-3.5" /><span className="hidden sm:inline">Hide</span>
+                      </button>
                     </div>
                     <button onClick={() => setShowAudioMenu(v => !v)} data-tv-focusable title="Audio enhancement"
                       className={`ml-auto w-9 h-9 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed ${audioOn ? '!bg-amber-500 !text-amber-950' : ''}`}><Waves className="w-4 h-4" /></button>
