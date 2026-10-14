@@ -61,6 +61,10 @@ function enableTvMode() {
  *     remote-driven browser reports and a laptop never does.
  */
 function looksLikeTv(): boolean {
+  // The dedicated TV APK (built with VITE_TARGET=tv) is always on a television.
+  // The app presents a phone browser identity to stream providers, so the
+  // user-agent test below cannot see the TV there.
+  try { if ((import.meta.env?.VITE_TARGET as string) === 'tv') return true; } catch { /* not a Vite build */ }
   try {
     const ua = navigator.userAgent;
     if (/\b(Android TV|GoogleTV|Google TV|CrKey|AFT[A-Z0-9]+|BRAVIA|SMART-TV|SmartTV|Tizen|Web0S|WebOS|HbbTV|NetCast|Viera)\b/i.test(ua)) {

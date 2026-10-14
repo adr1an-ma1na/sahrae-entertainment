@@ -1,0 +1,265 @@
+name: Build Android TV APK
+
+# Sahrae TV: the same app built for televisions. Its own app id
+# (com.sahrae.entertainment.tv) so it installs beside the phone app, TV mode
+# from the first screen (VITE_TARGET=tv), landscape, leanback required.
+# Published to the rolling `tv` release as Sahrae-TV.apk.
+
+on:
+  push:
+    branches: [main, june-plus]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build TV APK
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed to publish APKs to a GitHub Release
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Java 17 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
+
+      - name: Install npm dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: TypeScript check
+        run: npm run lint
+
+      - name: Build web app for TV (Vite)
+        env:
+          VITE_TARGET: tv
+        run: npm run build
+
+      - name: Add Android platform
+        run: npx cap add android
+
+      - name: Fetch ad / tracker blocklist (bundled into the app)
+        run: |
+          mkdir -p android-overlay/app/src/main/assets
+          OUT=android-overlay/app/src/main/assets/adhosts.txt
+          # Maintained ads + malware host list (conservative — does not block CDNs).
+          # Two mirrors; fall back gracefully so a hiccup never fails the build.
+          if curl -fsSL --retry 3 --max-time 120 https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts -o /tmp/hosts.txt \
+             || curl -fsSL --retry 3 --max-time 120 https://o0.pages.dev/Pro/hosts.txt -o /tmp/hosts.txt; then
+            # Extract bare domains from "0.0.0.0 domain" / "127.0.0.1 domain" lines.
+            grep -E '^(0\.0\.0\.0|127\.0\.0\.1)[[:space:]]+' /tmp/hosts.txt \
+              | awk '{print $2}' \
+              | grep -vE '^(localhost|localhost\.localdomain|local|broadcasthost|0\.0\.0\.0|ip6-.*)$' \
+              | tr 'A-Z' 'a-z' | sort -u > "$OUT" || true
+          fi
+          # Guarantee the file exists even if the fetch failed.
+          touch "$OUT"
+          echo "Bundled blocklist size: $(wc -l < "$OUT") domains"
+
+      - name: Fetch EasyList filter rules (Brave/uBlock-style, bundled)
+        run: |
+          mkdir -p android-overlay/app/src/main/assets
+          OUT=android-overlay/app/src/main/assets/easylist.txt
+          : > "$OUT"
+          # EasyList + EasyPrivacy are the same lists Brave and uBlock ship.
+          # AdFilter.java parses the NETWORK rules and ignores the rest, so we
+          # strip cosmetic rules here to keep the asset (and parse time) small.
+          for URL in \
+            https://easylist.to/easylist/easylist.txt \
+            https://easylist.to/easylist/easyprivacy.txt ; do
+            if curl -fsSL --retry 3 --max-time 120 "$URL" -o /tmp/list.txt; then
+              # Drop comments, cosmetic rules (##, #@#, #?#) and blank lines.
+              grep -vE '^[!\[]' /tmp/list.txt \
+                | grep -vE '#(#|@#|\?#)' \
+                | grep -vE '^[[:space:]]*$' >> "$OUT" || true
+            fi
+          done
+          sort -u -o "$OUT" "$OUT" || true
+          echo "Bundled EasyList network rules: $(wc -l < "$OUT")"
+
+      # Every build gets a higher version code than the one before it. Capacitor
+      # generates versionCode 1 and leaves it there, so every APK claimed to be
+      # the same version as the installed one; Android then treats an update as a
+      # reinstall, and some installers refuse it outright ("app not installed").
+      - name: Stamp version
+        run: |
+          sed -i "s/versionCode 1$/versionCode ${{ github.run_number }}/" android/app/build.gradle
+          sed -i "s/versionName \"1.0\"$/versionName \"1.0.${{ github.run_number }}\"/" android/app/build.gradle
+          grep -E 'versionCode|versionName' android/app/build.gradle
+
+      - name: Apply Android overlay (ad-blocking MainActivity, etc.)
+        run: |
+          if [ -d android-overlay ]; then
+            # Remove Capacitor's default MainActivity so our overlay replaces it cleanly
+            rm -f android/app/src/main/java/com/sahrae/entertainment/MainActivity.java
+            cp -rv android-overlay/. android/
+            echo "Overlay applied."
+            ls -la android/app/src/main/java/com/sahrae/entertainment/
+          else
+            echo "No android-overlay directory; skipping."
+          fi
+
+      - name: Make it the TV app
+        run: node .github/scripts/tv-variant.cjs
+
+      # No R8 here: this branch rebuilds the June 7 native shell exactly as the
+      # APK that worked on the phone was built, and that APK was not shrunk.
+      - name: Enable R8 shrink + obfuscation (release only)
+        if: false
+        run: |
+          # Capacitor generates `minifyEnabled false` in the release buildType and
+          # already wires in proguard-rules.pro (supplied by our overlay). Flip it on
+          # so the release APK is shrunk + obfuscated. Debug builds are unaffected.
+          sed -i 's/minifyEnabled false/minifyEnabled true/' android/app/build.gradle
+          echo "--- release buildType ---"
+          grep -n -A4 'release {' android/app/build.gradle || true
+
+      - name: Install rsvg-convert (SVG → PNG)
+        run: sudo apt-get update && sudo apt-get install -y librsvg2-bin
+
+      - name: Rasterize source SVGs to PNGs
+        run: |
+          rsvg-convert -w 1024 -h 1024 assets/icon.svg            -o assets/icon.png
+          rsvg-convert -w 1024 -h 1024 assets/icon-foreground.svg -o assets/icon-foreground.png
+          rsvg-convert -w 1024 -h 1024 assets/icon-background.svg -o assets/icon-background.png
+          rsvg-convert -w 2732 -h 2732 assets/splash.svg          -o assets/splash.png
+          cp assets/splash.png assets/splash-dark.png
+          ls -la assets/
+
+      - name: Generate Android icon + splash assets
+        run: npx capacitor-assets generate --android --assetPath assets
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Make gradlew executable
+        run: chmod +x android/gradlew
+
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Locate debug APK
+        id: locate_debug
+        run: |
+          APK_PATH=$(find android/app/build/outputs/apk/debug -name '*.apk' | head -n1)
+          echo "Found debug APK at: $APK_PATH"
+          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Upload debug APK
+        continue-on-error: true   # non-fatal: artifact storage quota can be hit; the Release step is the primary delivery
+        uses: actions/upload-artifact@v4
+        with:
+          name: sahrae-tv-debug-apk
+          path: ${{ steps.locate_debug.outputs.apk_path }}
+          if-no-files-found: error
+          retention-days: 30
+
+      # ------------------------------------------------------------------
+      # Release-signed APK — runs only if KEYSTORE_BASE64 secret is set.
+      # See .github/workflows/generate-keystore.yml to create one.
+      # ------------------------------------------------------------------
+      - name: Check for release signing secrets
+        id: have_release_secrets
+        run: |
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "ℹ️ KEYSTORE_BASE64 secret not set — skipping release build. Run the 'Generate Release Keystore' workflow to enable." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Decode keystore
+        if: steps.have_release_secrets.outputs.present == 'true'
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/sahrae-release.jks"
+          ls -la "$RUNNER_TEMP/sahrae-release.jks"
+          # Fail fast (with a useful message) if the keystore/passwords are mismatched
+          if ! keytool -list -keystore "$RUNNER_TEMP/sahrae-release.jks" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null 2>&1; then
+            echo "::error::Keystore verification failed. Check KEYSTORE_BASE64 / KEYSTORE_PASSWORD / KEY_ALIAS secrets."
+            exit 1
+          fi
+          echo "✅ Keystore verified (alias '$KEY_ALIAS' is readable)"
+
+      - name: Build release APK (signed)
+        if: steps.have_release_secrets.outputs.present == 'true'
+        working-directory: android
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleRelease --no-daemon --stacktrace \
+            -Pandroid.injected.signing.store.file="$RUNNER_TEMP/sahrae-release.jks" \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
+
+      - name: Locate release APK
+        if: steps.have_release_secrets.outputs.present == 'true'
+        id: locate_release
+        run: |
+          APK_PATH=$(find android/app/build/outputs/apk/release -name '*.apk' | head -n1)
+          echo "Found release APK at: $APK_PATH"
+          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release APK
+        if: steps.have_release_secrets.outputs.present == 'true'
+        continue-on-error: true   # non-fatal: artifact storage quota can be hit; the Release step is the primary delivery
+        uses: actions/upload-artifact@v4
+        with:
+          name: sahrae-tv-release-apk
+          path: ${{ steps.locate_release.outputs.apk_path }}
+          if-no-files-found: error
+          retention-days: 90
+
+      # ------------------------------------------------------------------
+      # Primary delivery: publish the APK(s) to a rolling "preview" GitHub
+      # Release. Release assets are stored separately from Actions artifacts,
+      # so they're unaffected by the artifact-storage quota.
+      # ------------------------------------------------------------------
+      - name: Publish the TV APK to the "tv" Release
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f "${{ steps.locate_release.outputs.apk_path }}" ]; then
+            cp "${{ steps.locate_release.outputs.apk_path }}" Sahrae-TV.apk
+          elif [ -f "${{ steps.locate_debug.outputs.apk_path }}" ]; then
+            cp "${{ steps.locate_debug.outputs.apk_path }}" Sahrae-TV.apk
+          else
+            echo "No APK to publish"; exit 1
+          fi
+          VERSION=$(grep -m1 'versionName' android/app/build.gradle | sed 's/.*"\(.*\)".*/\1/')
+          TAG=tv; TITLE="Sahrae TV $VERSION"; PRE=""
+          if [ "${{ github.ref_name }}" != "main" ]; then
+            TAG="test-tv-$(echo '${{ github.ref_name }}' | tr '/' '-')"
+            TITLE="Sahrae TV $VERSION (test build from ${{ github.ref_name }})"
+            PRE="--prerelease"
+          fi
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" Sahrae-TV.apk $PRE \
+            --title "$TITLE" \
+            --notes "Sahrae TV for Android TV, Google TV and Fire TV, version $VERSION.
+
+          Install **Sahrae-TV.apk** on the TV (for example with the Downloader app, or from a USB stick through a file manager). It installs beside the phone app and opens in TV mode, ready for the remote.
+
+          Built from ${{ github.sha }}." \
+            --target "${{ github.sha }}"

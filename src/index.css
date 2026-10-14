@@ -1158,6 +1158,17 @@ html.tv-mode .tv-rail { display: none !important; }
 html.tv-mode:not(.nav-collapsed) .tv-full { display: flex !important; transform: none !important; }
 html.tv-mode:not(.nav-collapsed) .tv-shell { padding-left: 16rem !important; }
 html.tv-mode:not(.nav-collapsed) .tv-navbar { left: 16rem !important; }
+/* The TV sidebar carries the logo; a second one in the header ran into the icons. */
+html.tv-mode:not(.nav-collapsed) .nav-wordmark { display: none !important; }
+/* Hero on a TV: a 1080p TV WebView is often 540 CSS px tall, and with the 118%
+   TV type the full hero was taller than its banner, pushing the title off the
+   top. Sized to the screen height instead. */
+/* Coachmarks are touchscreen hints ("tap a poster"); with a remote they only
+   cover the hero's buttons. */
+html.tv-mode .coachmark { display: none !important; }
+html.tv-mode .tv-hero-body { padding-top: 4.5rem !important; padding-bottom: 2.5rem !important; }
+html.tv-mode .tv-hero-title { font-size: clamp(1.75rem, 7vh, 3.25rem) !important; margin-bottom: 0.5rem !important; }
+html.tv-mode .tv-hero-desc { -webkit-line-clamp: 2 !important; line-clamp: 2; font-size: 1rem !important; margin-bottom: 1rem !important; }
 
 /* ── Illustration motion ────────────────────────────────────────────────────
    A slow drift on the subject and a gentle twinkle on the sparkles — enough to

@@ -34,14 +34,14 @@ export default function Hero({ item, onPlay }: HeroProps) {
       </div>
 
       {/* Content */}
-      <div className="absolute bottom-0 left-0 w-full px-4 md:px-12 pb-24 md:pb-32 pt-32 z-20">
+      <div className="tv-hero-body absolute bottom-0 left-0 w-full px-4 md:px-12 pb-24 md:pb-32 pt-32 z-20">
         <div className="max-w-2xl">
           <div className="overline mb-3 flex items-center gap-2.5">
             <span className="inline-block w-7 h-px bg-amber-400/70" />
             Featured {type === 'movie' ? 'Film' : 'Series'}
           </div>
 
-          <h1 className="font-display font-extrabold text-white mb-4 leading-[1.03] drop-shadow-2xl tracking-tight text-4xl md:text-6xl lg:text-7xl">
+          <h1 className="tv-hero-title font-display font-extrabold text-white mb-4 leading-[1.03] drop-shadow-2xl tracking-tight text-4xl md:text-6xl lg:text-7xl">
             {title}
           </h1>
 
@@ -61,7 +61,7 @@ export default function Hero({ item, onPlay }: HeroProps) {
             </span>
           </div>
 
-          <p className="text-zinc-300 text-base md:text-xl mb-8 line-clamp-3 max-w-xl drop-shadow-lg leading-relaxed">
+          <p className="tv-hero-desc text-zinc-300 text-base md:text-xl mb-8 line-clamp-3 max-w-xl drop-shadow-lg leading-relaxed">
             {item.overview}
           </p>
 
