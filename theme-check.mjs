@@ -93,5 +93,19 @@ for (const [name, t] of Object.entries(themes)) {
   else { pass++; console.log('\n  ok   the accent is declared once per theme'); }
 }
 
+// The TV keeps the theme. TV mode once painted every <nav> fixed near-black and
+// the focus ring had a black inner ring, which on Sand and Cosmic gave a black
+// header, a black box behind dark sidebar labels and black outlines on every
+// selected item. Outside the theme blocks nothing may hard-code that colour.
+{
+  const tokensEnd = css.indexOf('PREMIUM DESIGN SYSTEM');
+  const rest = css.slice(tokensEnd);
+  const hardDark = (rest.match(/rgba\(\s*9\s*,\s*9\s*,\s*11/g) || []).length;
+  if (hardDark) { fail++; console.log(`\n  FAIL ${hardDark} fixed near-black colour(s) outside the theme tokens`); }
+  else { pass++; console.log('\n  ok   no fixed near-black outside the theme tokens'); }
+  if (/\.tv-mode nav\s*\{/.test(css)) { fail++; console.log('  FAIL a TV-mode rule restyles every <nav>'); }
+  else { pass++; console.log('  ok   TV mode restyles only its top bar'); }
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exitCode = fail ? 1 : 0;

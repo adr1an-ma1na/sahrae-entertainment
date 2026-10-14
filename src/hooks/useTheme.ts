@@ -2,12 +2,24 @@ import { useState, useEffect } from 'react';
 
 type Theme = 'light' | 'dark' | 'midnight';
 
+/**
+ * The theme a signed-in listener chose, carried between their devices by
+ * cloudSync (it is one of SYNCED_KEYS), so the phone, the laptop and the TV
+ * app all show the same theme. Written only when they pick one, never on
+ * start-up, so a new device's default can never overwrite their choice.
+ */
+export const THEME_SYNC_KEY = 'sahrae.theme.v1';
+
+const isTheme = (v: unknown): v is Theme => v === 'light' || v === 'dark' || v === 'midnight';
+
 export function useTheme() {
   const [theme, setTheme] = useState<Theme>(() => {
+    try {
+      const synced = JSON.parse(localStorage.getItem(THEME_SYNC_KEY) || 'null');
+      if (isTheme(synced)) return synced;
+    } catch { /* not set yet */ }
     const savedTheme = localStorage.getItem('theme');
-    if (savedTheme === 'light' || savedTheme === 'dark' || savedTheme === 'midnight') {
-      return savedTheme as Theme;
-    }
+    if (isTheme(savedTheme)) return savedTheme;
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
 
@@ -20,9 +32,9 @@ export function useTheme() {
 
   const toggleTheme = () => {
     setTheme((prev) => {
-      if (prev === 'dark') return 'midnight';
-      if (prev === 'midnight') return 'light';
-      return 'dark';
+      const next: Theme = prev === 'dark' ? 'midnight' : prev === 'midnight' ? 'light' : 'dark';
+      try { localStorage.setItem(THEME_SYNC_KEY, JSON.stringify(next)); } catch { /* storage full */ }
+      return next;
     });
   };
 

@@ -45,6 +45,8 @@ export const SYNCED_KEYS = [
   'sahrae.taste.genres.v1',
   'sahrae.eq.v1',
   'sahrae_watch_progress',
+  // The chosen theme, so phone, laptop and the TV app look the same (useTheme).
+  'sahrae.theme.v1',
 ] as const;
 
 type Bundle = Record<string, unknown>;
