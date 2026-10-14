@@ -290,8 +290,10 @@ export function initSpatialNavigation() {
         || nearestToViewportTopLeft(getFocusables());
       if (first) focusElement(first);
     };
-    setTimeout(claim, 600);
-    setTimeout(claim, 1800); // again after the first data load paints
+    // Repeated through start-up: a slow TV box can take several seconds to draw
+    // its first screen, and a claim before then finds nothing to select. Each
+    // one does nothing once something has focus.
+    for (const ms of [600, 1800, 4000, 8000, 15000]) setTimeout(claim, ms);
   }
 
   // Remove the highlight ring as soon as a pointer is used, so mouse/touch
