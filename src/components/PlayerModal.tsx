@@ -401,48 +401,43 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   }, [isOpen, isPlaying]);
 
   // Streaming servers. NOTE: vidvault.ru is deliberately NOT here — it is a
-  // download portal ("Download movies and TV shows"), not a stream. It now lives
-  // only behind the Download button (see DOWNLOAD_SOURCE below), per the request
-  // that it stop being the default play server.
+  // download portal, not a stream. It lives only behind the Download button
+  // (see DOWNLOAD_SOURCE below).
   //
-  // SIX ENTRIES WERE REMOVED, each verified dead rather than assumed:
-  //   moviesapi.club  NXDOMAIN — the domain does not exist
-  //   vidsrc.net      NXDOMAIN
-  //   embed.su        no A record
-  //   vidsrc.pro      resolves, but 301-redirects to embed.su, which is dead
-  //   superembed      host answers, but its embed path 404s
-  //   vidbinge        host answers, but its embed path returns no player markup
+  // RE-AUDITED 16 Oct 2026 after viewers reported missing episodes, by playing
+  // five titles on each server from Kenya: Inception, Stranger Things S5E1,
+  // Wednesday S2E1, Squid Game S3E1 and East of Eden S1E1 (out 1 Oct 2026).
   //
-  // A dead entry is worse than no entry: it is a choice the viewer makes and
-  // then has to undo, and with seven of thirteen dead the picker was mostly
-  // traps. VidSrc.cc and SmashyStream are KEPT — both resolve with valid
-  // certificates and fail only from one audit network, which is a bot filter,
-  // not a dead host.
+  // THE FIRST THREE played or loaded every one of the five. VidZee and VidRock
+  // come from the 7 June build; VidRock has since moved from vidrock.ru to
+  // vidrock.to, so the APK was rewriting its player as a stranger's page.
   //
-  // Re-check with `node audit.mjs movies` before a release; these hosts rot
-  // without notice and the list is a claim, not a fact.
+  // THE LAST FOUR found every test title but play inside a nested player that
+  // could not be timed from outside, so they stay as fallbacks, not leads.
   //
-  // THE FIRST THREE were added after testing 26 providers on a film AND an
-  // episode. They lead because they state the highest capability (4K, surround,
-  // subtitles) and carry no ad networks, and because all three accept a theme
-  // parameter — so the player renders in Sahrae's amber rather than a stranger's
-  // default blue. Re-verified live before being restored here.
+  // REMOVED, each for a reason seen in the audit rather than assumed:
+  //   VidFast    stuck on "Fetching, one moment" for every episode
+  //   Videasy    reported no length for East of Eden, i.e. no source
+  //   VidSrc.cc  blank player; the host often does not answer at all
+  //   MultiEmbed an ad wall before any player
+  //   AutoEmbed  spinner only
+  //   VidSrc.pm  "Not found" for East of Eden
+  //   VidSrc.su  "No available servers" for Wednesday S2E1
+  // Re-check before a release; these hosts rot without notice.
+  //
   // The accent handed to providers that accept a theme, so their player matches
   // the app rather than sitting in it as a differently-coloured rectangle.
   // Material 3 primary, minus the '#' these APIs expect.
   const brand = 'FBBF24';
 
   const SERVERS = [
-    { id: 'vidfast', name: '4K · Surround (VidFast)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidfast.pro/movie/${id}?theme=${brand}&autoPlay=true` : `https://vidfast.pro/tv/${id}/${s}/${e}?theme=${brand}&autoPlay=true&nextButton=true`, type: 'iframe' },
-    { id: 'videasy', name: '4K Ultra (Videasy)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://player.videasy.net/movie/${id}?color=${brand}` : `https://player.videasy.net/tv/${id}/${s}/${e}?color=${brand}&nextEpisode=true&episodeSelector=true`, type: 'iframe' },
     { id: 'vidlink', name: 'Surround HD (VidLink)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidlink.pro/movie/${id}?primaryColor=${brand}&autoplay=true&title=true` : `https://vidlink.pro/tv/${id}/${s}/${e}?primaryColor=${brand}&autoplay=true&title=true&nextbutton=true`, type: 'iframe' },
-    { id: 'multiembed', name: 'Ultra HD (MultiEmbed)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://multiembed.mov/?video_id=${id}&tmdb=1` : `https://multiembed.mov/?video_id=${id}&tmdb=1&s=${s}&e=${e}`, type: 'iframe' },
-    { id: 'vidsrccc', name: 'Ultra HD V3 (VidSrc.cc)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.cc/v3/embed/movie/${id}` : `https://vidsrc.cc/v3/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
-    { id: 'smashystream', name: 'Multi-Source HQ (SmashyStream)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://embed.smashystream.com/playere.php?tmdb=${id}` : `https://embed.smashystream.com/playere.php?tmdb=${id}&season=${s}&episode=${e}`, type: 'iframe' },
-    { id: 'vidsrcto', name: 'Premium 4K CDN (VidSrc.to)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.to/embed/movie/${id}` : `https://vidsrc.to/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
-    { id: 'autoembed', name: 'Cloud AutoEmbed (AutoEmbed)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://autoembed.co/movie/tmdb/${id}` : `https://autoembed.co/tv/tmdb/${id}-${s}-${e}`, type: 'iframe' },
-    { id: '2embed', name: 'HQ Stream (2Embed)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://www.2embed.cc/embed/${id}` : `https://www.2embed.cc/embedtv/${id}&s=${s}&e=${e}`, type: 'iframe' },
-    { id: 'vidsrcme', name: 'Fast Stream 2 (VidSrc.me)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.me/embed/movie?tmdb=${id}` : `https://vidsrc.me/embed/tv?tmdb=${id}&season=${s}&episode=${e}`, type: 'iframe' },
+    { id: 'vidzee', name: 'Multi-Source HD (VidZee)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://player.vidzee.wtf/embed/movie/${id}` : `https://player.vidzee.wtf/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
+    { id: 'vidrock', name: 'HD Stream (VidRock)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidrock.to/embed/movie/${id}` : `https://vidrock.to/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
+    { id: 'vidsrcto', name: 'Backup 1 (VidSrc.to)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.to/embed/movie/${id}` : `https://vidsrc.to/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
+    { id: '2embed', name: 'Backup 2 (2Embed)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://www.2embed.cc/embed/${id}` : `https://www.2embed.cc/embedtv/${id}&s=${s}&e=${e}`, type: 'iframe' },
+    { id: 'vidsrcme', name: 'Backup 3 (VidSrc.me)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.me/embed/movie?tmdb=${id}` : `https://vidsrc.me/embed/tv?tmdb=${id}&season=${s}&episode=${e}`, type: 'iframe' },
+    { id: 'smashystream', name: 'Backup 4 (SmashyStream)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://embed.smashystream.com/playere.php?tmdb=${id}` : `https://embed.smashystream.com/playere.php?tmdb=${id}&season=${s}&episode=${e}`, type: 'iframe' },
   ];
 
   useEffect(() => { failedServersRef.current = failedServers; }, [failedServers]);

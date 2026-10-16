@@ -97,12 +97,14 @@ public class MainActivity extends BridgeActivity {
      * on-click popunder/redirect and refused.
      */
     private static final Set<String> EMBED_HOSTS = new HashSet<>(Arrays.asList(
-        // Today's PlayerModal SERVERS, added to the June 7 list: a server missing
-        // here has its player rewritten (L1.5) and refuses to play.
-        "vidfast.pro", "videasy.net", "multiembed.mov", "vidsrc.cc", "smashystream.com", "2embed.cc", "vidsrc.me",
-        // Movie / TV embed providers
-        "vidrock.ru","vidzee.wtf","vidlink.pro","vidsrc.to","vidsrc.pm",
-        "autoembed.co","vidsrc.icu","vidvault.ru",
+        // PlayerModal SERVERS (re-audited 16 Oct 2026): a server missing here
+        // has its player rewritten (L1.5) and refuses to play.
+        "vidlink.pro","vidzee.wtf","vidrock.to","vidsrc.to","2embed.cc","vidsrc.me","smashystream.com",
+        // ...and the hosts those servers now redirect or hand off to. VidRock
+        // moved from .ru to .to; the others answer from a sister domain.
+        "vidrock.ru","vsembed.ru","2embed.skin","vidsrc.sh","anyembed.xyz",
+        // Download source (behind the Download button, not a stream server)
+        "vidvault.ru",
         "youtube-nocookie.com","youtube.com","ytimg.com",   // trailer player
         // Live Sports (Streamed API + its stream embed hosts)
         "streamed.pk","streamed.su","streamed.st",
