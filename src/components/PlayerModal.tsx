@@ -1,4 +1,4 @@
-import { EyeOff, ChevronDown, X, ExternalLink, AlertCircle, Info, Star, Calendar, Clock, Play, RefreshCw, Plus, Check, Maximize, ArrowLeft, SkipBack, SkipForward, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { EyeOff, ChevronDown, X, ExternalLink, AlertCircle, Info, Star, Calendar, Clock, Play, RefreshCw, Plus, Check, Maximize, ArrowLeft, SkipBack, SkipForward, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle, Gauge } from 'lucide-react';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { fetchMediaDetails, MediaDetails, getImageUrl, fetchSimilar, MediaItem, SeasonDetails, fetchSeasonDetails } from '../services/tmdb';
@@ -11,6 +11,7 @@ import { posterColor, cachedPosterColor } from '../services/posterColor';
 import { playerSandbox, isShieldOn, setShieldOn as persistShield, shieldAppliesHere } from '../services/adShield';
 import { suppressPopups } from '../services/popupGuard';
 import { NO_START_LIMIT_MS, COUNTDOWN_S, isPlaybackEvidence, markWorking, markDown, startServer } from '../services/serverHealth';
+import { useDataSaver, canCapVideo, canMeasure, estimateText, formatBytes, readReceivedBytes } from '../services/dataSaver';
 import { NO_CROWD, crowdChoice, fetchProof, fetchSeasonPlayable, nextServerRanked, reportPlay, titleKey, warmUp, type CrowdChoice, type ProofRow } from '../services/playProof';
 
 /** How soon the crowd's answer must arrive to change the opening server; later it would interrupt a loading player. */
@@ -124,6 +125,9 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const [crowd, setCrowd] = useState<CrowdChoice>(NO_CROWD);
   const crowdRef = useRef<{ choice: CrowdChoice; rows: ProofRow[] }>({ choice: NO_CROWD, rows: [] });
   const [seasonPlayable, setSeasonPlayable] = useState<Set<number>>(() => new Set());
+  const [dataSaver, setDataSaverOn] = useDataSaver();
+  // Data this viewing has used, measured by the Android app; null where it cannot be.
+  const [usedBytes, setUsedBytes] = useState<number | null>(null);
   // A server the viewer picked by hand is theirs; the crowd never overrides it.
   const manualPickRef = useRef(false);
   const pickServer = (idx: number) => { manualPickRef.current = true; setSelectedServer(idx); };
@@ -656,6 +660,24 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, currentMediaId, currentMediaType, selectedSeason, selectedEpisode]);
 
+  // What this viewing has cost so far, from the Android app's own byte count.
+  // Starts at zero for each title and episode.
+  useEffect(() => {
+    setUsedBytes(null);
+    if (!isOpen || !playerUp || !canMeasure()) return;
+    let base: number | null = null;
+    let live = true;
+    const tick = async () => {
+      const rx = await readReceivedBytes();
+      if (!live || rx === null) return;
+      if (base === null) base = rx;
+      setUsedBytes(Math.max(0, rx - base));
+    };
+    void tick();
+    const t = setInterval(tick, 10000);
+    return () => { live = false; clearInterval(t); };
+  }, [isOpen, playerUp, currentMediaId, selectedSeason, selectedEpisode]);
+
   // Which episodes of this season played for someone in the last two days.
   useEffect(() => {
     if (!isOpen || currentMediaType !== 'tv' || !currentMediaId) { setSeasonPlayable(new Set()); return; }
@@ -1030,6 +1052,11 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                         <EyeOff className="w-3.5 h-3.5" /><span className="hidden sm:inline">Hide</span>
                       </button>
                     </div>
+                    {usedBytes !== null && (
+                      <span className="ml-auto h-9 px-3 shrink-0 rounded-full bg-white/10 text-white text-xs font-semibold flex items-center gap-1.5 tabular-nums" title="Data this viewing has used so far">
+                        <Gauge className="w-3.5 h-3.5" />{formatBytes(usedBytes)}
+                      </span>
+                    )}
                     <button onClick={() => setShowAudioMenu(v => !v)} data-tv-focusable title="Audio enhancement"
                       className={`ml-auto w-9 h-9 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed ${audioOn ? '!bg-amber-500 !text-amber-950' : ''}`}><Waves className="w-4 h-4" /></button>
                     <button onClick={() => setRefreshKey(prev => prev + 1)} data-tv-focusable title="Reload video" className="w-9 h-9 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"><RefreshCw className="w-4 h-4" /></button>
@@ -1105,6 +1132,22 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       <span className="text-sm">Download</span>
                     </button>
                   </div>
+                  {(() => {
+                    const ep = currentMediaType === 'tv' ? seasonDetails?.episodes?.find((x) => x.episode_number === selectedEpisode) : null;
+                    const minutes = (currentMediaType === 'tv' ? (ep?.runtime || details.episode_run_time?.[0]) : details.runtime) || 0;
+                    const est = estimateText(minutes, dataSaver, canCapVideo());
+                    if (!est) return null;
+                    return (
+                      <p className="text-xs text-zinc-300 flex items-center gap-2 flex-wrap" title="An estimate: the player picks the quality to suit your connection">
+                        <Gauge className="w-3.5 h-3.5 text-zinc-400" />
+                        <span>{est} for {minutes} min</span>
+                        <button onClick={() => { setDataSaverOn(!dataSaver); haptics.tap(); }} data-tv-focusable
+                          className={`px-2 py-0.5 rounded-full border text-[11px] font-semibold transition-colors ${dataSaver ? 'border-emerald-500/60 text-emerald-400 bg-emerald-500/10' : 'border-zinc-600 text-zinc-300 hover:text-white'}`}>
+                          Data Saver {dataSaver ? 'on' : 'off'}
+                        </button>
+                      </p>
+                    );
+                  })()}
                 </div>
               </>
             </div>
@@ -1137,6 +1180,29 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       )}
                     </button>
                   ))}
+                </div>
+
+                {/* Data Saver: always offered, because data costs on every device. */}
+                <div className="mt-4 flex items-start gap-3 p-3 rounded-xl border border-white/10 bg-zinc-900/50">
+                  <Gauge className={`w-5 h-5 shrink-0 mt-0.5 ${dataSaver ? 'text-emerald-400' : 'text-zinc-500'}`} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-white">Data Saver {dataSaver ? 'on' : 'off'}</p>
+                    <p className="text-xs text-zinc-400 leading-snug mt-0.5">
+                      {canCapVideo()
+                        ? 'Plays films and episodes at up to 480p, about a third of the data of full HD, and loads smaller pictures across the app.'
+                        : 'Loads smaller pictures and skips video previews. To also cap films at 480p, use the Sahrae Android app.'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => { setDataSaverOn(!dataSaver); haptics.tap(); }}
+                    role="switch"
+                    aria-checked={dataSaver}
+                    aria-label="Toggle Data Saver"
+                    data-tv-focusable
+                    className={`shrink-0 w-12 h-7 rounded-full p-0.5 transition-colors ${dataSaver ? 'bg-emerald-500' : 'bg-zinc-700'}`}
+                  >
+                    <span className={`block w-6 h-6 rounded-full bg-white transition-transform ${dataSaver ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </button>
                 </div>
 
                 {/* Ad Shield toggle — web only. On Android the native shell

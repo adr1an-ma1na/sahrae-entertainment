@@ -28,6 +28,11 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      # Data Saver rewrites players' quality menus; a wrong rewrite would stop
+      # films playing, so its checks run before any APK is built.
+      - name: Data Saver playlist checks
+        run: java android-overlay/app/src/main/java/com/sahrae/entertainment/HlsCap.java
+
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:

@@ -2,9 +2,11 @@ package com.sahrae.entertainment;
 
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.net.TrafficStats;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Process;
 import android.os.Message;
 import android.view.View;
 import android.view.ViewGroup;
@@ -1079,6 +1081,95 @@ public class MainActivity extends BridgeActivity {
     private boolean inFullscreen = false;
     /** The movie/series player is on screen (reported by the page via /__player). */
     private static volatile boolean sPlayerOpen = false;
+    /** Data Saver: the page's switch (/__datasaver). Caps films and episodes at 480p. */
+    private static volatile boolean sDataSaver = false;
+    /** Data Saver's ceiling, in pixel rows. */
+    private static final int DATA_SAVER_MAX_HEIGHT = 480;
+    /** When the page was last told a player fetched its video, so it is told at most every 1.5 s. */
+    private static volatile long sLastStreamSignal = 0;
+
+    /**
+     * Does this request look like a player fetching video: an HLS playlist, a
+     * DASH manifest or a media segment? Only checked for third-party frames
+     * while the movie player is open, so trailers, music, live TV and our own
+     * page never count.
+     */
+    private static boolean isVideoFetch(Uri u) {
+        String p = u.getPath();
+        if (p == null) return false;
+        p = p.toLowerCase();
+        return p.endsWith(".m3u8") || p.endsWith(".mpd") || p.endsWith(".ts") || p.endsWith(".m4s")
+            || p.endsWith(".mp4") || p.contains(".m3u8/") || p.endsWith(".m3u");
+    }
+
+    /** Tell the page "the player is fetching its video": proof the server works. */
+    private static void signalStream(WebView view) {
+        long now = System.currentTimeMillis();
+        if (now - sLastStreamSignal < 1500) return;
+        sLastStreamSignal = now;
+        try {
+            view.post(() -> {
+                try { view.evaluateJavascript("window.dispatchEvent(new Event('sahrae:embed-media'))", null); }
+                catch (Throwable ignore) {}
+            });
+        } catch (Throwable ignore) {}
+    }
+
+    /**
+     * Data Saver for a player's HLS playlist: fetch it here with the player's
+     * own headers and cookies, and when it is a master playlist hand back the
+     * menu without anything above 480p (HlsCap). Anything going wrong returns
+     * null, and the WebView fetches the playlist itself as if nothing happened.
+     */
+    private static WebResourceResponse dataSaverPlaylist(WebResourceRequest req) {
+        if (!"GET".equalsIgnoreCase(req.getMethod())) return null;
+        HttpURLConnection conn = null;
+        try {
+            String url = req.getUrl().toString();
+            conn = (HttpURLConnection) new URL(url).openConnection();
+            conn.setInstanceFollowRedirects(true);
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(15000);
+            Map<String, String> h = req.getRequestHeaders();
+            String origin = null;
+            if (h != null) {
+                for (Map.Entry<String, String> e : h.entrySet()) {
+                    if (e.getKey() == null || e.getValue() == null) continue;
+                    if (e.getKey().equalsIgnoreCase("Accept-Encoding")) continue;
+                    if (e.getKey().equalsIgnoreCase("Origin")) origin = e.getValue();
+                    conn.setRequestProperty(e.getKey(), e.getValue());
+                }
+            }
+            conn.setRequestProperty("Accept-Encoding", "identity");
+            String cookie = CookieManager.getInstance().getCookie(url);
+            if (cookie != null && !cookie.isEmpty()) conn.setRequestProperty("Cookie", cookie);
+
+            int code = conn.getResponseCode();
+            if (code < 200 || code >= 300) return null;
+            byte[] body = readAll(conn.getInputStream());
+            String text = new String(body, StandardCharsets.UTF_8);
+            if (!HlsCap.isMaster(text)) {
+                // Not a menu of qualities: hand back exactly what came, since it is already fetched.
+                return playlistResponse(body, conn.getContentType(), origin);
+            }
+            return playlistResponse(HlsCap.cap(text, DATA_SAVER_MAX_HEIGHT).getBytes(StandardCharsets.UTF_8),
+                conn.getContentType(), origin);
+        } catch (Throwable t) {
+            return null;
+        } finally {
+            if (conn != null) try { conn.disconnect(); } catch (Throwable ignore) {}
+        }
+    }
+
+    private static WebResourceResponse playlistResponse(byte[] body, String contentType, String origin) {
+        Map<String, String> headers = new HashMap<>();
+        // The player fetched this cross-origin; answer as its own server would.
+        headers.put("Access-Control-Allow-Origin", origin != null ? origin : "*");
+        if (origin != null) headers.put("Access-Control-Allow-Credentials", "true");
+        headers.put("Cache-Control", "no-cache");
+        String mime = contentType != null ? contentType.split(";")[0].trim() : "application/vnd.apple.mpegurl";
+        return new WebResourceResponse(mime, "utf-8", 200, "OK", headers, new ByteArrayInputStream(body));
+    }
     private WebChromeClient.CustomViewCallback fsCallback;
 
     /**
@@ -1666,6 +1757,14 @@ public class MainActivity extends BridgeActivity {
                         } else if (path.startsWith("/__player")) {
                             sPlayerOpen = "1".equals(u.getQueryParameter("open"));
                             return DownloadStore.json("{\"ok\":true}");
+                        } else if (path.startsWith("/__datasaver")) {
+                            sDataSaver = "1".equals(u.getQueryParameter("on"));
+                            return DownloadStore.json("{\"ok\":true,\"on\":" + sDataSaver + "}");
+                        } else if (path.startsWith("/__traffic")) {
+                            // Bytes this app has received since the phone started: the page
+                            // takes the difference over a viewing to show what it cost.
+                            long rx = TrafficStats.getUidRxBytes(Process.myUid());
+                            return DownloadStore.json("{\"rx\":" + rx + "}");
                         } else if (path.startsWith("/__immersive")) {
                             if ("1".equals(u.getQueryParameter("on"))) enterImmersiveFullscreen();
                             else exitImmersiveFullscreen();
@@ -1703,6 +1802,19 @@ public class MainActivity extends BridgeActivity {
                     if (initiator != null && !isLocalAppHost(initiator)) {
                         if (isEasyListHost(host) && !isExceptedByRule(request, host)) return blockedResponse();
                         if (isAdByRule(request, host)) return blockedResponse();
+                    }
+
+                    // A movie player fetching its video: tell the page (proof the
+                    // server works), and under Data Saver shorten its quality menu.
+                    if (sPlayerOpen && initiator != null && !isLocalAppHost(initiator) && isVideoFetch(request.getUrl())) {
+                        signalStream(view);
+                        if (sDataSaver) {
+                            String p = request.getUrl().getPath();
+                            if (p != null && p.toLowerCase().contains(".m3u8")) {
+                                WebResourceResponse capped = dataSaverPlaylist(request);
+                                if (capped != null) return capped;
+                            }
+                        }
                     }
 
                     // L1.5 — DOM-level eradication: rewrite embed HTML documents,
@@ -1769,6 +1881,14 @@ public class MainActivity extends BridgeActivity {
                 }
                 // L4 — only inject into the top frame (this callback only fires there)
                 view.evaluateJavascript(ANTI_POPUP_SHIM, null);
+
+                // What this shell can do for the page: signal a player's video
+                // fetches (as proof only: 'streams' stays unset, because a player
+                // with disguised segment names would look silent and be switched
+                // away from while playing), measure data used, cap video quality.
+                view.evaluateJavascript(
+                    "window.__sahraeCaps=Object.assign(window.__sahraeCaps||{},{mediaSignal:true,traffic:true,dataSaver:true});"
+                    + "window.dispatchEvent(new Event('sahrae:caps'))", null);
 
                 // This phone has lost its screen engine before: flatten the heavy
                 // compositing. `low-gfx` is the switch the app's graphics tier uses,

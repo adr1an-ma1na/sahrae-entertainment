@@ -1,3 +1,4 @@
+import { isDataSaver } from '../../services/dataSaver';
 import { useEffect, useRef, useState } from 'react';
 import type { Track } from '../../services/ytmusic';
 import { compactViews, runtime, timeAgo } from './videoFormat';
@@ -90,7 +91,7 @@ export default function VideoCard({ track, onPlay, activeId, onHoverStart, onHov
           className="absolute inset-0 w-full h-full object-cover"
         />
 
-        {previewing && activeId === track.id && (
+        {previewing && activeId === track.id && !isDataSaver() && (
           <iframe
             className="absolute inset-0 w-full h-full"
             /* mute=1 is not decoration: autoplay is refused without it.

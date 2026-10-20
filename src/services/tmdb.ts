@@ -1,3 +1,4 @@
+import { isDataSaver } from './dataSaver.ts';
 import { httpFetch } from './http.ts';
 import { screenPixels } from './deviceTier.ts';
 const API_KEY = 'f1a823e739bfce21511a8e2f8e42befc';
@@ -315,6 +316,13 @@ export const getImageUrl = (path: string | null, size: TmdbImageSize = 'w500') =
   if (!path) return POSTER_PLACEHOLDER;
   if (path.startsWith('http')) return path;
   let asked: TmdbImageSize = size;
+  // Data Saver: one step down for posters (w500 is about twice the bytes of
+  // w342) and backdrops capped at w780, which still fills a phone.
+  if (isDataSaver()) {
+    if (size === 'w500') asked = 'w342';
+    else if (SIZE_PX[size] > 780) asked = 'w780';
+    return `https://image.tmdb.org/t/p/${asked}${path}`;
+  }
   if (SIZE_PX[size] >= 780) {
     const budget = screenPixels();
     // A 720 px phone at 2x wants ~1440 px across: w1280 fills it, and costs
