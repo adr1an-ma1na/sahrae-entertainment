@@ -10,7 +10,13 @@ import MovieDownloadModal from './MovieDownloadModal';
 import { posterColor, cachedPosterColor } from '../services/posterColor';
 import { playerSandbox, isShieldOn, setShieldOn as persistShield, shieldAppliesHere } from '../services/adShield';
 import { suppressPopups } from '../services/popupGuard';
-import { NO_START_LIMIT_MS, COUNTDOWN_S, isPlaybackEvidence, markWorking, markDown, startServer, nextServer } from '../services/serverHealth';
+import { NO_START_LIMIT_MS, COUNTDOWN_S, isPlaybackEvidence, markWorking, markDown, startServer } from '../services/serverHealth';
+import { NO_CROWD, crowdChoice, fetchProof, fetchSeasonPlayable, nextServerRanked, reportPlay, titleKey, warmUp, type CrowdChoice, type ProofRow } from '../services/playProof';
+
+/** How soon the crowd's answer must arrive to change the opening server; later it would interrupt a loading player. */
+const CROWD_FOLLOW_MS = 4000;
+/** No-start wait when another server is proven on this title: a known way out is worth taking sooner. */
+const PROVEN_ALTERNATIVE_LIMIT_MS = 12000;
 
 interface PlayerModalProps {
   isOpen: boolean;
@@ -114,6 +120,13 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const [countdown, setCountdown] = useState<{ from: string; to: string; left: number } | null>(null);
   const failedServersRef = useRef<string[]>([]);
   const [switchNotice, setSwitchNotice] = useState<{ from: string; to: string } | null>(null);
+  // What other viewers saw play for this exact title (services/playProof.ts).
+  const [crowd, setCrowd] = useState<CrowdChoice>(NO_CROWD);
+  const crowdRef = useRef<{ choice: CrowdChoice; rows: ProofRow[] }>({ choice: NO_CROWD, rows: [] });
+  const [seasonPlayable, setSeasonPlayable] = useState<Set<number>>(() => new Set());
+  // A server the viewer picked by hand is theirs; the crowd never overrides it.
+  const manualPickRef = useRef(false);
+  const pickServer = (idx: number) => { manualPickRef.current = true; setSelectedServer(idx); };
 
   // Go fullscreen AFTER the embed has loaded and started playing (fired from the
   // iframe's onLoad), not the instant Play is tapped. Tapping Play then waiting
@@ -333,25 +346,17 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     const currentServerId = SERVERS[selectedServer]?.id;
     if (!currentServerId) return;
     markDown(currentServerId);
+    // A viewer saying so is the surest failure signal there is.
+    if (currentMediaType && currentMediaId) reportPlay(titleKey(currentMediaType, currentMediaId, selectedSeason, selectedEpisode), currentServerId, false);
 
-    setFailedServers(prev => {
-      if (prev.includes(currentServerId)) return prev;
-      return [...prev, currentServerId];
-    });
+    const failed = new Set([...failedServers, currentServerId]);
+    setFailedServers([...failed]);
 
-    // Automatically switch to the next non-failed server in sequence
-    let nextIdx = (selectedServer + 1) % SERVERS.length;
-    let iterations = 0;
-    while (iterations < SERVERS.length) {
-      const serverId = SERVERS[nextIdx].id;
-      // Is this server also failed?
-      if (!failedServers.includes(serverId) && serverId !== currentServerId) {
-        break;
-      }
-      nextIdx = (nextIdx + 1) % SERVERS.length;
-      iterations++;
-    }
-
+    // Switch to the server most likely to have this title.
+    const ids = SERVERS.map((sv) => sv.id);
+    const nextIdx = nextServerRanked(ids, selectedServer, failed, crowdRef.current.choice, crowdRef.current.rows)
+      ?? (selectedServer + 1) % SERVERS.length;
+    manualPickRef.current = false;
     setSelectedServer(nextIdx);
     setShowServerDeadNotice(true);
     setTimeout(() => setShowServerDeadNotice(false), 4000);
@@ -450,10 +455,14 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     const current = ids[selectedServer];
     if (!current) return;
     markDown(current);
+    // Only the APK sees a silent player's stream, so only it can tell "did not
+    // play" from "waiting for a tap". Elsewhere a failure is not reported.
+    const canSee = (window as unknown as { __sahraeCaps?: { streams?: boolean } }).__sahraeCaps?.streams === true;
+    if (canSee && currentMediaType && currentMediaId) reportPlay(titleKey(currentMediaType, currentMediaId, selectedSeason, selectedEpisode), current, false);
     const failed = new Set([...failedServersRef.current, current]);
     failedServersRef.current = [...failed];
     setFailedServers([...failed]);
-    const next = nextServer(ids, selectedServer, failed);
+    const next = nextServerRanked(ids, selectedServer, failed, crowdRef.current.choice, crowdRef.current.rows);
     if (next === null) { setSlowLoad(true); return; }
     setSwitchNotice({ from: SERVERS[selectedServer].name, to: SERVERS[next].name });
     setSelectedServer(next);
@@ -501,6 +510,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
       heardRef.current = true;
       clearTimers();
       if (id) markWorking(id);
+      if (id && currentMediaType && currentMediaId) reportPlay(titleKey(currentMediaType, currentMediaId, selectedSeason, selectedEpisode), id, true);
     };
     const fromPlayer = (src: MessageEventSource | null) => {
       const root = iframeRef.current?.contentWindow;
@@ -523,7 +533,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
       // tapped into the player they are trusted to judge it themselves.
       if (!canSeeStreams && engagedRef.current) return;
       const ids = SERVERS.map((sv) => sv.id);
-      const next = nextServer(ids, selectedServer, new Set([...failedServersRef.current, ids[selectedServer]]));
+      const next = nextServerRanked(ids, selectedServer, new Set([...failedServersRef.current, ids[selectedServer]]), crowdRef.current.choice, crowdRef.current.rows);
       if (next === null) return;
       // Take focus back, so a later tap inside the player registers as a tap.
       try { iframeRef.current?.blur(); window.focus(); } catch { /* noop */ }
@@ -537,7 +547,12 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     };
     const arm = () => {
       if (noStartTimerRef.current) clearTimeout(noStartTimerRef.current);
-      noStartTimerRef.current = setTimeout(onNoStart, NO_START_LIMIT_MS);
+      // When others watched this title on another server, there is a known
+      // way out, so a silent player gets less time before it is offered.
+      const choice = crowdRef.current.choice;
+      const provenElsewhere = [...choice.good].some((g) => g !== id);
+      const limit = provenElsewhere && !choice.good.has(id || '') ? PROVEN_ALTERNATIVE_LIMIT_MS : NO_START_LIMIT_MS;
+      noStartTimerRef.current = setTimeout(onNoStart, limit);
     };
     keepTryingRef.current = () => {
       engagedRef.current = true;
@@ -611,6 +626,52 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
       saveProgress(currentMediaId, currentMediaType, details, selectedSeason, selectedEpisode);
     }
   }, [selectedSeason, selectedEpisode, isPlaying, isOpen, details, currentMediaId, currentMediaType]);
+
+  // What other viewers saw play for this title. When it arrives in the first
+  // seconds, before this server has proven itself and unless the viewer chose
+  // it, open on the server that played it for them instead.
+  useEffect(() => {
+    if (!isOpen || !currentMediaId || !currentMediaType) return;
+    const key = titleKey(currentMediaType, currentMediaId, selectedSeason, selectedEpisode);
+    const startedAt = Date.now();
+    let live = true;
+    manualPickRef.current = false;
+    crowdRef.current = { choice: NO_CROWD, rows: [] };
+    setCrowd(NO_CROWD);
+    fetchProof(key).then((rows) => {
+      if (!live) return;
+      const ids = SERVERS.map((sv) => sv.id);
+      const choice = crowdChoice(ids, rows);
+      crowdRef.current = { choice, rows };
+      setCrowd(choice);
+      if (manualPickRef.current || heardRef.current || Date.now() - startedAt > CROWD_FOLLOW_MS) return;
+      setSelectedServer((cur) => {
+        if (choice.best !== null && !failedServersRef.current.includes(ids[choice.best])) return choice.best;
+        if (choice.bad.has(ids[cur])) return nextServerRanked(ids, cur, new Set(failedServersRef.current), choice, rows) ?? cur;
+        return cur;
+      });
+    });
+    return () => { live = false; };
+    // SERVERS is rebuilt every render but its ids are fixed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, currentMediaId, currentMediaType, selectedSeason, selectedEpisode]);
+
+  // Which episodes of this season played for someone in the last two days.
+  useEffect(() => {
+    if (!isOpen || currentMediaType !== 'tv' || !currentMediaId) { setSeasonPlayable(new Set()); return; }
+    let live = true;
+    fetchSeasonPlayable(currentMediaId, selectedSeason).then((p) => { if (live) setSeasonPlayable(p); });
+    return () => { live = false; };
+  }, [isOpen, currentMediaType, currentMediaId, selectedSeason]);
+
+  // Open the connection to the likely fallback early, so a switch answers fast.
+  useEffect(() => {
+    if (!isOpen || !isPlaying || !currentMediaId || !currentMediaType) return;
+    const ids = SERVERS.map((sv) => sv.id);
+    const next = nextServerRanked(ids, selectedServer, new Set(failedServers), crowd, crowdRef.current.rows);
+    if (next !== null) warmUp(SERVERS[next].getUrl(currentMediaType, currentMediaId, selectedSeason, selectedEpisode));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, isPlaying, selectedServer, crowd, currentMediaId, currentMediaType, selectedSeason, selectedEpisode]);
 
   // Fetch season details when season changes
   useEffect(() => {
@@ -947,13 +1008,13 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                   <>
                     <div className="contents">
                       {/* Switch server while watching: the fix for "content isn't available". */}
-                      <select value={selectedServer} onChange={e => setSelectedServer(Number(e.target.value))} data-tv-focusable aria-label="Switch server" title="Switch server if it won't play"
+                      <select value={selectedServer} onChange={e => pickServer(Number(e.target.value))} data-tv-focusable aria-label="Switch server" title="Switch server if it won't play"
                         className="h-9 shrink-0 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold rounded-full px-3 border-none outline-none cursor-pointer appearance-none">
                         {dynamicServers.map((server, idx) => {
                           const isDown = failedServers.includes(server.id);
                           return (
                             <option key={server.id} value={idx} className="bg-zinc-900 text-white">
-                              {`Server ${idx + 1}${isDown ? ' (down)' : ''}`}
+                              {`Server ${idx + 1}${isDown ? ' (down)' : crowd.good.has(server.id) ? ' · works for others' : ''}`}
                             </option>
                           );
                         })}
@@ -1063,7 +1124,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                 </div>
                 <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar snap-x">
                   {dynamicServers.map((server, idx) => (
-                    <button key={server.id} onClick={() => setSelectedServer(idx)} data-tv-focusable
+                    <button key={server.id} onClick={() => pickServer(idx)} data-tv-focusable
                       aria-pressed={selectedServer === idx}
                       className={`shrink-0 snap-start px-4 py-2 rounded-full text-sm font-semibold border transition-colors ${
                         selectedServer === idx
@@ -1071,6 +1132,9 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                           : 'bg-zinc-900/80 text-zinc-300 border-zinc-700 hover:bg-zinc-800 hover:text-white'
                       }`}>
                       {server.name}
+                      {crowd.good.has(server.id) && (
+                        <span className="ml-1.5 inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 align-middle" title="Played this for other viewers recently" aria-label="works for others" />
+                      )}
                     </button>
                   ))}
                 </div>
@@ -1149,7 +1213,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                     <h3 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">Episodes</h3>
                     <div className="flex items-center gap-4">
                       {isPlaying && (
-                        <select value={selectedServer} onChange={e => setSelectedServer(Number(e.target.value))} className="bg-zinc-900 text-white font-bold outline-none cursor-pointer rounded px-3 py-2 border border-zinc-800 text-sm md:max-w-[200px]">
+                        <select value={selectedServer} onChange={e => pickServer(Number(e.target.value))} className="bg-zinc-900 text-white font-bold outline-none cursor-pointer rounded px-3 py-2 border border-zinc-800 text-sm md:max-w-[200px]">
                           {dynamicServers.map((server, idx) => <option key={server.id} value={idx}>{server.name}</option>)}
                         </select>
                       )}
@@ -1190,7 +1254,12 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                           <div className="flex-1 min-w-0 md:pr-4">
                             <div className="flex justify-between items-start mb-1">
                               <h4 className="text-base font-bold text-white line-clamp-1">{episode.name}</h4>
-                              <span className="text-sm font-bold text-white shrink-0 ml-4">{episode.runtime ? `${episode.runtime}m` : ''}</span>
+                              <span className="text-sm font-bold text-white shrink-0 ml-4 flex items-center gap-2">
+                                {seasonPlayable.has(episode.episode_number) && (
+                                  <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400" title="Someone watched this episode here in the last 48 hours">Plays</span>
+                                )}
+                                {episode.runtime ? `${episode.runtime}m` : ''}
+                              </span>
                             </div>
                             <p className="text-sm text-zinc-400 line-clamp-3 md:line-clamp-2 leading-snug w-11/12">{episode.overview || 'No description available for this episode.'}</p>
                           </div>
