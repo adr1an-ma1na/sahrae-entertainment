@@ -11,7 +11,8 @@
  * (play_proof), which the app weighs separately.
  *
  * A server is marked down after FAILS_TO_DOWN failed days in a row, so one bad
- * morning does not pull it, and back up on its first good one.
+ * morning does not pull it, and back up on its first good one. A server that
+ * refuses these runners (401/403/429) is not failing; nothing is changed.
  *
  * Run: node .github/scripts/server-health.mjs [--dry]
  */
@@ -39,6 +40,10 @@ async function probe(url, hosts) {
     const body = (await r.text()).slice(0, 20000);
     const host = new URL(r.url).hostname;
     const title = (body.match(/<title[^>]*>([^<]{0,80})/i) || [])[1] || '';
+    // 401/403/429 are a server refusing these data-centre runners (VidSrc.to
+    // does this, and plays fine from Kenya), not a dead server: unknown, left
+    // to viewers' own results.
+    if ([401, 403, 429].includes(r.status)) return { ok: null, why: `refused here (HTTP ${r.status})` };
     if (r.status >= 400) return { ok: false, why: `HTTP ${r.status}` };
     if (!ownHost(host, hosts)) return { ok: false, why: `redirected to ${host}` };
     if (PARKED.test(title)) return { ok: false, why: `"${title.trim()}"` };
@@ -56,9 +61,12 @@ let changed = false;
 for (const s of pool.servers) {
   const results = [];
   for (const [type, id, se, ep] of PROBES) results.push(await probe(fill(type === 'movie' ? s.movie : s.tv, id, se, ep), s.hosts));
-  const up = results.every((r) => r.ok);
+  const up = results.every((r) => r.ok === true);
+  const unknown = !up && results.every((r) => r.ok !== false);
   const before = JSON.stringify([s.status, s.failStreak || 0]);
-  if (up) {
+  if (unknown) {
+    // Nothing learned: leave the server as it is.
+  } else if (up) {
     s.failStreak = 0;
     if (s.status === 'down') { s.status = s.was || 'reserve'; delete s.was; }
   } else {
@@ -67,7 +75,7 @@ for (const s of pool.servers) {
   }
   const after = JSON.stringify([s.status, s.failStreak]);
   if (before !== after) { s.checked = today; changed = true; }
-  console.log(`${up ? 'up  ' : 'FAIL'} ${s.id.padEnd(14)} ${s.status.padEnd(8)} streak ${s.failStreak}${up ? '' : '  ' + results.filter((r) => !r.ok).map((r) => r.why).join('; ')}`);
+  console.log(`${up ? 'up  ' : unknown ? '??  ' : 'FAIL'} ${s.id.padEnd(14)} ${s.status.padEnd(8)} streak ${s.failStreak}${up ? '' : '  ' + results.filter((r) => r.ok !== true).map((r) => r.why).join('; ')}`);
 }
 
 if (changed) {

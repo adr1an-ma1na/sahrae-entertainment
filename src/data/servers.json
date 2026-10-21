@@ -127,7 +127,7 @@
       "coverage": 1,
       "events": false,
       "status": "active",
-      "failStreak": 1,
+      "failStreak": 0,
       "checked": "2026-10-21",
       "note": "Found all 5 audit titles. Its player is nested inside another site's frame, so quality could not be measured."
     },
