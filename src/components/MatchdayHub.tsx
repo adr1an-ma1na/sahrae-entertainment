@@ -5,6 +5,7 @@ import { COMPETITIONS, dayLabel, findStream, loadMatchday, percentages, type Fix
 import { clearReminder, LEAD_MS, setReminder, useReminders } from '../services/reminders';
 import { isDataSaver } from '../services/dataSaver';
 import { haptics } from '../services/haptics';
+import { t } from '../i18n';
 
 /**
  * Matchday: the competitions viewers follow on one screen. Each fixture shows
@@ -95,7 +96,7 @@ export default function MatchdayHub({ feed, onWatch }: { feed: Feed | null; onWa
       : `${title} starts too soon for a reminder`);
   };
 
-  const chips: { id: Filter; label: string }[] = [{ id: 'all', label: 'All' }, ...COMPETITIONS.map((c) => ({ id: c.code, label: c.short }))];
+  const chips: { id: Filter; label: string }[] = [{ id: 'all', label: t('All') }, ...COMPETITIONS.map((c) => ({ id: c.code, label: c.short }))];
 
   const card = (f: Fixture) => {
     const stream = findStream(f, events);
@@ -141,7 +142,7 @@ export default function MatchdayHub({ feed, onWatch }: { feed: Feed | null; onWa
             </div>
             <div className="flex justify-between text-[11px] mt-1 text-zinc-300 tabular-nums">
               <span><b className="text-amber-300">{pct[0]}%</b> {f.home?.short}</span>
-              <span>Draw {pct[1]}%</span>
+              <span>{t('Draw')} {pct[1]}%</span>
               <span>{f.away?.short} <b className="text-sky-300">{pct[2]}%</b></span>
             </div>
             <p className="text-[10px] text-zinc-500 mt-0.5">From {f.odds.provider} odds, bookmaker margin removed</p>
@@ -152,7 +153,7 @@ export default function MatchdayHub({ feed, onWatch }: { feed: Feed | null; onWa
           {stream && f.state !== 'post' && (
             <button onClick={() => { haptics.tap(); onWatch(stream as FeedEvent); }} data-tv-focusable
               className={`px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 active:scale-95 ${isLive ? 'bg-red-500 text-white' : 'bg-white text-black'}`}>
-              <Play className="w-3.5 h-3.5 fill-current" />{isLive ? 'Watch live' : 'Stream'}
+              <Play className="w-3.5 h-3.5 fill-current" />{isLive ? t('Watch live') : t('Stream')}
             </button>
           )}
           {!stream && f.state !== 'post' && (
@@ -163,13 +164,13 @@ export default function MatchdayHub({ feed, onWatch }: { feed: Feed | null; onWa
           {canRemind && (
             <button onClick={() => void toggleReminder(f)} data-tv-focusable aria-pressed={reminders.has(f.id)}
               className={`px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 border active:scale-95 ${reminders.has(f.id) ? 'border-amber-400/60 text-amber-300 bg-amber-400/10' : 'border-white/15 text-white bg-zinc-800'}`}>
-              {reminders.has(f.id) ? <BellRing className="w-3.5 h-3.5" /> : <Bell className="w-3.5 h-3.5" />}{reminders.has(f.id) ? 'Reminder set' : 'Remind me'}
+              {reminders.has(f.id) ? <BellRing className="w-3.5 h-3.5" /> : <Bell className="w-3.5 h-3.5" />}{reminders.has(f.id) ? t('Reminder set') : t('Remind me')}
             </button>
           )}
           {f.sport === 'soccer' && f.state === 'pre' && (
             <button onClick={() => openExternal(PREDICTOR_URL)} data-tv-focusable
               className="px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 border border-white/15 text-white bg-zinc-800 active:scale-95">
-              <BarChart3 className="w-3.5 h-3.5" />Full prediction
+              <BarChart3 className="w-3.5 h-3.5" />{t('Full prediction')}
             </button>
           )}
         </div>
@@ -205,14 +206,14 @@ export default function MatchdayHub({ feed, onWatch }: { feed: Feed | null; onWa
 
       {live.length > 0 && (
         <section>
-          <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2"><Radio className="w-4 h-4 text-red-400" />Live now</h3>
+          <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2"><Radio className="w-4 h-4 text-red-400" />{t('Live now')}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">{live.map(card)}</div>
         </section>
       )}
 
       {groups.map(([label, list]) => (
         <section key={label}>
-          <h3 className="text-lg font-bold text-white mb-3">{label}</h3>
+          <h3 className="text-lg font-bold text-white mb-3">{t(label)}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">{list.map(card)}</div>
         </section>
       ))}

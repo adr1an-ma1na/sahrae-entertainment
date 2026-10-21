@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { Play, Info, Star, Film } from 'lucide-react';
 import { MediaItem, getImageUrl } from '../services/tmdb';
 
@@ -71,14 +72,14 @@ export default function Hero({ item, onPlay }: HeroProps) {
               className="btn-gold flex items-center justify-center gap-2 px-7 md:px-9 py-3 rounded-full font-bold text-lg"
             >
               <Play className="w-6 h-6 fill-current" />
-              Play
+              {t('Play')}
             </button>
             <button
               onClick={() => onPlay(item.id, type, true, true)}
               className="btn-glass flex items-center justify-center gap-2 px-7 md:px-9 py-3 rounded-xl font-bold text-lg"
             >
               <Film className="w-6 h-6" />
-              Trailer
+              {t('Trailer')}
             </button>
             <button
               onClick={() => onPlay(item.id, type, true)}

@@ -14,6 +14,7 @@ import { loadSportsFeed, sourcesById, fetchStreamsFor, type Feed, type FeedEvent
 import { hostOf } from '../services/sportsStreams';
 import Coachmark from './Coachmark';
 import MatchdayHub from './MatchdayHub';
+import { t as tr } from '../i18n';
 import { suppressPopups } from '../services/popupGuard';
 import { readAudioFormat, bestAudioTrack, upscaleDecision, bestHeight, type AudioFormat } from '../services/streamQuality.ts';
 import { gpuReport } from '../services/gpu.ts';
@@ -1397,7 +1398,7 @@ export default function SportsView() {
           {(['matchday', 'events', 'channels'] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)} tabIndex={0} data-tv-focusable
               className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2 ${tab === t ? 'bg-amber-500 text-amber-950' : 'text-zinc-400 hover:text-white'}`}>
-              {t === 'matchday' ? <><CalendarClock className="w-4 h-4" /> Matchday</> : t === 'events' ? <><Clapperboard className="w-4 h-4" /> Live Events</> : <><Tv className="w-4 h-4" /> Channels</>}
+              {t === 'matchday' ? <><CalendarClock className="w-4 h-4" /> {tr('Matchday')}</> : t === 'events' ? <><Clapperboard className="w-4 h-4" /> {tr('Live Events')}</> : <><Tv className="w-4 h-4" /> {tr('Channels')}</>}
             </button>
           ))}
         </div>

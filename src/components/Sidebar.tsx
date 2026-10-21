@@ -1,3 +1,4 @@
+import { t as tr } from '../i18n';
 import { Home, Search, Headphones, Radio, Film, Tv2, Clapperboard, Trophy, Heart, Clock, Download, Library, PanelLeftClose, PanelLeftOpen, Music2, Mic2, Youtube } from 'lucide-react';
 
 /**
@@ -53,7 +54,7 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
               shadows put a box around EVERY item, which is the opposite of how
               a Material drawer separates the selected row from the rest. */}
           <Icon className="w-5 h-5 shrink-0" />
-          <span className="truncate">{t.label}</span>
+          <span className="truncate">{tr(t.label)}</span>
         </button>
       );
     });
@@ -63,7 +64,7 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
     const Icon = t.icon;
     const active = activeTab === t.id;
     return (
-      <button key={t.id} onClick={() => setActiveTab(t.id)} tabIndex={0} data-tv-focusable title={t.label} aria-label={t.label}
+      <button key={t.id} onClick={() => setActiveTab(t.id)} tabIndex={0} data-tv-focusable title={tr(t.label)} aria-label={tr(t.label)}
         className={`w-14 h-8 rounded-full flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
           active
             ? 'bg-amber-700 text-amber-100'

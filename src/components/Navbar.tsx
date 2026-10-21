@@ -1,6 +1,7 @@
 import { useState, useEffect, FormEvent, useRef } from 'react';
 import { Search, Bell, User, Sun, Moon, LogIn, LogOut, Palette, MonitorSmartphone } from 'lucide-react';
 import { OPEN_REMOTE } from './RemotePanel';
+import { currentLang, setLang } from '../i18n';
 import { isTelevision } from '../tv/spatialNavigation';
 import { useTheme } from '../hooks/useTheme';
 import { useNotifications } from '../hooks/useNotifications';
@@ -182,6 +183,17 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
             )}
           </div>
           
+          {/* Interface language: English or Kiswahili. */}
+          <button
+            onClick={() => setLang(currentLang() === 'sw' ? 'en' : 'sw')}
+            data-tv-focusable
+            className="text-white px-2 py-1 hover:bg-white/10 rounded-full transition-colors text-xs font-bold border border-white/15"
+            aria-label={currentLang() === 'sw' ? 'Switch to English' : 'Badilisha kuwa Kiswahili'}
+            title={currentLang() === 'sw' ? 'Switch to English' : 'Badilisha kuwa Kiswahili'}
+          >
+            {currentLang() === 'sw' ? 'EN' : 'SW'}
+          </button>
+
           {/* Phone remote: on a TV it shows the pairing code, on a phone the controls. */}
           <button
             onClick={() => window.dispatchEvent(new Event(OPEN_REMOTE))}

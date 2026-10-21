@@ -180,6 +180,15 @@ export const fetchDiscover = async (type: 'movie' | 'tv' = 'movie', page: number
     : [];
 };
 
+/** Discover with any TMDB parameters (time-and-mood picks, local rows). */
+export const discoverWith = async (type: 'movie' | 'tv', params: Record<string, string>): Promise<MediaItem[]> => {
+  const q = new URLSearchParams({ api_key: API_KEY, language: 'en-US', ...params });
+  const res = await tmdbFetch(`${BASE_URL}/discover/${type}?${q}`);
+  if (!res.ok) throw new Error(`TMDB discover failed: ${res.status}`);
+  const data = await res.json();
+  return Array.isArray(data.results) ? data.results.map((item: any) => ({ ...item, media_type: type })) : [];
+};
+
 const DETAILS_KEY_PREFIX = 'sahrae_tmdb_details_';
 /** Hard cap on cached title blobs. Each is ~10-40 KB with credits and videos. */
 const MAX_CACHED_DETAILS = 250;

@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { MediaItem } from '../services/tmdb';
 import { useRef, useState, useEffect, Fragment } from 'react';
@@ -57,7 +58,7 @@ export default function MediaRow({ title, items, onPlay, defaultType = 'movie', 
       <div className="px-4 md:px-12 py-6 relative">
         <div className="flex items-center gap-3 mb-4">
           <span className="w-1 h-5 md:h-6 rounded-full bg-gradient-to-b from-amber-300 to-amber-600" />
-          <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">{title}</h2>
+          <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">{t(title)}</h2>
         </div>
         <div className="flex overflow-x-hidden gap-2.5 md:gap-3 lg:gap-3.5 xl:gap-4 pb-4">
           {[...Array(8)].map((_, i) => (
@@ -77,7 +78,7 @@ export default function MediaRow({ title, items, onPlay, defaultType = 'movie', 
     <div className="px-4 md:px-12 py-6 relative group/row">
       <div className="flex items-center gap-3 mb-4">
         <span className="w-1 h-5 md:h-6 rounded-full bg-gradient-to-b from-amber-300 to-amber-600" />
-        <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">{title}</h2>
+        <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">{t(title)}</h2>
       </div>
       
       <div className="relative">

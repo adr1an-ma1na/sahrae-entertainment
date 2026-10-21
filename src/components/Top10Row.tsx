@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { Play, ChevronLeft, ChevronRight, Star } from 'lucide-react';
 import { MediaItem, getImageUrl } from '../services/tmdb';
 import { useRef, useState, useEffect } from 'react';
@@ -53,7 +54,7 @@ export default function Top10Row({ items, onPlay, title = "Top 10 Trending Today
 
   return (
     <div className="px-4 md:px-12 py-6 relative group/row">
-      <h2 className="text-xl md:text-2xl font-display font-bold text-white mb-4 tracking-tight">{title}</h2>
+      <h2 className="text-xl md:text-2xl font-display font-bold text-white mb-4 tracking-tight">{t(title)}</h2>
       
       <div className="relative">
         {isScrolled && (

@@ -1,3 +1,4 @@
+import { t as tr } from '../i18n';
 import { useState } from 'react';
 import { Home, Search, Headphones, Radio, Grid3x3, X, Film, Tv2, Clapperboard, Trophy, Heart, Clock, Download, Music2, Mic2, Youtube } from 'lucide-react';
 
@@ -56,7 +57,7 @@ export default function BottomTabBar({ activeTab, setActiveTab }: { activeTab: s
                   <button key={m.id} onClick={() => go(m.id)} tabIndex={0} data-tv-focusable
                     className={`tier-card card-lift flex items-center gap-3 p-3 rounded-xl text-left ${on ? 'text-sauti' : 'text-white'}`}>
                     <span className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${on ? 'bg-sauti text-amber-950' : 'bg-white/10'}`}><Icon className="w-5 h-5" /></span>
-                    <span className="text-sm font-semibold truncate">{m.label}</span>
+                    <span className="text-sm font-semibold truncate">{tr(m.label)}</span>
                   </button>
                 );
               })}
@@ -74,7 +75,7 @@ export default function BottomTabBar({ activeTab, setActiveTab }: { activeTab: s
               <button key={t.id} onClick={() => go(t.id)} tabIndex={0} data-tv-focusable
                 className={`flex-1 flex flex-col items-center gap-1 py-2 transition-colors ${on ? 'text-zinc-100' : 'text-zinc-400 hover:text-zinc-200'}`}>
                 <span className={`flex items-center justify-center w-16 h-8 rounded-full transition-colors ${on ? 'bg-amber-700 text-amber-100' : ''}`}><Icon className="w-6 h-6" /></span>
-                <span className="text-xs font-medium">{t.label}</span>
+                <span className="text-xs font-medium">{tr(t.label)}</span>
               </button>
             );
           })}

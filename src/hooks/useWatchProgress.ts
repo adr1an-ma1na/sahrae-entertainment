@@ -31,19 +31,31 @@ function scopeKey(uid?: string, profileId?: string): string {
 }
 const storageKey = (scope: string) => `sahrae_watch_progress_${scope}`;
 
+/** Fired after progress is saved, so every holder of this hook re-reads it. */
+const PROGRESS_EVENT = 'sahrae:progress';
+const announce = () => { try { window.dispatchEvent(new Event(PROGRESS_EVENT)); } catch { /* no window */ } };
+
 export function useWatchProgress() {
   const [progress, setProgress] = useState<WatchProgress[]>([]);
   const { user, activeProfile } = useAuth();
 
-  // Local fallback hydration on mount/user/profile change
+  // Local fallback hydration on mount/user/profile change, and again whenever
+  // another part of the app saves progress: the player and the home screen
+  // each hold this hook, and the home screen's taste rows should follow what
+  // was just watched without waiting for a restart.
   useEffect(() => {
     const key = storageKey(scopeKey(user?.uid, activeProfile?.id));
-    try {
-      const stored = localStorage.getItem(key);
-      setProgress(stored ? (JSON.parse(stored) as WatchProgress[]) : []);
-    } catch {
-      setProgress([]);
-    }
+    const load = () => {
+      try {
+        const stored = localStorage.getItem(key);
+        setProgress(stored ? (JSON.parse(stored) as WatchProgress[]) : []);
+      } catch {
+        setProgress([]);
+      }
+    };
+    load();
+    window.addEventListener(PROGRESS_EVENT, load);
+    return () => window.removeEventListener(PROGRESS_EVENT, load);
   }, [user, activeProfile]);
 
   // Real-time Cloud Sync with Firestore
@@ -127,6 +139,11 @@ export function useWatchProgress() {
       media_type: mediaType,
       release_date: item.release_date || '',
       first_air_date: item.first_air_date || '',
+      // Genres feed the taste profile (services/tasteProfile.ts): list items
+      // carry genre_ids, full details carry genres. A few ids is all it needs.
+      genre_ids: ((item as { genre_ids?: number[] }).genre_ids
+        || (item as { genres?: { id: number }[] }).genres?.map((g) => g.id)
+        || []).slice(0, 4),
     } as MediaItem;
 
     const newProgress: WatchProgress = {
@@ -145,6 +162,7 @@ export function useWatchProgress() {
       const updated = [newProgress, ...filtered].slice(0, 20);
       try {
         localStorage.setItem(key, JSON.stringify(updated));
+        setTimeout(announce, 0);
       } catch (e) {
         console.error('Failed to save watch progress locally', e);
       }
@@ -186,6 +204,7 @@ export function useWatchProgress() {
       const updated = prev.filter((p) => p.mediaId !== mediaId);
       try {
         localStorage.setItem(key, JSON.stringify(updated));
+        setTimeout(announce, 0);
       } catch (e) {
         console.error('Failed to remove watch progress locally', e);
       }

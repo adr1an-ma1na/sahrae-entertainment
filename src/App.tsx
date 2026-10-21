@@ -12,6 +12,12 @@ import Top10Row from './components/Top10Row';
 import MediaGrid from './components/MediaGrid';
 import PlayerModal from './components/PlayerModal';
 import RemotePanel from './components/RemotePanel';
+import QuickPick from './components/QuickPick';
+import TasteCard from './components/TasteCard';
+import { buildProfile } from './services/tasteProfile';
+import { discoverWith } from './services/tmdb';
+import { LOCAL_ROWS, localQuery } from './services/discoverCore';
+import { t } from './i18n';
 import WatchParty from './components/WatchParty';
 import { setRoomOpener } from './services/room';
 import { setScreenHandlers, startScreen } from './services/remote';
@@ -131,6 +137,8 @@ export default function App() {
   const [appOnboarded, setAppOnboarded] = useState<boolean>(true);
   const [tasteGenres, setTasteGenres] = useState<TasteGenre[]>(() => { try { return JSON.parse(localStorage.getItem('sahrae.taste.genres.v1') || '[]'); } catch { return []; } });
   const [forYou, setForYou] = useState<MediaItem[]>([]);
+  const [kenyaItems, setKenyaItems] = useState<MediaItem[]>([]);
+  const [africaItems, setAfricaItems] = useState<MediaItem[]>([]);
   const spotlightItem = useMemo(() => {
     const pool = [...awardDramas, ...sciFi, ...bingeShows, ...movies]
       .filter((m) => m && m.backdrop_path && m.id !== heroItem?.id);
@@ -240,12 +248,28 @@ export default function App() {
     loadInitialData();
   }, []);
 
-  // Personalised Home row from the onboarding taste (top picked genre).
+  // One taste across films, music and sport (services/tasteProfile.ts). The
+  // For You row follows the strongest film or series genre from what is
+  // actually watched, with the onboarding picks as the starting point.
+  const profile = useMemo(() => buildProfile(progress, tasteGenres), [progress, tasteGenres]);
+  const topScreen = profile.screen[0];
   useEffect(() => {
-    const g = tasteGenres[0]?.id;
-    if (!g) { setForYou([]); return; }
-    fetchDiscover('movie', 1, g, 'popularity.desc').then(setForYou).catch(() => {});
-  }, [tasteGenres]);
+    if (!topScreen) { setForYou([]); return; }
+    fetchDiscover(topScreen.type, 1, topScreen.id, 'popularity.desc').then(setForYou).catch(() => {});
+  }, [topScreen?.id, topScreen?.type]);
+
+  // Local first: films and series made in Kenya, and stories from across Africa.
+  useEffect(() => {
+    Promise.all([
+      discoverWith('movie', localQuery(LOCAL_ROWS.kenya.origin, 'movie')).catch(() => []),
+      discoverWith('tv', localQuery(LOCAL_ROWS.kenya.origin, 'tv')).catch(() => []),
+    ]).then(([m, s]) => {
+      const mixed: MediaItem[] = [];
+      for (let i = 0; i < Math.max(m.length, s.length); i++) { if (s[i]) mixed.push(s[i]); if (m[i]) mixed.push(m[i]); }
+      setKenyaItems(mixed.filter((x) => x.poster_path).slice(0, 20));
+    });
+    discoverWith('movie', localQuery(LOCAL_ROWS.africa.origin, 'movie')).then((r) => setAfricaItems(r.filter((x) => x.poster_path))).catch(() => {});
+  }, []);
 
   // Re-apply the saved equalizer to the native global audio effects on launch.
   useEffect(() => { applyEq(loadEq()); }, []);
@@ -497,9 +521,13 @@ export default function App() {
                 }))}
                 onPlay={handlePlay}
               />
+              <QuickPick onPlay={handlePlay} />
               <Top10Row items={trending} onPlay={handlePlay} />
-              {forYou.length > 0 && <MediaRow title={`For You · ${tasteGenres[0]?.name}`} items={forYou} onPlay={handlePlay} defaultType="movie" isLoading={loading} />}
-              <Top10Row items={trendingSeries} onPlay={handlePlay} title="Top 10 Series Today" />
+              <TasteCard profile={profile} onGenre={(name) => handleSearch(name)} onNavigate={navigate} />
+              {forYou.length > 0 && topScreen && <MediaRow title={`For You · ${topScreen.name}`} items={forYou} onPlay={handlePlay} defaultType={topScreen.type} isLoading={loading} />}
+              <Top10Row items={trendingSeries} onPlay={handlePlay} title={t('Top 10 Series Today')} />
+              {kenyaItems.length > 0 && <MediaRow title="Made in Kenya" items={kenyaItems} onPlay={handlePlay} isLoading={loading} />}
+              {africaItems.length > 0 && <MediaRow title="African stories" items={africaItems} onPlay={handlePlay} defaultType="movie" isLoading={loading} />}
               {recommendations && recommendations.items.length > 0 && (
                 <MediaRow title={`Because you watched ${recommendations.basedOn}`} items={recommendations.items} onPlay={handlePlay} isLoading={loading} />
               )}

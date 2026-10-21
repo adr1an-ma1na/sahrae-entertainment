@@ -12,6 +12,7 @@ import { playerSandbox, isShieldOn, setShieldOn as persistShield, shieldAppliesH
 import { suppressPopups } from '../services/popupGuard';
 import { NO_START_LIMIT_MS, COUNTDOWN_S, isPlaybackEvidence, markWorking, markDown, startServer } from '../services/serverHealth';
 import { reportScreen } from '../services/remote';
+import { t } from '../i18n';
 import { reportRoomNow } from '../services/room';
 import { OPEN_PARTY } from './WatchParty';
 import { useServerPool, fill as fillTemplate, label as poolLabel, type PoolServer } from '../services/serverPool';
@@ -983,7 +984,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                           </div>
                           <div className="flex gap-2 mt-3">
                             <button onClick={playNextNow} data-tv-focusable data-tv-autofocus
-                              className="px-3.5 py-1.5 rounded-full bg-white text-black text-xs font-bold flex items-center gap-1.5 active:scale-95"><Play className="w-3.5 h-3.5 fill-current" /> Play now</button>
+                              className="px-3.5 py-1.5 rounded-full bg-white text-black text-xs font-bold flex items-center gap-1.5 active:scale-95"><Play className="w-3.5 h-3.5 fill-current" /> {t('Play now')}</button>
                             <button onClick={stopUpNext} data-tv-focusable
                               className="px-3.5 py-1.5 rounded-full bg-zinc-800 text-white text-xs font-bold border border-white/15 active:scale-95">Cancel</button>
                           </div>
@@ -1095,7 +1096,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                 : barHidden ? 'hidden' : 'relative bg-zinc-950 border-t border-white/10'}`}>
                 <button onClick={() => { if (playingTrailer) { setPlayingTrailer(null); return; } setIsPlaying(false); const d = document as any; if (d.fullscreenElement || d.webkitFullscreenElement) { try { (d.exitFullscreen || d.webkitExitFullscreen)?.call(document); } catch { /* noop */ } } }}
                   data-tv-focusable tabIndex={0} title="Back to details" className="h-9 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed">
-                  <ArrowLeft className="w-4 h-4" /><span className="hidden sm:inline">Back</span>
+                  <ArrowLeft className="w-4 h-4" /><span className="hidden sm:inline">{t('Back')}</span>
                 </button>
                 {playingTrailer ? <div className="flex-1" /> : (
                   <>
@@ -1114,18 +1115,18 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       </select>
                       {currentServerObj.type !== 'youtube' && (
                         <button onClick={reportCurrentMovieServerDead} data-tv-focusable title="Report this server broken and switch to the next one" className="h-9 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed">
-                          <AlertTriangle className="w-3.5 h-3.5" /><span className="hidden sm:inline">Not working?</span>
+                          <AlertTriangle className="w-3.5 h-3.5" /><span className="hidden sm:inline">{t('Not working?')}</span>
                         </button>
                       )}
                       <button onClick={() => { setShowAudioMenu(false); setPeek(false); setBarHidden(true); }} data-tv-focusable
                         title="Hide these controls. Pause, Escape or Back brings them back."
                         className="h-9 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors active:scale-95">
-                        <EyeOff className="w-3.5 h-3.5" /><span className="hidden sm:inline">Hide</span>
+                        <EyeOff className="w-3.5 h-3.5" /><span className="hidden sm:inline">{t('Hide')}</span>
                       </button>
                       <button onClick={() => window.dispatchEvent(new Event(OPEN_PARTY))} data-tv-focusable
                         title="Watch together with friends"
                         className="h-9 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors active:scale-95">
-                        <Users className="w-3.5 h-3.5" /><span className="hidden sm:inline">Together</span>
+                        <Users className="w-3.5 h-3.5" /><span className="hidden sm:inline">{t('Together')}</span>
                       </button>
                     </div>
                     {usedBytes !== null && (
@@ -1238,7 +1239,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
               <div className="mb-8">
                 <div className="flex items-center gap-2 mb-3 flex-wrap">
                   <Server className="w-4 h-4 text-amber-400 shrink-0" />
-                  <h4 className="text-white font-bold text-sm">Choose your server</h4>
+                  <h4 className="text-white font-bold text-sm">{t('Choose your server')}</h4>
                   <span className="text-xs text-zinc-500">Pick one before you play, and switch anytime if a title won't load</span>
                 </div>
                 <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar snap-x">
