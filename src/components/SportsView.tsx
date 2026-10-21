@@ -13,6 +13,7 @@ import { buildStreams, validateStream, metrics, canValidateDeeply } from '../ser
 import { loadSportsFeed, sourcesById, fetchStreamsFor, type Feed, type FeedEvent } from '../services/sportsFeed';
 import { hostOf } from '../services/sportsStreams';
 import Coachmark from './Coachmark';
+import MatchdayHub from './MatchdayHub';
 import { suppressPopups } from '../services/popupGuard';
 import { readAudioFormat, bestAudioTrack, upscaleDecision, bestHeight, type AudioFormat } from '../services/streamQuality.ts';
 import { gpuReport } from '../services/gpu.ts';
@@ -503,7 +504,8 @@ interface Playing {
 }
 
 export default function SportsView() {
-  const [tab, setTab] = useState<'events' | 'channels'>('events');
+  // Matchday leads: what is on and when, with the stream, odds and a reminder.
+  const [tab, setTab] = useState<'matchday' | 'events' | 'channels'>('matchday');
   const [feed, setFeed] = useState<Feed | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -1392,10 +1394,10 @@ export default function SportsView() {
           </div>
         </div>
         <div className="flex gap-1 glass p-1 rounded-xl self-start">
-          {(['events', 'channels'] as const).map((t) => (
+          {(['matchday', 'events', 'channels'] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)} tabIndex={0} data-tv-focusable
               className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2 ${tab === t ? 'bg-amber-500 text-amber-950' : 'text-zinc-400 hover:text-white'}`}>
-              {t === 'events' ? <><Clapperboard className="w-4 h-4" /> Live Events</> : <><Tv className="w-4 h-4" /> Channels</>}
+              {t === 'matchday' ? <><CalendarClock className="w-4 h-4" /> Matchday</> : t === 'events' ? <><Clapperboard className="w-4 h-4" /> Live Events</> : <><Tv className="w-4 h-4" /> Channels</>}
             </button>
           ))}
         </div>
@@ -1403,7 +1405,9 @@ export default function SportsView() {
 
       <Coachmark id="sports" text="Tap any event to watch the match. If a feed stalls, switch to another one below the player." />
 
-      {tab === 'channels' ? (
+      {tab === 'matchday' ? (
+        <MatchdayHub feed={feed} onWatch={(e) => openEvent(e)} />
+      ) : tab === 'channels' ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {CHANNELS.map((ch) => (
             <div key={ch.name} onClick={() => setPlaying({

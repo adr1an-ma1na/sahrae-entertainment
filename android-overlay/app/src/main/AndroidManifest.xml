@@ -30,6 +30,11 @@
 
         </activity>
 
+        <!-- Kick-off reminders from the Matchday screen (KickoffReminder.java). -->
+        <receiver
+            android:name="com.sahrae.entertainment.KickoffReminder"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -61,6 +66,8 @@
     <!-- Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Android 13+: kick-off reminders. Asked for only when a viewer sets the first one. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Run on phones, tablets, laptops (Chromebook) AND Android TV.
          Declaring these as NOT required keeps the app installable everywhere. -->

@@ -386,7 +386,9 @@ public class MainActivity extends BridgeActivity {
      * refused, so the endpoint cannot be turned back into an arbitrary-URL popup.
      */
     private static final Set<String> DOWNLOAD_HOSTS = new HashSet<>(Arrays.asList(
-        "vidvault.ru"
+        "vidvault.ru",
+        // Our own sites, e.g. Sahrae Predictor from the Matchday screen.
+        "adr1an-ma1na.github.io"
     ));
 
     private static boolean isAllowedDownloadHost(String host) {
@@ -1793,6 +1795,28 @@ public class MainActivity extends BridgeActivity {
                         } else if (path.startsWith("/__datasaver")) {
                             sDataSaver = "1".equals(u.getQueryParameter("on"));
                             return DownloadStore.json("{\"ok\":true,\"on\":" + sDataSaver + "}");
+                        } else if (path.startsWith("/__remind")) {
+                            // A kick-off reminder. Android 13+ asks the viewer once.
+                            boolean ok = false;
+                            try {
+                                int id = Integer.parseInt(u.getQueryParameter("id"));
+                                long at = Long.parseLong(u.getQueryParameter("at"));
+                                String title = u.getQueryParameter("title");
+                                String text = u.getQueryParameter("text");
+                                if (title != null && title.length() > 120) title = title.substring(0, 120);
+                                if (text != null && text.length() > 160) text = text.substring(0, 160);
+                                ok = KickoffReminder.schedule(getApplicationContext(), id, at, title, text);
+                                if (ok && Build.VERSION.SDK_INT >= 33
+                                    && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED) {
+                                    runOnUiThread(() -> {
+                                        try { requestPermissions(new String[] { "android.permission.POST_NOTIFICATIONS" }, 7301); } catch (Throwable ignore) {}
+                                    });
+                                }
+                            } catch (Throwable ignore) {}
+                            return DownloadStore.json("{\"ok\":" + ok + "}");
+                        } else if (path.startsWith("/__unremind")) {
+                            try { KickoffReminder.cancel(getApplicationContext(), Integer.parseInt(u.getQueryParameter("id"))); } catch (Throwable ignore) {}
+                            return DownloadStore.json("{\"ok\":true}");
                         } else if (path.startsWith("/__embedhosts")) {
                             int n = addEmbedHosts(u.getQueryParameter("h"));
                             return DownloadStore.json("{\"ok\":true,\"added\":" + n + "}");
@@ -1923,7 +1947,7 @@ public class MainActivity extends BridgeActivity {
                 // with disguised segment names would look silent and be switched
                 // away from while playing), measure data used, cap video quality.
                 view.evaluateJavascript(
-                    "window.__sahraeCaps=Object.assign(window.__sahraeCaps||{},{mediaSignal:true,traffic:true,dataSaver:true,embedHosts:true});"
+                    "window.__sahraeCaps=Object.assign(window.__sahraeCaps||{},{mediaSignal:true,traffic:true,dataSaver:true,embedHosts:true,reminders:true});"
                     + "window.dispatchEvent(new Event('sahrae:caps'))", null);
 
                 // This phone has lost its screen engine before: flatten the heavy
