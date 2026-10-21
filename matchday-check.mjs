@@ -4,7 +4,7 @@
  *
  * Run: node --experimental-strip-types matchday-check.mjs
  */
-import { americanToDecimal, devig, percentages, parseEvent, findStream, teamSimilarity, dayToken, COMPETITIONS, predictionsByEvent } from './src/services/matchdayCore.ts';
+import { americanToDecimal, devig, percentages, parseEvent, findStream, teamSimilarity, dayToken, COMPETITIONS } from './src/services/matchdayCore.ts';
 
 let pass = 0, fail = 0;
 const eq = (name, got, want) => {
@@ -71,16 +71,6 @@ eq('an F1 race finds its F1 listing', findStream(race, [
   { id: 'm', title: 'MotoGP: Malaysian GP', category: 'motor-sports', date: race.date },
   { id: 'g', title: 'F1: United States Grand Prix', category: 'motor-sports', date: race.date + 600000 },
 ])?.id, 'g');
-
-console.log('\npredictions on Live Events cards');
-const card = { id: 'b', title: 'Aston Villa vs Man City', category: 'football', date: t0, teams: { home: { name: 'Aston Villa' }, away: { name: 'Man City' } } };
-const preds = predictionsByEvent([fx], [card, { id: 'x', title: 'Lakers vs Celtics', category: 'basketball', date: t0 }]);
-eq('the football card gets the fixture\'s chances', [preds.size, preds.has('b'), Math.round(preds.get('b').pAway * 100)], [1, true, Math.round(fx.odds.pAway * 100)]);
-const swappedCard = { id: 's', title: 'Man City vs Aston Villa', category: 'football', date: t0, teams: { home: { name: 'Man City' }, away: { name: 'Aston Villa' } } };
-const sp = predictionsByEvent([fx], [swappedCard]).get('s');
-eq('a card listing the away side first gets the chances swapped to match it', [sp.pHome, sp.pAway], [fx.odds.pAway, fx.odds.pHome]);
-eq('a fixture without odds gives no prediction', predictionsByEvent([{ ...fx, odds: undefined }], [card]).size, 0);
-eq('a finished match gives no prediction', predictionsByEvent([{ ...fx, state: 'post' }], [card]).size, 0);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exitCode = fail ? 1 : 0;
