@@ -12,6 +12,8 @@ import Top10Row from './components/Top10Row';
 import MediaGrid from './components/MediaGrid';
 import PlayerModal from './components/PlayerModal';
 import RemotePanel from './components/RemotePanel';
+import WatchParty from './components/WatchParty';
+import { setRoomOpener } from './services/room';
 import { setScreenHandlers, startScreen } from './services/remote';
 import { isTelevision } from './tv/spatialNavigation';
 import AudioHubView from './components/AudioHubView';
@@ -661,6 +663,12 @@ export default function App() {
   // What a paired phone may ask this screen to do (services/remote.ts). Kept
   // current every render, so a command always reaches today's handlers.
   setScreenHandlers({ play: handlePlay, search: handleSearch, navigate });
+  // A watch-party guest opens what the host is playing, on the host's server.
+  // The server is asked for twice because the player may still be opening.
+  setRoomOpener((now) => {
+    handlePlay(now.id, now.type, false, false, now.s, now.e);
+    for (const ms of [900, 2500]) setTimeout(() => window.dispatchEvent(new CustomEvent('sahrae:room-server', { detail: now.server })), ms);
+  });
   // A TV is always ready for a phone: the code is there the moment it is asked for.
   useEffect(() => { if (isTelevision()) startScreen(); }, []);
 
@@ -689,6 +697,7 @@ export default function App() {
       <div className="aurora-bg isolate min-h-screen text-zinc-50 font-sans selection:bg-amber-500/30 transition-colors duration-300">
         <SplashIntro />
         <RemotePanel />
+        <WatchParty />
         {!appOnboarded && <Onboarding onDone={finishOnboarding} />}
         {/* Ambient cinematic glow field — viewport-fixed, above the base canvas
             but behind all content (root is `isolate` so -z stays contained). */}

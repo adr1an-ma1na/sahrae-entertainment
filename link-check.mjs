@@ -46,7 +46,7 @@ eq('a server id that could be anything is refused', validRoomMessage({ t: 'now',
 eq('chat is trimmed, names capped', validRoomMessage({ t: 'chat', name: '  Adrian  ', text: ' goal! ', at: 5 }), { t: 'chat', name: 'Adrian', text: 'goal!', at: 5 });
 eq('empty or huge chat is dropped', [validRoomMessage({ t: 'chat', name: 'A', text: '  ' }), validRoomMessage({ t: 'chat', name: 'A', text: 'x'.repeat(301) })], [null, null]);
 eq('only the offered reactions', [validRoomMessage({ t: 'react', name: 'A', emoji: '🔥' })?.emoji, validRoomMessage({ t: 'react', name: 'A', emoji: '<img>' })], ['🔥', null]);
-eq('a countdown only for the next half minute', [!!validRoomMessage({ t: 'countdown', at: Date.now() + 5000 }), validRoomMessage({ t: 'countdown', at: Date.now() + 3600000 })], [true, null]);
+eq('a countdown of 3 to 10 seconds', [validRoomMessage({ t: 'countdown', inMs: 5000, name: 'Ann' }), validRoomMessage({ t: 'countdown', inMs: 3600000 }), validRoomMessage({ t: 'countdown', inMs: 500 })], [{ t: 'countdown', inMs: 5000, name: 'Ann' }, null, null]);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exitCode = fail ? 1 : 0;

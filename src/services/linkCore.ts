@@ -87,8 +87,12 @@ export function validState(x: unknown): ScreenState | null {
 export type RoomNow = { t: 'now'; type: 'movie' | 'tv'; id: number; s?: number; e?: number; server: string; title: string };
 export type RoomChat = { t: 'chat'; name: string; text: string; at: number };
 export type RoomReact = { t: 'react'; name: string; emoji: string };
-/** "Press play together": everyone counts down to the same moment. */
-export type RoomCountdown = { t: 'countdown'; at: number };
+/**
+ * "Press play together": everyone counts down from when the message arrives.
+ * Relative on purpose: phones' clocks often differ by seconds, while the
+ * message itself arrives within a fraction of one.
+ */
+export type RoomCountdown = { t: 'countdown'; inMs: number; name: string };
 
 export const REACTIONS = ['😂', '😮', '🔥', '😢', '❤️', '👏'];
 
@@ -107,8 +111,8 @@ export function validRoomMessage(x: unknown): RoomNow | RoomChat | RoomReact | R
     case 'react':
       return name && REACTIONS.includes(m.emoji as string) ? { t: 'react', name, emoji: m.emoji as string } : null;
     case 'countdown':
-      // Only a moment in the next half minute: an old or far-future countdown is a mistake or mischief.
-      return isInt(m.at, 0, Number.MAX_SAFE_INTEGER) && Math.abs((m.at as number) - Date.now()) < 30_000 ? { t: 'countdown', at: m.at as number } : null;
+      // Between 3 and 10 seconds: enough to reach the play button, short enough to stay together.
+      return isInt(m.inMs, 3000, 10_000) ? { t: 'countdown', inMs: m.inMs as number, name: name || 'Someone' } : null;
     default:
       return null;
   }

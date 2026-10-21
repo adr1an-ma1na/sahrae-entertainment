@@ -1,4 +1,4 @@
-import { EyeOff, ChevronDown, X, ExternalLink, AlertCircle, Info, Star, Calendar, Clock, Play, RefreshCw, Plus, Check, Maximize, ArrowLeft, SkipBack, SkipForward, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle, Gauge } from 'lucide-react';
+import { EyeOff, ChevronDown, X, ExternalLink, AlertCircle, Info, Star, Calendar, Clock, Play, RefreshCw, Plus, Check, Maximize, ArrowLeft, SkipBack, SkipForward, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle, Gauge, Users } from 'lucide-react';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { fetchMediaDetails, MediaDetails, getImageUrl, fetchSimilar, MediaItem, SeasonDetails, fetchSeasonDetails } from '../services/tmdb';
@@ -12,6 +12,8 @@ import { playerSandbox, isShieldOn, setShieldOn as persistShield, shieldAppliesH
 import { suppressPopups } from '../services/popupGuard';
 import { NO_START_LIMIT_MS, COUNTDOWN_S, isPlaybackEvidence, markWorking, markDown, startServer } from '../services/serverHealth';
 import { reportScreen } from '../services/remote';
+import { reportRoomNow } from '../services/room';
+import { OPEN_PARTY } from './WatchParty';
 import { useServerPool, fill as fillTemplate, label as poolLabel, type PoolServer } from '../services/serverPool';
 import { useDataSaver, canCapVideo, canMeasure, estimateText, formatBytes, readReceivedBytes } from '../services/dataSaver';
 import { NO_CROWD, crowdChoice, fetchProof, fetchSeasonPlayable, nextServerRanked, reportPlay, titleKey, warmUp, type CrowdChoice, type ProofRow } from '../services/playProof';
@@ -687,6 +689,26 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     return () => window.removeEventListener('sahrae:remote-server', onServer);
   });
 
+  // Watch together: say what is playing, and take the host's server when a guest.
+  useEffect(() => {
+    if (!isOpen || !isPlaying || playingTrailer || !details || !currentMediaId || !currentMediaType) { reportRoomNow(null); return; }
+    reportRoomNow({
+      type: currentMediaType, id: currentMediaId, title: details.title || details.name || '',
+      server: SERVERS[selectedServer]?.id || '',
+      ...(currentMediaType === 'tv' ? { s: selectedSeason, e: selectedEpisode } : {}),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, isPlaying, playingTrailer, details, currentMediaId, currentMediaType, selectedServer, selectedSeason, selectedEpisode]);
+  useEffect(() => {
+    const onRoomServer = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail;
+      const idx = SERVERS.findIndex((sv) => sv.id === id);
+      if (isOpen && idx >= 0 && idx !== selectedServer) pickServer(idx);
+    };
+    window.addEventListener('sahrae:room-server', onRoomServer);
+    return () => window.removeEventListener('sahrae:room-server', onRoomServer);
+  });
+
   // Which episodes of this season played for someone in the last two days.
   useEffect(() => {
     if (!isOpen || currentMediaType !== 'tv' || !currentMediaId) { setSeasonPlayable(new Set()); return; }
@@ -1099,6 +1121,11 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                         title="Hide these controls. Pause, Escape or Back brings them back."
                         className="h-9 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors active:scale-95">
                         <EyeOff className="w-3.5 h-3.5" /><span className="hidden sm:inline">Hide</span>
+                      </button>
+                      <button onClick={() => window.dispatchEvent(new Event(OPEN_PARTY))} data-tv-focusable
+                        title="Watch together with friends"
+                        className="h-9 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors active:scale-95">
+                        <Users className="w-3.5 h-3.5" /><span className="hidden sm:inline">Together</span>
                       </button>
                     </div>
                     {usedBytes !== null && (
