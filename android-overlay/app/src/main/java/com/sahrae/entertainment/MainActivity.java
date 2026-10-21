@@ -105,6 +105,8 @@ public class MainActivity extends BridgeActivity {
         // ...and the hosts those servers now redirect or hand off to. VidRock
         // moved from .ru to .to; the others answer from a sister domain.
         "vidrock.ru","vsembed.ru","2embed.skin","vidsrc.sh","anyembed.xyz",
+        // Pool servers added 21 Oct 2026 (src/data/servers.json).
+        "vidsrc.wtf","viduki.net",
         // Download source (behind the Download button, not a stream server)
         "vidvault.ru",
         "youtube-nocookie.com","youtube.com","ytimg.com",   // trailer player
@@ -254,11 +256,38 @@ public class MainActivity extends BridgeActivity {
     private static boolean isEmbedHost(String host) {
         if (host == null) return false;
         String h = host.toLowerCase();
-        if (EMBED_HOSTS.contains(h)) return true;
+        if (EMBED_HOSTS.contains(h) || EXTRA_EMBED_HOSTS.contains(h)) return true;
         for (String e : EMBED_HOSTS) {
             if (h.endsWith("." + e)) return true;
         }
+        for (String e : EXTRA_EMBED_HOSTS) {
+            if (h.endsWith("." + e)) return true;
+        }
         return false;
+    }
+
+    /**
+     * Server hosts the page reported from the live server pool (/__embedhosts),
+     * so a server added to the pool after this APK was built plays like the
+     * built-in ones instead of being treated as a stranger. Only our own page
+     * can call the bridge, only plain host names are accepted, and the list is
+     * capped, so it cannot be used to whitelist arbitrary sites in bulk.
+     */
+    private static final Set<String> EXTRA_EMBED_HOSTS = ConcurrentHashMap.newKeySet();
+    private static final int EXTRA_EMBED_HOSTS_MAX = 64;
+    private static final java.util.regex.Pattern HOST_NAME =
+        java.util.regex.Pattern.compile("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$");
+
+    private static int addEmbedHosts(String csv) {
+        if (csv == null) return 0;
+        int added = 0;
+        for (String raw : csv.split(",")) {
+            String h = raw.trim().toLowerCase();
+            if (h.isEmpty() || h.length() > 100 || !HOST_NAME.matcher(h).matches()) continue;
+            if (EXTRA_EMBED_HOSTS.size() >= EXTRA_EMBED_HOSTS_MAX) break;
+            if (EXTRA_EMBED_HOSTS.add(h)) added++;
+        }
+        return added;
     }
 
     /** Safely extract the host from a URL string (null on any parse failure). */
@@ -1148,6 +1177,10 @@ public class MainActivity extends BridgeActivity {
             if (code < 200 || code >= 300) return null;
             byte[] body = readAll(conn.getInputStream());
             String text = new String(body, StandardCharsets.UTF_8);
+            if (HlsCap.isDash(text)) {
+                return playlistResponse(HlsCap.capDash(text, DATA_SAVER_MAX_HEIGHT).getBytes(StandardCharsets.UTF_8),
+                    conn.getContentType(), origin);
+            }
             if (!HlsCap.isMaster(text)) {
                 // Not a menu of qualities: hand back exactly what came, since it is already fetched.
                 return playlistResponse(body, conn.getContentType(), origin);
@@ -1760,6 +1793,9 @@ public class MainActivity extends BridgeActivity {
                         } else if (path.startsWith("/__datasaver")) {
                             sDataSaver = "1".equals(u.getQueryParameter("on"));
                             return DownloadStore.json("{\"ok\":true,\"on\":" + sDataSaver + "}");
+                        } else if (path.startsWith("/__embedhosts")) {
+                            int n = addEmbedHosts(u.getQueryParameter("h"));
+                            return DownloadStore.json("{\"ok\":true,\"added\":" + n + "}");
                         } else if (path.startsWith("/__traffic")) {
                             // Bytes this app has received since the phone started: the page
                             // takes the difference over a viewing to show what it cost.
@@ -1810,7 +1846,7 @@ public class MainActivity extends BridgeActivity {
                         signalStream(view);
                         if (sDataSaver) {
                             String p = request.getUrl().getPath();
-                            if (p != null && p.toLowerCase().contains(".m3u8")) {
+                            if (p != null && (p.toLowerCase().contains(".m3u8") || p.toLowerCase().endsWith(".mpd"))) {
                                 WebResourceResponse capped = dataSaverPlaylist(request);
                                 if (capped != null) return capped;
                             }
@@ -1887,7 +1923,7 @@ public class MainActivity extends BridgeActivity {
                 // with disguised segment names would look silent and be switched
                 // away from while playing), measure data used, cap video quality.
                 view.evaluateJavascript(
-                    "window.__sahraeCaps=Object.assign(window.__sahraeCaps||{},{mediaSignal:true,traffic:true,dataSaver:true});"
+                    "window.__sahraeCaps=Object.assign(window.__sahraeCaps||{},{mediaSignal:true,traffic:true,dataSaver:true,embedHosts:true});"
                     + "window.dispatchEvent(new Event('sahrae:caps'))", null);
 
                 // This phone has lost its screen engine before: flatten the heavy

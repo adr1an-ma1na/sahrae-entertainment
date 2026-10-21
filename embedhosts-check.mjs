@@ -1,5 +1,5 @@
 /**
- * Every movie/series server in PlayerModal's SERVERS must be on MainActivity's
+ * Every movie/series server in the server pool must be on MainActivity's
  * EMBED_HOSTS list.
  *
  * A server missing from the native list plays in the PWA but not in the APK:
@@ -12,13 +12,14 @@
  */
 import fs from 'node:fs';
 
-const tsx = fs.readFileSync('src/components/PlayerModal.tsx', 'utf8');
+// The movie and series servers live in the pool file (src/data/servers.json):
+// every host of every server in it counts, reserves included, because a
+// reserve steps in the moment one of the six goes down. The APK also learns the
+// published pool's hosts at run time (/__embedhosts), but a server that ships
+// with the app must work before that call has been made.
+const pool = JSON.parse(fs.readFileSync('src/data/servers.json', 'utf8'));
+const serverHosts = [...new Set(pool.servers.flatMap((s) => s.hosts.map((h) => h.toLowerCase())))];
 const java = fs.readFileSync('android-overlay/app/src/main/java/com/sahrae/entertainment/MainActivity.java', 'utf8');
-
-const serversBlock = tsx.slice(tsx.search(/(export )?const SERVERS\b/));
-const serversEnd = serversBlock.search(/\n\];/);
-const serverHosts = [...new Set((serversBlock.slice(0, serversEnd).match(/https?:\/\/[a-z0-9.-]+/gi) || [])
-  .map((u) => u.replace(/^https?:\/\//i, '').toLowerCase()))];
 
 const embedBlock = (java.match(/EMBED_HOSTS\s*=\s*new HashSet<>\(Arrays\.asList\(([\s\S]*?)\)\);/) || [])[1] || '';
 const embedHosts = (embedBlock.replace(/\/\/[^\n]*/g, '').match(/"([a-z0-9.-]+)"/gi) || []).map((s) => s.slice(1, -1).toLowerCase());

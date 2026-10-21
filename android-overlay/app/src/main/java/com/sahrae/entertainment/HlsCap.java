@@ -81,6 +81,82 @@ public final class HlsCap {
         return sb.toString();
     }
 
+    /** True for a DASH manifest (VidLink serves these). */
+    public static boolean isDash(String text) {
+        return text != null && text.contains("<MPD") && text.contains("<Representation");
+    }
+
+    /**
+     * The DASH manifest with every video Representation taller than maxHeight
+     * removed, keeping the shortest one in an AdaptationSet when none would be
+     * left, so the player always has a picture. Audio and text Representations
+     * carry no height and are never touched.
+     */
+    public static String capDash(String text, int maxHeight) {
+        if (!isDash(text)) return text;
+        StringBuilder out = new StringBuilder(text.length());
+        int pos = 0;
+        while (true) {
+            int setStart = text.indexOf("<AdaptationSet", pos);
+            if (setStart < 0) break;
+            int setEnd = text.indexOf("</AdaptationSet>", setStart);
+            if (setEnd < 0) break;
+            setEnd += "</AdaptationSet>".length();
+            out.append(text, pos, setStart);
+            out.append(capSet(text.substring(setStart, setEnd), maxHeight));
+            pos = setEnd;
+        }
+        out.append(text.substring(pos));
+        return out.toString();
+    }
+
+    private static String capSet(String set, int maxHeight) {
+        List<int[]> reps = new ArrayList<>();   // {start, end, height}
+        int i = 0;
+        while (true) {
+            int s = set.indexOf("<Representation", i);
+            if (s < 0) break;
+            int tagEnd = set.indexOf('>', s);
+            if (tagEnd < 0) break;
+            int end;
+            if (set.charAt(tagEnd - 1) == '/') end = tagEnd + 1;
+            else {
+                int close = set.indexOf("</Representation>", tagEnd);
+                if (close < 0) break;
+                end = close + "</Representation>".length();
+            }
+            long h = xmlAttrLong(set.substring(s, tagEnd), "height");
+            reps.add(new int[] { s, end, (int) h });
+            i = end;
+        }
+        int shortest = -1, keep = 0;
+        for (int r = 0; r < reps.size(); r++) {
+            int h = reps.get(r)[2];
+            if (h <= 0 || h <= maxHeight) keep++;
+            if (h > 0 && (shortest < 0 || h < reps.get(shortest)[2])) shortest = r;
+        }
+        StringBuilder sb = new StringBuilder(set.length());
+        int at = 0;
+        for (int r = 0; r < reps.size(); r++) {
+            int[] rp = reps.get(r);
+            boolean drop = rp[2] > maxHeight && !(keep == 0 && r == shortest);
+            if (!drop) continue;
+            sb.append(set, at, rp[0]);
+            at = rp[1];
+        }
+        sb.append(set.substring(at));
+        return sb.toString();
+    }
+
+    private static long xmlAttrLong(String tag, String name) {
+        int i = tag.indexOf(" " + name + "=\"");
+        if (i < 0) return -1;
+        int s = i + name.length() + 3;
+        int e = tag.indexOf('"', s);
+        if (e < 0) return -1;
+        try { return Long.parseLong(tag.substring(s, e).trim()); } catch (NumberFormatException x) { return -1; }
+    }
+
     private static long height(String inf) {
         String r = attr(inf, "RESOLUTION");
         if (r == null) return -1;
@@ -166,6 +242,29 @@ public final class HlsCap {
         check(r, "not a playlist at all is untouched", cap("<html>", 480).equals("<html>"));
         check(r, "CRLF playlists keep working", cap(master.replace("\n", "\r\n"), 480).contains("480/index.m3u8")
             && !cap(master.replace("\n", "\r\n"), 480).contains("1080/index.m3u8"));
+
+        String mpd = String.join("\n",
+            "<?xml version=\"1.0\"?>",
+            "<MPD xmlns=\"urn:mpeg:dash:schema:mpd:2011\" type=\"static\">",
+            "<Period>",
+            "<AdaptationSet mimeType=\"video/mp4\">",
+            "<Representation id=\"v1080\" bandwidth=\"1600000\" width=\"1920\" height=\"1080\" codecs=\"hev1\"><BaseURL>1080.mp4</BaseURL><SegmentBase indexRange=\"0-1\"/></Representation>",
+            "<Representation id=\"v720\" bandwidth=\"900000\" width=\"1280\" height=\"720\"><BaseURL>720.mp4</BaseURL></Representation>",
+            "<Representation id=\"v480\" bandwidth=\"500000\" width=\"854\" height=\"480\"/>",
+            "</AdaptationSet>",
+            "<AdaptationSet mimeType=\"audio/mp4\" lang=\"eng\">",
+            "<Representation id=\"a1\" bandwidth=\"128000\" codecs=\"mp4a.40.2\"><AudioChannelConfiguration value=\"2\"/></Representation>",
+            "</AdaptationSet>",
+            "</Period></MPD>");
+        String dc = capDash(mpd, 480);
+        check(r, "DASH: 1080p and 720p removed", !dc.contains("v1080") && !dc.contains("v720") && !dc.contains("1080.mp4"));
+        check(r, "DASH: 480p kept (self-closing form)", dc.contains("id=\"v480\""));
+        check(r, "DASH: the audio is untouched", dc.contains("id=\"a1\"") && dc.contains("AudioChannelConfiguration"));
+        check(r, "DASH: the rest of the manifest is intact", dc.startsWith("<?xml") && dc.trim().endsWith("</MPD>") && dc.contains("</AdaptationSet>"));
+        String hiOnly = mpd.replace("<Representation id=\"v480\" bandwidth=\"500000\" width=\"854\" height=\"480\"/>", "");
+        String dc2 = capDash(hiOnly, 480);
+        check(r, "DASH: when every video is too tall, the shortest stays", dc2.contains("v720") && !dc2.contains("v1080"));
+        check(r, "DASH: not a manifest is untouched", capDash("#EXTM3U", 480).equals("#EXTM3U"));
 
         System.out.println("\n" + r[0] + " passed, " + r[1] + " failed");
         if (r[1] > 0) System.exit(1);

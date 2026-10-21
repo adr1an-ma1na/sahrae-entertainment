@@ -1,0 +1,121 @@
+/**
+ * Which movie and series servers to offer, and in what order. Pure, so it is
+ * testable on its own (serverpool-check.mjs).
+ *
+ * The pool (src/data/servers.json) holds more servers than are shown. The app
+ * shows the best ACTIVE_COUNT that are up, ranked by visual quality first,
+ * then audio, then reliability. When one goes down, whether the daily check
+ * marked it or viewers keep failing on it, the next best in the pool takes its
+ * place, so the six on screen are always the six best still working.
+ */
+
+export type PoolServer = {
+  id: string;
+  name: string;
+  movie: string;
+  tv: string;
+  hosts: string[];
+  visual: { maxHeight: number; mbps: number | null; codec: string | null; adaptive: boolean };
+  audio: { channels: number; languages: number };
+  coverage: number;
+  events: boolean;
+  status: 'active' | 'reserve' | 'down';
+  failStreak?: number;
+  checked?: string;
+  note?: string;
+};
+
+export type Pool = { version: number; updated: string; servers: PoolServer[] };
+
+/** Server-wide results from viewers over the last few days (play_proof, server_health). */
+export type ServerHealth = { server_id: string; ok: number; fail: number; last_ok: string | null; last_fail: string | null };
+
+export const ACTIVE_COUNT = 6;
+/** Bitrate assumed where it could not be measured: modest, so an unmeasured server never outranks a measured one by guesswork. */
+export const UNMEASURED_MBPS = 2;
+
+/** H.265 needs about half the bitrate of H.264 for the same picture, AV1 a little less again. */
+const CODEC_GAIN: Record<string, number> = { hevc: 2, h265: 2, av1: 2.2, vp9: 1.6 };
+
+/**
+ * The ranking, in the order asked for: visual quality outweighs audio, which
+ * outweighs reliability. Visual is up to 70 points, audio up to 12,
+ * reliability up to 13, so no amount of reliability beats a clearly sharper
+ * picture, while two near-equal pictures are decided by sound, then by how
+ * dependably the server has the title.
+ */
+export function score(s: PoolServer, type: 'movie' | 'tv' = 'movie'): number {
+  const h = Math.min(Math.max(s.visual.maxHeight || 0, 0), 2160);
+  const gain = (s.visual.codec && CODEC_GAIN[s.visual.codec.toLowerCase()]) || 1;
+  const mbps = (s.visual.mbps ?? UNMEASURED_MBPS) * gain;
+  const visual = (h / 1080) * 40 + (Math.min(mbps, 8) / 8) * 25 + (s.visual.adaptive ? 5 : 0);
+  const audio = (s.audio.channels >= 6 ? 10 : 6) + (s.audio.languages > 1 ? 2 : 0);
+  // A series plays one episode after another only on a server that says when
+  // an episode ends, so for series that counts as reliability.
+  const reliability = Math.max(0, Math.min(1, s.coverage)) * 10 + (s.events ? 3 : 0) + (type === 'tv' && s.events ? 5 : 0);
+  return Math.round((visual + audio + reliability) * 10) / 10;
+}
+
+/** Thresholds for "viewers keep failing on it": enough reports to mean something, mostly failures, and no success in a day. */
+const CROWD_MIN_FAILS = 8;
+const CROWD_MAX_OK_SHARE = 0.25;
+const CROWD_RECENT_OK_MS = 24 * 60 * 60 * 1000;
+
+export function crowdFailing(h: ServerHealth | undefined, now = Date.now()): boolean {
+  if (!h) return false;
+  const total = h.ok + h.fail;
+  if (h.fail < CROWD_MIN_FAILS || total === 0) return false;
+  if (h.ok / total >= CROWD_MAX_OK_SHARE) return false;
+  const lastOk = h.last_ok ? Date.parse(h.last_ok) : 0;
+  return !(lastOk && now - lastOk < CROWD_RECENT_OK_MS);
+}
+
+/** The servers to show, best first: the top ACTIVE_COUNT that are neither marked down nor failing for viewers. */
+export function pickServers(pool: Pool, type: 'movie' | 'tv', health: ServerHealth[] = [], now = Date.now(), count = ACTIVE_COUNT): PoolServer[] {
+  const byId = new Map(health.map((h) => [h.server_id, h]));
+  const usable = pool.servers.filter((s) => s.status !== 'down' && !crowdFailing(byId.get(s.id), now));
+  const ranked = [...usable].sort((a, b) => score(b, type) - score(a, type) || pool.servers.indexOf(a) - pool.servers.indexOf(b));
+  const picked = ranked.slice(0, count);
+  // Never show nothing: if everything is marked down, the marks are more
+  // likely wrong than every server at once, so fall back to the best by score.
+  if (picked.length) return picked;
+  return [...pool.servers].sort((a, b) => score(b, type) - score(a, type)).slice(0, count);
+}
+
+const HOST = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
+
+/**
+ * A pool from the network is only used if it is well formed and every URL is
+ * https on one of that server's own hosts, so a damaged or tampered file can
+ * never point the player somewhere else.
+ */
+export function validPool(x: unknown): x is Pool {
+  if (!x || typeof x !== 'object') return false;
+  const p = x as Pool;
+  if (typeof p.version !== 'number' || !Array.isArray(p.servers) || p.servers.length === 0) return false;
+  return p.servers.every((s) => {
+    if (!s || typeof s.id !== 'string' || !/^[a-z0-9]{2,20}$/.test(s.id) || typeof s.name !== 'string') return false;
+    if (!Array.isArray(s.hosts) || !s.hosts.length || !s.hosts.every((h) => typeof h === 'string' && HOST.test(h))) return false;
+    if (!s.visual || typeof s.visual.maxHeight !== 'number' || !s.audio || typeof s.coverage !== 'number') return false;
+    if (!['active', 'reserve', 'down'].includes(s.status)) return false;
+    return [s.movie, s.tv].every((t) => {
+      if (typeof t !== 'string') return false;
+      try {
+        const u = new URL(fill(t, 1, 1, 1, 'FFFFFF'));
+        return u.protocol === 'https:' && s.hosts.some((h) => u.hostname === h || u.hostname.endsWith('.' + h));
+      } catch { return false; }
+    });
+  });
+}
+
+/** A template with the title filled in. */
+export function fill(template: string, id: number, s: number, e: number, brand: string): string {
+  return template.replace(/\{id\}/g, String(id)).replace(/\{s\}/g, String(s)).replace(/\{e\}/g, String(e)).replace(/\{brand\}/g, brand);
+}
+
+/** What the picker calls a server: its name and the picture it gives. */
+export function label(s: PoolServer): string {
+  if (s.visual.mbps == null) return `${s.name} (backup)`;
+  const extras = s.audio.languages > 1 ? ` · ${s.audio.languages} languages` : '';
+  return `${s.name} · ${s.visual.maxHeight}p${extras}`;
+}

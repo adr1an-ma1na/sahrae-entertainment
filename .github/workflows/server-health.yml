@@ -1,0 +1,43 @@
+# Every morning: check every server in the pool and mark it down, or back up,
+# in src/data/servers.json (.github/scripts/server-health.mjs). The web app is
+# then redeployed so the published servers.json changes too, and every
+# installed app picks the new list up the next time it opens. No new APK.
+name: server health
+
+on:
+  schedule:
+    - cron: '30 3 * * *'   # 06:30 in Nairobi
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check the servers
+        run: node .github/scripts/server-health.mjs
+      - name: Publish any change
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet src/data/servers.json; then
+            echo "No server changed state."
+            exit 0
+          fi
+          git config user.name "sahrae-server-check"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/data/servers.json
+          git commit -m "Server pool: daily check changed a server's state"
+          git push origin HEAD:main
+          # A push made with this token starts no workflows, so the web app is
+          # redeployed explicitly; that is what publishes the new servers.json.
+          gh workflow run pages.yml --ref main

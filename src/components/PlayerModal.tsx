@@ -11,6 +11,7 @@ import { posterColor, cachedPosterColor } from '../services/posterColor';
 import { playerSandbox, isShieldOn, setShieldOn as persistShield, shieldAppliesHere } from '../services/adShield';
 import { suppressPopups } from '../services/popupGuard';
 import { NO_START_LIMIT_MS, COUNTDOWN_S, isPlaybackEvidence, markWorking, markDown, startServer } from '../services/serverHealth';
+import { useServerPool, fill as fillTemplate, label as poolLabel, type PoolServer } from '../services/serverPool';
 import { useDataSaver, canCapVideo, canMeasure, estimateText, formatBytes, readReceivedBytes } from '../services/dataSaver';
 import { NO_CROWD, crowdChoice, fetchProof, fetchSeasonPlayable, nextServerRanked, reportPlay, titleKey, warmUp, type CrowdChoice, type ProofRow } from '../services/playProof';
 
@@ -416,45 +417,25 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     };
   }, [isOpen, isPlaying]);
 
-  // Streaming servers. NOTE: vidvault.ru is deliberately NOT here — it is a
-  // download portal, not a stream. It lives only behind the Download button
-  // (see DOWNLOAD_SOURCE below).
+  // Streaming servers: the best six of the pool in src/data/servers.json,
+  // ranked by visual quality, then audio, then reliability, with any that are
+  // down replaced by the next best (services/serverPool.ts). The published copy
+  // of that file is updated by a daily check, so the list keeps itself current.
+  // VidVault is the download source only, never a stream server.
   //
-  // RE-AUDITED 16 Oct 2026 after viewers reported missing episodes, by playing
-  // five titles on each server from Kenya: Inception, Stranger Things S5E1,
-  // Wednesday S2E1, Squid Game S3E1 and East of Eden S1E1 (out 1 Oct 2026).
-  //
-  // THE FIRST THREE played or loaded every one of the five. VidZee and VidRock
-  // come from the 7 June build; VidRock has since moved from vidrock.ru to
-  // vidrock.to, so the APK was rewriting its player as a stranger's page.
-  //
-  // THE LAST FOUR found every test title but play inside a nested player that
-  // could not be timed from outside, so they stay as fallbacks, not leads.
-  //
-  // REMOVED, each for a reason seen in the audit rather than assumed:
-  //   VidFast    stuck on "Fetching, one moment" for every episode
-  //   Videasy    reported no length for East of Eden, i.e. no source
-  //   VidSrc.cc  blank player; the host often does not answer at all
-  //   MultiEmbed an ad wall before any player
-  //   AutoEmbed  spinner only
-  //   VidSrc.pm  "Not found" for East of Eden
-  //   VidSrc.su  "No available servers" for Wednesday S2E1
-  // Re-check before a release; these hosts rot without notice.
-  //
-  // The accent handed to providers that accept a theme, so their player matches
-  // the app rather than sitting in it as a differently-coloured rectangle.
-  // Material 3 primary, minus the '#' these APIs expect.
+  // The list is fixed for as long as one title is open: a ranking that changed
+  // mid-film would move every index and switch the player under the viewer.
   const brand = 'FBBF24';
-
-  const SERVERS = [
-    { id: 'vidlink', name: 'Surround HD (VidLink)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidlink.pro/movie/${id}?primaryColor=${brand}&autoplay=true&title=true` : `https://vidlink.pro/tv/${id}/${s}/${e}?primaryColor=${brand}&autoplay=true&title=true&nextbutton=true`, type: 'iframe' },
-    { id: 'vidzee', name: 'Multi-Source HD (VidZee)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://player.vidzee.wtf/embed/movie/${id}` : `https://player.vidzee.wtf/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
-    { id: 'vidrock', name: 'HD Stream (VidRock)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidrock.to/embed/movie/${id}` : `https://vidrock.to/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
-    { id: 'vidsrcto', name: 'Backup 1 (VidSrc.to)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.to/embed/movie/${id}` : `https://vidsrc.to/embed/tv/${id}/${s}/${e}`, type: 'iframe' },
-    { id: '2embed', name: 'Backup 2 (2Embed)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://www.2embed.cc/embed/${id}` : `https://www.2embed.cc/embedtv/${id}&s=${s}&e=${e}`, type: 'iframe' },
-    { id: 'vidsrcme', name: 'Backup 3 (VidSrc.me)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://vidsrc.me/embed/movie?tmdb=${id}` : `https://vidsrc.me/embed/tv?tmdb=${id}&season=${s}&episode=${e}`, type: 'iframe' },
-    { id: 'smashystream', name: 'Backup 4 (SmashyStream)', getUrl: (type: string, id: number, s: number, e: number) => type === 'movie' ? `https://embed.smashystream.com/playere.php?tmdb=${id}` : `https://embed.smashystream.com/playere.php?tmdb=${id}&season=${s}&episode=${e}`, type: 'iframe' },
-  ];
+  const livePool = useServerPool(currentMediaType === 'tv' ? 'tv' : 'movie');
+  const poolKey = `${isOpen}|${currentMediaId}|${currentMediaType}`;
+  const poolSnap = useRef<{ key: string; list: PoolServer[] }>({ key: '', list: livePool });
+  if (poolSnap.current.key !== poolKey) poolSnap.current = { key: poolKey, list: livePool };
+  const SERVERS = poolSnap.current.list.map((p) => ({
+    id: p.id,
+    name: poolLabel(p),
+    getUrl: (type: string, id: number, s: number, e: number) => fillTemplate(type === 'movie' ? p.movie : p.tv, id, s, e, brand),
+    type: 'iframe',
+  }));
 
   useEffect(() => { failedServersRef.current = failedServers; }, [failedServers]);
 

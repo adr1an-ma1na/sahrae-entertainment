@@ -1,5 +1,6 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import fs from 'fs';
 import path from 'path';
 import {defineConfig} from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -14,6 +15,15 @@ export default defineConfig(() => {
   return {
     base,
     plugins: [
+      // The server pool ships inside the app AND is published beside it as
+      // servers.json, which installed apps fetch so the list can change without
+      // an update (services/serverPool.ts, scripts/server-health.mjs).
+      {
+        name: 'publish-server-pool',
+        generateBundle() {
+          this.emitFile({ type: 'asset', fileName: 'servers.json', source: fs.readFileSync(path.resolve(__dirname, 'src/data/servers.json'), 'utf8') });
+        },
+      },
       react(), 
       tailwindcss(),
       VitePWA({
