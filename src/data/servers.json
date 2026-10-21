@@ -8,10 +8,21 @@
       "name": "VidRock",
       "movie": "https://vidrock.to/embed/movie/{id}",
       "tv": "https://vidrock.to/embed/tv/{id}/{s}/{e}",
-      "hosts": ["vidrock.to", "vidrock.ru"],
-      "visual": { "maxHeight": 1080, "mbps": 5.0, "codec": "h264", "adaptive": true },
-      "audio": { "channels": 2, "languages": 1 },
-      "coverage": 1.0,
+      "hosts": [
+        "vidrock.to",
+        "vidrock.ru"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": 5,
+        "codec": "h264",
+        "adaptive": true
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "coverage": 1,
       "events": false,
       "status": "active",
       "failStreak": 0,
@@ -23,10 +34,20 @@
       "name": "VidZee",
       "movie": "https://player.vidzee.wtf/embed/movie/{id}",
       "tv": "https://player.vidzee.wtf/embed/tv/{id}/{s}/{e}",
-      "hosts": ["vidzee.wtf"],
-      "visual": { "maxHeight": 1080, "mbps": 4.5, "codec": "h264", "adaptive": false },
-      "audio": { "channels": 2, "languages": 4 },
-      "coverage": 1.0,
+      "hosts": [
+        "vidzee.wtf"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": 4.5,
+        "codec": "h264",
+        "adaptive": false
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 4
+      },
+      "coverage": 1,
       "events": true,
       "status": "active",
       "failStreak": 0,
@@ -38,10 +59,20 @@
       "name": "VidLink",
       "movie": "https://vidlink.pro/movie/{id}?primaryColor={brand}&autoplay=true&title=true",
       "tv": "https://vidlink.pro/tv/{id}/{s}/{e}?primaryColor={brand}&autoplay=true&title=true&nextbutton=true",
-      "hosts": ["vidlink.pro"],
-      "visual": { "maxHeight": 1080, "mbps": 1.6, "codec": "hevc", "adaptive": true },
-      "audio": { "channels": 2, "languages": 1 },
-      "coverage": 1.0,
+      "hosts": [
+        "vidlink.pro"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": 1.6,
+        "codec": "hevc",
+        "adaptive": true
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "coverage": 1,
       "events": true,
       "status": "active",
       "failStreak": 0,
@@ -53,9 +84,20 @@
       "name": "Viduki",
       "movie": "https://vidsrc.wtf/api/1/movie/?id={id}",
       "tv": "https://vidsrc.wtf/api/1/tv/?id={id}&s={s}&e={e}",
-      "hosts": ["vidsrc.wtf", "viduki.net"],
-      "visual": { "maxHeight": 1080, "mbps": 4.5, "codec": "h264", "adaptive": false },
-      "audio": { "channels": 2, "languages": 1 },
+      "hosts": [
+        "vidsrc.wtf",
+        "viduki.net"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": 4.5,
+        "codec": "h264",
+        "adaptive": false
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
       "coverage": 0.9,
       "events": false,
       "status": "active",
@@ -68,13 +110,24 @@
       "name": "VidSrc.to",
       "movie": "https://vidsrc.to/embed/movie/{id}",
       "tv": "https://vidsrc.to/embed/tv/{id}/{s}/{e}",
-      "hosts": ["vidsrc.to", "vsembed.ru"],
-      "visual": { "maxHeight": 1080, "mbps": null, "codec": null, "adaptive": true },
-      "audio": { "channels": 2, "languages": 1 },
-      "coverage": 1.0,
+      "hosts": [
+        "vidsrc.to",
+        "vsembed.ru"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": null,
+        "codec": null,
+        "adaptive": true
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "coverage": 1,
       "events": false,
       "status": "active",
-      "failStreak": 0,
+      "failStreak": 1,
       "checked": "2026-10-21",
       "note": "Found all 5 audit titles. Its player is nested inside another site's frame, so quality could not be measured."
     },
@@ -83,10 +136,21 @@
       "name": "2Embed",
       "movie": "https://www.2embed.cc/embed/{id}",
       "tv": "https://www.2embed.cc/embedtv/{id}&s={s}&e={e}",
-      "hosts": ["2embed.cc", "2embed.skin"],
-      "visual": { "maxHeight": 1080, "mbps": null, "codec": null, "adaptive": true },
-      "audio": { "channels": 2, "languages": 1 },
-      "coverage": 1.0,
+      "hosts": [
+        "2embed.cc",
+        "2embed.skin"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": null,
+        "codec": null,
+        "adaptive": true
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "coverage": 1,
       "events": false,
       "status": "active",
       "failStreak": 0,
@@ -98,9 +162,20 @@
       "name": "VidSrc.me",
       "movie": "https://vidsrc.me/embed/movie?tmdb={id}",
       "tv": "https://vidsrc.me/embed/tv?tmdb={id}&season={s}&episode={e}",
-      "hosts": ["vidsrc.me", "vidsrc.sh"],
-      "visual": { "maxHeight": 1080, "mbps": null, "codec": null, "adaptive": true },
-      "audio": { "channels": 2, "languages": 1 },
+      "hosts": [
+        "vidsrc.me",
+        "vidsrc.sh"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": null,
+        "codec": null,
+        "adaptive": true
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
       "coverage": 0.9,
       "events": false,
       "status": "reserve",
@@ -113,9 +188,20 @@
       "name": "SmashyStream",
       "movie": "https://embed.smashystream.com/playere.php?tmdb={id}",
       "tv": "https://embed.smashystream.com/playere.php?tmdb={id}&season={s}&episode={e}",
-      "hosts": ["smashystream.com", "anyembed.xyz"],
-      "visual": { "maxHeight": 1080, "mbps": null, "codec": null, "adaptive": true },
-      "audio": { "channels": 2, "languages": 1 },
+      "hosts": [
+        "smashystream.com",
+        "anyembed.xyz"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": null,
+        "codec": null,
+        "adaptive": true
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
       "coverage": 0.8,
       "events": false,
       "status": "reserve",
@@ -125,14 +211,41 @@
     }
   ],
   "retired": [
-    { "id": "vidfast", "why": "2026-10-21: stuck on 'Fetching, one moment' from Kenya for every title" },
-    { "id": "videasy", "why": "2026-10-21: no answer; earlier reported no source for new episodes" },
-    { "id": "vidsrcsu", "why": "2026-10-21: 'No available servers' for Inception and Wednesday S2E1" },
-    { "id": "vidcore", "why": "2026-10-21: covers the video with a fake 'confirm you are not a robot' notification prompt" },
-    { "id": "primesrc", "why": "2026-10-21: makes every viewer pass a Cloudflare human check before playing" },
-    { "id": "cinemaos", "why": "2026-10-21: closes the page it is opened in" },
-    { "id": "embedmaster", "why": "2026-10-21: closes the page when Play is pressed" },
-    { "id": "111movies", "why": "2026-10-21: domain now redirects to an advert page" },
-    { "id": "vixsrc", "why": "2026-10-21: blocked by Cloudflare from Kenya" }
+    {
+      "id": "vidfast",
+      "why": "2026-10-21: stuck on 'Fetching, one moment' from Kenya for every title"
+    },
+    {
+      "id": "videasy",
+      "why": "2026-10-21: no answer; earlier reported no source for new episodes"
+    },
+    {
+      "id": "vidsrcsu",
+      "why": "2026-10-21: 'No available servers' for Inception and Wednesday S2E1"
+    },
+    {
+      "id": "vidcore",
+      "why": "2026-10-21: covers the video with a fake 'confirm you are not a robot' notification prompt"
+    },
+    {
+      "id": "primesrc",
+      "why": "2026-10-21: makes every viewer pass a Cloudflare human check before playing"
+    },
+    {
+      "id": "cinemaos",
+      "why": "2026-10-21: closes the page it is opened in"
+    },
+    {
+      "id": "embedmaster",
+      "why": "2026-10-21: closes the page when Play is pressed"
+    },
+    {
+      "id": "111movies",
+      "why": "2026-10-21: domain now redirects to an advert page"
+    },
+    {
+      "id": "vixsrc",
+      "why": "2026-10-21: blocked by Cloudflare from Kenya"
+    }
   ]
 }
