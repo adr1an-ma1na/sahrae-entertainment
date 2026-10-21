@@ -1,5 +1,7 @@
 import { useState, useEffect, FormEvent, useRef } from 'react';
-import { Search, Bell, User, Sun, Moon, LogIn, LogOut, Palette } from 'lucide-react';
+import { Search, Bell, User, Sun, Moon, LogIn, LogOut, Palette, MonitorSmartphone } from 'lucide-react';
+import { OPEN_REMOTE } from './RemotePanel';
+import { isTelevision } from '../tv/spatialNavigation';
 import { useTheme } from '../hooks/useTheme';
 import { useNotifications } from '../hooks/useNotifications';
 import { getImageUrl } from '../services/tmdb';
@@ -180,6 +182,17 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
             )}
           </div>
           
+          {/* Phone remote: on a TV it shows the pairing code, on a phone the controls. */}
+          <button
+            onClick={() => window.dispatchEvent(new Event(OPEN_REMOTE))}
+            data-tv-focusable
+            className="text-white p-2 hover:bg-white/10 rounded-full transition-colors"
+            aria-label={isTelevision() ? 'Pair phone' : 'Phone remote'}
+            title={isTelevision() ? 'Pair a phone as the remote' : 'Use this phone as a TV remote'}
+          >
+            <MonitorSmartphone className="w-5 h-5" />
+          </button>
+
           <button
             onClick={toggleTheme}
             className="text-white p-2 hover:bg-white/10 rounded-full transition-colors"

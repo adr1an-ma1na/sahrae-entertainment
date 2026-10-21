@@ -11,6 +11,7 @@ import { posterColor, cachedPosterColor } from '../services/posterColor';
 import { playerSandbox, isShieldOn, setShieldOn as persistShield, shieldAppliesHere } from '../services/adShield';
 import { suppressPopups } from '../services/popupGuard';
 import { NO_START_LIMIT_MS, COUNTDOWN_S, isPlaybackEvidence, markWorking, markDown, startServer } from '../services/serverHealth';
+import { reportScreen } from '../services/remote';
 import { useServerPool, fill as fillTemplate, label as poolLabel, type PoolServer } from '../services/serverPool';
 import { useDataSaver, canCapVideo, canMeasure, estimateText, formatBytes, readReceivedBytes } from '../services/dataSaver';
 import { NO_CROWD, crowdChoice, fetchProof, fetchSeasonPlayable, nextServerRanked, reportPlay, titleKey, warmUp, type CrowdChoice, type ProofRow } from '../services/playProof';
@@ -665,6 +666,26 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     const t = setInterval(tick, 10000);
     return () => { live = false; clearInterval(t); };
   }, [isOpen, playerUp, currentMediaId, selectedSeason, selectedEpisode]);
+
+  // Tell a paired phone what is on screen, and let it switch the server.
+  useEffect(() => {
+    if (!isOpen || !details || !currentMediaId || !currentMediaType) { reportScreen({ view: 'browse' }); return; }
+    reportScreen({
+      title: details.title || details.name, type: currentMediaType, id: currentMediaId,
+      ...(currentMediaType === 'tv' ? { s: selectedSeason, e: selectedEpisode } : {}),
+      servers: SERVERS.map((sv) => sv.name), server: selectedServer, view: isPlaying ? 'playing' : 'details',
+    });
+    // SERVERS is fixed while a title is open (poolSnap).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, details, currentMediaId, currentMediaType, selectedSeason, selectedEpisode, selectedServer, isPlaying]);
+  useEffect(() => {
+    const onServer = (e: Event) => {
+      const idx = (e as CustomEvent<number>).detail;
+      if (isOpen && typeof idx === 'number' && idx >= 0 && idx < SERVERS.length) { pickServer(idx); setIsPlaying(true); }
+    };
+    window.addEventListener('sahrae:remote-server', onServer);
+    return () => window.removeEventListener('sahrae:remote-server', onServer);
+  });
 
   // Which episodes of this season played for someone in the last two days.
   useEffect(() => {

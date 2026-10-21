@@ -11,6 +11,9 @@ import MediaRow from './components/MediaRow';
 import Top10Row from './components/Top10Row';
 import MediaGrid from './components/MediaGrid';
 import PlayerModal from './components/PlayerModal';
+import RemotePanel from './components/RemotePanel';
+import { setScreenHandlers, startScreen } from './services/remote';
+import { isTelevision } from './tv/spatialNavigation';
 import AudioHubView from './components/AudioHubView';
 import PodcastsView from './components/PodcastsView';
 import ConnectView from './components/ConnectView';
@@ -655,6 +658,12 @@ export default function App() {
     if (tab !== 'search') setSearchQuery('');
   };
 
+  // What a paired phone may ask this screen to do (services/remote.ts). Kept
+  // current every render, so a command always reaches today's handlers.
+  setScreenHandlers({ play: handlePlay, search: handleSearch, navigate });
+  // A TV is always ready for a phone: the code is there the moment it is asked for.
+  useEffect(() => { if (isTelevision()) startScreen(); }, []);
+
 
   const renderAppLayout = () => {
     if (authLoading) {
@@ -679,6 +688,7 @@ export default function App() {
     return (
       <div className="aurora-bg isolate min-h-screen text-zinc-50 font-sans selection:bg-amber-500/30 transition-colors duration-300">
         <SplashIntro />
+        <RemotePanel />
         {!appOnboarded && <Onboarding onDone={finishOnboarding} />}
         {/* Ambient cinematic glow field — viewport-fixed, above the base canvas
             but behind all content (root is `isolate` so -z stays contained). */}

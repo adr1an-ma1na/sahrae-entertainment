@@ -272,6 +272,9 @@ const KEY_TO_DIR: Record<string, Dir> = {
   ArrowRight: 'right',
 };
 
+/** Is this a television (the TV app, or a TV browser)? Same test the TV layout uses. */
+export function isTelevision(): boolean { return looksLikeTv(); }
+
 export function initSpatialNavigation() {
   if (typeof window === 'undefined') return;
   if ((window as unknown as { __tvNavInit?: boolean }).__tvNavInit) return;
