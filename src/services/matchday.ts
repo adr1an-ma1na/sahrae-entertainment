@@ -66,11 +66,11 @@ async function pool<T>(jobs: (() => Promise<T>)[], n: number): Promise<T[]> {
  * Fixtures from today through `days` ahead (and anything still live from
  * yesterday), soonest first, without duplicates. `fresh` refreshes today only.
  */
-export async function loadMatchday(days = 3, fresh = false): Promise<Fixture[]> {
+export async function loadMatchday(days = 3, fresh = false, competitions: Competition[] = COMPETITIONS): Promise<Fixture[]> {
   const now = Date.now();
   const tokens = Array.from({ length: days + 1 }, (_, i) => dayToken(now + i * 86400000));
   const jobs: (() => Promise<Fixture[]>)[] = [];
-  for (const c of COMPETITIONS) {
+  for (const c of competitions) {
     if (c.sport === 'racing') { jobs.push(() => loadOne(c, null, fresh ? LIVE_MS : CACHE_MS)); continue; }
     tokens.forEach((d, i) => jobs.push(() => loadOne(c, d, fresh && i === 0 ? LIVE_MS : CACHE_MS)));
   }

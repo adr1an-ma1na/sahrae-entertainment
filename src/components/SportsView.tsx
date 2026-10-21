@@ -13,8 +13,8 @@ import { buildStreams, validateStream, metrics, canValidateDeeply } from '../ser
 import { loadSportsFeed, sourcesById, fetchStreamsFor, type Feed, type FeedEvent } from '../services/sportsFeed';
 import { hostOf } from '../services/sportsStreams';
 import Coachmark from './Coachmark';
-import MatchdayHub from './MatchdayHub';
 import { t as tr } from '../i18n';
+import { loadMatchday, percentages, predictionsByEvent, PREDICTION_COMPETITIONS, type CardPrediction } from '../services/matchday';
 import { suppressPopups } from '../services/popupGuard';
 import { readAudioFormat, bestAudioTrack, upscaleDecision, bestHeight, type AudioFormat } from '../services/streamQuality.ts';
 import { gpuReport } from '../services/gpu.ts';
@@ -505,8 +505,10 @@ interface Playing {
 }
 
 export default function SportsView() {
-  // Matchday leads: what is on and when, with the stream, odds and a reminder.
-  const [tab, setTab] = useState<'matchday' | 'events' | 'channels'>('matchday');
+  const [tab, setTab] = useState<'events' | 'channels'>('events');
+  // Football predictions for the event cards: bookmaker odds (ESPN), margin
+  // removed, matched to each card by both teams and kick-off time.
+  const [predictions, setPredictions] = useState<Map<string, CardPrediction>>(() => new Map());
   const [feed, setFeed] = useState<Feed | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -1017,8 +1019,21 @@ export default function SportsView() {
     return groups;
   }, [visible, sport]);
 
+  // Once the feed is in, find each football card's fixture and its odds.
+  useEffect(() => {
+    const events = feed?.events;
+    if (!events?.some((e) => e.category === 'football')) return;
+    let live = true;
+    loadMatchday(3, false, PREDICTION_COMPETITIONS)
+      .then((fx) => { if (live) setPredictions(predictionsByEvent(fx, events)); })
+      .catch(() => { /* no predictions; the cards are unchanged */ });
+    return () => { live = false; };
+  }, [feed]);
+
   const renderEvent = (m: FeedEvent) => {
     const home = m.teams?.home, away = m.teams?.away;
+    const pred = !eventIsLive(m) ? predictions.get(m.id) : undefined;
+    const pct = pred ? percentages([pred.pHome, pred.pDraw, pred.pAway]) : null;
     return (
       <div key={m.id} onClick={() => openEvent(m)} tabIndex={0} data-tv-focusable role="button" aria-label={m.title}
         className="card-lift tier-card group relative rounded-2xl p-5 cursor-pointer focus:outline-none flex flex-col justify-between h-full border border-white/5 bg-zinc-900/40 hover:border-amber-500/30 transition-all duration-300">
@@ -1056,6 +1071,22 @@ export default function SportsView() {
             </div>
           )}
         </div>
+
+        {pred && pct && (
+          <div className="mt-1 mb-2" title={`${pred.provider} odds with the bookmaker's margin removed. A market view, not a certainty.`}>
+            <div className="flex h-1.5 rounded-full overflow-hidden bg-zinc-800">
+              <div className="bg-amber-400" style={{ width: `${pct[0]}%` }} />
+              <div className="bg-zinc-500" style={{ width: `${pct[1]}%` }} />
+              <div className="bg-sky-400" style={{ width: `${pct[2]}%` }} />
+            </div>
+            <div className="flex justify-between text-[10px] mt-1 text-zinc-300 tabular-nums">
+              <span><b className="text-amber-300">{pct[0]}%</b> {tr('Home win')}</span>
+              <span>{tr('Draw')} {pct[1]}%</span>
+              <span>{tr('Away win')} <b className="text-sky-300">{pct[2]}%</b></span>
+            </div>
+            <p className="text-[9px] text-zinc-500 mt-0.5">Prediction from {pred.provider} odds, margin removed</p>
+          </div>
+        )}
 
         <div>
           {/* Directly show Server Pills on the card - doesn't need to wait for scheduled time to show! */}
@@ -1395,10 +1426,10 @@ export default function SportsView() {
           </div>
         </div>
         <div className="flex gap-1 glass p-1 rounded-xl self-start">
-          {(['matchday', 'events', 'channels'] as const).map((t) => (
+          {(['events', 'channels'] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)} tabIndex={0} data-tv-focusable
               className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2 ${tab === t ? 'bg-amber-500 text-amber-950' : 'text-zinc-400 hover:text-white'}`}>
-              {t === 'matchday' ? <><CalendarClock className="w-4 h-4" /> {tr('Matchday')}</> : t === 'events' ? <><Clapperboard className="w-4 h-4" /> {tr('Live Events')}</> : <><Tv className="w-4 h-4" /> {tr('Channels')}</>}
+              {t === 'events' ? <><Clapperboard className="w-4 h-4" /> {tr('Live Events')}</> : <><Tv className="w-4 h-4" /> {tr('Channels')}</>}
             </button>
           ))}
         </div>
@@ -1406,9 +1437,7 @@ export default function SportsView() {
 
       <Coachmark id="sports" text="Tap any event to watch the match. If a feed stalls, switch to another one below the player." />
 
-      {tab === 'matchday' ? (
-        <MatchdayHub feed={feed} onWatch={(e) => openEvent(e)} />
-      ) : tab === 'channels' ? (
+      {tab === 'channels' ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {CHANNELS.map((ch) => (
             <div key={ch.name} onClick={() => setPlaying({

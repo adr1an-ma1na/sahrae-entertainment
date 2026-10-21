@@ -2,11 +2,11 @@
  * Which movie and series servers to offer, and in what order. Pure, so it is
  * testable on its own (serverpool-check.mjs).
  *
- * The pool (src/data/servers.json) holds more servers than are shown. The app
- * shows the best ACTIVE_COUNT that are up, ranked by visual quality first,
- * then audio, then reliability. When one goes down, whether the daily check
- * marked it or viewers keep failing on it, the next best in the pool takes its
- * place, so the six on screen are always the six best still working.
+ * The pool (src/data/servers.json) lists the servers in the owner's order of
+ * preference (since 2026-10-21: VidLink Pro, then Tier 1, 2 and 3). The app
+ * offers them in that order, leaving out any the daily check marked down or
+ * that keep failing for viewers; when one recovers it returns to its place.
+ * score() remains for reference and tests, but no longer reorders the list.
  */
 
 export type PoolServer = {
@@ -30,7 +30,8 @@ export type Pool = { version: number; updated: string; servers: PoolServer[] };
 /** Server-wide results from viewers over the last few days (play_proof, server_health). */
 export type ServerHealth = { server_id: string; ok: number; fail: number; last_ok: string | null; last_fail: string | null };
 
-export const ACTIVE_COUNT = 6;
+/** At most this many servers are offered; the owner's list is ten. */
+export const ACTIVE_COUNT = 12;
 /** Bitrate assumed where it could not be measured: modest, so an unmeasured server never outranks a measured one by guesswork. */
 export const UNMEASURED_MBPS = 2;
 
@@ -76,15 +77,18 @@ export function crowdFailing(h: ServerHealth | undefined, now = Date.now()): boo
 }
 
 /** The servers to show, best first: the top ACTIVE_COUNT that are neither marked down nor failing for viewers. */
-export function pickServers(pool: Pool, type: 'movie' | 'tv', health: ServerHealth[] = [], now = Date.now(), count = ACTIVE_COUNT, canHoldHd = true): PoolServer[] {
+/**
+ * The servers to offer, in the pool's own order (set by the owner, best
+ * first), leaving out any marked down or failing for viewers. A server that
+ * comes back takes its old place again. `type` and `canHoldHd` are kept for
+ * existing callers; the order is the file's.
+ */
+export function pickServers(pool: Pool, _type: 'movie' | 'tv', health: ServerHealth[] = [], now = Date.now(), count = ACTIVE_COUNT, _canHoldHd = true): PoolServer[] {
   const byId = new Map(health.map((h) => [h.server_id, h]));
   const usable = pool.servers.filter((s) => s.status !== 'down' && !crowdFailing(byId.get(s.id), now));
-  const ranked = [...usable].sort((a, b) => score(b, type, canHoldHd) - score(a, type, canHoldHd) || pool.servers.indexOf(a) - pool.servers.indexOf(b));
-  const picked = ranked.slice(0, count);
   // Never show nothing: if everything is marked down, the marks are more
-  // likely wrong than every server at once, so fall back to the best by score.
-  if (picked.length) return picked;
-  return [...pool.servers].sort((a, b) => score(b, type) - score(a, type)).slice(0, count);
+  // likely wrong than every server at once.
+  return (usable.length ? usable : pool.servers).slice(0, count);
 }
 
 const HOST = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
@@ -120,7 +124,5 @@ export function fill(template: string, id: number, s: number, e: number, brand: 
 
 /** What the picker calls a server: its name and the picture it gives. */
 export function label(s: PoolServer): string {
-  if (s.visual.mbps == null) return `${s.name} (backup)`;
-  const extras = s.audio.languages > 1 ? ` · ${s.audio.languages} languages` : '';
-  return `${s.name} · ${s.visual.maxHeight}p${extras}`;
+  return s.name;
 }

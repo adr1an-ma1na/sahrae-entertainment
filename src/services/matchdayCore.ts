@@ -223,3 +223,43 @@ export function dayLabel(ms: number, now = Date.now()): string {
   if (days === -1) return 'Yesterday';
   return d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' });
 }
+
+// ── Predictions on the sports feed's football cards ───────────────────────────
+
+/** Football competitions whose odds feed the predictions on Live Events cards. */
+export const PREDICTION_COMPETITIONS: Competition[] = [
+  ...COMPETITIONS.filter((c) => c.sport === 'soccer'),
+  { code: 'ita.1', name: 'Serie A', short: 'SA', sport: 'soccer' },
+  { code: 'fra.1', name: 'Ligue 1', short: 'L1', sport: 'soccer' },
+  { code: 'uefa.europa', name: 'Europa League', short: 'UEL', sport: 'soccer' },
+];
+
+export type CardPrediction = { pHome: number; pDraw: number; pAway: number; provider: string; competition: string };
+
+/**
+ * The fixture's probabilities for a feed card, the right way round: the feed
+ * sometimes lists the away side first, so home and away are swapped when its
+ * "home" team is the fixture's away team.
+ */
+export function predictionFor(fx: Fixture, e: FeedLike): CardPrediction | null {
+  if (!fx.odds || !fx.home || !fx.away) return null;
+  const feedHome = e.teams?.home?.name || e.title.split(/\s+(?:vs?\.?|-|–|x|@)\s+/i)[0] || '';
+  const same = teamSimilarity(fx.home.name, feedHome);
+  const swapped = teamSimilarity(fx.away.name, feedHome);
+  const flip = swapped > same;
+  const { pHome, pDraw, pAway, provider } = fx.odds;
+  return { pHome: flip ? pAway : pHome, pDraw, pAway: flip ? pHome : pAway, provider, competition: fx.competitionName };
+}
+
+/** For each feed card, the prediction of the fixture it shows (by card id). */
+export function predictionsByEvent<T extends FeedLike>(fixtures: Fixture[], feed: T[]): Map<string, CardPrediction> {
+  const out = new Map<string, CardPrediction>();
+  for (const fx of fixtures) {
+    if (fx.sport !== 'soccer' || !fx.odds || fx.state === 'post') continue;
+    const e = findStream(fx, feed);
+    if (!e || out.has(e.id)) continue;
+    const p = predictionFor(fx, e);
+    if (p) out.set(e.id, p);
+  }
+  return out;
+}

@@ -83,6 +83,8 @@ const SW: Record<string, string> = {
   'Full prediction': 'Utabiri kamili',
   'Full time': 'Mwisho wa mchezo',
   'Draw': 'Sare',
+  'Home win': 'Wenyeji washinde',
+  'Away win': 'Wageni washinde',
   // Remote and parties
   'Use your phone as the remote': 'Tumia simu yako kama rimoti',
   'Control a TV': 'Dhibiti TV',

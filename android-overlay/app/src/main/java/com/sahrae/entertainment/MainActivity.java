@@ -107,6 +107,8 @@ public class MainActivity extends BridgeActivity {
         "vidrock.ru","vsembed.ru","2embed.skin","vidsrc.sh","anyembed.xyz",
         // Pool servers added 21 Oct 2026 (src/data/servers.json).
         "vidsrc.wtf","viduki.net",
+        // The owner's list of 21 Oct 2026 (src/data/servers.json).
+        "autoembed.co","vidsrc.su","vidsrc.io","vidsrc.pm","multiembed.mov","streamingnow.mov","vidjoy.pro",
         // Download source (behind the Download button, not a stream server)
         "vidvault.ru",
         "youtube-nocookie.com","youtube.com","ytimg.com",   // trailer player

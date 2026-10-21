@@ -422,10 +422,10 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     };
   }, [isOpen, isPlaying]);
 
-  // Streaming servers: the best six of the pool in src/data/servers.json,
-  // ranked by visual quality, then audio, then reliability, with any that are
-  // down replaced by the next best (services/serverPool.ts). The published copy
-  // of that file is updated by a daily check, so the list keeps itself current.
+  // Streaming servers: the pool in src/data/servers.json, in the owner's order
+  // (VidLink Pro first), leaving out any that are down or failing for viewers
+  // (services/serverPool.ts). The published copy of that file is updated by a
+  // daily check, so the list keeps itself current.
   // VidVault is the download source only, never a stream server.
   //
   // The list is fixed for as long as one title is open: a ranking that changed

@@ -47,6 +47,9 @@ async function refreshPool() {
     if (!r.ok) return;
     const p = await r.json();
     if (!validPool(p)) return;
+    // An older published list never overrides the one this build carries:
+    // the build may be newer than the last deploy.
+    if (p.updated < (bundled as Pool).updated) return;
     pool = p;
     try { localStorage.setItem(CACHE_KEY, JSON.stringify(p)); } catch { /* storage full: still used this session */ }
     shareHosts(p);
