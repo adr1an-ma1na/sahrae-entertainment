@@ -16,7 +16,7 @@ import { t } from '../i18n';
 import { reportRoomNow } from '../services/room';
 import { OPEN_PARTY } from './WatchParty';
 import { useServerPool, fill as fillTemplate, label as poolLabel, type PoolServer } from '../services/serverPool';
-import { useDataSaver, canCapVideo, canMeasure, estimateText, formatBytes, readReceivedBytes } from '../services/dataSaver';
+import { useDataSaver, usePicture, announcePlayerSource, canCapVideo, canMeasure, estimateText, formatBytes, readReceivedBytes, type Picture } from '../services/dataSaver';
 import { NO_CROWD, crowdChoice, fetchProof, fetchSeasonPlayable, nextServerRanked, reportPlay, titleKey, warmUp, type CrowdChoice, type ProofRow } from '../services/playProof';
 
 /** How soon the crowd's answer must arrive to change the opening server; later it would interrupt a loading player. */
@@ -138,6 +138,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const crowdRef = useRef<{ choice: CrowdChoice; rows: ProofRow[] }>({ choice: NO_CROWD, rows: [] });
   const [seasonPlayable, setSeasonPlayable] = useState<Set<number>>(() => new Set());
   const [dataSaver, setDataSaverOn] = useDataSaver();
+  const [picture, setPicture] = usePicture();
   // Data this viewing has used, measured by the Android app; null where it cannot be.
   const [usedBytes, setUsedBytes] = useState<number | null>(null);
   // A server the viewer picked by hand is theirs; the crowd never overrides it.
@@ -710,6 +711,12 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     return () => window.removeEventListener('sahrae:room-server', onRoomServer);
   });
 
+  // A new server or episode has a new menu of qualities: have the Android app
+  // apply the picture setting to it.
+  useEffect(() => {
+    if (isOpen && isPlaying && !playingTrailer) announcePlayerSource();
+  }, [isOpen, isPlaying, playingTrailer, selectedServer, selectedSeason, selectedEpisode, refreshKey, currentMediaId]);
+
   // Which episodes of this season played for someone in the last two days.
   useEffect(() => {
     if (!isOpen || currentMediaType !== 'tv' || !currentMediaId) { setSeasonPlayable(new Set()); return; }
@@ -1212,7 +1219,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                   {(() => {
                     const ep = currentMediaType === 'tv' ? seasonDetails?.episodes?.find((x) => x.episode_number === selectedEpisode) : null;
                     const minutes = (currentMediaType === 'tv' ? (ep?.runtime || details.episode_run_time?.[0]) : details.runtime) || 0;
-                    const est = estimateText(minutes, dataSaver, canCapVideo());
+                    const est = estimateText(minutes, dataSaver, canCapVideo(), picture);
                     if (!est) return null;
                     return (
                       <p className="text-xs text-zinc-300 flex items-center gap-2 flex-wrap" title="An estimate: the player picks the quality to suit your connection">
@@ -1259,27 +1266,28 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                   ))}
                 </div>
 
-                {/* Data Saver: always offered, because data costs on every device. */}
-                <div className="mt-4 flex items-start gap-3 p-3 rounded-xl border border-white/10 bg-zinc-900/50">
-                  <Gauge className={`w-5 h-5 shrink-0 mt-0.5 ${dataSaver ? 'text-emerald-400' : 'text-zinc-500'}`} />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-bold text-white">Data Saver {dataSaver ? 'on' : 'off'}</p>
-                    <p className="text-xs text-zinc-400 leading-snug mt-0.5">
-                      {canCapVideo()
-                        ? 'Plays films and episodes at up to 480p, about a third of the data of full HD, and loads smaller pictures across the app.'
-                        : 'Loads smaller pictures and skips video previews. To also cap films at 480p, use the Sahrae Android app.'}
-                    </p>
+                {/* Picture: Data Saver, HD (default) or Best. Always offered,
+                    because data costs on every device and sharpness matters on all. */}
+                <div className="mt-4 p-3 rounded-xl border border-white/10 bg-zinc-900/50">
+                  <p className="text-sm font-bold text-white flex items-center gap-2"><Gauge className="w-4 h-4 text-amber-400" />Picture</p>
+                  <div className="mt-2 grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Picture quality">
+                    {([['saver', 'Data Saver', 'Up to 480p'], ['hd', 'HD', '720p and up'], ['best', 'Best', '1080p']] as [Picture, string, string][]).map(([id, name, sub]) => (
+                      <button key={id} onClick={() => { setPicture(id); haptics.tap(); }} role="radio" aria-checked={picture === id} data-tv-focusable
+                        className={`rounded-lg px-2 py-2 text-left border transition-colors ${picture === id ? 'border-amber-400 bg-amber-400/10' : 'border-zinc-700 bg-zinc-900 hover:border-zinc-500'}`}>
+                        <span className={`block text-xs font-bold ${picture === id ? 'text-amber-300' : 'text-white'}`}>{name}</span>
+                        <span className="block text-[10px] text-zinc-400">{sub}</span>
+                      </button>
+                    ))}
                   </div>
-                  <button
-                    onClick={() => { setDataSaverOn(!dataSaver); haptics.tap(); }}
-                    role="switch"
-                    aria-checked={dataSaver}
-                    aria-label="Toggle Data Saver"
-                    data-tv-focusable
-                    className={`shrink-0 w-12 h-7 rounded-full p-0.5 transition-colors ${dataSaver ? 'bg-emerald-500' : 'bg-zinc-700'}`}
-                  >
-                    <span className={`block w-6 h-6 rounded-full bg-white transition-transform ${dataSaver ? 'translate-x-5' : 'translate-x-0'}`} />
-                  </button>
+                  <p className="text-xs text-zinc-400 leading-snug mt-2">
+                    {!canCapVideo()
+                      ? 'In a browser the player picks its own quality; Data Saver here loads smaller pictures and skips previews. The Sahrae Android app applies all three settings to films and episodes.'
+                      : picture === 'saver'
+                        ? 'Films and episodes at up to 480p, about a third of the data of full HD, and smaller pictures across the app.'
+                        : picture === 'best'
+                          ? 'Full HD only, the sharpest these servers offer. Needs a steady connection; if it keeps pausing, choose HD.'
+                          : 'Never drops below 720p, so a film does not stay blurry after a slow start. If it keeps pausing, choose Data Saver.'}
+                  </p>
                 </div>
 
                 {/* Ad Shield toggle — web only. On Android the native shell

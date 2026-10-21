@@ -44,11 +44,16 @@ const CODEC_GAIN: Record<string, number> = { hevc: 2, h265: 2, av1: 2.2, vp9: 1.
  * picture, while two near-equal pictures are decided by sound, then by how
  * dependably the server has the title.
  */
-export function score(s: PoolServer, type: 'movie' | 'tv' = 'movie'): number {
+export function score(s: PoolServer, type: 'movie' | 'tv' = 'movie', canHoldHd = true): number {
   const h = Math.min(Math.max(s.visual.maxHeight || 0, 0), 2160);
   const gain = (s.visual.codec && CODEC_GAIN[s.visual.codec.toLowerCase()]) || 1;
   const mbps = (s.visual.mbps ?? UNMEASURED_MBPS) * gain;
-  const visual = (h / 1080) * 40 + (Math.min(mbps, 8) / 8) * 25 + (s.visual.adaptive ? 5 : 0);
+  // An adaptive player is a plus where the app can keep it in HD (the Android
+  // app's picture floor), and a minus where it cannot: in a browser it may
+  // start at 360p on a slow line and stay there, while a fixed 1080p stream
+  // never drops.
+  const adaptive = s.visual.adaptive ? (canHoldHd ? 5 : -8) : 0;
+  const visual = (h / 1080) * 40 + (Math.min(mbps, 8) / 8) * 25 + adaptive;
   const audio = (s.audio.channels >= 6 ? 10 : 6) + (s.audio.languages > 1 ? 2 : 0);
   // A series plays one episode after another only on a server that says when
   // an episode ends, so for series that counts as reliability.
@@ -71,10 +76,10 @@ export function crowdFailing(h: ServerHealth | undefined, now = Date.now()): boo
 }
 
 /** The servers to show, best first: the top ACTIVE_COUNT that are neither marked down nor failing for viewers. */
-export function pickServers(pool: Pool, type: 'movie' | 'tv', health: ServerHealth[] = [], now = Date.now(), count = ACTIVE_COUNT): PoolServer[] {
+export function pickServers(pool: Pool, type: 'movie' | 'tv', health: ServerHealth[] = [], now = Date.now(), count = ACTIVE_COUNT, canHoldHd = true): PoolServer[] {
   const byId = new Map(health.map((h) => [h.server_id, h]));
   const usable = pool.servers.filter((s) => s.status !== 'down' && !crowdFailing(byId.get(s.id), now));
-  const ranked = [...usable].sort((a, b) => score(b, type) - score(a, type) || pool.servers.indexOf(a) - pool.servers.indexOf(b));
+  const ranked = [...usable].sort((a, b) => score(b, type, canHoldHd) - score(a, type, canHoldHd) || pool.servers.indexOf(a) - pool.servers.indexOf(b));
   const picked = ranked.slice(0, count);
   // Never show nothing: if everything is marked down, the marks are more
   // likely wrong than every server at once, so fall back to the best by score.

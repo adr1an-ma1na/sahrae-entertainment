@@ -29,7 +29,9 @@ eq('an hour at 1080p is about 2.25 GB', ds.gbFor(60, ds.HD_MBPS).toFixed(2), '2.
 eq('under a gigabyte reads in MB, to the nearest 10', ds.formatGB(0.596), '600 MB');
 eq('a gigabyte and up reads to one decimal', ds.formatGB(1.987), '2.0 GB');
 eq('very small never reads as 0 MB', ds.formatGB(0.001), '10 MB');
-eq('a 53-minute episode, off: a range, because the player picks', ds.estimateText(53, false, true), 'About 600 MB to 2.0 GB of data');
+eq('a 53-minute episode on the web: a range, because the player picks', ds.estimateText(53, false, false), 'About 600 MB to 2.0 GB of data');
+eq('in the Android app at HD (the default): never below 720p', ds.estimateText(53, false, true), 'About 1.2 GB to 2.0 GB in HD');
+eq('at Best: full HD only', ds.estimateText(53, false, true, 'best'), 'About 2.0 GB in full HD');
 eq('on, in the Android app: one figure, because 480p is enforced', ds.estimateText(53, true, true), 'About 600 MB with Data Saver');
 eq('on, on the web: still a range, because the web cannot cap the player', ds.estimateText(53, true, false), 'About 600 MB to 2.0 GB of data');
 eq('no runtime, no estimate', ds.estimateText(0, false, false), null);
@@ -47,6 +49,13 @@ eq('backdrops are capped at w780', getImageUrl('/b.jpg', 'original'), 'https://i
 eq('small sizes stay as asked', getImageUrl('/s.jpg', 'w185'), 'https://image.tmdb.org/t/p/w185/s.jpg');
 ds.setDataSaver(false);
 eq('off again: posters back to w500', getImageUrl('/p.jpg', 'w500'), 'https://image.tmdb.org/t/p/w500/p.jpg');
+
+console.log('\npicture setting');
+eq('HD by default', ds.currentPicture(), 'hd');
+ds.setPicture('best');
+eq('Best is remembered, and is not Data Saver', [ds.currentPicture(), ds.isDataSaver(), store.get('sahrae.picture.v1')], ['best', false, 'best']);
+ds.setDataSaver(true); ds.setDataSaver(false);
+eq('Data Saver off returns to the last picture setting', ds.currentPicture(), 'best');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exitCode = fail ? 1 : 0;

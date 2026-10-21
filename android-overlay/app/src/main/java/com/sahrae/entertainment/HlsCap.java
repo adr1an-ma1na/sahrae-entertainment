@@ -4,8 +4,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Data Saver for films and episodes: drop the high-quality renditions from an
- * HLS master playlist, so the player can only choose 480p or lower.
+ * Picture quality for films and episodes, by editing the menu of qualities a
+ * player is given (an HLS master playlist or a DASH manifest):
+ *   Data Saver  drop everything above 480p (cap)
+ *   HD / Best   drop everything below 720p / 1080p (floor), so an adaptive
+ *               player cannot settle on 360p on a slow start, which is what
+ *               made films look soft on mobile data
+ * When nothing would be left, the closest rendition stays, so the player always
+ * has something to play.
  *
  * The movie players are other people's pages, so the app cannot set their
  * quality. What it can do is answer the player's request for the master
@@ -19,8 +25,10 @@ import java.util.List;
 public final class HlsCap {
     private HlsCap() {}
 
-    /** Renditions without a RESOLUTION are kept up to this bandwidth (bits/s), about what 480p needs. */
+    /** Renditions without a RESOLUTION are judged by bandwidth (bits/s): about what 480p needs... */
     static final long UNLABELLED_MAX_BPS = 1_600_000L;
+    /** ...and about what 720p needs. */
+    static final long UNLABELLED_HD_BPS = 2_500_000L;
 
     /** True when this playlist lists renditions (a master), rather than the segments of one. */
     public static boolean isMaster(String text) {
@@ -34,7 +42,20 @@ public final class HlsCap {
      * playlist comes back unchanged.
      */
     public static String cap(String text, int maxHeight) {
+        return select(text, 0, maxHeight);
+    }
+
+    /**
+     * The playlist with every rendition shorter than minHeight removed, so the
+     * player starts and stays in HD. When none is tall enough, the tallest stays.
+     */
+    public static String floor(String text, int minHeight) {
+        return select(text, minHeight, Integer.MAX_VALUE);
+    }
+
+    private static String select(String text, int minHeight, int maxHeight) {
         if (!isMaster(text)) return text;
+        boolean capping = maxHeight != Integer.MAX_VALUE;
         String[] lines = text.split("\n", -1);
         List<int[]> variants = new ArrayList<>();      // {infLine, uriLine}
         List<long[]> info = new ArrayList<>();         // {height or -1, bandwidth or -1}
@@ -54,17 +75,19 @@ public final class HlsCap {
         if (variants.isEmpty()) return text;
 
         boolean[] keep = new boolean[variants.size()];
-        int kept = 0, lowest = 0;
+        int kept = 0, lowest = 0, highest = 0;
         for (int v = 0; v < variants.size(); v++) {
             long h = info.get(v)[0], bw = info.get(v)[1];
-            boolean ok = h > 0 ? h <= maxHeight : (bw > 0 && bw <= UNLABELLED_MAX_BPS);
+            boolean ok = h > 0
+                ? h >= minHeight && h <= maxHeight
+                : capping ? (bw > 0 && bw <= UNLABELLED_MAX_BPS) : (bw >= UNLABELLED_HD_BPS);
             keep[v] = ok;
             if (ok) kept++;
-            long lbw = info.get(lowest)[1];
-            if (bw > 0 && (lbw <= 0 || bw < lbw)) lowest = v;
+            if (rank(info.get(v)) < rank(info.get(lowest))) lowest = v;
+            if (rank(info.get(v)) > rank(info.get(highest))) highest = v;
         }
         if (kept == variants.size()) return text;
-        if (kept == 0) keep[lowest] = true;
+        if (kept == 0) keep[capping ? lowest : highest] = true;
 
         boolean[] drop = new boolean[lines.length];
         for (int v = 0; v < variants.size(); v++) {
@@ -81,6 +104,11 @@ public final class HlsCap {
         return sb.toString();
     }
 
+    /** How good a rendition is: height first, bandwidth to break ties or stand in. */
+    private static long rank(long[] hb) {
+        return (hb[0] > 0 ? hb[0] : 0) * 100_000_000L + Math.max(hb[1], 0);
+    }
+
     /** True for a DASH manifest (VidLink serves these). */
     public static boolean isDash(String text) {
         return text != null && text.contains("<MPD") && text.contains("<Representation");
@@ -93,6 +121,15 @@ public final class HlsCap {
      * carry no height and are never touched.
      */
     public static String capDash(String text, int maxHeight) {
+        return selectDash(text, 0, maxHeight);
+    }
+
+    /** The DASH manifest with every video Representation shorter than minHeight removed; the tallest stays if none is tall enough. */
+    public static String floorDash(String text, int minHeight) {
+        return selectDash(text, minHeight, Integer.MAX_VALUE);
+    }
+
+    private static String selectDash(String text, int minHeight, int maxHeight) {
         if (!isDash(text)) return text;
         StringBuilder out = new StringBuilder(text.length());
         int pos = 0;
@@ -103,14 +140,15 @@ public final class HlsCap {
             if (setEnd < 0) break;
             setEnd += "</AdaptationSet>".length();
             out.append(text, pos, setStart);
-            out.append(capSet(text.substring(setStart, setEnd), maxHeight));
+            out.append(selectSet(text.substring(setStart, setEnd), minHeight, maxHeight));
             pos = setEnd;
         }
         out.append(text.substring(pos));
         return out.toString();
     }
 
-    private static String capSet(String set, int maxHeight) {
+    private static String selectSet(String set, int minHeight, int maxHeight) {
+        boolean capping = maxHeight != Integer.MAX_VALUE;
         List<int[]> reps = new ArrayList<>();   // {start, end, height}
         int i = 0;
         while (true) {
@@ -129,17 +167,22 @@ public final class HlsCap {
             reps.add(new int[] { s, end, (int) h });
             i = end;
         }
-        int shortest = -1, keep = 0;
+        int shortest = -1, tallest = -1, keep = 0, video = 0;
         for (int r = 0; r < reps.size(); r++) {
             int h = reps.get(r)[2];
-            if (h <= 0 || h <= maxHeight) keep++;
-            if (h > 0 && (shortest < 0 || h < reps.get(shortest)[2])) shortest = r;
+            if (h <= 0) continue;
+            video++;
+            if (h >= minHeight && h <= maxHeight) keep++;
+            if (shortest < 0 || h < reps.get(shortest)[2]) shortest = r;
+            if (tallest < 0 || h > reps.get(tallest)[2]) tallest = r;
         }
+        if (video == 0) return set;   // audio or text: never touched
+        int fallback = capping ? shortest : tallest;
         StringBuilder sb = new StringBuilder(set.length());
         int at = 0;
         for (int r = 0; r < reps.size(); r++) {
             int[] rp = reps.get(r);
-            boolean drop = rp[2] > maxHeight && !(keep == 0 && r == shortest);
+            boolean drop = rp[2] > 0 && (rp[2] < minHeight || rp[2] > maxHeight) && !(keep == 0 && r == fallback);
             if (!drop) continue;
             sb.append(set, at, rp[0]);
             at = rp[1];
@@ -265,6 +308,21 @@ public final class HlsCap {
         String dc2 = capDash(hiOnly, 480);
         check(r, "DASH: when every video is too tall, the shortest stays", dc2.contains("v720") && !dc2.contains("v1080"));
         check(r, "DASH: not a manifest is untouched", capDash("#EXTM3U", 480).equals("#EXTM3U"));
+
+        String hd = floor(master, 720);
+        check(r, "HD: 480p and 360p removed", !hd.contains("480/index.m3u8") && !hd.contains("360/index.m3u8"));
+        check(r, "HD: 1080p and 720p kept, audio too", hd.contains("1080/index.m3u8") && hd.contains("720/index.m3u8") && hd.contains("TYPE=AUDIO"));
+        check(r, "Best: only 1080p", floor(master, 1080).contains("1080/index.m3u8") && !floor(master, 1080).contains("720/index.m3u8"));
+        String lowOnly = String.join("\n", "#EXTM3U",
+            "#EXT-X-STREAM-INF:BANDWIDTH=600000,RESOLUTION=640x360", "a.m3u8",
+            "#EXT-X-STREAM-INF:BANDWIDTH=1200000,RESOLUTION=854x480", "b.m3u8");
+        check(r, "HD on a low-only menu keeps the best there is", floor(lowOnly, 720).contains("b.m3u8") && !floor(lowOnly, 720).contains("a.m3u8"));
+        check(r, "HD: without RESOLUTION, bandwidth decides", floor(unlabelled, 720).contains("hi.m3u8") && !floor(unlabelled, 720).contains("lo.m3u8"));
+        String dh = floorDash(mpd, 720);
+        check(r, "DASH HD: 480p removed, 1080p and 720p kept", !dh.contains("id=\"v480\"") && dh.contains("v1080") && dh.contains("v720"));
+        check(r, "DASH HD: audio untouched", dh.contains("id=\"a1\""));
+        String lowDash = mpd.replace("height=\"1080\"", "height=\"360\"").replace("height=\"720\"", "height=\"240\"");
+        check(r, "DASH HD on a low-only manifest keeps the tallest", floorDash(lowDash, 720).contains("id=\"v480\"") && !floorDash(lowDash, 720).contains("v720"));
 
         System.out.println("\n" + r[0] + " passed, " + r[1] + " failed");
         if (r[1] > 0) System.exit(1);

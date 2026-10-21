@@ -79,7 +79,9 @@ export function useServerPool(type: 'movie' | 'tv'): PoolServer[] {
     void refreshHealth();
     return () => window.removeEventListener(EVENT, on);
   }, []);
-  return pickServers(pool, type, health);
+  // The Android app can hold adaptive players in HD (its picture floor); a browser cannot.
+  const canHoldHd = (window as unknown as { __sahraeCaps?: { quality?: boolean } }).__sahraeCaps?.quality === true;
+  return pickServers(pool, type, health, Date.now(), undefined, canHoldHd);
 }
 
 /** Every host any pool server uses (for checks). */

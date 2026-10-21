@@ -26,6 +26,7 @@ eq('is well formed', validPool(pool), true);
 eq('offers six', pickServers(pool, 'movie').length, ACTIVE_COUNT);
 eq('films: sharpest picture first', ids(pickServers(pool, 'movie')), ['vidrock', 'vidzee', 'vidlink', 'viduki', 'vidsrcto', '2embed']);
 eq('series: servers that can start the next episode lead', ids(pickServers(pool, 'tv')).slice(0, 2), ['vidzee', 'vidlink']);
+eq('in a browser, fixed 1080p streams lead, since nothing can stop an adaptive one settling at 360p', ids(pickServers(pool, 'movie', [], Date.now(), 6, false)).slice(0, 2), ['vidzee', 'viduki']);
 eq('no server id appears twice', new Set(pool.servers.map((s) => s.id)).size, pool.servers.length);
 
 console.log('\nthe ranking is visual, then audio, then reliability');

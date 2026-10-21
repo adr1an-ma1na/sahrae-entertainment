@@ -1116,6 +1116,14 @@ public class MainActivity extends BridgeActivity {
     private static volatile boolean sDataSaver = false;
     /** Data Saver's ceiling, in pixel rows. */
     private static final int DATA_SAVER_MAX_HEIGHT = 480;
+    /**
+     * Picture floor in pixel rows (/__quality): 720 by default (HD), 1080 for
+     * Best, 0 for none. Adaptive players otherwise start low on mobile data and
+     * often stay there, which is why films looked soft. Data Saver wins over it.
+     */
+    private static volatile int sQualityFloor = 720;
+    /** The current player's menu of qualities has been handled; its later playlists load untouched. */
+    private static volatile boolean sMenuHandled = false;
     /** When the page was last told a player fetched its video, so it is told at most every 1.5 s. */
     private static volatile long sLastStreamSignal = 0;
 
@@ -1147,10 +1155,13 @@ public class MainActivity extends BridgeActivity {
     }
 
     /**
-     * Data Saver for a player's HLS playlist: fetch it here with the player's
-     * own headers and cookies, and when it is a master playlist hand back the
-     * menu without anything above 480p (HlsCap). Anything going wrong returns
-     * null, and the WebView fetches the playlist itself as if nothing happened.
+     * Picture quality for a player's playlist: fetch it here with the player's
+     * own headers and cookies, and when it is a menu of qualities (an HLS
+     * master or a DASH manifest) hand back the menu with Data Saver's cap or
+     * the HD floor applied (HlsCap). Anything going wrong, or a redirect
+     * (relative addresses in the playlist would then point at the wrong
+     * place), returns null, and the WebView fetches it itself as if nothing
+     * happened.
      */
     private static WebResourceResponse dataSaverPlaylist(WebResourceRequest req) {
         if (!"GET".equalsIgnoreCase(req.getMethod())) return null;
@@ -1177,18 +1188,23 @@ public class MainActivity extends BridgeActivity {
 
             int code = conn.getResponseCode();
             if (code < 200 || code >= 300) return null;
+            if (!url.equals(conn.getURL().toString())) return null;
             byte[] body = readAll(conn.getInputStream());
             String text = new String(body, StandardCharsets.UTF_8);
+            boolean saver = sDataSaver;
+            int floor = sQualityFloor;
             if (HlsCap.isDash(text)) {
-                return playlistResponse(HlsCap.capDash(text, DATA_SAVER_MAX_HEIGHT).getBytes(StandardCharsets.UTF_8),
-                    conn.getContentType(), origin);
+                sMenuHandled = true;
+                String out = saver ? HlsCap.capDash(text, DATA_SAVER_MAX_HEIGHT) : floor > 0 ? HlsCap.floorDash(text, floor) : text;
+                return playlistResponse(out.getBytes(StandardCharsets.UTF_8), conn.getContentType(), origin);
             }
             if (!HlsCap.isMaster(text)) {
                 // Not a menu of qualities: hand back exactly what came, since it is already fetched.
                 return playlistResponse(body, conn.getContentType(), origin);
             }
-            return playlistResponse(HlsCap.cap(text, DATA_SAVER_MAX_HEIGHT).getBytes(StandardCharsets.UTF_8),
-                conn.getContentType(), origin);
+            sMenuHandled = true;
+            String out = saver ? HlsCap.cap(text, DATA_SAVER_MAX_HEIGHT) : floor > 0 ? HlsCap.floor(text, floor) : text;
+            return playlistResponse(out.getBytes(StandardCharsets.UTF_8), conn.getContentType(), origin);
         } catch (Throwable t) {
             return null;
         } finally {
@@ -1791,7 +1807,16 @@ public class MainActivity extends BridgeActivity {
                             return DownloadStore.json("{\"ok\":true}");
                         } else if (path.startsWith("/__player")) {
                             sPlayerOpen = "1".equals(u.getQueryParameter("open"));
+                            sMenuHandled = false;
                             return DownloadStore.json("{\"ok\":true}");
+                        } else if (path.startsWith("/__quality")) {
+                            try {
+                                int fl = Integer.parseInt(u.getQueryParameter("floor"));
+                                sQualityFloor = (fl == 0 || fl == 720 || fl == 1080) ? fl : 720;
+                            } catch (Throwable ignore) {}
+                            // Sent again whenever the player loads a new server or episode: its menu is new too.
+                            sMenuHandled = false;
+                            return DownloadStore.json("{\"ok\":true,\"floor\":" + sQualityFloor + "}");
                         } else if (path.startsWith("/__datasaver")) {
                             sDataSaver = "1".equals(u.getQueryParameter("on"));
                             return DownloadStore.json("{\"ok\":true,\"on\":" + sDataSaver + "}");
@@ -1865,10 +1890,11 @@ public class MainActivity extends BridgeActivity {
                     }
 
                     // A movie player fetching its video: tell the page (proof the
-                    // server works), and under Data Saver shorten its quality menu.
+                    // server works), and set its quality menu (Data Saver cap or
+                    // HD floor) the first time it asks for one.
                     if (sPlayerOpen && initiator != null && !isLocalAppHost(initiator) && isVideoFetch(request.getUrl())) {
                         signalStream(view);
-                        if (sDataSaver) {
+                        if ((sDataSaver || sQualityFloor > 0) && !sMenuHandled) {
                             String p = request.getUrl().getPath();
                             if (p != null && (p.toLowerCase().contains(".m3u8") || p.toLowerCase().endsWith(".mpd"))) {
                                 WebResourceResponse capped = dataSaverPlaylist(request);
@@ -1947,7 +1973,7 @@ public class MainActivity extends BridgeActivity {
                 // with disguised segment names would look silent and be switched
                 // away from while playing), measure data used, cap video quality.
                 view.evaluateJavascript(
-                    "window.__sahraeCaps=Object.assign(window.__sahraeCaps||{},{mediaSignal:true,traffic:true,dataSaver:true,embedHosts:true,reminders:true});"
+                    "window.__sahraeCaps=Object.assign(window.__sahraeCaps||{},{mediaSignal:true,traffic:true,dataSaver:true,embedHosts:true,reminders:true,quality:true});"
                     + "window.dispatchEvent(new Event('sahrae:caps'))", null);
 
                 // This phone has lost its screen engine before: flatten the heavy
