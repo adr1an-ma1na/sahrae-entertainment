@@ -18,6 +18,8 @@ import { NO_CROWD, crowdChoice, fetchProof, fetchSeasonPlayable, nextServerRanke
 const CROWD_FOLLOW_MS = 4000;
 /** No-start wait when another server is proven on this title: a known way out is worth taking sooner. */
 const PROVEN_ALTERNATIVE_LIMIT_MS = 12000;
+/** Seconds between an episode ending and the next one starting by itself. */
+const UP_NEXT_S = 3;
 
 interface PlayerModalProps {
   isOpen: boolean;
@@ -58,7 +60,12 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const [currentMediaId, setCurrentMediaId] = useState<number | null>(mediaId);
   const [currentMediaType, setCurrentMediaType] = useState<'movie' | 'tv' | null>(mediaType);
   const [isSandboxed, setIsSandboxed] = useState(false);
-  const [showNextEpisodeOverlay, setShowNextEpisodeOverlay] = useState(false);
+  // Up next: the seconds left before the next episode starts on its own, like
+  // Netflix, once this one ends. null when no countdown is running.
+  const [upNext, setUpNext] = useState<number | null>(null);
+  const upNextTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // An episode's end is acted on once, even though players repeat the news.
+  const endHandledRef = useRef(false);
   const [showControls, setShowControls] = useState(true);
   const [rating, setRating] = useState<'up' | 'down' | null>(null);
   const [offlineBlobUrl, setOfflineBlobUrl] = useState<string | null>(null);
@@ -736,7 +743,6 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
         }
       }
       setRefreshKey(prev => prev + 1);
-      setShowNextEpisodeOverlay(false);
     }
   };
 
@@ -755,28 +761,47 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     return !!details.seasons.find(s => s.season_number === selectedSeason - 1);
   };
 
+  const stopUpNext = () => {
+    if (upNextTimerRef.current) clearInterval(upNextTimerRef.current);
+    upNextTimerRef.current = null;
+    setUpNext(null);
+  };
+  const playNextNow = () => { stopUpNext(); handleSkipEpisode('next'); };
+
+  // When an episode ends, the next one starts by itself after UP_NEXT_S
+  // seconds, unless the viewer cancels. "Ended" is the player saying so, or its
+  // clock reaching the last second (some players never say). A press of the
+  // player's own Next button skips the wait. Only players that report their
+  // clock can be followed: VidLink and VidZee do (measured 2026-10-21); VidRock
+  // reports nothing, so there the episode simply stops.
   useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      if (typeof event.data === 'object' && event.data?.type === 'PLAYER_EVENT') {
-        const payload = event.data.data;
-        if (payload?.event === 'timeupdate') {
-          if (payload.currentTime > 0 && payload.duration > 0) {
-            const perc = payload.currentTime / payload.duration;
-            if (perc >= 0.90 && hasNextEpisode()) {
-              setShowNextEpisodeOverlay(true);
-            } else {
-              setShowNextEpisodeOverlay(false);
-            }
-          }
-        }
-        if (payload?.event === 'ended' || payload?.event === 'next_episode') {
-          handleSkipEpisode('next');
-        }
-      }
+    endHandledRef.current = false;
+    stopUpNext();
+    if (!isOpen || !isPlaying || playingTrailer || currentMediaType !== 'tv') return;
+    const onMessage = (e: MessageEvent) => {
+      if (!fromFrame(iframeRef.current?.contentWindow, e.source)) return;
+      let d: unknown = e.data;
+      if (typeof d === 'string') { try { d = JSON.parse(d); } catch { return; } }
+      const m = d as { type?: string; data?: { event?: string; currentTime?: number; duration?: number } } | null;
+      if (!m || m.type !== 'PLAYER_EVENT' || !m.data) return;
+      const { event, currentTime = 0, duration = 0 } = m.data;
+      if (event === 'next_episode') { if (hasNextEpisode()) playNextNow(); return; }
+      const atEnd = event === 'ended' || (event === 'timeupdate' && duration > 60 && currentTime >= duration - 1.5);
+      if (!atEnd || endHandledRef.current || !hasNextEpisode()) return;
+      endHandledRef.current = true;
+      let left = UP_NEXT_S;
+      setUpNext(left);
+      upNextTimerRef.current = setInterval(() => {
+        left -= 1;
+        if (left <= 0) playNextNow();
+        else setUpNext(left);
+      }, 1000);
     };
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, [currentMediaType, details, selectedSeason, selectedEpisode]);
+    window.addEventListener('message', onMessage);
+    return () => { window.removeEventListener('message', onMessage); stopUpNext(); };
+    // hasNextEpisode and handleSkipEpisode read details and the episode, both listed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, isPlaying, playingTrailer, currentMediaType, details, selectedSeason, selectedEpisode, selectedServer, refreshKey]);
 
   // Loading indicator + slow-load recovery. We can't read inside the cross-origin
   // embed, so progress is a smooth simulation that completes when the iframe fires
@@ -919,6 +944,28 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                         )}
                       </div>
                     )}
+                    {upNext !== null && (() => {
+                      const sameSeason = details.seasons?.find((x) => x.season_number === selectedSeason);
+                      const nextInSeason = !!sameSeason && selectedEpisode < sameSeason.episode_count;
+                      const nS = nextInSeason ? selectedSeason : selectedSeason + 1;
+                      const nE = nextInSeason ? selectedEpisode + 1 : 1;
+                      const nextName = nextInSeason ? seasonDetails?.episodes?.find((x) => x.episode_number === nE)?.name : undefined;
+                      return (
+                        <div role="alert" className="absolute bottom-6 right-6 z-40 w-[min(20rem,calc(100%-3rem))] bg-zinc-950/95 border border-white/15 text-white rounded-xl p-4 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-4 duration-300">
+                          <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">Next episode in {upNext}</p>
+                          <p className="text-sm font-bold mt-1 truncate">S{nS} E{nE}{nextName ? ` · ${nextName}` : ''}</p>
+                          <div className="h-1 mt-3 rounded-full bg-white/15 overflow-hidden">
+                            <div className="h-full bg-amber-400 transition-[width] duration-1000 ease-linear" style={{ width: `${((UP_NEXT_S - upNext + 1) / UP_NEXT_S) * 100}%` }} />
+                          </div>
+                          <div className="flex gap-2 mt-3">
+                            <button onClick={playNextNow} data-tv-focusable data-tv-autofocus
+                              className="px-3.5 py-1.5 rounded-full bg-white text-black text-xs font-bold flex items-center gap-1.5 active:scale-95"><Play className="w-3.5 h-3.5 fill-current" /> Play now</button>
+                            <button onClick={stopUpNext} data-tv-focusable
+                              className="px-3.5 py-1.5 rounded-full bg-zinc-800 text-white text-xs font-bold border border-white/15 active:scale-95">Cancel</button>
+                          </div>
+                        </div>
+                      );
+                    })()}
                     {isSandboxed && (['superembed', 'vidsrcpro', '2embed', 'vidbinge', 'multiembed', 'vidsrcnet', 'vidsrcme', 'embedsu'].includes(currentServerObj.id)) && (
                       <div className="absolute top-0 left-0 w-full z-40 bg-[#e50914]/95 text-white text-xs md:text-sm font-bold px-4 py-3 flex flex-col md:flex-row items-center justify-center gap-3 md:gap-4 text-center backdrop-blur shadow-2xl border-b border-white/20 animate-in slide-in-from-top-2">
                         <AlertCircle className="w-5 h-5 shrink-0" />
