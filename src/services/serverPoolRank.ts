@@ -126,3 +126,16 @@ export function fill(template: string, id: number, s: number, e: number, brand: 
 export function label(s: PoolServer): string {
   return s.name;
 }
+
+/**
+ * Is list `a` at least as new as list `b`? By version first, then date. By
+ * date alone, two lists made the same day tied, and an old cached or published
+ * list could win over a newer one this build carries (2026-10-25: v4 and v5
+ * were both dated that day). The daily health check changes the date, not the
+ * version, so within one version the later date still wins.
+ */
+export function notOlder(a: { version?: number; updated: string }, b: { version?: number; updated: string }): boolean {
+  const va = a.version ?? 0, vb = b.version ?? 0;
+  if (va !== vb) return va > vb;
+  return a.updated >= b.updated;
+}

@@ -107,10 +107,12 @@ public class MainActivity extends BridgeActivity {
         "vidrock.ru","vsembed.ru","2embed.skin","vidsrc.sh","anyembed.xyz",
         // Pool servers added 21 Oct 2026 (src/data/servers.json).
         "vidsrc.wtf","viduki.net",
+        // VixSrc, added 25 Oct 2026 (src/data/servers.json).
+        "vixsrc.to",
         // The owner's list of 21 Oct 2026 (src/data/servers.json).
         "autoembed.co","vidsrc.su","vidsrc.io","vidsrc.pm","multiembed.mov","streamingnow.mov","vidjoy.pro",
         // Download source (behind the Download button, not a stream server)
-        "vidvault.ru",
+        "vidvault.ru","vidvault.to",
         "youtube-nocookie.com","youtube.com","ytimg.com",   // trailer player
         // Live Sports (Streamed API + its stream embed hosts)
         "streamed.pk","streamed.su","streamed.st",
@@ -848,7 +850,10 @@ public class MainActivity extends BridgeActivity {
         String l = u.toLowerCase();
         int q = l.indexOf('?');
         String p = q >= 0 ? l.substring(0, q) : l;
-        return p.endsWith(".m3u8") || p.contains(".m3u8/");
+        if (p.endsWith(".m3u8") || p.contains(".m3u8/")) return true;
+        // VixSrc serves its master as /playlist/<id>?token=…; its audio and
+        // subtitle playlists carry type=… and are not the one to play.
+        return p.contains("/playlist/") && (q < 0 || !l.substring(q).contains("type="));
     }
 
     private WebResourceResponse filmResolve(Uri uri) {

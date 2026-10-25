@@ -27,7 +27,7 @@ export default function MovieDownloadModal({ url, title, onClose }: { url: strin
   const openExternally = () => {
     if (native) {
       // Hardened bridge: the native side only honours an allow-listed download
-      // host (vidvault.ru). Failure is silent — the iframe below still works.
+      // host (vidvault.to; vidvault.ru forwards there since October 2026). Failure is silent — the iframe below still works.
       try { fetch(`https://localhost/__openext?url=${encodeURIComponent(url)}`, { cache: 'no-store' }).catch(() => {}); } catch { /* ignore */ }
     } else {
       window.open(url, '_blank', 'noopener,noreferrer');

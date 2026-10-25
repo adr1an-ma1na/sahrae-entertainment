@@ -1,32 +1,32 @@
 {
-  "version": 4,
+  "version": 5,
   "updated": "2026-10-25",
-  "about": "Movie and series servers, in the order the web app offers them. Measured from Kenya on 2026-10-25 on Matlock (2024) S1E1, reading the picture actually decoded and the bitrate of the stream: VidRock 1080p at 5 Mb/s (also 720p, 360p), VidZee 1080p at about 3 Mb/s (one rendition only), VidLink Pro 1080p at only 1.6 Mb/s (also 720p, 480p; it was showing 720p after 40 s). On the web VidZee leads because it is the only one that runs inside the Ad Shield sandbox (no pop-ups). In the Android app, where Sahrae plays the stream in its own player without the provider page, the order is by bitrate instead (cleanFirst in services/cleanStream.ts).",
+  "about": "Movie and series servers, in the order the web app offers them, chosen on 2026-10-25 by measuring from Kenya the picture actually decoded, the stream bitrate and the sound, on Matlock (2024) S1E1 and Dune: Part Two. Of the providers still alive that week only VixSrc was new and good enough; VidFast, VidSrc.cc, 111Movies, EmbedWave, Videasy (top level) and Mapple did not play or asked viewers to prove they are human, and VidSrc.su was 720p with a TV channel logo. In the Android app, where Sahrae plays the stream in its own player without the provider page, the order is by bitrate instead (cleanFirst in services/cleanStream.ts).",
   "servers": [
     {
-      "id": "vidzee",
-      "name": "VidZee · 1080p · 5.1",
-      "movie": "https://player.vidzee.wtf/embed/movie/{id}",
-      "tv": "https://player.vidzee.wtf/embed/tv/{id}/{s}/{e}",
+      "id": "vixsrc",
+      "name": "VixSrc · 1080p · subtitles",
+      "movie": "https://vixsrc.to/movie/{id}?lang=en",
+      "tv": "https://vixsrc.to/tv/{id}/{s}/{e}?lang=en",
       "hosts": [
-        "vidzee.wtf"
+        "vixsrc.to"
       ],
       "visual": {
         "maxHeight": 1080,
-        "mbps": 3,
+        "mbps": 4.5,
         "codec": "h264",
-        "adaptive": false
+        "adaptive": true
       },
       "audio": {
-        "channels": 6,
-        "languages": 4
+        "channels": 2,
+        "languages": 2
       },
       "coverage": 1,
       "events": true,
       "status": "active",
       "failStreak": 0,
       "checked": "2026-10-25",
-      "note": "Matlock S1E1 at 1920x1080, about 3 Mb/s H.264, one rendition (never drops), 5.1 AAC. The only server that plays inside the web Ad Shield sandbox."
+      "note": "Matlock S1E1 and Dune: Part Two: renditions 1080p at 4.5 Mb/s, 720p at 2.1, 480p at 1.2 (H.264, AAC); English and Italian audio, 4 subtitle tracks on Dune. Starts by itself, no pop-up seen. Its web player starts at 720p and climbs; in Sahrae's player it opens at 1080p. Audio channels not measured (encrypted segments)."
     },
     {
       "id": "vidrock",
@@ -52,16 +52,15 @@
       "status": "active",
       "failStreak": 0,
       "checked": "2026-10-25",
-      "note": "Matlock S1E1: renditions 1080p at 5.0 Mb/s, 720p at 3.0, 360p at 0.8; showing 1080p after 34 s. The clearest picture measured. Slow to start (up to ~20 s). Refuses the web sandbox."
+      "note": "Matlock S1E1: renditions 1080p at 5.0 Mb/s, 720p at 3.0, 360p at 0.8; showing 1080p after 34 s, the clearest picture measured. Dolby Digital Plus 5.1 on Dune: Part Two. Slow to start (up to ~20 s), and it was down (504 on vidrock.to and vidrock.net) at 20:05 on 2026-10-25, an hour after playing: the failover covers it. Refuses the web sandbox."
     },
     {
-      "id": "viduki",
-      "name": "Viduki · 1080p",
-      "movie": "https://vidsrc.wtf/api/1/movie/?id={id}",
-      "tv": "https://vidsrc.wtf/api/1/tv/?id={id}&s={s}&e={e}",
+      "id": "vidzee",
+      "name": "VidZee · 1080p · 5.1",
+      "movie": "https://player.vidzee.wtf/embed/movie/{id}",
+      "tv": "https://player.vidzee.wtf/embed/tv/{id}/{s}/{e}",
       "hosts": [
-        "vidsrc.wtf",
-        "viduki.net"
+        "vidzee.wtf"
       ],
       "visual": {
         "maxHeight": 1080,
@@ -70,43 +69,46 @@
         "adaptive": false
       },
       "audio": {
-        "channels": 2,
-        "languages": 1
+        "channels": 6,
+        "languages": 4
       },
-      "coverage": 0.9,
-      "events": false,
-      "status": "active",
-      "failStreak": 0,
-      "checked": "2026-10-25",
-      "note": "The same stream as VidZee (about 3 Mb/s 1080p) through a different front end: a backup for when VidZee's own player is down. Refuses the web sandbox."
-    },
-    {
-      "id": "vidlink",
-      "name": "VidLink Pro · up to 1080p",
-      "movie": "https://vidlink.pro/movie/{id}?primaryColor=f59e0b",
-      "tv": "https://vidlink.pro/tv/{id}/{s}/{e}?primaryColor=f59e0b",
-      "hosts": [
-        "vidlink.pro"
-      ],
-      "visual": {
-        "maxHeight": 1080,
-        "mbps": 1.6,
-        "codec": "hevc",
-        "adaptive": true
-      },
-      "audio": {
-        "channels": 2,
-        "languages": 1
-      },
-      "coverage": 0.8,
+      "coverage": 1,
       "events": true,
       "status": "active",
       "failStreak": 0,
       "checked": "2026-10-25",
-      "note": "Matlock S1E1: renditions 1080p at only 1.6 Mb/s (HEVC), 720p at 0.8, 480p at 0.3; showing 720p after 40 s, and it starts at 480p. The softest picture of the four, so last. Refuses the web sandbox."
+      "note": "Matlock S1E1 at 1920x1080, about 3 Mb/s H.264, one rendition (never drops), 5.1 AAC. The only server that plays inside the web Ad Shield sandbox."
     }
   ],
   "retired": [
+    {
+      "id": "vidlink",
+      "why": "2026-10-25: 1080p at only 1.6 Mb/s, and it showed 480p to 720p: the softest picture of the pool"
+    },
+    {
+      "id": "viduki",
+      "why": "2026-10-25: the same stream as VidZee through another front end, so no gain in picture or sound"
+    },
+    {
+      "id": "vidsrcsu2",
+      "why": "2026-10-25: vidsrc.su plays 720x404 with a TV channel logo burnt in"
+    },
+    {
+      "id": "mapple",
+      "why": "2026-10-25: mappletv.uk (\"4K\") asks every viewer to verify they are human before it plays"
+    },
+    {
+      "id": "embedwave",
+      "why": "2026-10-25: wraps web.nxsha.app, whose player never started"
+    },
+    {
+      "id": "vidsrccc",
+      "why": "2026-10-25: Cloudflare 522, origin down"
+    },
+    {
+      "id": "111movies",
+      "why": "2026-10-25: redirects to a parked advert page"
+    },
     {
       "id": "vidfast",
       "why": "2026-10-22: still stuck on \"Fetching\" from Kenya; its own server answers with error 500"

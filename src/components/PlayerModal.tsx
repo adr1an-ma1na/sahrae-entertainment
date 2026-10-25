@@ -8,7 +8,7 @@ import { loadEq, saveEq, EQ_PRESETS, PRESET_EXTRAS } from '../services/eq';
 import { haptics } from '../services/haptics';
 import MovieDownloadModal from './MovieDownloadModal';
 import { posterColor, cachedPosterColor } from '../services/posterColor';
-import { playerSandbox, isShieldOn, setShieldOn as persistShield, shieldAppliesHere, refusesSandbox } from '../services/adShield';
+import { playerSandbox, isShieldOn, setShieldOn as persistShield, shieldAppliesHere, refusesSandbox, playerReferrer } from '../services/adShield';
 import { suppressPopups } from '../services/popupGuard';
 import { lockLandscape, unlockOrientation } from '../services/fullscreen';
 import CleanPlayer from './CleanPlayer';
@@ -26,7 +26,9 @@ import { NO_CROWD, crowdChoice, fetchProof, fetchSeasonPlayable, nextServerRanke
 /** How soon the crowd's answer must arrive to change the opening server; later it would interrupt a loading player. */
 const CROWD_FOLLOW_MS = 4000;
 /** No-start wait when another server is proven on this title: a known way out is worth taking sooner. */
-const PROVEN_ALTERNATIVE_LIMIT_MS = 12000;
+const PROVEN_ALTERNATIVE_LIMIT_MS = 20000;
+/** How long a server's page gets to load before it is reloaded once, then left (owner's call, 2026-10-25: 20 s). */
+const SERVER_LOAD_MS = 20000;
 /** Seconds between an episode ending and the next one starting by itself. */
 const UP_NEXT_S = 3;
 
@@ -99,8 +101,8 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   // VidVault is the download provider only — deliberately not in SERVERS.
   const downloadUrl = currentMediaId && currentMediaType
     ? (currentMediaType === 'movie'
-        ? `https://vidvault.ru/movie/${currentMediaId}`
-        : `https://vidvault.ru/tv/${currentMediaId}/${selectedSeason}/${selectedEpisode}`)
+        ? `https://vidvault.to/movie/${currentMediaId}`
+        : `https://vidvault.to/tv/${currentMediaId}/${selectedSeason}/${selectedEpisode}`)
     : '';
   // Colour lifted from this title's own poster, used to tint the detail header.
   const [headerTint, setHeaderTint] = useState<string | null>(null);
@@ -933,12 +935,12 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     if (slowTimerRef.current) clearTimeout(slowTimerRef.current);
     loadTimerRef.current = setInterval(() => { setLoadPct(p => (p >= 92 ? p : p + Math.max(0.7, (92 - p) * 0.05))); }, 250);
     // First: silently remount once (the embed 'load' fires fast on any reachable
-    // provider, so no load in ~10s = a real failure — a remount usually fixes it,
+    // provider, so no load in 20 s = a real failure — a remount usually fixes it,
     // like closing/reopening the app). If it STILL fails, show manual recovery.
     slowTimerRef.current = setTimeout(() => {
       if (!autoRetriedRef.current) { autoRetriedRef.current = true; setRefreshKey(k => k + 1); }
       else { autoSwitch(); }
-    }, 10000);
+    }, SERVER_LOAD_MS);
     return () => { if (loadTimerRef.current) clearInterval(loadTimerRef.current); if (slowTimerRef.current) clearTimeout(slowTimerRef.current); };
   }, [isPlaying, selectedServer, selectedSeason, selectedEpisode, refreshKey, clean.state]);
 
@@ -1034,7 +1036,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       // the user's clipboard, and no player needs it.
                       allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen"
                       allowFullScreen
-                      referrerPolicy="no-referrer"
+                      referrerPolicy={playerReferrer(src)}
                       // Ad Shield. On the WEB this sandbox is the only thing that
                       // can actually stop a cross-origin embed popping windows or
                       // hijacking the tab — no parent-page JS can reach inside it.

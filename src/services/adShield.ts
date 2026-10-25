@@ -79,6 +79,7 @@ const SANDBOX_REFUSERS = [
   'vidsrc.wtf', 'viduki.net', // Viduki: "This player was sandboxed"
   'vidrock.to', 'vidrock.ru', // VidRock: "Sandbox Not Allowed"
   'vidlink.pro', // VidLink Pro: "Please Disable Sandbox"
+  'vixsrc.to', // VixSrc: black when sandboxed, plays without (no pop-ups seen)
 ];
 
 export function refusesSandbox(url: string): boolean {
@@ -87,5 +88,21 @@ export function refusesSandbox(url: string): boolean {
     return SANDBOX_REFUSERS.some((r) => h === r || h.endsWith('.' + r));
   } catch {
     return false;
+  }
+}
+
+/**
+ * Players that refuse to play without knowing which site embeds them. The
+ * others get no referrer at all; these get only the site's origin, never the
+ * page address. VixSrc shows "use referrerpolicy=origin" otherwise (2026-10-25).
+ */
+const NEEDS_ORIGIN = ['vixsrc.to'];
+
+export function playerReferrer(url: string): 'origin' | 'no-referrer' {
+  try {
+    const h = new URL(url).hostname.toLowerCase();
+    return NEEDS_ORIGIN.some((r) => h === r || h.endsWith('.' + r)) ? 'origin' : 'no-referrer';
+  } catch {
+    return 'no-referrer';
   }
 }

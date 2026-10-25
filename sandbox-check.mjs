@@ -10,7 +10,7 @@
  * Run: node --experimental-strip-types sandbox-check.mjs
  */
 import fs from 'node:fs';
-import { refusesSandbox, playerSandbox, SHIELD_SANDBOX } from './src/services/adShield.ts';
+import { refusesSandbox, playerSandbox, SHIELD_SANDBOX, playerReferrer } from './src/services/adShield.ts';
 
 let pass = 0, fail = 0;
 const eq = (name, got, want) => {
@@ -35,6 +35,12 @@ console.log('\nevery film server is accounted for');
 const pool = JSON.parse(fs.readFileSync('src/data/servers.json', 'utf8'));
 const sandboxed = pool.servers.filter((s) => !refusesSandbox(s.movie.replace('{id}', '1'))).map((s) => s.id).join(',');
 eq('only VidZee plays sandboxed (update this when the pool changes)', sandboxed, 'vidzee');
+eq('VixSrc', playerSandbox(true, 'https://vixsrc.to/tv/226174/1/1?lang=en'), undefined);
+
+console.log('\nreferrer: only to players that refuse to play without it');
+eq('VixSrc gets the site origin', playerReferrer('https://vixsrc.to/movie/1?lang=en'), 'origin');
+eq('the others get none', playerReferrer('https://player.vidzee.wtf/embed/movie/1'), 'no-referrer');
+eq('junk gets none', playerReferrer('nope'), 'no-referrer');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exitCode = fail ? 1 : 0;

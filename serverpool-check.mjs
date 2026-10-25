@@ -9,7 +9,7 @@
  * Run: node --experimental-strip-types serverpool-check.mjs
  */
 import fs from 'node:fs';
-import { pickServers, score, validPool, crowdFailing, fill, label } from './src/services/serverPoolRank.ts';
+import { pickServers, score, validPool, crowdFailing, fill, label, notOlder } from './src/services/serverPoolRank.ts';
 
 let pass = 0, fail = 0;
 const eq = (name, got, want) => {
@@ -21,15 +21,15 @@ const pool = JSON.parse(fs.readFileSync('src/data/servers.json', 'utf8'));
 const ids = (list) => list.map((s) => s.id);
 const NOW = Date.parse('2026-10-22T12:00:00Z');
 const ago = (h) => new Date(NOW - h * 3600_000).toISOString();
-const ORDER = ['vidzee', 'vidrock', 'viduki', 'vidlink'];
+const ORDER = ['vixsrc', 'vidrock', 'vidzee'];
 
 console.log('\nthe shipped pool');
 eq('is well formed', validPool(pool), true);
-eq('films: best picture and sound first, VidZee leads', ids(pickServers(pool, 'movie')), ORDER);
+eq('films: VixSrc leads, then VidRock and VidZee', ids(pickServers(pool, 'movie')), ORDER);
 eq('series: the same order', ids(pickServers(pool, 'tv')), ORDER);
 eq('the order does not change in a browser', ids(pickServers(pool, 'movie', [], Date.now(), undefined, false)), ORDER);
 eq('no server id appears twice', new Set(pool.servers.map((s) => s.id)).size, pool.servers.length);
-eq('the first two carry 5.1 surround', pool.servers.slice(0, 2).map((s) => s.audio.channels), [6, 6]);
+eq('VidRock and VidZee carry 5.1 surround', pool.servers.slice(1).map((s) => s.audio.channels), [6, 6]);
 eq('every server is at least 1080p', pool.servers.every((s) => s.visual.maxHeight >= 1080), true);
 
 console.log('\nthe quality score (kept for reference; it no longer reorders)');
@@ -42,7 +42,7 @@ console.log('\nwhen a server fails');
 const down = { ...pool, servers: pool.servers.map((s) => (s.id === 'vidrock' ? { ...s, status: 'down' } : s)) };
 eq('a server marked down steps out, the rest keep their order', ids(pickServers(down, 'movie')), ORDER.filter((x) => x !== 'vidrock'));
 const failing = [{ server_id: 'vidzee', ok: 1, fail: 20, last_ok: ago(60), last_fail: ago(1) }];
-eq('a server viewers keep failing on steps out too, and the next leads', ids(pickServers(pool, 'movie', failing, NOW))[0], 'vidrock');
+eq('a server viewers keep failing on steps out too, and the next leads', ids(pickServers(pool, 'movie', failing, NOW))[0], 'vixsrc');
 eq('...but a success in the last day keeps it', crowdFailing({ server_id: 'x', ok: 1, fail: 20, last_ok: ago(5), last_fail: ago(1) }, NOW), false);
 eq('...and a handful of failures is not enough', crowdFailing({ server_id: 'x', ok: 0, fail: 5, last_ok: null, last_fail: ago(1) }, NOW), false);
 eq('...nor mostly successes', crowdFailing({ server_id: 'x', ok: 30, fail: 20, last_ok: ago(30), last_fail: ago(1) }, NOW), false);
@@ -60,9 +60,15 @@ console.log('\nurls and names');
 const by = (id) => pool.servers.find((s) => s.id === id);
 eq('VidZee episode (Matlock S2E16)', fill(by('vidzee').tv, 226174, 2, 16, 'x'), 'https://player.vidzee.wtf/embed/tv/226174/2/16');
 eq('VidRock film (Dune: Part Two)', fill(by('vidrock').movie, 693134, 1, 1, 'x'), 'https://vidrock.to/embed/movie/693134');
-eq('Viduki episode', fill(by('viduki').tv, 226174, 1, 1, 'x'), 'https://vidsrc.wtf/api/1/tv/?id=226174&s=1&e=1');
-eq('VidLink Pro keeps its theme colour', fill(by('vidlink').tv, 226174, 2, 16, 'x'), 'https://vidlink.pro/tv/226174/2/16?primaryColor=f59e0b');
-eq('names say the picture and sound, honestly', pool.servers.map(label), ['VidZee · 1080p · 5.1', 'VidRock · 1080p · sharpest', 'Viduki · 1080p', 'VidLink Pro · up to 1080p']);
+eq('VixSrc episode, English first', fill(by('vixsrc').tv, 226174, 1, 1, 'x'), 'https://vixsrc.to/tv/226174/1/1?lang=en');
+eq('VixSrc film', fill(by('vixsrc').movie, 693134, 1, 1, 'x'), 'https://vixsrc.to/movie/693134?lang=en');
+eq('names say the picture and sound, honestly', pool.servers.map(label), ['VixSrc · 1080p · subtitles', 'VidRock · 1080p · sharpest', 'VidZee · 1080p · 5.1']);
+
+console.log('\nwhich copy of the list wins');
+eq('a newer version wins even on the same day', notOlder({ version: 5, updated: '2026-10-25' }, { version: 4, updated: '2026-10-25' }), true);
+eq('an older version loses even with a later date', notOlder({ version: 4, updated: '2026-10-26' }, { version: 5, updated: '2026-10-25' }), false);
+eq("same version: the daily check's later date wins", notOlder({ version: 5, updated: '2026-10-27' }, { version: 5, updated: '2026-10-25' }), true);
+eq('same version, an earlier date loses', notOlder({ version: 5, updated: '2026-10-24' }, { version: 5, updated: '2026-10-25' }), false);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exitCode = fail ? 1 : 0;

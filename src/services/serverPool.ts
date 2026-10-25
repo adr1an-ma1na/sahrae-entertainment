@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import bundled from '../data/servers.json';
 import { supabase } from '../supabase';
-import { pickServers, validPool, type Pool, type PoolServer, type ServerHealth } from './serverPoolRank';
+import { pickServers, validPool, notOlder, type Pool, type PoolServer, type ServerHealth } from './serverPoolRank';
 
 export { fill, label, score, type PoolServer } from './serverPoolRank';
 
@@ -25,7 +25,7 @@ const EVENT = 'sahrae:serverpool';
 let pool: Pool = bundled as Pool;
 try {
   const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
-  if (validPool(cached) && cached.updated >= pool.updated) pool = cached;
+  if (validPool(cached) && notOlder(cached, pool)) pool = cached;
 } catch { /* nothing cached */ }
 
 let health: ServerHealth[] = [];
@@ -49,7 +49,7 @@ async function refreshPool() {
     if (!validPool(p)) return;
     // An older published list never overrides the one this build carries:
     // the build may be newer than the last deploy.
-    if (p.updated < (bundled as Pool).updated) return;
+    if (!notOlder(p, bundled as Pool)) return;
     pool = p;
     try { localStorage.setItem(CACHE_KEY, JSON.stringify(p)); } catch { /* storage full: still used this session */ }
     shareHosts(p);
