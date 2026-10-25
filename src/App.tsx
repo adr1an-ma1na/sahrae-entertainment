@@ -31,6 +31,9 @@ import ContinueWatchingView from './components/ContinueWatchingView';
 import FlowChannelsView from './components/FlowChannelsView';
 import GlobalAudioPlayer from './components/GlobalAudioPlayer';
 import ProfileSelection from './components/ProfileSelection';
+import SignInGate, { NewPasswordSheet } from './components/SignInGate';
+import SearchBox from './components/SearchBox';
+import { onRecovery } from './firebase';
 import DiscoveryView from './components/DiscoveryView';
 import TalentExplorer from './components/TalentExplorer';
 import Sidebar from './components/Sidebar';
@@ -61,6 +64,9 @@ import { crumb } from './services/bootCrumbs';
 
 export default function App() {
   const { user, activeProfile, loading: authLoading } = useAuth();
+  // Opened from a password-reset email: ask for the new password first.
+  const [recovering, setRecovering] = useState(false);
+  useEffect(() => onRecovery(setRecovering), []);
   const screen = authLoading ? 'starting' : (user && !activeProfile) ? 'profiles' : user ? 'app:signed-in' : 'app:guest';
   useEffect(() => { crumb(`screen:${screen}`); }, [screen]);
 
@@ -588,6 +594,7 @@ export default function App() {
               <TalentExplorer onPlay={handlePlay} />
             ) : (
               <>
+                <SearchBox value={searchQuery} onSearch={handleSearch} />
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                   <h2 className="text-2xl font-bold text-white">
                     {searchQuery ? `Search Results for "${searchQuery}"` : 'Discover'}
@@ -640,6 +647,12 @@ export default function App() {
                 </div>
                 
                 <MediaGrid title="" items={filteredSearchResults} onPlay={handlePlay} />
+                {!loading && filteredSearchResults.length === 0 && (
+                  <div className="py-16 text-center">
+                    <p className="text-white font-semibold">{searchQuery ? `Nothing found for "${searchQuery}"` : 'Search for a film, series or actor'}</p>
+                    <p className="text-zinc-400 text-sm mt-1">{searchQuery ? 'Check the spelling, try the original title, or clear the filters.' : 'Or pick a genre, year or order above to browse.'}</p>
+                  </div>
+                )}
                 
                 {searchResults.length > 0 && (
                   <div className="mt-12 flex justify-center">
@@ -717,7 +730,11 @@ export default function App() {
       );
     }
 
-    if (user && !activeProfile) {
+    // Sahrae needs an account: nothing plays until someone is signed in.
+    if (!user) return <SignInGate />;
+    if (recovering) return <NewPasswordSheet />;
+
+    if (!activeProfile) {
       return <ProfileSelection />;
     }
 

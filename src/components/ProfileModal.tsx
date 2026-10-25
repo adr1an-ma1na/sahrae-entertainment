@@ -1,5 +1,7 @@
 import { useState, FormEvent } from 'react';
-import { X, User, LogOut, Key, Camera, Check, Database, Trash2, ShieldAlert } from 'lucide-react';
+import { X, User, LogOut, Key, Camera, Check, Database, Trash2, ShieldAlert, Languages, Sun, Moon, Palette } from 'lucide-react';
+import { currentLang, setLang } from '../i18n';
+import { useTheme } from '../hooks/useTheme';
 import { useAuth } from '../hooks/useAuth';
 import { updateProfile, updatePassword } from '../firebase';
 import { getCacheStats, clearMediaCache, CacheStats } from '../services/cacheManager';
@@ -22,6 +24,7 @@ interface ProfileModalProps {
 
 export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
   const { user, logout, reloadUser, activeProfile, updateProfileData, setActiveProfile } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [tab, setTab] = useState<'profile' | 'security' | 'cache'>('profile');
   const [name, setName] = useState(activeProfile?.name || user?.displayName || '');
   const [selectedAvatar, setSelectedAvatar] = useState(activeProfile?.avatar || user?.photoURL || AVATARS[0]);
@@ -124,6 +127,21 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
             className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${tab === 'cache' ? 'bg-amber-500/10 text-amber-500' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}
           >
             <Database className="w-5 h-5" /> App Cache
+          </button>
+          {/* Also in the top bar on wider screens; on a phone they live here. */}
+          <button
+            onClick={() => setLang(currentLang() === 'sw' ? 'en' : 'sw')}
+            className="flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-zinc-400 hover:bg-white/5 hover:text-white transition-colors"
+          >
+            <Languages className="w-5 h-5" /> Language
+            <span className="ml-auto text-xs font-bold text-zinc-300">{currentLang() === 'sw' ? 'Kiswahili' : 'English'}</span>
+          </button>
+          <button
+            onClick={toggleTheme}
+            className="flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-zinc-400 hover:bg-white/5 hover:text-white transition-colors"
+          >
+            {theme === 'light' ? <Sun className="w-5 h-5" /> : theme === 'dark' ? <Moon className="w-5 h-5" /> : <Palette className="w-5 h-5" />} Theme
+            <span className="ml-auto text-xs font-bold text-zinc-300 capitalize">{theme}</span>
           </button>
           <div className="mt-auto pt-6 flex flex-col gap-2">
             <button 

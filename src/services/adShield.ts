@@ -59,7 +59,33 @@ export function setShieldOn(on: boolean) {
  * leave it unsandboxed. Native always returns undefined: the native layer does
  * the blocking, and sandboxing there would break providers for no gain.
  */
-export function playerSandbox(shieldOn: boolean): string | undefined {
+export function playerSandbox(shieldOn: boolean, url?: string): string | undefined {
   if (!shieldAppliesHere()) return undefined;
+  if (url && refusesSandbox(url)) return undefined;
   return shieldOn ? SHIELD_SANDBOX : undefined;
+}
+
+/**
+ * Players that will not run sandboxed at all: they show the red "Remove
+ * sandbox attributes on the iframe tag" screen instead of the stream. Every
+ * Live Sports feed is on embed.st, and of the film servers only VidZee runs
+ * sandboxed (all checked 2026-10-25). With the shield on
+ * by default no match and three of four film servers could play on the web,
+ * which is what "every server fails" was on the web. These load unsandboxed; the shield
+ * cannot protect them, and the toggle is not offered for them.
+ */
+const SANDBOX_REFUSERS = [
+  'embed.st', 'streamed.pk', 'streamed.su', // Live Sports
+  'vidsrc.wtf', 'viduki.net', // Viduki: "This player was sandboxed"
+  'vidrock.to', 'vidrock.ru', // VidRock: "Sandbox Not Allowed"
+  'vidlink.pro', // VidLink Pro: "Please Disable Sandbox"
+];
+
+export function refusesSandbox(url: string): boolean {
+  try {
+    const h = new URL(url).hostname.toLowerCase();
+    return SANDBOX_REFUSERS.some((r) => h === r || h.endsWith('.' + r));
+  } catch {
+    return false;
+  }
 }

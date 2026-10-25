@@ -4,9 +4,9 @@ import type HlsT from 'hls.js';
 import { useHls } from '../services/hlsLoader';
 import { Capacitor } from '@capacitor/core';
 import { haptics } from '../services/haptics';
-import { playerSandbox, isShieldOn, setShieldOn as persistShield, shieldAppliesHere } from '../services/adShield';
+import { playerSandbox, isShieldOn, setShieldOn as persistShield, shieldAppliesHere, refusesSandbox } from '../services/adShield';
 import {
-  DEFAULT_CONFIG, markFailure, needsCheck, nextStream,
+  DEFAULT_CONFIG, markFailure, needsCheck, nextStream, rankFeeds,
   type FailureReason, type Stream,
 } from '../services/sportsStreams';
 import { buildStreams, validateStream, metrics, canValidateDeeply } from '../services/streamValidation';
@@ -14,6 +14,7 @@ import { loadSportsFeed, sourcesById, fetchStreamsFor, type Feed, type FeedEvent
 import { hostOf } from '../services/sportsStreams';
 import Coachmark from './Coachmark';
 import { suppressPopups } from '../services/popupGuard';
+import { lockLandscape, unlockOrientation } from '../services/fullscreen';
 import { readAudioFormat, bestAudioTrack, upscaleDecision, bestHeight, type AudioFormat } from '../services/streamQuality.ts';
 import { gpuReport } from '../services/gpu.ts';
 import { attachUpscaler } from '../services/upscaler.ts';
@@ -610,16 +611,50 @@ export default function SportsView() {
     const t = setInterval(load, 180000);
     return () => clearInterval(t);
   }, [load]);
+  // Full window, for where the browser will not give the player real full
+  // screen (an iPhone allows it only for a bare <video>). Esc leaves it first,
+  // then closes the player.
+  const [maxed, setMaxed] = useState(false);
+  useEffect(() => { if (!playing) setMaxed(false); }, [playing]);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && playing) setPlaying(null); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || !playing) return;
+      if (maxed) setMaxed(false); else setPlaying(null);
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [playing]);
+  }, [playing, maxed]);
 
   const toggleFullScreen = () => {
-    if (!document.fullscreenElement) playerRef.current?.requestFullscreen?.().catch(() => {});
-    else document.exitFullscreen?.().catch(() => {});
+    haptics.tap();
+    const doc = document as any;
+    const el = playerRef.current as any;
+    if (doc.fullscreenElement || doc.webkitFullscreenElement || maxed) {
+      const exit = doc.exitFullscreen || doc.webkitExitFullscreen;
+      if (doc.fullscreenElement || doc.webkitFullscreenElement) { try { exit?.call(document)?.catch?.(() => {}); } catch { /* noop */ } }
+      setMaxed(false);
+      unlockOrientation();
+      return;
+    }
+    const req = el?.requestFullscreen || el?.webkitRequestFullscreen;
+    if (!req) { setMaxed(true); return; }
+    try {
+      const p = req.call(el);
+      if (p && p.then) p.then(lockLandscape, () => setMaxed(true));
+      else lockLandscape();
+    } catch { setMaxed(true); }
   };
+
+  // Turning a phone on its side fills the screen with the match; turning it
+  // back restores the page.
+  useEffect(() => {
+    if (!playing || typeof window.matchMedia !== 'function') return;
+    if (!window.matchMedia('(pointer: coarse)').matches) return;
+    const mq = window.matchMedia('(orientation: landscape)');
+    const onTurn = () => { if (!document.fullscreenElement) setMaxed(mq.matches); };
+    mq.addEventListener?.('change', onTurn);
+    return () => mq.removeEventListener?.('change', onTurn);
+  }, [!!playing]);
 
   // Badge host. The live API serves team badges from its own origin.
   const base = 'https://streamed.pk';
@@ -752,10 +787,11 @@ export default function SportsView() {
         const p = playingRef.current;
         if (!p) return;
         const channels = p.sources.filter((s) => s.kind === 'channel');
-        const servers: Stream[] = metas.slice(0, 8).map((meta, i) => {
-          const label = meta.language
-            ? `${meta.source} · ${meta.language.split(' - ')[0]}`
-            : `${meta.source} ${meta.streamNo}`;
+        const servers: Stream[] = rankFeeds(metas).slice(0, 8).map((meta, i) => {
+          // "admin · English" meant nothing to a viewer. Feeds are numbered in
+          // the order offered, HD first, with the commentary language.
+          const lang = meta.language ? meta.language.split(' - ')[0] : '';
+          const label = `Feed ${i + 1}${lang ? ` · ${lang}` : ''}`;
           const existing = p.sources.find((s) => s.embed === meta.embedUrl);
           // Keep any health already measured, but take the API's label and
           // quality — otherwise the pre-expansion "Server 1" name lingers
@@ -780,6 +816,10 @@ export default function SportsView() {
         const merged = [...servers, ...channels];
         const activeId = p.sources[p.idx]?.id;
         const idx = Math.max(0, merged.findIndex((s) => s.id === activeId));
+        // checkStream looks its target up in the ref. Point the ref at the new
+        // list now: waiting for the re-render meant every lookup missed, no
+        // stream was ever checked, and the web player sat on "Loading…".
+        playingRef.current = { ...p, sources: merged, idx };
         setPlaying((prev) => (prev ? { ...prev, sources: merged, idx } : prev));
 
         // Validate the expanded set by its REAL ids; the first may promote.
@@ -1110,50 +1150,28 @@ export default function SportsView() {
         style={{ background: 'radial-gradient(60% 70% at 12% 0%, rgba(251,191,36,0.20), transparent 70%), radial-gradient(50% 60% at 85% 8%, rgba(244,63,94,0.16), transparent 72%)', filter: 'blur(8px)' }} />
       {/* Player */}
       {playing && (
-        <div role="dialog" data-tv-layer className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center backdrop-blur-sm p-3 md:p-10">
-          <div className="w-full max-w-5xl flex flex-col gap-3">
-            <div ref={playerRef} className="w-full aspect-video bg-black rounded-lg shadow-2xl overflow-hidden relative border border-white/10">
-              <div className="absolute top-0 left-0 right-0 p-3 md:p-4 bg-gradient-to-b from-black/80 to-transparent z-10 flex justify-between items-center">
+        <div role="dialog" data-tv-layer className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-start md:justify-center p-0 md:p-10 overflow-y-auto">
+          {/* Title and controls sit ABOVE the picture on a phone: laid over a
+              375px-wide video they collided with each other and hid the
+              match. Over the picture only on larger screens and full screen. */}
+          <div className="md:hidden w-full flex items-center gap-2 px-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-2">
+            <button onClick={() => setPlaying(null)} tabIndex={0} data-tv-focusable aria-label="Close" className="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center shrink-0"><X className="w-5 h-5" /></button>
+            <div className="min-w-0 flex-1">
+              <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-red-400"><span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> Live</p>
+              <h3 className="text-white font-bold text-sm truncate">{playing.title}</h3>
+            </div>
+            <button onClick={toggleFullScreen} tabIndex={0} aria-label="Full screen" className="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center shrink-0"><Maximize className="w-5 h-5" /></button>
+          </div>
+          <div className="w-full max-w-5xl flex flex-col gap-3 px-3 md:px-0 pb-6">
+            <div ref={playerRef} className={maxed
+              ? 'fixed inset-0 z-[400] bg-black overflow-hidden'
+              : 'w-full aspect-video bg-black rounded-xl shadow-2xl overflow-hidden relative border border-white/10'}>
+              <div className={`absolute top-0 left-0 right-0 p-3 md:p-4 bg-gradient-to-b from-black/80 to-transparent z-10 justify-between items-center ${maxed ? 'flex' : 'hidden md:flex'}`}>
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="flex items-center gap-1.5 bg-red-500 text-white px-2.5 py-1 rounded-sm shrink-0"><div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /><span className="text-xs font-bold uppercase tracking-wider">Live</span></div>
                   <h3 className="text-white font-bold text-sm md:text-lg drop-shadow-md truncate">{playing.title}</h3>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  {/* Reflects the REAL state. This used to read "Ad Shield
-                      Protected" unconditionally, including on the web where
-                      nothing was blocking anything — a badge claiming
-                      protection the build did not have. It is now a live
-                      toggle on web and a plain status on Android. */}
-                  {isEmbedUrl && (shieldAppliesHere() ? (
-                    <button
-                      onClick={() => { const n = !shieldOn; setShieldOn(n); persistShield(n); haptics.tap(); }}
-                      role="switch"
-                      aria-checked={shieldOn}
-                      title={shieldOn
-                        ? "Ad Shield on: pop-ups blocked. If this stream won't start, turn it off or try another server."
-                        : 'Ad Shield off: provider pop-ups are NOT blocked.'}
-                      className={`text-xs font-bold px-3 py-1.5 rounded-lg border flex items-center gap-1.5 shadow-sm transition-colors ${
-                        shieldOn
-                          ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20'
-                          : 'text-zinc-400 bg-zinc-900/80 border-white/10 hover:text-white'
-                      }`}
-                    >
-                      <ShieldCheck className="w-3.5 h-3.5" /> Ad Shield {shieldOn ? 'On' : 'Off'}
-                    </button>
-                  ) : (
-                    <div className="text-xs font-bold text-emerald-400 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-1.5 shadow-sm">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Ad Shield Protected
-                    </div>
-                  ))}
-                  {activeSrc?.kind === 'server' && (
-                    <button
-                      onClick={reportCurrentSportsServerDead}
-                      className="px-3 py-1.5 text-xs font-bold bg-zinc-900/80 hover:bg-red-500/20 border border-white/10 hover:border-red-500/50 text-zinc-300 hover:text-red-400 rounded-lg flex items-center gap-1.5 transition-all shadow-md active:scale-95"
-                      title="Report stream dead or slow and auto-switch to the next server"
-                    >
-                      <AlertTriangle className="w-3.5 h-3.5" /> Dead Server?
-                    </button>
-                  )}
                   <button onClick={toggleFullScreen} tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full bg-black/50 hover:bg-white/20 text-white flex items-center justify-center border border-white/10"><Maximize className="w-5 h-5" /></button>
                   <button onClick={() => setPlaying(null)} tabIndex={0} data-tv-focusable data-tv-close className="w-10 h-10 rounded-full bg-red-500/80 hover:bg-red-500 text-white flex items-center justify-center"><X className="w-5 h-5" /></button>
                 </div>
@@ -1178,12 +1196,12 @@ export default function SportsView() {
                     // the header and the server list as the escape hatch. On
                     // Android this is undefined: the native shell blocks popups
                     // already, without breaking any provider.
-                    sandbox={playerSandbox(shieldOn)}
+                    sandbox={playerSandbox(shieldOn, activeUrl)}
                   />
                   {isSandboxed && (
                     <div className="absolute top-0 left-0 w-full z-40 bg-amber-500/95 text-amber-950 text-xs md:text-sm font-bold px-4 py-3 flex flex-col md:flex-row items-center justify-center gap-3 md:gap-4 text-center backdrop-blur shadow-2xl border-b border-amber-400/30 animate-in slide-in-from-top-2">
                       <AlertCircle className="w-5 h-5 shrink-0 animate-bounce" />
-                      <span>Google AI Studio's preview window blocks nested sports streams. <b>Sahrae plays flawlessly on its own tab!</b></span>
+                      <span>This page is shown inside another site, which blocks the match. <b>Open Sahrae in its own tab to watch.</b></span>
                       <a href={window.location.href} target="_blank" rel="noopener noreferrer" className="bg-amber-950 text-amber-50 px-4 py-1.5 rounded-full whitespace-nowrap hover:bg-amber-900 transition-colors shadow-lg active:scale-95 flex items-center gap-1 text-xs">
                         Open Sahrae in New Tab <ExternalLink className="w-3 h-3" />
                       </a>
@@ -1279,15 +1297,15 @@ export default function SportsView() {
                     </div>
                     <div className="min-w-0">
                       <p className="text-zinc-200 font-semibold truncate">
-                        {activeSrc.kind === 'channel' ? 'Channel' : 'Match feed'} · {activeSrc.label}
+                        {activeSrc.label}
                       </p>
                       <p className="text-[11px] text-zinc-500">
-                        {activeSrc.status === 'working' && `Verified${activeSrc.quality ? ` · ${activeSrc.quality}` : ''}${activeSrc.latencyMs ? ` · ${activeSrc.latencyMs}ms` : ''} · health ${activeSrc.healthScore}/100`}
-                        {activeSrc.status === 'degraded' && 'Reachable but slow. A better feed may be available below'}
-                        {activeSrc.status === 'unverified' && 'Not verifiable in a browser, playing unchecked'}
-                        {activeSrc.status === 'offline' && `Not responding${activeSrc.lastFailure ? ` (${activeSrc.lastFailure.reason})` : ''}`}
-                        {activeSrc.status === 'checking' && 'Checking this feed…'}
-                        {activeSrc.status === 'unknown' && 'Not checked yet'}
+                        {activeSrc.status === 'working' && `Stream checked${activeSrc.quality ? ` · ${activeSrc.quality}` : ''} · playing`}
+                        {activeSrc.status === 'degraded' && 'This feed is slow. Try another one below'}
+                        {activeSrc.status === 'unverified' && `Live${activeSrc.quality ? ` · ${activeSrc.quality}` : ''} · if it does not start, try another feed`}
+                        {activeSrc.status === 'offline' && 'This feed is not responding. Pick another below'}
+                        {activeSrc.status === 'checking' && 'Getting the stream ready…'}
+                        {activeSrc.status === 'unknown' && 'Getting the stream ready…'}
                       </p>
                     </div>
                   </div>
@@ -1318,8 +1336,8 @@ export default function SportsView() {
               const groups: { key: string; title: string; hint: string; items: { s: Stream; i: number }[] }[] = [
                 {
                   key: 'match',
-                  title: 'Match feeds',
-                  hint: 'The actual game',
+                  title: 'Feeds',
+                  hint: 'This match',
                   items: playing.sources.map((s, i) => ({ s, i })).filter((x) => x.s.kind === 'server'),
                 },
                 {
@@ -1373,10 +1391,8 @@ export default function SportsView() {
               ));
             })()}
             <p className="text-[11px] text-zinc-500 flex items-center gap-2">
-              <Radio className="w-3.5 h-3.5" />
-              {canValidateDeeply()
-                ? 'Feeds are checked before they are offered, and the healthiest plays first. A dot means verified; the app switches automatically if one drops.'
-                : 'A browser cannot verify these streams (cross-origin), so they are offered unverified. The Android app validates each one before playing it.'}
+              <Radio className="w-3.5 h-3.5 shrink-0" />
+              If the picture freezes, tap another feed. Sahrae also moves you on by itself when one drops.
             </p>
           </div>
         </div>

@@ -455,3 +455,21 @@ export function summarise(m: Metrics) {
     failoverSuccessRate: m.failovers ? +(m.failoversSucceeded / m.failovers).toFixed(3) : null,
   };
 }
+
+/**
+ * Order a match's feeds the way a viewer would want them tried: HD before SD,
+ * then the most watched. The source reports how many people are on each feed,
+ * and a feed thousands are watching is showing the match; one with a handful
+ * is often an "offline" slate (seen 2026-10-25: a 4-viewer feed showing
+ * "flux hors ligne" while the 10,000-viewer feed had the game). Ties keep the
+ * order given.
+ */
+export function rankFeeds<T extends { hd?: boolean; viewers?: number }>(feeds: T[]): T[] {
+  return feeds
+    .map((f, i) => ({ f, i }))
+    .sort((a, b) =>
+      Number(!!b.f.hd) - Number(!!a.f.hd)
+      || (b.f.viewers ?? 0) - (a.f.viewers ?? 0)
+      || a.i - b.i)
+    .map((x) => x.f);
+}

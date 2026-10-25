@@ -11,6 +11,8 @@ import { Home, Search, Headphones, Radio, Grid3x3, X, Film, Tv2, Clapperboard, T
 const PRIMARY = [
   { id: 'home', label: 'Home', icon: Home },
   { id: 'search', label: 'Search', icon: Search },
+  // Live sport is the reason many people come; one tap, not a trip into More.
+  { id: 'sports', label: 'Sports', icon: Trophy },
   { id: 'audio', label: 'Listen', icon: Headphones },
 ] as const;
 // The Listen hub's three destinations. The primary tab stays lit for any of
@@ -25,7 +27,6 @@ const MORE = [
   { id: 'movies', label: 'Movies', icon: Film },
   { id: 'series', label: 'Series', icon: Tv2 },
   { id: 'tv', label: 'Live TV', icon: Radio },
-  { id: 'sports', label: 'Live Sports', icon: Trophy },
   { id: 'channels', label: 'Flow Channels', icon: Clapperboard },
   { id: 'mylist', label: 'My List', icon: Heart },
   { id: 'continue', label: 'Continue Watching', icon: Clock },
@@ -73,15 +74,15 @@ export default function BottomTabBar({ activeTab, setActiveTab }: { activeTab: s
             const Icon = t.icon; const on = t.id === 'audio' ? AUDIO_TABS.includes(activeTab) : activeTab === t.id;
             return (
               <button key={t.id} onClick={() => go(t.id)} tabIndex={0} data-tv-focusable
-                className={`flex-1 flex flex-col items-center gap-1 py-2 transition-colors ${on ? 'text-zinc-100' : 'text-zinc-400 hover:text-zinc-200'}`}>
-                <span className={`flex items-center justify-center w-16 h-8 rounded-full transition-colors ${on ? 'bg-amber-700 text-amber-100' : ''}`}><Icon className="w-6 h-6" /></span>
+                className={`flex-1 min-w-0 flex flex-col items-center gap-1 py-2 transition-colors ${on ? 'text-zinc-100' : 'text-zinc-400 hover:text-zinc-200'}`}>
+                <span className={`flex items-center justify-center w-14 h-8 rounded-full transition-colors ${on ? 'bg-amber-700 text-amber-100' : ''}`}><Icon className="w-6 h-6" /></span>
                 <span className="text-xs font-medium">{tr(t.label)}</span>
               </button>
             );
           })}
           <button onClick={() => setMoreOpen(true)} tabIndex={0} data-tv-focusable
-            className={`flex-1 flex flex-col items-center gap-1 py-2 transition-colors ${moreActive || moreOpen ? 'text-zinc-100' : 'text-zinc-400 hover:text-zinc-200'}`}>
-            <span className={`flex items-center justify-center w-16 h-8 rounded-full transition-colors ${moreActive || moreOpen ? 'bg-amber-700 text-amber-100' : ''}`}><Grid3x3 className="w-6 h-6" /></span>
+            className={`flex-1 min-w-0 flex flex-col items-center gap-1 py-2 transition-colors ${moreActive || moreOpen ? 'text-zinc-100' : 'text-zinc-400 hover:text-zinc-200'}`}>
+            <span className={`flex items-center justify-center w-14 h-8 rounded-full transition-colors ${moreActive || moreOpen ? 'bg-amber-700 text-amber-100' : ''}`}><Grid3x3 className="w-6 h-6" /></span>
             <span className="text-xs font-medium">More</span>
           </button>
         </div>

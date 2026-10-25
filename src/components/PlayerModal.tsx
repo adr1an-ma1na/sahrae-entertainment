@@ -8,8 +8,10 @@ import { loadEq, saveEq, EQ_PRESETS, PRESET_EXTRAS } from '../services/eq';
 import { haptics } from '../services/haptics';
 import MovieDownloadModal from './MovieDownloadModal';
 import { posterColor, cachedPosterColor } from '../services/posterColor';
-import { playerSandbox, isShieldOn, setShieldOn as persistShield, shieldAppliesHere } from '../services/adShield';
+import { playerSandbox, isShieldOn, setShieldOn as persistShield, shieldAppliesHere, refusesSandbox } from '../services/adShield';
 import { suppressPopups } from '../services/popupGuard';
+import { lockLandscape, unlockOrientation } from '../services/fullscreen';
+import { isTelevision } from '../tv/spatialNavigation';
 import { NO_START_LIMIT_MS, COUNTDOWN_S, isPlaybackEvidence, markWorking, markDown, startServer } from '../services/serverHealth';
 import { reportScreen } from '../services/remote';
 import { t } from '../i18n';
@@ -241,18 +243,32 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const wakeLockRef = useRef<any>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
 
+  // Where the browser will not put the player full screen (an iPhone allows it
+  // only for a bare <video>; an embedded preview may forbid it), the button used
+  // to do nothing at all. It now falls back to filling the window, and the same
+  // button, Esc or Back brings it out again.
   const toggleFullScreen = () => {
     if (nativeShell) { setMaxed((m) => !m); return; }
     const doc = document as any;
     const el = playerContainerRef.current as any;
     const fsEl = doc.fullscreenElement || doc.webkitFullscreenElement;
-    if (fsEl) {
-       const exit = doc.exitFullscreen || doc.webkitExitFullscreen;
-       try { exit?.call(document); } catch { /* noop */ }
-    } else if (el) {
-       const req = el.requestFullscreen || el.webkitRequestFullscreen;
-       try { const p = req?.call(el); if (p && p.catch) p.catch(() => {}); } catch { /* noop */ }
+    if (fsEl || maxedRef.current) {
+      if (fsEl) {
+        const exit = doc.exitFullscreen || doc.webkitExitFullscreen;
+        try { exit?.call(document); } catch { /* noop */ }
+      }
+      setMaxed(false);
+      return;
     }
+    if (!el) return;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    const fallback = () => setMaxed(true);
+    if (!req) { fallback(); return; }
+    try {
+      const p = req.call(el);
+      if (p && p.then) p.then(lockLandscape, fallback);
+      else lockLandscape();
+    } catch { fallback(); }
   };
 
   // Tell the Android shell when the movie/series player is up, so it knows a
@@ -264,6 +280,36 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     fetch(`https://localhost/__player?open=${playerUp ? 1 : 0}`, { cache: 'no-store' }).catch(() => {});
     if (!playerUp) setMaxed(false);
   }, [playerUp]);
+
+  // Turning a phone on its side fills the screen with the picture, and turning
+  // it back restores the page, as every streaming app does. Only a turn this
+  // player caused is undone: full screen chosen with the button stays.
+  const rotatedInRef = useRef(false);
+  useEffect(() => {
+    if (!playerUp || typeof window.matchMedia !== 'function') return;
+    if (!window.matchMedia('(pointer: coarse)').matches || isTelevision()) return;
+    const mq = window.matchMedia('(orientation: landscape)');
+    const onTurn = () => {
+      if (mq.matches && !maxedRef.current && !document.fullscreenElement) {
+        rotatedInRef.current = true;
+        setMaxed(true);
+      } else if (!mq.matches && rotatedInRef.current) {
+        rotatedInRef.current = false;
+        setMaxed(false);
+      }
+    };
+    mq.addEventListener?.('change', onTurn);
+    return () => mq.removeEventListener?.('change', onTurn);
+  }, [playerUp]);
+
+  // Esc leaves the full-window fallback in a browser (the real full screen
+  // already answers to it).
+  useEffect(() => {
+    if (nativeShell || !maxed) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMaxed(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [maxed]);
 
   // System bars hide with the full-screen player and come back with it.
   useEffect(() => {
@@ -312,7 +358,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     const onFs = () => {
       const on = !!document.fullscreenElement && document.fullscreenElement === playerContainerRef.current;
       setDocFs(on);
-      if (!on) setBarHidden(false);
+      if (!on) { setBarHidden(false); unlockOrientation(); }
     };
     document.addEventListener('fullscreenchange', onFs);
     return () => document.removeEventListener('fullscreenchange', onFs);
@@ -946,7 +992,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       // providers' anti-tamper check for no gain. Some providers
                       // refuse to play when sandboxed, which is why this is a
                       // toggle and why the server picker sits right below.
-                      sandbox={playerSandbox(shieldOn)}
+                      sandbox={playerSandbox(shieldOn, src)}
                       // Auto-fullscreen once the embed has loaded + autostarted
                       // (media playback no longer needs a separate gesture), so a
                       // single Play tap ends up fullscreen and playing.
@@ -1001,7 +1047,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                     {isSandboxed && (['superembed', 'vidsrcpro', '2embed', 'vidbinge', 'multiembed', 'vidsrcnet', 'vidsrcme', 'embedsu'].includes(currentServerObj.id)) && (
                       <div className="absolute top-0 left-0 w-full z-40 bg-[#e50914]/95 text-white text-xs md:text-sm font-bold px-4 py-3 flex flex-col md:flex-row items-center justify-center gap-3 md:gap-4 text-center backdrop-blur shadow-2xl border-b border-white/20 animate-in slide-in-from-top-2">
                         <AlertCircle className="w-5 h-5 shrink-0" />
-                        <span>Google AI Studio's preview window secretly blocks this server. <b>Sahrae works perfectly on its own tab!</b></span>
+                        <span>This page is shown inside another site, which blocks the player. <b>Open Sahrae in its own tab to watch.</b></span>
                         <a href={window.location.href} target="_blank" rel="noopener noreferrer" className="bg-white text-[#e50914] px-4 py-1.5 rounded-full whitespace-nowrap hover:bg-zinc-200 transition-colors shadow-lg active:scale-95 flex items-center gap-1">
                           Open Sahrae App Natively <ExternalLink className="w-3 h-3" />
                         </a>
@@ -1115,13 +1161,13 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                           const isDown = failedServers.includes(server.id);
                           return (
                             <option key={server.id} value={idx} className="bg-zinc-900 text-white">
-                              {`Server ${idx + 1}${isDown ? ' (down)' : crowd.good.has(server.id) ? ' · works for others' : ''}`}
+                              {`${(server.name || `Server ${idx + 1}`).split(' · ')[0]}${isDown ? ' (down)' : crowd.good.has(server.id) ? ' · works for others' : ''}`}
                             </option>
                           );
                         })}
                       </select>
                       {currentServerObj.type !== 'youtube' && (
-                        <button onClick={reportCurrentMovieServerDead} data-tv-focusable title="Report this server broken and switch to the next one" className="h-9 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed">
+                        <button onClick={reportCurrentMovieServerDead} data-tv-focusable title="Report this server broken and switch to the next one" aria-label="Report this server broken and switch to the next one" className="h-9 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed">
                           <AlertTriangle className="w-3.5 h-3.5" /><span className="hidden sm:inline">{t('Not working?')}</span>
                         </button>
                       )}
@@ -1141,13 +1187,13 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                         <Gauge className="w-3.5 h-3.5" />{formatBytes(usedBytes)}
                       </span>
                     )}
-                    <button onClick={() => setShowAudioMenu(v => !v)} data-tv-focusable title="Audio enhancement"
+                    <button onClick={() => setShowAudioMenu(v => !v)} data-tv-focusable title="Audio enhancement" aria-label="Audio enhancement"
                       className={`ml-auto w-9 h-9 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed ${audioOn ? '!bg-amber-500 !text-amber-950' : ''}`}><Waves className="w-4 h-4" /></button>
-                    <button onClick={() => setRefreshKey(prev => prev + 1)} data-tv-focusable title="Reload video" className="w-9 h-9 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"><RefreshCw className="w-4 h-4" /></button>
-                    <button onClick={toggleFullScreen} data-tv-focusable title="Full screen" className="w-9 h-9 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"><Maximize className="w-4 h-4" /></button>
+                    <button onClick={() => setRefreshKey(prev => prev + 1)} data-tv-focusable title="Reload video" aria-label="Reload video" className="w-9 h-9 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"><RefreshCw className="w-4 h-4" /></button>
+                    <button onClick={toggleFullScreen} data-tv-focusable title="Full screen" aria-label="Full screen" className="w-9 h-9 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"><Maximize className="w-4 h-4" /></button>
                   </>
                 )}
-                <button onClick={onClose} data-tv-focusable data-tv-close title="Close" className="w-9 h-9 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"><X className="w-4 h-4" /></button>
+                <button onClick={onClose} data-tv-focusable data-tv-close title="Close" aria-label="Close" className="w-9 h-9 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"><X className="w-4 h-4" /></button>
                 {!playingTrailer && showAudioMenu && (
                     <div className={`absolute ${fsActive ? 'top-full mt-1' : 'bottom-full mb-2'} right-2 z-50 w-56 bg-zinc-950/95 backdrop-blur rounded-xl border border-white/15 shadow-2xl p-2 animate-in fade-in slide-in-from-top-2 duration-200`}>
                       <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 px-2 pt-1 pb-2 flex items-center gap-1.5"><Waves className="w-3.5 h-3.5" /> Audio Enhancement</p>
@@ -1198,13 +1244,13 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                         <Play className="w-5 h-5 md:w-6 md:h-6 fill-current text-white"/> Trailer
                       </button>
                     )}
-                    <button onClick={() => toggleMyList(details)} className="w-10 h-10 md:w-12 md:h-12 flex items-center justify-center border border-zinc-600/60 bg-zinc-900/90 text-white rounded-full hover:bg-white/10 hover:border-white transition-colors shadow-lg shrink-0" title="My List">
+                    <button onClick={() => toggleMyList(details)} className="w-10 h-10 md:w-12 md:h-12 flex items-center justify-center border border-zinc-600/60 bg-zinc-900/90 text-white rounded-full hover:bg-white/10 hover:border-white transition-colors shadow-lg shrink-0" title="My List" aria-label="My List">
                       {isInMyList(details.id) ? <Check className="w-5 h-5 md:w-6 md:h-6"/> : <Plus className="w-5 h-5 md:w-6 md:h-6"/>}
                     </button>
-                    <button onClick={() => setRating(rating === 'up' ? null : 'up')} className={`w-10 h-10 md:w-12 md:h-12 flex items-center justify-center border border-zinc-600/60 bg-zinc-900/90 rounded-full transition-colors shadow-lg shrink-0 ${rating === 'up' ? 'text-green-400 bg-zinc-800 border-green-500/50' : 'text-white hover:bg-white/10 hover:border-white'}`} title="Like">
+                    <button onClick={() => setRating(rating === 'up' ? null : 'up')} className={`w-10 h-10 md:w-12 md:h-12 flex items-center justify-center border border-zinc-600/60 bg-zinc-900/90 rounded-full transition-colors shadow-lg shrink-0 ${rating === 'up' ? 'text-green-400 bg-zinc-800 border-green-500/50' : 'text-white hover:bg-white/10 hover:border-white'}`} title="Like" aria-label="Like">
                       <ThumbsUp className="w-4 h-4 md:w-5 md:h-5"/>
                     </button>
-                    <button onClick={() => setRating(rating === 'down' ? null : 'down')} className={`w-10 h-10 md:w-12 md:h-12 flex items-center justify-center border border-zinc-600/60 bg-zinc-900/90 rounded-full transition-colors shadow-lg shrink-0 ${rating === 'down' ? 'text-red-400 bg-zinc-800 border-red-500/50' : 'text-white hover:bg-white/10 hover:border-white'}`} title="Not for me">
+                    <button onClick={() => setRating(rating === 'down' ? null : 'down')} className={`w-10 h-10 md:w-12 md:h-12 flex items-center justify-center border border-zinc-600/60 bg-zinc-900/90 rounded-full transition-colors shadow-lg shrink-0 ${rating === 'down' ? 'text-red-400 bg-zinc-800 border-red-500/50' : 'text-white hover:bg-white/10 hover:border-white'}`} title="Not for me" aria-label="Not for me">
                       <ThumbsDown className="w-4 h-4 md:w-5 md:h-5"/>
                     </button>
                     <button
@@ -1292,7 +1338,18 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
 
                 {/* Ad Shield toggle — web only. On Android the native shell
                     already blocks ads, so there is no trade to offer. */}
-                {shieldAppliesHere() && (
+                {shieldAppliesHere() && refusesSandbox(src) && (
+                  // Saying "on" here was untrue: this server will not play
+                  // with the shield, so it plays without it.
+                  <div className="mt-4 flex items-start gap-3 p-3 rounded-xl border border-white/10 bg-zinc-900/50">
+                    <ShieldCheck className="w-5 h-5 shrink-0 mt-0.5 text-zinc-500" />
+                    <p className="text-xs text-zinc-400 leading-snug">
+                      <span className="block text-sm font-bold text-white">Ad Shield does not work on this server</span>
+                      It will not play with the shield on, so it plays without it. If an advert opens, close it and you are back here. VidZee plays with the shield.
+                    </p>
+                  </div>
+                )}
+                {shieldAppliesHere() && !refusesSandbox(src) && (
                   <div className="mt-4 flex items-start gap-3 p-3 rounded-xl border border-white/10 bg-zinc-900/50">
                     <ShieldCheck className={`w-5 h-5 shrink-0 mt-0.5 ${shieldOn ? 'text-emerald-400' : 'text-zinc-500'}`} />
                     <div className="min-w-0 flex-1">

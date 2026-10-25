@@ -10,6 +10,7 @@ type Theme = 'light' | 'dark' | 'midnight';
  */
 export const THEME_SYNC_KEY = 'sahrae.theme.v1';
 
+const THEME_EVENT = 'sahrae:theme';
 const isTheme = (v: unknown): v is Theme => v === 'light' || v === 'dark' || v === 'midnight';
 
 export function useTheme() {
@@ -30,10 +31,18 @@ export function useTheme() {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
+  // The top bar and Settings each hold this hook; a pick in one shows in both.
+  useEffect(() => {
+    const on = (e: Event) => { const v = (e as CustomEvent).detail; if (isTheme(v)) setTheme(v); };
+    window.addEventListener(THEME_EVENT, on);
+    return () => window.removeEventListener(THEME_EVENT, on);
+  }, []);
+
   const toggleTheme = () => {
     setTheme((prev) => {
       const next: Theme = prev === 'dark' ? 'midnight' : prev === 'midnight' ? 'light' : 'dark';
       try { localStorage.setItem(THEME_SYNC_KEY, JSON.stringify(next)); } catch { /* storage full */ }
+      setTimeout(() => window.dispatchEvent(new CustomEvent(THEME_EVENT, { detail: next })), 0);
       return next;
     });
   };

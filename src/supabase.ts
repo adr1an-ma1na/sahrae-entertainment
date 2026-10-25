@@ -1,4 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { Capacitor } from '@capacitor/core';
+
+const isNativeShell = () => { try { return Capacitor.isNativePlatform(); } catch { return false; } };
 
 /**
  * Supabase client for authentication.
@@ -18,9 +21,13 @@ const SUPABASE_URL = ENV.VITE_SUPABASE_URL || 'https://qkyrztpqdrpucdyabjsm.supa
 const SUPABASE_ANON_KEY = ENV.VITE_SUPABASE_ANON_KEY || 'sb_publishable_pd_yZhWPd2SE1ipMbijolQ_0jVCfcL0';
 
 export const supabase: SupabaseClient | null =
-  SUPABASE_URL && SUPABASE_ANON_KEY
+  // VITE_AUTH_LOCAL=1 builds use the on-device accounts instead: for testing a
+  // local build signed in without touching real accounts. Never set in CI.
+  SUPABASE_URL && SUPABASE_ANON_KEY && ENV.VITE_AUTH_LOCAL !== '1'
     ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+        // The links in reset and confirmation emails carry the session in the
+        // address; read it on the web. The Android app is never opened by them.
+        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: !isNativeShell() },
       })
     : null;
 

@@ -11,7 +11,7 @@
 import {
   DEFAULT_CONFIG, analyseManifest, scoreStream, rankStreams, selectableStreams,
   nextStream, markSuccess, markFailure, markUnverified, needsCheck,
-  reliabilityOf, mapWithLimit, emptyMetrics, summarise, qualityScore,
+  reliabilityOf, mapWithLimit, emptyMetrics, summarise, qualityScore, rankFeeds,
 } from './src/services/sportsStreams.ts';
 
 let pass = 0, fail = 0;
@@ -194,5 +194,19 @@ console.log('\n[observability §21]');
   ok('no divide-by-zero on empty metrics', summarise(emptyMetrics()).successRate === null);
 }
 
+
+console.log('\nfeed order: HD first, then the most watched');
+{
+  const r = rankFeeds([
+    { id: 'hotel1', hd: true, viewers: 4 },
+    { id: 'admin2', hd: false, viewers: 2280 },
+    { id: 'admin1', hd: true, viewers: 10734 },
+    { id: 'golf1', hd: true, viewers: 1010 },
+    { id: 'x', hd: true },
+  ]).map((f) => f.id);
+  ok('HD feeds before SD, busiest first', JSON.stringify(r) === JSON.stringify(['admin1', 'golf1', 'hotel1', 'x', 'admin2']), r.join(','));
+  ok('ties keep the order given', JSON.stringify(rankFeeds([{ id: 'a', hd: true }, { id: 'b', hd: true }]).map((f) => f.id)) === '["a","b"]');
+  ok('empty in, empty out', rankFeeds([]).length === 0);
+}
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

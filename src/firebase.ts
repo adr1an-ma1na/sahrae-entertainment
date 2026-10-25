@@ -116,6 +116,12 @@ function mapSb(u: SbUser | null | undefined): User | null {
 class LocalAuth {
   currentUser: User | null = null;
   private listeners: AuthListener[] = [];
+  /**
+   * False until the saved cloud session has been read. Listeners are not told
+   * "signed out" before then: with sign-in required, that flashed the sign-in
+   * screen at every signed-in person on every launch.
+   */
+  private ready = !supabase;
 
   constructor() {
     // Only restore the local session when there's no cloud backend; with
@@ -131,13 +137,14 @@ class LocalAuth {
 
   subscribe(cb: AuthListener): () => void {
     this.listeners.push(cb);
-    cb(this.currentUser);
+    if (this.ready) cb(this.currentUser);
     return () => {
       this.listeners = this.listeners.filter((l) => l !== cb);
     };
   }
 
   setUser(user: User | null) {
+    this.ready = true;
     this.currentUser = user;
     if (!supabase) {
       if (user) localStorage.setItem(SESSION_KEY, user.uid);
@@ -151,12 +158,46 @@ export const auth = new LocalAuth();
 
 // Hydrate + track the cloud session when Supabase is configured.
 if (supabase) {
-  supabase.auth.getSession().then(({ data }) => {
-    auth.setUser(mapSb(data.session?.user));
-  });
-  supabase.auth.onAuthStateChange((_event, session) => {
+  supabase.auth.getSession()
+    .then(({ data }) => auth.setUser(mapSb(data.session?.user)))
+    // Storage unreadable or offline with an expired token: signed out, rather
+    // than a starting screen that never ends.
+    .catch(() => auth.setUser(null));
+  supabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'PASSWORD_RECOVERY') setRecovery(true);
     auth.setUser(mapSb(session?.user));
   });
+}
+
+// ── Password recovery ──
+// Opening the link in a reset email signs the person in for one purpose: to
+// choose a new password. The app asks for it before anything else.
+let recovering = false;
+const recoveryListeners = new Set<(on: boolean) => void>();
+function setRecovery(on: boolean) {
+  recovering = on;
+  recoveryListeners.forEach((l) => l(on));
+}
+export function onRecovery(cb: (on: boolean) => void): () => void {
+  recoveryListeners.add(cb);
+  cb(recovering);
+  return () => { recoveryListeners.delete(cb); };
+}
+export function endRecovery() { setRecovery(false); }
+
+/**
+ * Where links in Sahrae's emails land. Always the public web app: inside the
+ * Android app the page's own address is https://localhost, which a link in an
+ * email cannot reach. The address must also be in Supabase's allowed redirect
+ * URLs (Authentication, URL Configuration).
+ */
+export const PUBLIC_APP_URL = 'https://adr1an-ma1na.github.io/sahrae-entertainment/';
+function emailRedirect(): string {
+  try {
+    const { protocol, hostname, origin, pathname } = window.location;
+    if (protocol === 'https:' && hostname !== 'localhost') return origin + pathname.replace(/[^/]*$/, '');
+  } catch { /* fall through */ }
+  return PUBLIC_APP_URL;
 }
 
 export function onAuthStateChanged(_auth: LocalAuth, cb: AuthListener): () => void {
@@ -167,17 +208,25 @@ export function getRedirectResult(_auth?: unknown): Promise<null> {
   return Promise.resolve(null);
 }
 
-export async function createUserWithEmailAndPassword(_auth: unknown, email: string, password: string) {
+export async function createUserWithEmailAndPassword(_auth: unknown, email: string, password: string, displayName?: string) {
   const e = (email || '').trim().toLowerCase();
   if (!e) throw new Error('Please enter an email address.');
   if (!password || password.length < 6) throw new Error('Password must be at least 6 characters.');
 
   if (supabase) {
-    const { data, error } = await supabase.auth.signUp({ email: e, password });
+    const { data, error } = await supabase.auth.signUp({
+      email: e,
+      password,
+      // The name goes in with the account, so it is there the moment they are in.
+      options: { emailRedirectTo: emailRedirect(), data: displayName ? { displayName } : undefined },
+    });
     if (error) throw new Error(error.message);
+    // No session means the project asks new accounts to confirm their email
+    // first. Saying "signed in" then would be a lie the next launch exposes.
+    if (!data.session) return { user: null, needsConfirmation: true };
     const u = mapSb(data.user);
     if (u) auth.setUser(u);
-    return { user: u };
+    return { user: u, needsConfirmation: false };
   }
 
   const accounts = loadAccounts();
@@ -186,7 +235,7 @@ export async function createUserWithEmailAndPassword(_auth: unknown, email: stri
   const user: StoredUser = {
     uid: genId('u_'),
     email: e,
-    displayName: null,
+    displayName: displayName || null,
     photoURL: null,
     passwordSalt,
     passwordHash: await derivePasswordHash(password, passwordSalt),
@@ -231,9 +280,7 @@ export async function signInWithEmailAndPassword(_auth: unknown, email: string, 
 export async function sendPasswordResetEmail(_auth: unknown, email: string) {
   if (supabase) {
     const e = (email || '').trim().toLowerCase();
-    const { error } = await supabase.auth.resetPasswordForEmail(e, {
-      redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
-    });
+    const { error } = await supabase.auth.resetPasswordForEmail(e, { redirectTo: emailRedirect() });
     if (error) throw new Error(error.message);
     return;
   }
@@ -319,13 +366,17 @@ export async function logout() {
 export interface StoredProfile { id: string; name: string; avatar: string }
 const profilesKey = (uid: string) => `sahrae_profiles_${uid}`;
 
+/**
+ * The account's profiles. Throws when they could not be read, so a dropped
+ * connection is never mistaken for an account with none (which would make a
+ * fresh default profile and save it over the real ones).
+ */
 export async function getProfiles(): Promise<StoredProfile[]> {
   if (supabase) {
-    try {
-      const { data } = await supabase.auth.getUser();
-      const m = (data.user?.user_metadata || {}) as Record<string, unknown>;
-      return Array.isArray(m.profiles) ? (m.profiles as StoredProfile[]) : [];
-    } catch { return []; }
+    const { data, error } = await supabase.auth.getUser();
+    if (error) throw new Error(error.message);
+    const m = (data.user?.user_metadata || {}) as Record<string, unknown>;
+    return Array.isArray(m.profiles) ? (m.profiles as StoredProfile[]) : [];
   }
   const uid = auth.currentUser?.uid;
   if (!uid) return [];

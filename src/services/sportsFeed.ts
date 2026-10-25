@@ -29,7 +29,7 @@ export interface FeedEvent {
   /** Ready-to-play embed URLs. */
   embeds?: string[];
   /** Per-stream detail from the API: real quality/language, never guessed. */
-  streamMeta?: { embedUrl: string; hd: boolean; language?: string; source: string; streamNo: number }[];
+  streamMeta?: { embedUrl: string; hd: boolean; language?: string; source: string; streamNo: number; viewers?: number }[];
 }
 
 export interface Feed { events: FeedEvent[] }
@@ -88,7 +88,7 @@ async function getJson<T>(url: string, timeoutMs = 12000): Promise<T | null> {
  * source instead of offering a link nobody has any reason to believe in.
  */
 export async function fetchStreamsFor(source: string, id: string): Promise<FeedEvent['streamMeta']> {
-  const rows = await getJson<{ embedUrl: string; hd: boolean; language?: string; source: string; streamNo: number }[]>(
+  const rows = await getJson<{ embedUrl: string; hd: boolean; language?: string; source: string; streamNo: number; viewers?: number }[]>(
     `${API_BASE}/stream/${encodeURIComponent(source)}/${encodeURIComponent(id)}`,
     9000,
   );

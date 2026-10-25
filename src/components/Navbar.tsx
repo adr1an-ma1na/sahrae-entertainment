@@ -1,6 +1,7 @@
-import { useState, useEffect, FormEvent, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Search, Bell, User, Sun, Moon, LogIn, LogOut, Palette, MonitorSmartphone } from 'lucide-react';
 import { OPEN_REMOTE } from './RemotePanel';
+import { FOCUS_SEARCH } from './SearchBox';
 import { currentLang, setLang } from '../i18n';
 import { isTelevision } from '../tv/spatialNavigation';
 import { useTheme } from '../hooks/useTheme';
@@ -17,10 +18,8 @@ interface NavbarProps {
   onPlay: (id: number, type: 'movie' | 'tv', startInInfo?: boolean) => void;
 }
 
-export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: NavbarProps) {
+export default function Navbar({ activeTab, setActiveTab, onPlay }: NavbarProps) {
   const [isScrolled, setIsScrolled] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const { theme, toggleTheme } = useTheme();
   const { notifications, unreadCount, markAsRead, markAllAsRead, clearNotifications, checkUpdates } = useNotifications();
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -51,12 +50,6 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleSearchSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      onSearch(searchQuery);
-    }
-  };
 
   const tabs = [
     { id: 'home', label: 'Home' },
@@ -78,7 +71,7 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
       <div className="px-4 md:px-12 py-4 flex items-center justify-between">
         <div className="flex items-center gap-8 md:gap-12 min-w-0 flex-1">
           <h1
-            className={`nav-wordmark text-2xl md:text-3xl font-black tracking-tighter cursor-pointer whitespace-nowrap shrink-0 lg:hidden ${isSearchOpen ? 'hidden' : ''}`}
+            className={`nav-wordmark text-2xl md:text-3xl font-black tracking-tighter cursor-pointer whitespace-nowrap shrink-0 lg:hidden`}
             onClick={() => setActiveTab('home')}
           >
             <span className="text-gold drop-shadow-[0_1px_8px_rgba(251,191,36,0.25)]">SAHRAE</span> <span className="text-white font-light text-xl md:text-2xl tracking-normal hidden sm:inline-block">ENTERTAINMENT</span>
@@ -86,29 +79,18 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
           {/* Section nav now lives in the Sidebar (desktop) + BottomTabBar (mobile). */}
         </div>
 
-        <div className="flex items-center gap-6">
-          <form 
-            onSubmit={handleSearchSubmit}
-            className={`flex items-center transition-all duration-300 ${isSearchOpen ? 'glass rounded-full px-3 py-1.5' : ''}`}
+        <div className="flex items-center gap-2 sm:gap-4 md:gap-6 shrink-0">
+          {/* Opens the Search page, where the one search box is. Phones have the
+              Search tab at the bottom, so it shows from tablet width up. */}
+          <button
+            type="button"
+            onClick={() => { setActiveTab('search'); setTimeout(() => window.dispatchEvent(new Event(FOCUS_SEARCH)), 60); }}
+            data-tv-focusable
+            className={`hidden md:inline-flex text-white p-2 rounded-full hover:bg-white/10 transition-colors ${activeTab === 'search' ? 'bg-white/10' : ''}`}
+            title="Search" aria-label="Search"
           >
-            <button
-              type="button"
-              onClick={() => setIsSearchOpen(!isSearchOpen)}
-              className="text-white p-2 rounded-full hover:bg-white/10 transition-colors"
-              title="Search" aria-label="Search"
-            >
-              <Search className="w-5 h-5" />
-            </button>
-            <input
-              type="text"
-              placeholder="Titles, people, genres"
-              className={`bg-transparent text-white text-sm focus:outline-none transition-all duration-300 ${
-                isSearchOpen ? 'w-48 md:w-64 ml-2 opacity-100' : 'w-0 opacity-0'
-              }`}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </form>
+            <Search className="w-5 h-5" />
+          </button>
           
           <div className="relative" ref={notificationsRef}>
             <button
@@ -187,7 +169,7 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
           <button
             onClick={() => setLang(currentLang() === 'sw' ? 'en' : 'sw')}
             data-tv-focusable
-            className="text-white px-2 py-1 hover:bg-white/10 rounded-full transition-colors text-xs font-bold border border-white/15"
+            className="hidden sm:inline-flex text-white px-2 py-1 hover:bg-white/10 rounded-full transition-colors text-xs font-bold border border-white/15"
             aria-label={currentLang() === 'sw' ? 'Switch to English' : 'Badilisha kuwa Kiswahili'}
             title={currentLang() === 'sw' ? 'Switch to English' : 'Badilisha kuwa Kiswahili'}
           >
@@ -207,7 +189,7 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, onPlay }: Na
 
           <button
             onClick={toggleTheme}
-            className="text-white p-2 hover:bg-white/10 rounded-full transition-colors"
+            className="hidden sm:inline-flex text-white p-2 hover:bg-white/10 rounded-full transition-colors"
             aria-label="Toggle theme"
           >
             {theme === 'light' ? <Sun className="w-5 h-5" /> : theme === 'dark' ? <Moon className="w-5 h-5" /> : <Palette className="w-5 h-5" />}
