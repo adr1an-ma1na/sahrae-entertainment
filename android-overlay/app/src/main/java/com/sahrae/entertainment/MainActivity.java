@@ -825,6 +825,155 @@ public class MainActivity extends BridgeActivity {
         return result[0];
     }
 
+    // ─────────────────────────────────────────────────────────────
+    //  Film and episode streams for Sahrae's own player.
+    //
+    //  The film servers' pages carry their adverts (pop-ups, fake "not a robot"
+    //  cards) and pick their own quality, often starting at 480p. Here their
+    //  page runs out of sight, exactly like the sports resolver above, and the
+    //  HLS playlist it asks for is handed to the app, which plays it in its own
+    //  player through /__hlsproxy: no provider page on screen, so none of its
+    //  adverts, and the app chooses the sharpest rendition.
+    //
+    //  URL form: https://localhost/__filmstream?u={encoded embed url}
+    //  Returns:  {"m3u8":"<url>","referer":"<url>"}  or {"m3u8":null}: the
+    //            app then shows the provider's own player as before.
+    // ─────────────────────────────────────────────────────────────
+    private static final Map<String, String[]> FILM_CACHE = new ConcurrentHashMap<>();
+    private static final Map<String, Long> FILM_EXPIRY = new ConcurrentHashMap<>();
+
+    /** An HLS playlist, but not a DASH manifest (the app's player is hls.js). */
+    private static boolean looksLikeFilmPlaylist(String u) {
+        if (u == null) return false;
+        String l = u.toLowerCase();
+        int q = l.indexOf('?');
+        String p = q >= 0 ? l.substring(0, q) : l;
+        return p.endsWith(".m3u8") || p.contains(".m3u8/");
+    }
+
+    private WebResourceResponse filmResolve(Uri uri) {
+        final String embed = uri.getQueryParameter("u");
+        if (embed == null || embed.isEmpty() || !embed.startsWith("https://")) return jsonResponse("{\"m3u8\":null}");
+        Long exp = FILM_EXPIRY.get(embed);
+        String[] got = (exp != null && exp > System.currentTimeMillis()) ? FILM_CACHE.get(embed) : null;
+        if (got == null) {
+            got = runFilmResolver(embed);
+            if (got != null) {
+                FILM_CACHE.put(embed, got);
+                FILM_EXPIRY.put(embed, System.currentTimeMillis() + 10 * 60 * 1000L);
+            }
+        }
+        if (got == null) return jsonResponse("{\"m3u8\":null}");
+        return jsonResponse("{\"m3u8\":" + jsonStr(got[0]) + ",\"referer\":" + jsonStr(got[1]) + "}");
+    }
+
+    /** Load the film page out of sight; return {playlist, referer} of the first HLS playlist it fetches. */
+    private String[] runFilmResolver(final String embed) {
+        final String[] result = new String[2];
+        final WebView[] holder = new WebView[1];
+        final CountDownLatch latch = new CountDownLatch(1);
+        final String fallbackRef = originOf(embed) != null ? originOf(embed) + "/" : embed;
+
+        runOnUiThread(() -> {
+            try {
+                WebView wv = new WebView(MainActivity.this);
+                holder[0] = wv;
+                WebSettings s = wv.getSettings();
+                s.setJavaScriptEnabled(true);
+                s.setDomStorageEnabled(true);
+                s.setMediaPlaybackRequiresUserGesture(false);
+                s.setUserAgentString(PROXY_UA);
+                // No second windows: the page's pop-ups have nowhere to open.
+                s.setSupportMultipleWindows(false);
+                s.setJavaScriptCanOpenWindowsAutomatically(false);
+                wv.setWebChromeClient(new WebChromeClient());
+                wv.setWebViewClient(new WebViewClient() {
+                    @Override
+                    public boolean onRenderProcessGone(WebView v, android.webkit.RenderProcessGoneDetail detail) {
+                        recordRecovery("Background film lookup " + (detail != null && detail.didCrash() ? "crashed" : "was closed for memory") + "; handled.");
+                        try {
+                            ViewGroup parent = (ViewGroup) v.getParent();
+                            if (parent != null) parent.removeView(v);
+                            v.destroy();
+                        } catch (Throwable ignore) {}
+                        if (holder[0] == v) holder[0] = null;
+                        latch.countDown();
+                        return true;
+                    }
+
+                    @Override
+                    public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest req) {
+                        // A redirect to an advert instead of the player: stay put.
+                        return req != null && req.isForMainFrame()
+                            && (req.hasGesture() || (req.getUrl() != null && isAdHost(req.getUrl().getHost())));
+                    }
+
+                    @Override
+                    public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest req) {
+                        try {
+                            if (req != null && req.getUrl() != null) {
+                                String us = req.getUrl().toString();
+                                if (isAdHost(req.getUrl().getHost())) return blockedResponse();
+                                if (result[0] == null && looksLikeFilmPlaylist(us)) {
+                                    String ref = null;
+                                    Map<String, String> h = req.getRequestHeaders();
+                                    if (h != null) for (Map.Entry<String, String> e : h.entrySet()) {
+                                        if (e.getKey() != null && e.getKey().equalsIgnoreCase("Referer")) ref = e.getValue();
+                                    }
+                                    result[0] = us;
+                                    result[1] = (ref != null && !ref.isEmpty()) ? ref : fallbackRef;
+                                    latch.countDown();
+                                    return blockedResponse();
+                                }
+                                // Video and pictures are not needed to find the playlist.
+                                String l = us.toLowerCase();
+                                if (l.matches(".*\\.(ts|m4s|mp4|jpg|jpeg|png|gif|webp)(\\?.*)?$")) return blockedResponse();
+                            }
+                        } catch (Exception ignore) {}
+                        return null;
+                    }
+
+                    @Override
+                    public void onPageFinished(WebView v, String url) {
+                        try {
+                            v.evaluateJavascript(PLAY_KICK, null);
+                            v.postDelayed(() -> { try { v.evaluateJavascript(PLAY_KICK, null); } catch (Exception e) {} }, 2000);
+                            v.postDelayed(() -> { try { v.evaluateJavascript(PLAY_KICK, null); } catch (Exception e) {} }, 5000);
+                            v.postDelayed(() -> { try { v.evaluateJavascript(PLAY_KICK, null); } catch (Exception e) {} }, 9000);
+                        } catch (Exception ignore) {}
+                    }
+                });
+                try {
+                    ViewGroup root = findViewById(android.R.id.content);
+                    if (root != null) {
+                        wv.setLayoutParams(new ViewGroup.LayoutParams(1, 1));
+                        wv.setAlpha(0f);
+                        wv.setEnabled(false);
+                        root.addView(wv);
+                    }
+                } catch (Exception ignore) {}
+                wv.loadUrl(embed);
+            } catch (Exception e) {
+                latch.countDown();
+            }
+        });
+
+        // VidRock can take ~20 s to ask for its playlist.
+        try { latch.await(24, TimeUnit.SECONDS); } catch (InterruptedException ignore) {}
+        runOnUiThread(() -> {
+            try {
+                if (holder[0] != null) {
+                    holder[0].stopLoading();
+                    holder[0].loadUrl("about:blank");
+                    ViewGroup parent = (ViewGroup) holder[0].getParent();
+                    if (parent != null) parent.removeView(holder[0]);
+                    holder[0].destroy();
+                }
+            } catch (Exception ignore) {}
+        });
+        return result[0] != null ? result : null;
+    }
+
     //  On-device YouTube AUDIO resolver (powers background playback + downloads).
     //  Piped audio URLs are flaky/CORS-locked on-device, so we load the YouTube
     //  embed in a hidden WebView (residential IP), autoplay it muted, and capture
@@ -1792,6 +1941,9 @@ public class MainActivity extends BridgeActivity {
                             // Sports stream resolver (IP-locked embeds resolved on the phone).
                             WebResourceResponse r = embedResolve(u);
                             if (r != null) return r;
+                        } else if (path.startsWith("/__filmstream")) {
+                            // Films and episodes in Sahrae's own player, without the provider's page.
+                            return filmResolve(u);
                         } else if (path.startsWith("/__ytaudio")) {
                             // Song downloads: the audio stream of a YouTube track.
                             return ytAudioResolve(u);
@@ -1975,7 +2127,7 @@ public class MainActivity extends BridgeActivity {
                 // with disguised segment names would look silent and be switched
                 // away from while playing), measure data used, cap video quality.
                 view.evaluateJavascript(
-                    "window.__sahraeCaps=Object.assign(window.__sahraeCaps||{},{mediaSignal:true,traffic:true,dataSaver:true,embedHosts:true,reminders:true,quality:true});"
+                    "window.__sahraeCaps=Object.assign(window.__sahraeCaps||{},{mediaSignal:true,traffic:true,dataSaver:true,embedHosts:true,reminders:true,quality:true,filmStream:true});"
                     + "window.dispatchEvent(new Event('sahrae:caps'))", null);
 
                 // This phone has lost its screen engine before: flatten the heavy

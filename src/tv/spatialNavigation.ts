@@ -361,6 +361,10 @@ export function initSpatialNavigation() {
       // Let arrow keys move the caret while typing in a text field.
       if (isTypingTarget(active)) return;
 
+      // Sahrae's own film player skips 10 s on left and right; up and down
+      // still move between the buttons.
+      if ((dir === 'left' || dir === 'right') && active?.closest('[data-tv-seek]')) return;
+
       const focusables = getFocusables();
       if (focusables.length === 0) return;
 

@@ -1,7 +1,7 @@
 {
-  "version": 3,
-  "updated": "2026-10-23",
-  "about": "Movie and series servers, best picture and sound first, measured from Kenya on 2026-10-22 on Matlock (2024) S1E1, S2E1, S2E16 and Dune: Part Two. No working server offered more than 1080p (Dune: Part Two exists in 4K; none served it above 1080p). The app offers them in this order, leaving out any marked down by the daily check (scripts/server-health.mjs) or failing for viewers (play_proof).",
+  "version": 4,
+  "updated": "2026-10-25",
+  "about": "Movie and series servers, in the order the web app offers them. Measured from Kenya on 2026-10-25 on Matlock (2024) S1E1, reading the picture actually decoded and the bitrate of the stream: VidRock 1080p at 5 Mb/s (also 720p, 360p), VidZee 1080p at about 3 Mb/s (one rendition only), VidLink Pro 1080p at only 1.6 Mb/s (also 720p, 480p; it was showing 720p after 40 s). On the web VidZee leads because it is the only one that runs inside the Ad Shield sandbox (no pop-ups). In the Android app, where Sahrae plays the stream in its own player without the provider page, the order is by bitrate instead (cleanFirst in services/cleanStream.ts).",
   "servers": [
     {
       "id": "vidzee",
@@ -13,7 +13,7 @@
       ],
       "visual": {
         "maxHeight": 1080,
-        "mbps": 2.5,
+        "mbps": 3,
         "codec": "h264",
         "adaptive": false
       },
@@ -25,12 +25,12 @@
       "events": true,
       "status": "active",
       "failStreak": 0,
-      "checked": "2026-10-22",
-      "note": "Matlock S1E1, S2E1, S2E16 at 1920x1080 with 5.1 surround (6-channel AAC); Dune: Part Two at 1080p. Fixed 1080p: never drops on a slow start. Reports its clock, so the next episode starts by itself."
+      "checked": "2026-10-25",
+      "note": "Matlock S1E1 at 1920x1080, about 3 Mb/s H.264, one rendition (never drops), 5.1 AAC. The only server that plays inside the web Ad Shield sandbox."
     },
     {
       "id": "vidrock",
-      "name": "VidRock · 1080p · Dolby 5.1",
+      "name": "VidRock · 1080p · sharpest",
       "movie": "https://vidrock.to/embed/movie/{id}",
       "tv": "https://vidrock.to/embed/tv/{id}/{s}/{e}",
       "hosts": [
@@ -51,8 +51,8 @@
       "events": false,
       "status": "active",
       "failStreak": 0,
-      "checked": "2026-10-22",
-      "note": "Dune: Part Two at 1080p with Dolby Digital Plus 5.1 (E-AC-3); Matlock episodes at 1080p with stereo AAC (the sound follows each title's source). Played all three Matlock episodes, slow to start (up to ~20 s)."
+      "checked": "2026-10-25",
+      "note": "Matlock S1E1: renditions 1080p at 5.0 Mb/s, 720p at 3.0, 360p at 0.8; showing 1080p after 34 s. The clearest picture measured. Slow to start (up to ~20 s). Refuses the web sandbox."
     },
     {
       "id": "viduki",
@@ -65,7 +65,7 @@
       ],
       "visual": {
         "maxHeight": 1080,
-        "mbps": 4.5,
+        "mbps": 3,
         "codec": "h264",
         "adaptive": false
       },
@@ -77,12 +77,12 @@
       "events": false,
       "status": "active",
       "failStreak": 0,
-      "checked": "2026-10-22",
-      "note": "Serves the same stream as VidZee, through a different front end: a backup for when VidZee's own player is down. Sound not measured separately."
+      "checked": "2026-10-25",
+      "note": "The same stream as VidZee (about 3 Mb/s 1080p) through a different front end: a backup for when VidZee's own player is down. Refuses the web sandbox."
     },
     {
       "id": "vidlink",
-      "name": "VidLink Pro · 1080p",
+      "name": "VidLink Pro · up to 1080p",
       "movie": "https://vidlink.pro/movie/{id}?primaryColor=f59e0b",
       "tv": "https://vidlink.pro/tv/{id}/{s}/{e}?primaryColor=f59e0b",
       "hosts": [
@@ -102,8 +102,8 @@
       "events": true,
       "status": "active",
       "failStreak": 0,
-      "checked": "2026-10-22",
-      "note": "Played Matlock S2E16 (starts at 480p; the app's HD setting lifts it). Did not have Dune: Part Two (\"We couldn't find this content\"). Stereo."
+      "checked": "2026-10-25",
+      "note": "Matlock S1E1: renditions 1080p at only 1.6 Mb/s (HEVC), 720p at 0.8, 480p at 0.3; showing 720p after 40 s, and it starts at 480p. The softest picture of the four, so last. Refuses the web sandbox."
     }
   ],
   "retired": [

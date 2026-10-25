@@ -11,6 +11,8 @@ import { posterColor, cachedPosterColor } from '../services/posterColor';
 import { playerSandbox, isShieldOn, setShieldOn as persistShield, shieldAppliesHere, refusesSandbox } from '../services/adShield';
 import { suppressPopups } from '../services/popupGuard';
 import { lockLandscape, unlockOrientation } from '../services/fullscreen';
+import CleanPlayer from './CleanPlayer';
+import { canPlayClean, resolveFilmStream, relayUrl, cleanFirst, isCleanOn, setCleanOn } from '../services/cleanStream';
 import { isTelevision } from '../tv/spatialNavigation';
 import { NO_START_LIMIT_MS, COUNTDOWN_S, isPlaybackEvidence, markWorking, markDown, startServer } from '../services/serverHealth';
 import { reportScreen } from '../services/remote';
@@ -52,6 +54,8 @@ function fromFrame(root: Window | null | undefined, src: MessageEventSource | nu
 }
 
 const nativeShell = (() => { try { return Capacitor.isNativePlatform(); } catch { return false; } })();
+/** Sahrae's own player reached the end of an episode. */
+const CLEAN_ENDED = 'sahrae:clean-ended';
 
 export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, startInInfo = false, initialSeason, initialEpisode, playTrailer = false }: PlayerModalProps) {
   const [details, setDetails] = useState<MediaDetails | null>(null);
@@ -480,7 +484,9 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const livePool = useServerPool(currentMediaType === 'tv' ? 'tv' : 'movie');
   const poolKey = `${isOpen}|${currentMediaId}|${currentMediaType}`;
   const poolSnap = useRef<{ key: string; list: PoolServer[] }>({ key: '', list: livePool });
-  if (poolSnap.current.key !== poolKey) poolSnap.current = { key: poolKey, list: livePool };
+  // In Sahrae's own player every server plays without its adverts, so the
+  // clearest picture (highest bitrate, measured) goes first.
+  if (poolSnap.current.key !== poolKey) poolSnap.current = { key: poolKey, list: nativeShell && canPlayClean() && isCleanOn() ? cleanFirst(livePool) : livePool };
   const SERVERS = poolSnap.current.list.map((p) => ({
     id: p.id,
     name: poolLabel(p),
@@ -489,6 +495,27 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   }));
 
   useEffect(() => { failedServersRef.current = failedServers; }, [failedServers]);
+
+  // ── Sahrae's own player (Android app) ────────────────────────────────────
+  // The server's page runs out of sight and hands over its stream, which plays
+  // here without the page's adverts and on its sharpest rendition. 'resolving'
+  // while the page is asked, 'ready' with the stream, 'failed' (or 'off') and
+  // the provider's own player shows as before.
+  const [cleanOn, setCleanOnState] = useState<boolean>(() => isCleanOn());
+  const [clean, setClean] = useState<{ state: 'off' | 'resolving' | 'ready' | 'failed'; url?: string }>({ state: 'off' });
+  const cleanServer = SERVERS[selectedServer];
+  const cleanSrc = cleanServer && currentMediaType && currentMediaId
+    ? cleanServer.getUrl(currentMediaType, currentMediaId, selectedSeason, selectedEpisode) : '';
+  useEffect(() => {
+    if (!nativeShell || !canPlayClean() || !cleanOn || !isOpen || !isPlaying || playingTrailer || !cleanSrc) { setClean({ state: 'off' }); return; }
+    let live = true;
+    setClean({ state: 'resolving' });
+    resolveFilmStream(cleanSrc).then((r) => {
+      if (!live) return;
+      setClean(r ? { state: 'ready', url: relayUrl(r.m3u8, r.referer) } : { state: 'failed' });
+    });
+    return () => { live = false; };
+  }, [cleanSrc, cleanOn, isOpen, isPlaying, playingTrailer, refreshKey]);
 
   // Move on from a server that never started, so the viewer does not have to
   // diagnose it. The failed one is skipped for this title and remembered, and
@@ -526,6 +553,8 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   // on their own play button and are working fine.
   useEffect(() => {
     if (!isOpen || !isPlaying || playingTrailer) return;
+    // The hidden page is still being asked for its stream: nothing to judge yet.
+    if (clean.state === 'resolving') return;
     const id = SERVERS[selectedServer]?.id;
     // Only a native shell that reports the player's stream fetches can see a
     // silent player working (it sets window.__sahraeCaps.streams). Without that,
@@ -617,7 +646,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
       window.removeEventListener('blur', onBlur);
       clearTimers();
     };
-  }, [isOpen, isPlaying, playingTrailer, selectedServer, selectedSeason, selectedEpisode, refreshKey, currentMediaId]);
+  }, [isOpen, isPlaying, playingTrailer, selectedServer, selectedSeason, selectedEpisode, refreshKey, currentMediaId, clean.state]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -856,8 +885,8 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     endHandledRef.current = false;
     stopUpNext();
     if (!isOpen || !isPlaying || playingTrailer || currentMediaType !== 'tv') return;
-    const onMessage = (e: MessageEvent) => {
-      if (!fromFrame(iframeRef.current?.contentWindow, e.source)) return;
+    const onMessage = (e: MessageEvent, trusted = false) => {
+      if (!trusted && !fromFrame(iframeRef.current?.contentWindow, e.source)) return;
       let d: unknown = e.data;
       if (typeof d === 'string') { try { d = JSON.parse(d); } catch { return; } }
       const m = d as { type?: string; data?: { event?: string; currentTime?: number; duration?: number } } | null;
@@ -875,8 +904,12 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
         else setUpNext(left);
       }, 1000);
     };
-    window.addEventListener('message', onMessage);
-    return () => { window.removeEventListener('message', onMessage); stopUpNext(); };
+    // Sahrae's own player says "ended" directly.
+    const onCleanEnd = () => onMessage({ data: { type: 'PLAYER_EVENT', data: { event: 'ended' } } } as MessageEvent, true);
+    const onMsg = (e: MessageEvent) => onMessage(e);
+    window.addEventListener('message', onMsg);
+    window.addEventListener(CLEAN_ENDED, onCleanEnd);
+    return () => { window.removeEventListener('message', onMsg); window.removeEventListener(CLEAN_ENDED, onCleanEnd); stopUpNext(); };
     // hasNextEpisode and handleSkipEpisode read details and the episode, both listed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, isPlaying, playingTrailer, currentMediaType, details, selectedSeason, selectedEpisode, selectedServer, refreshKey]);
@@ -888,7 +921,14 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   // it, so users don't have to close and reopen the whole app.
   useEffect(() => {
     if (!isPlaying) { setVideoLoaded(false); setLoadPct(0); setSlowLoad(false); return; }
+    if (clean.state === 'ready') { setVideoLoaded(true); setLoadPct(100); setSlowLoad(false); return; }
     setVideoLoaded(false); setLoadPct(8); setSlowLoad(false);
+    if (clean.state === 'resolving') {
+      // The ring fills while the stream is fetched; the resolver's own limit stops it.
+      if (loadTimerRef.current) clearInterval(loadTimerRef.current);
+      loadTimerRef.current = setInterval(() => { setLoadPct(p => (p >= 92 ? p : p + Math.max(0.4, (92 - p) * 0.03))); }, 250);
+      return () => { if (loadTimerRef.current) clearInterval(loadTimerRef.current); };
+    }
     if (loadTimerRef.current) clearInterval(loadTimerRef.current);
     if (slowTimerRef.current) clearTimeout(slowTimerRef.current);
     loadTimerRef.current = setInterval(() => { setLoadPct(p => (p >= 92 ? p : p + Math.max(0.7, (92 - p) * 0.05))); }, 250);
@@ -900,7 +940,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
       else { autoSwitch(); }
     }, 10000);
     return () => { if (loadTimerRef.current) clearInterval(loadTimerRef.current); if (slowTimerRef.current) clearTimeout(slowTimerRef.current); };
-  }, [isPlaying, selectedServer, selectedSeason, selectedEpisode, refreshKey]);
+  }, [isPlaying, selectedServer, selectedSeason, selectedEpisode, refreshKey, clean.state]);
 
   // Reset the one-shot auto-retry when the content or server actually changes.
   useEffect(() => { autoRetriedRef.current = false; }, [isPlaying, selectedServer, selectedSeason, selectedEpisode]);
@@ -973,6 +1013,17 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                   />
                 ) : (
                   <>
+                    {clean.state === 'ready' && clean.url ? (
+                      <CleanPlayer
+                        key={clean.url}
+                        src={clean.url}
+                        saver={dataSaver}
+                        onPlaying={() => { window.dispatchEvent(new Event('sahrae:embed-media')); setTimeout(enterFullscreen, 300); }}
+                        onProgress={() => { /* progress is saved per episode, as for every server */ }}
+                        onEnded={() => window.dispatchEvent(new Event(CLEAN_ENDED))}
+                        onFail={() => setClean({ state: 'failed' })}
+                      />
+                    ) : clean.state === 'resolving' ? null : (
                     <iframe
                       key={`player-${refreshKey}-${shieldOn ? 'shield' : 'open'}-${currentServerObj.id}`}
                       ref={iframeRef}
@@ -1000,6 +1051,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       className="w-full h-full absolute inset-0 bg-black"
                       title="Video Player"
                     />
+                    )}
                     {/* Netflix-style loading ring + slow-load recovery (Reload / Next server) */}
                     {!videoLoaded && (
                       <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/85 pointer-events-none">
@@ -1338,6 +1390,41 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
 
                 {/* Ad Shield toggle — web only. On Android the native shell
                     already blocks ads, so there is no trade to offer. */}
+                {nativeShell && canPlayClean() && (
+                  <div className="mt-4 flex items-start gap-3 p-3 rounded-xl border border-white/10 bg-zinc-900/50">
+                    <ShieldCheck className={`w-5 h-5 shrink-0 mt-0.5 ${cleanOn ? 'text-emerald-400' : 'text-zinc-500'}`} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-white">Sahrae player {cleanOn ? 'on' : 'off'}</p>
+                      <p className="text-xs text-zinc-400 leading-snug mt-0.5">
+                        {cleanOn
+                          ? (clean.state === 'failed'
+                            ? "This server would not hand over its stream, so its own player is showing, adverts and all. Another server usually works in Sahrae's player."
+                            : "No adverts, and the sharpest picture the server has. The badge on the picture shows the real quality. Turn it off to use the server's own player, for its subtitles.")
+                          : "The server's own player, with its adverts and its own quality choice."}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => { const n = !cleanOn; setCleanOnState(n); setCleanOn(n); haptics.tap(); }}
+                      role="switch"
+                      aria-checked={cleanOn}
+                      aria-label="Sahrae player"
+                      data-tv-focusable
+                      className={`shrink-0 w-12 h-7 rounded-full p-0.5 transition-colors ${cleanOn ? 'bg-emerald-500' : 'bg-zinc-700'}`}
+                    >
+                      <span className={`block w-6 h-6 rounded-full bg-white transition-transform ${cleanOn ? 'translate-x-5' : 'translate-x-0'}`} />
+                    </button>
+                  </div>
+                )}
+                {shieldAppliesHere() && (
+                  // A browser cannot reach inside a server's page, so its adverts
+                  // and its quality choice stay. The Android app plays the stream
+                  // itself, with neither.
+                  <a href="https://github.com/adr1an-ma1na/sahrae-entertainment/releases/download/preview/Sahrae-release.apk" target="_blank" rel="noopener noreferrer" data-tv-focusable
+                    className="mt-4 flex items-center gap-3 p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/15 transition-colors">
+                    <Download className="w-5 h-5 shrink-0 text-amber-400" />
+                    <span className="text-xs text-zinc-300 leading-snug"><b className="block text-sm text-white">No adverts, sharpest picture: the Sahrae app</b>On Android phones and TVs Sahrae plays the film in its own player, without the server's adverts, at its best quality. Tap to download.</span>
+                  </a>
+                )}
                 {shieldAppliesHere() && refusesSandbox(src) && (
                   // Saying "on" here was untrue: this server will not play
                   // with the shield, so it plays without it.

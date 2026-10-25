@@ -62,7 +62,7 @@ eq('VidZee episode (Matlock S2E16)', fill(by('vidzee').tv, 226174, 2, 16, 'x'), 
 eq('VidRock film (Dune: Part Two)', fill(by('vidrock').movie, 693134, 1, 1, 'x'), 'https://vidrock.to/embed/movie/693134');
 eq('Viduki episode', fill(by('viduki').tv, 226174, 1, 1, 'x'), 'https://vidsrc.wtf/api/1/tv/?id=226174&s=1&e=1');
 eq('VidLink Pro keeps its theme colour', fill(by('vidlink').tv, 226174, 2, 16, 'x'), 'https://vidlink.pro/tv/226174/2/16?primaryColor=f59e0b');
-eq('names say the picture and sound', pool.servers.map(label), ['VidZee · 1080p · 5.1', 'VidRock · 1080p · Dolby 5.1', 'Viduki · 1080p', 'VidLink Pro · 1080p']);
+eq('names say the picture and sound, honestly', pool.servers.map(label), ['VidZee · 1080p · 5.1', 'VidRock · 1080p · sharpest', 'Viduki · 1080p', 'VidLink Pro · up to 1080p']);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exitCode = fail ? 1 : 0;
