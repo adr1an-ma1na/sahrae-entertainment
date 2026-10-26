@@ -80,9 +80,9 @@ const SANDBOX_REFUSERS = [
   'vidrock.to', 'vidrock.ru', // VidRock: "Sandbox Not Allowed"
   'vidlink.pro', // VidLink Pro: "Please Disable Sandbox"
   'vixsrc.to', // VixSrc: black when sandboxed, plays without (no pop-ups seen)
-  // The owner's list of 2026-10-26: not checked sandboxed, so loaded without
-  // it rather than risk a list of servers that will not play on the web.
-  'vidsrc.to', 'vsembed.ru', 'autoembed.co', 'vidsrc.su', 'vidsrc.sh', '2embed.cc', '2embed.skin', 'vidsrc.io', 'vidsrc.pm',
+  // Checked sandboxed on 2026-10-26: refuse it ("can't be embedded in a sandboxed
+  // frame", "Restricted Embed Detected"; 2Embed hands over to the same player).
+  'vidsrc.to', 'vsembed.ru', 'vidsrc.su', 'vidsrc.sh', '2embed.cc', '2embed.skin', 'vidsrc.io',
 ];
 
 export function refusesSandbox(url: string): boolean {

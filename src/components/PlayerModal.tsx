@@ -489,7 +489,11 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   // In Sahrae's own player every server plays without its adverts, so the
   // clearest picture (highest bitrate, measured) goes first.
   if (poolSnap.current.key !== poolKey) poolSnap.current = { key: poolKey, list: nativeShell && canPlayClean() && isCleanOn() ? cleanFirst(livePool) : livePool };
-  const SERVERS = poolSnap.current.list.map((p) => ({
+  // With Ad Shield on (web), a server known to refuse the sandbox would only
+  // show its "remove the sandbox" screen, so it is left out rather than
+  // offered and failed. If that would leave nothing, all are kept.
+  const shielded = poolSnap.current.list.filter((p) => !(shieldAppliesHere() && shieldOn && refusesSandbox(p.movie.replace('{id}', '1'))));
+  const SERVERS = (shielded.length ? shielded : poolSnap.current.list).map((p) => ({
     id: p.id,
     name: poolLabel(p),
     getUrl: (type: string, id: number, s: number, e: number) => fillTemplate(type === 'movie' ? p.movie : p.tv, id, s, e, brand),
