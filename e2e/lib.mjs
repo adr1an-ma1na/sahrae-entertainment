@@ -226,8 +226,75 @@ export const filmStreamCheck = async () => {
   return out;
 };
 
+/**
+ * The last step: actually play each server's stream through the relay with
+ * hls.js (the library Sahrae's player uses), as Sahrae's player does: opening
+ * on the sharpest rendition. Reports the picture's real size and whether time
+ * advanced, after 25 s each.
+ */
+export const filmPlayCheck = async () => {
+  const servers = {
+    vixsrc: 'https://vixsrc.to/tv/226174/1/1?lang=en',
+    vidrock: 'https://vidrock.to/embed/tv/226174/1/1',
+    vidzee: 'https://player.vidzee.wtf/embed/tv/226174/1/1',
+  };
+  if (!window.Hls) {
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js';
+      s.onload = res; s.onerror = () => rej(new Error('hls.js did not load'));
+      document.head.appendChild(s);
+    });
+  }
+  const out = {};
+  for (const [id, embed] of Object.entries(servers)) {
+    const res = {};
+    let hls, v;
+    try {
+      let j = { pending: true };
+      const t0 = Date.now();
+      while (j.pending && Date.now() - t0 < 40000) {
+        j = await (await fetch(`https://localhost/__filmstream?u=${encodeURIComponent(embed)}`, { cache: 'no-store' })).json();
+        if (j.pending) await new Promise((r) => setTimeout(r, 1000));
+      }
+      if (!j.m3u8) { res.why = j.why || 'no stream'; out[id] = res; continue; }
+      const src = `https://localhost/__hlsproxy?u=${encodeURIComponent(j.m3u8)}${j.referer ? `&r=${encodeURIComponent(j.referer)}` : ''}`;
+      v = document.createElement('video');
+      v.muted = true; v.playsInline = true;
+      v.style.cssText = 'position:fixed;left:0;top:0;width:320px;height:180px;z-index:99999';
+      document.body.appendChild(v);
+      hls = new window.Hls({ startLevel: -1, capLevelToPlayerSize: false, abrEwmaDefaultEstimate: 8000000 });
+      const errors = [];
+      hls.on(window.Hls.Events.ERROR, (_e, d) => { if (errors.length < 4) errors.push(`${d.fatal ? 'FATAL ' : ''}${d.details}${d.response?.code ? ' ' + d.response.code : ''}`); });
+      hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
+        let best = 0;
+        hls.levels.forEach((l, i) => { if ((l.height || 0) > (hls.levels[best].height || 0)) best = i; });
+        hls.startLevel = best;
+        v.play().catch((e) => errors.push('play: ' + e.name));
+      });
+      const t1 = Date.now();
+      hls.loadSource(src);
+      hls.attachMedia(v);
+      let firstFrameMs = null;
+      while (Date.now() - t1 < 25000) {
+        await new Promise((r) => setTimeout(r, 500));
+        if (firstFrameMs === null && v.currentTime > 0.2) firstFrameMs = Date.now() - t1;
+      }
+      res.play = { height: v.videoHeight, width: v.videoWidth, seconds: +v.currentTime.toFixed(1), firstFrameMs, level: hls.levels[hls.currentLevel]?.height ?? null, errors };
+    } catch (e) {
+      res.error = String(e).slice(0, 160);
+    } finally {
+      try { hls && hls.destroy(); } catch {}
+      try { v && v.remove(); } catch {}
+    }
+    out[id] = res;
+  }
+  return out;
+};
+
 export const FLOWS = [
   { name: '00-film-stream', run: async (p) => p.evaluate(filmStreamCheck) },
+  { name: '00b-film-play', run: async (p) => p.evaluate(filmPlayCheck) },
   { name: '01-launch', run: async (p) => { await settle(p, 6000, 20000); } },
   { name: '02-past-onboarding', run: async (p) => ({ clicked: await clickByText(p, ['Skip', 'Get started'], { timeout: 6000 }) }) },
   { name: '03-home', run: async (p) => {
