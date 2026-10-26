@@ -19,9 +19,15 @@ import {
  * §23 exists precisely to forbid the alternative.
  */
 
+/** Streamed playlists (lb*.strmd.st) answer only a real browser on the feed's
+ *  site, so the app fetches them through its hidden page on that site (a=1). */
+export const needsSiteFetch = (url: string): boolean => {
+  try { return new URL(url).hostname.toLowerCase().endsWith('strmd.st'); } catch { return false; }
+};
+
 const nativeProxy = (url: string, referer?: string) =>
   Capacitor.isNativePlatform()
-    ? `https://localhost/__hlsproxy?u=${encodeURIComponent(url)}${referer ? `&r=${encodeURIComponent(referer)}` : ''}`
+    ? `https://localhost/__hlsproxy?${needsSiteFetch(url) ? 'a=1&' : ''}u=${encodeURIComponent(url)}${referer ? `&r=${encodeURIComponent(referer)}` : ''}`
     : url;
 
 export const canValidateDeeply = () => Capacitor.isNativePlatform();
@@ -232,6 +238,15 @@ export async function validateStream(s: Stream, cfg: StreamConfig = DEFAULT_CONF
   metrics.validationsFailed++;
   note(verdict.failure || 'UNKNOWN');
   recordSourceResult(s.source, false);
+  // The feed page gave up a playlist that cannot be played from outside its
+  // own player (on the emulators every Streamed playlist answered 404 to the
+  // relay, whatever the referer, 2026-10-26). The page itself still plays:
+  // offer it, as films fall back to their server's page. The app's native
+  // shield keeps its pop-ups out.
+  if (s.embed && s.kind === 'server') {
+    metrics.validationsIndeterminate++;
+    return applyScore({ ...markUnverified(s, now), url: s.embed });
+  }
   return applyScore({ ...markFailure(s, verdict.failure || 'UNKNOWN', cfg, now), url: target, referer });
 }
 

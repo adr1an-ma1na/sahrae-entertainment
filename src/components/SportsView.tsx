@@ -9,7 +9,7 @@ import {
   DEFAULT_CONFIG, markFailure, needsCheck, nextStream, rankFeeds,
   type FailureReason, type Stream,
 } from '../services/sportsStreams';
-import { buildStreams, validateStream, metrics, canValidateDeeply } from '../services/streamValidation';
+import { buildStreams, validateStream, metrics, canValidateDeeply, needsSiteFetch } from '../services/streamValidation';
 import { loadSportsFeed, sourcesById, fetchStreamsFor, type Feed, type FeedEvent } from '../services/sportsFeed';
 import { hostOf } from '../services/sportsStreams';
 import Coachmark from './Coachmark';
@@ -44,7 +44,7 @@ const FEED_URLS = [
 const FEED_CACHE_KEY = 'sahrae.sportsFeed.v1';
 const proxied = (m3u8: string, referer?: string) =>
   Capacitor.isNativePlatform()
-    ? `https://localhost/__hlsproxy?u=${encodeURIComponent(m3u8)}${referer ? `&r=${encodeURIComponent(referer)}` : ''}`
+    ? `https://localhost/__hlsproxy?${needsSiteFetch(m3u8) ? 'a=1&' : ''}u=${encodeURIComponent(m3u8)}${referer ? `&r=${encodeURIComponent(referer)}` : ''}`
     : m3u8;
 
 // NOTE: resolveEmbed() and validateStream() used to live here. Both now live in
