@@ -464,8 +464,10 @@ export const sportsLab = async (which) => {
       rec.lookupMs = Date.now() - t0;
       if (!j.m3u8) { rec.why = 'no stream from page'; out.matches.push(rec); continue; }
       rec.host = new URL(j.m3u8).hostname;
-      rec.direct = await play(j.m3u8);
-      rec.relay = await play(`https://localhost/__hlsproxy?u=${encodeURIComponent(j.m3u8)}&r=${encodeURIComponent(s.embedUrl)}`);
+      rec.referer = j.referer || null;
+      // As the app now plays it: relay with the referer the feed page sent.
+      rec.relayReferer = await play(`https://localhost/__hlsproxy?u=${encodeURIComponent(j.m3u8)}&r=${encodeURIComponent(j.referer || 'https://embed.st/')}`);
+      if (!rec.relayReferer.sec) rec.relaySite = await play(`https://localhost/__hlsproxy?u=${encodeURIComponent(j.m3u8)}&r=${encodeURIComponent('https://embed.st/')}`);
     } catch (e) { rec.error = String(e).slice(0, 120); }
     out.matches.push(rec);
   }
@@ -473,7 +475,7 @@ export const sportsLab = async (which) => {
 };
 
 export const FLOWS = [
-  ...[0, 1, 2, 3].map((n) => ({ name: `00-sports-${n}`, run: async (p) => p.evaluate(sportsLab, n) })),
+  ...[0, 1, 2].map((n) => ({ name: `00-sports-${n}`, run: async (p) => p.evaluate(sportsLab, n) })),
 ];
 export const FLOWS_ALL = [
   // Server checks (serverMatrix, CANDIDATES, TITLES) run on request, not in every build:
