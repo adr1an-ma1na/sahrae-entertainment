@@ -856,20 +856,44 @@ public class MainActivity extends BridgeActivity {
         return p.contains("/playlist/") && (q < 0 || !l.substring(q).contains("type="));
     }
 
+    /** Lookups in progress, and ones that just found nothing (with when). */
+    private static final Set<String> FILM_RUNNING = ConcurrentHashMap.newKeySet();
+    private static final Map<String, Long> FILM_FAILED = new ConcurrentHashMap<>();
+
+    /**
+     * Answers at once. The lookup runs on its own thread and the page asks
+     * again every second: {"pending":true} until there is an answer. Waiting
+     * here instead held one of the WebView's request threads for up to 24 s,
+     * while the hidden page itself needed those threads to fetch its player.
+     */
     private WebResourceResponse filmResolve(Uri uri) {
         final String embed = uri.getQueryParameter("u");
-        if (embed == null || embed.isEmpty() || !embed.startsWith("https://")) return jsonResponse("{\"m3u8\":null}");
+        if (embed == null || embed.isEmpty() || !embed.startsWith("https://")) return jsonResponse("{\"m3u8\":null,\"why\":\"bad address\"}");
         Long exp = FILM_EXPIRY.get(embed);
         String[] got = (exp != null && exp > System.currentTimeMillis()) ? FILM_CACHE.get(embed) : null;
-        if (got == null) {
-            got = runFilmResolver(embed);
-            if (got != null) {
-                FILM_CACHE.put(embed, got);
-                FILM_EXPIRY.put(embed, System.currentTimeMillis() + 10 * 60 * 1000L);
-            }
+        if (got != null) return jsonResponse("{\"m3u8\":" + jsonStr(got[0]) + ",\"referer\":" + jsonStr(got[1]) + "}");
+        if (FILM_RUNNING.contains(embed)) return jsonResponse("{\"pending\":true}");
+        Long failed = FILM_FAILED.remove(embed);
+        if (failed != null && System.currentTimeMillis() - failed < 60000) {
+            return jsonResponse("{\"m3u8\":null,\"why\":\"the page asked for no stream within 24 s\"}");
         }
-        if (got == null) return jsonResponse("{\"m3u8\":null}");
-        return jsonResponse("{\"m3u8\":" + jsonStr(got[0]) + ",\"referer\":" + jsonStr(got[1]) + "}");
+        FILM_RUNNING.add(embed);
+        new Thread(() -> {
+            try {
+                String[] r = runFilmResolver(embed);
+                if (r != null) {
+                    FILM_CACHE.put(embed, r);
+                    FILM_EXPIRY.put(embed, System.currentTimeMillis() + 10 * 60 * 1000L);
+                } else {
+                    FILM_FAILED.put(embed, System.currentTimeMillis());
+                }
+            } catch (Throwable t) {
+                FILM_FAILED.put(embed, System.currentTimeMillis());
+            } finally {
+                FILM_RUNNING.remove(embed);
+            }
+        }, "sahrae-film-lookup").start();
+        return jsonResponse("{\"pending\":true}");
     }
 
     /** Load the film page out of sight; return {playlist, referer} of the first HLS playlist it fetches. */

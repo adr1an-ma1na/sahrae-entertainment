@@ -504,7 +504,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   // while the page is asked, 'ready' with the stream, 'failed' (or 'off') and
   // the provider's own player shows as before.
   const [cleanOn, setCleanOnState] = useState<boolean>(() => isCleanOn());
-  const [clean, setClean] = useState<{ state: 'off' | 'resolving' | 'ready' | 'failed'; url?: string }>({ state: 'off' });
+  const [clean, setClean] = useState<{ state: 'off' | 'resolving' | 'ready' | 'failed'; url?: string; why?: string }>({ state: 'off' });
   const cleanServer = SERVERS[selectedServer];
   const cleanSrc = cleanServer && currentMediaType && currentMediaId
     ? cleanServer.getUrl(currentMediaType, currentMediaId, selectedSeason, selectedEpisode) : '';
@@ -514,7 +514,9 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     setClean({ state: 'resolving' });
     resolveFilmStream(cleanSrc).then((r) => {
       if (!live) return;
-      setClean(r ? { state: 'ready', url: relayUrl(r.m3u8, r.referer) } : { state: 'failed' });
+      // Logged so a test run on a device can read why a server fell back.
+      console.info('[sahrae-player]', JSON.stringify({ server: cleanServer?.id, ms: r.ms, ok: !!r.m3u8, why: r.why }));
+      setClean(r.m3u8 ? { state: 'ready', url: relayUrl(r.m3u8, r.referer) } : { state: 'failed', why: r.why });
     });
     return () => { live = false; };
   }, [cleanSrc, cleanOn, isOpen, isPlaying, playingTrailer, refreshKey]);
@@ -1023,7 +1025,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                         onPlaying={() => { window.dispatchEvent(new Event('sahrae:embed-media')); setTimeout(enterFullscreen, 300); }}
                         onProgress={() => { /* progress is saved per episode, as for every server */ }}
                         onEnded={() => window.dispatchEvent(new Event(CLEAN_ENDED))}
-                        onFail={() => setClean({ state: 'failed' })}
+                        onFail={(why) => { console.info('[sahrae-player]', JSON.stringify({ server: cleanServer?.id, playFailed: why })); setClean({ state: 'failed', why }); }}
                       />
                     ) : clean.state === 'resolving' ? null : (
                     <iframe
@@ -1400,7 +1402,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       <p className="text-xs text-zinc-400 leading-snug mt-0.5">
                         {cleanOn
                           ? (clean.state === 'failed'
-                            ? "This server would not hand over its stream, so its own player is showing, adverts and all. Another server usually works in Sahrae's player."
+                            ? `This server would not hand over its stream (${clean.why || 'no reason given'}), so its own player is showing, adverts and all. Another server usually works in Sahrae's player.`
                             : "No adverts, and the sharpest picture the server has. The badge on the picture shows the real quality. Turn it off to use the server's own player, for its subtitles.")
                           : "The server's own player, with its adverts and its own quality choice."}
                       </p>

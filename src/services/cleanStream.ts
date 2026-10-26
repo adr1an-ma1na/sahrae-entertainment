@@ -35,20 +35,26 @@ export function relayUrl(m3u8: string, referer?: string | null): string {
   return `https://localhost/__hlsproxy?u=${encodeURIComponent(m3u8)}${referer ? `&r=${encodeURIComponent(referer)}` : ''}`;
 }
 
-/** Ask the Android app for a film page's stream. Null when it has none to give. */
-export async function resolveFilmStream(embed: string, timeoutMs = 30000): Promise<{ m3u8: string; referer: string | null } | null> {
-  const ctl = new AbortController();
-  const t = setTimeout(() => ctl.abort(), timeoutMs);
-  try {
-    const r = await fetch(`https://localhost/__filmstream?u=${encodeURIComponent(embed)}`, { cache: 'no-store', signal: ctl.signal });
-    if (!r.ok) return null;
-    const j = (await r.json()) as { m3u8?: string | null; referer?: string | null };
-    return j && typeof j.m3u8 === 'string' && j.m3u8.startsWith('http') ? { m3u8: j.m3u8, referer: j.referer ?? null } : null;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(t);
+/** Ask the Android app for a film page's stream. The app answers at once with
+ *  {pending} while its hidden page looks (newer builds) or with the answer
+ *  (older ones); either way this asks again every second until there is one.
+ *  `why` says what went wrong, for the player panel and the test run. */
+export async function resolveFilmStream(embed: string, timeoutMs = 35000): Promise<{ m3u8: string | null; referer: string | null; why?: string; ms: number }> {
+  const t0 = Date.now();
+  const url = `https://localhost/__filmstream?u=${encodeURIComponent(embed)}`;
+  while (Date.now() - t0 < timeoutMs) {
+    try {
+      const r = await fetch(url, { cache: 'no-store' });
+      if (!r.ok) return { m3u8: null, referer: null, why: `the app answered ${r.status}`, ms: Date.now() - t0 };
+      const j = (await r.json()) as { m3u8?: string | null; referer?: string | null; pending?: boolean; why?: string };
+      if (j.pending) { await new Promise((res) => setTimeout(res, 1000)); continue; }
+      if (typeof j.m3u8 === 'string' && j.m3u8.startsWith('http')) return { m3u8: j.m3u8, referer: j.referer ?? null, ms: Date.now() - t0 };
+      return { m3u8: null, referer: null, why: j.why || 'the page asked for no stream', ms: Date.now() - t0 };
+    } catch (e) {
+      return { m3u8: null, referer: null, why: `could not ask the app (${String(e).slice(0, 60)})`, ms: Date.now() - t0 };
+    }
   }
+  return { m3u8: null, referer: null, why: 'no answer within 35 s', ms: Date.now() - t0 };
 }
 
 /** True in an Android app build that can hand over film streams. */

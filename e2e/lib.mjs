@@ -161,7 +161,73 @@ export async function probe(page) {
   });
 }
 
+/**
+ * Sahrae's own film player, end to end inside the real Android WebView: does
+ * the app say it can, does each server's hidden page hand over its stream, and
+ * does the relay then serve the quality menu, the sharpest variant and a real
+ * segment. Runs from the page itself, so the sign-in screen does not matter.
+ * Viewers reported adverts and soft pictures on every server, i.e. the player
+ * falling back; this says at which step.
+ */
+export const filmStreamCheck = async () => {
+  const servers = {
+    vixsrc: 'https://vixsrc.to/tv/226174/1/1?lang=en',
+    vidrock: 'https://vidrock.to/embed/tv/226174/1/1',
+    vidzee: 'https://player.vidzee.wtf/embed/tv/226174/1/1',
+  };
+  const out = { caps: window.__sahraeCaps || null, origin: location.origin };
+  const ask = async (u) => {
+    const t0 = Date.now();
+    while (Date.now() - t0 < 40000) {
+      const r = await fetch(`https://localhost/__filmstream?u=${encodeURIComponent(u)}`, { cache: 'no-store' });
+      const j = await r.json().catch(() => ({ bad: r.status }));
+      if (j.pending) { await new Promise((res) => setTimeout(res, 1000)); continue; }
+      return { ...j, ms: Date.now() - t0 };
+    }
+    return { timeout: true, ms: Date.now() - t0 };
+  };
+  const relay = (u, r) => `https://localhost/__hlsproxy?u=${encodeURIComponent(u)}${r ? `&r=${encodeURIComponent(r)}` : ''}`;
+  for (const [id, embed] of Object.entries(servers)) {
+    const res = { resolve: null };
+    try {
+      res.resolve = await ask(embed);
+      const m = res.resolve.m3u8;
+      if (m) {
+        const t1 = Date.now();
+        const mr = await fetch(relay(m, res.resolve.referer));
+        const mt = await mr.text();
+        res.master = { status: mr.status, ms: Date.now() - t1, head: mt.slice(0, 60), variants: (mt.match(/#EXT-X-STREAM-INF/g) || []).length };
+        const L = mt.split('\n');
+        let best = null, bh = -1, h = 0;
+        for (let i = 0; i < L.length; i++) {
+          const b = L[i].match(/BANDWIDTH=(\d+)/);
+          if (b && +b[1] > bh) { bh = +b[1]; h = +((L[i].match(/RESOLUTION=\d+x(\d+)/) || [])[1] || 0); best = L.slice(i + 1).find((l) => l.trim() && !l.startsWith('#')); }
+        }
+        res.master.top = { height: h, mbps: bh > 0 ? +(bh / 1e6).toFixed(1) : null };
+        let media = mt;
+        if (best) {
+          const vr = await fetch(new URL(best.trim(), location.href).href);
+          media = await vr.text();
+          res.variant = { status: vr.status, segments: (media.match(/#EXTINF/g) || []).length, keyed: /EXT-X-KEY/.test(media) };
+        }
+        const seg = media.split('\n').map((l) => l.trim()).find((l) => l && !l.startsWith('#'));
+        if (seg) {
+          const t2 = Date.now();
+          const sr = await fetch(new URL(seg, location.href).href);
+          const buf = await sr.arrayBuffer();
+          res.segment = { status: sr.status, kb: Math.round(buf.byteLength / 1024), ms: Date.now() - t2 };
+        }
+      }
+    } catch (e) {
+      res.error = String(e).slice(0, 160);
+    }
+    out[id] = res;
+  }
+  return out;
+};
+
 export const FLOWS = [
+  { name: '00-film-stream', run: async (p) => p.evaluate(filmStreamCheck) },
   { name: '01-launch', run: async (p) => { await settle(p, 6000, 20000); } },
   { name: '02-past-onboarding', run: async (p) => ({ clicked: await clickByText(p, ['Skip', 'Get started'], { timeout: 6000 }) }) },
   { name: '03-home', run: async (p) => {

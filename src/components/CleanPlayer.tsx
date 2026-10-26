@@ -23,7 +23,8 @@ export interface CleanPlayerProps {
   onPlaying: () => void;
   onProgress: (t: number, d: number) => void;
   onEnded: () => void;
-  onFail: () => void;
+  /** Why it gave up, in a few words. */
+  onFail: (why: string) => void;
 }
 
 export default function CleanPlayer({ src, saver, startAt = 0, onPlaying, onProgress, onEnded, onFail }: CleanPlayerProps) {
@@ -43,8 +44,8 @@ export default function CleanPlayer({ src, saver, startAt = 0, onPlaying, onProg
     const v = videoRef.current;
     if (!v || !Hls) return;
     let failed = false;
-    const fail = () => { if (!failed) { failed = true; cb.current.onFail(); } };
-    if (!Hls.isSupported()) { fail(); return; }
+    const fail = (why: string) => { if (!failed) { failed = true; cb.current.onFail(why); } };
+    if (!Hls.isSupported()) { fail('this device cannot play HLS'); return; }
     const hls = new Hls({
       maxBufferLength: 60,
       maxMaxBufferLength: 120,
@@ -77,15 +78,15 @@ export default function CleanPlayer({ src, saver, startAt = 0, onPlaying, onProg
     hls.on(Hls.Events.ERROR, (_e, data) => {
       if (!data.fatal) return;
       // No playlist at all: nothing to retry, back to the provider's player now.
-      if (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR || data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT || data.details === Hls.ErrorDetails.MANIFEST_PARSING_ERROR) { fail(); return; }
+      if (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR || data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT || data.details === Hls.ErrorDetails.MANIFEST_PARSING_ERROR) { fail(`the stream list would not load (${data.details}${data.response?.code ? ' ' + data.response.code : ''})`); return; }
       if (data.type === Hls.ErrorTypes.NETWORK_ERROR && networkRetries < 2) { networkRetries++; hls.startLoad(); return; }
       if (data.type === Hls.ErrorTypes.MEDIA_ERROR) { hls.recoverMediaError(); return; }
-      fail();
+      fail(`the stream stopped (${data.details})`);
     });
     hls.loadSource(src);
     hls.attachMedia(v);
     // Nothing to show after 25 s: hand back to the provider's player.
-    const noStart = setTimeout(() => { if (!v.currentTime) fail(); }, 25000);
+    const noStart = setTimeout(() => { if (!v.currentTime) fail('no picture after 25 s'); }, 25000);
     return () => { clearTimeout(noStart); hls.destroy(); hlsRef.current = null; };
   }, [Hls, src, saver, startAt]);
 
