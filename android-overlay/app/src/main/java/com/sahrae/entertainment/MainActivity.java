@@ -581,17 +581,20 @@ public class MainActivity extends BridgeActivity {
     private static final Map<String, CountDownLatch> AGENT_READY = new ConcurrentHashMap<>();
 
     /** A hidden page on `origin`, loaded once and kept, that fetches for the relay. */
-    private static WebView agentFor(final String origin) {
+    private static WebView agentFor(final String origin) { return agentForPage(origin, origin + "/"); }
+
+    private static WebView agentForPage(final String origin, final String page) {
         final MainActivity act = sActivity;
         if (act == null || origin == null) return null;
-        WebView existing = AGENTS.get(origin);
+        final String key = page;
+        WebView existing = AGENTS.get(key);
         if (existing != null) {
-            CountDownLatch l = AGENT_READY.get(origin);
+            CountDownLatch l = AGENT_READY.get(key);
             try { if (l != null) l.await(8, TimeUnit.SECONDS); } catch (InterruptedException ignore) {}
             return existing;
         }
         final CountDownLatch ready = new CountDownLatch(1);
-        AGENT_READY.put(origin, ready);
+        AGENT_READY.put(key, ready);
         final WebView[] made = new WebView[1];
         final CountDownLatch built = new CountDownLatch(1);
         act.runOnUiThread(() -> {
@@ -622,9 +625,9 @@ public class MainActivity extends BridgeActivity {
                         root.addView(wv);
                     }
                 } catch (Throwable ignore) {}
-                wv.loadUrl(origin + "/");
+                wv.loadUrl(page);
                 made[0] = wv;
-                AGENTS.put(origin, wv);
+                AGENTS.put(key, wv);
             } catch (Throwable t) {
                 ready.countDown();
             } finally {
@@ -636,9 +639,11 @@ public class MainActivity extends BridgeActivity {
     }
 
     /** Fetch `url` from the agent page. Returns {status, base64 body, final url, content type} or null. */
-    private static String[] agentFetch(final String url, final String referer, int timeoutSec) {
+    private static String[] agentFetch(final String url, final String referer, int timeoutSec) { return agentFetch(url, referer, timeoutSec, null); }
+
+    private static String[] agentFetch(final String url, final String referer, int timeoutSec, String page) {
         final String origin = originOf(referer != null && !referer.isEmpty() ? referer : url);
-        final WebView wv = agentFor(origin);
+        final WebView wv = page != null ? agentForPage(origin, page) : agentFor(origin);
         if (wv == null) return null;
         final String id = java.util.UUID.randomUUID().toString().replace("-", "");
         final String js = "(function(){window.__sr=window.__sr||{};var id=" + jsonStr(id) + ";"
@@ -2184,6 +2189,16 @@ public class MainActivity extends BridgeActivity {
                             // Sports stream resolver (IP-locked embeds resolved on the phone).
                             WebResourceResponse r = embedResolve(u);
                             if (r != null) return r;
+                        } else if (path.startsWith("/__agentfetch")) {
+                            // Diagnosis for Live Sports: the agent's raw answer.
+                            long t0 = System.currentTimeMillis();
+                            String[] got = agentFetch(u.getQueryParameter("u"), u.getQueryParameter("r"), 15, u.getQueryParameter("p"));
+                            String head = "";
+                            if (got != null && got[1] != null && !got[1].isEmpty()) {
+                                try { byte[] b = android.util.Base64.decode(got[1], android.util.Base64.DEFAULT); head = new String(b, 0, Math.min(b.length, 160), StandardCharsets.UTF_8); } catch (Throwable ignore) {}
+                            }
+                            return jsonResponse(got == null ? "{\"error\":\"no answer from the agent\",\"ms\":" + (System.currentTimeMillis() - t0) + "}"
+                                : "{\"status\":" + jsonStr(got[0]) + ",\"url\":" + jsonStr(got[2]) + ",\"type\":" + jsonStr(got[3]) + ",\"head\":" + jsonStr(head) + ",\"ms\":" + (System.currentTimeMillis() - t0) + "}");
                         } else if (path.startsWith("/__filmstream")) {
                             // Films and episodes in Sahrae's own player, without the provider's page.
                             return filmResolve(u);
