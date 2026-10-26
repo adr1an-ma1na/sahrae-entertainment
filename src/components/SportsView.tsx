@@ -137,10 +137,10 @@ const SPORT_EMOJI: Record<string, string> = {
 };
 /** Team crest with a graceful fallback: shows the badge image, but if it's
  *  missing or 404s, draws the team's initials so every event has a logo. */
-function TeamLogo({ name, src }: { name: string; src?: string }) {
+function TeamLogo({ name, src, size = 'w-10 h-10', text = 'text-[11px]' }: { name: string; src?: string; size?: string; text?: string }) {
   const [err, setErr] = useState(false);
-  if (src && !err) return <img loading="lazy" decoding="async" src={src} alt="" onError={() => setErr(true)} className="w-10 h-10 object-contain" />;
-  return <div className="w-10 h-10 rounded-full bg-gradient-to-br from-zinc-700 to-zinc-800 border border-white/10 flex items-center justify-center text-[11px] font-extrabold text-white">{initials(name) || '?'}</div>;
+  if (src && !err) return <img loading="lazy" decoding="async" src={src} alt="" onError={() => setErr(true)} className={`${size} object-contain drop-shadow-[0_6px_18px_rgba(0,0,0,0.6)]`} />;
+  return <div className={`${size} rounded-full bg-gradient-to-br from-zinc-600 to-zinc-800 border border-white/15 flex items-center justify-center ${text} font-extrabold text-white`}>{initials(name) || '?'}</div>;
 }
 
 // FeedEvent / Feed now come from services/sportsFeed.ts, which loads fixtures
@@ -166,6 +166,14 @@ const SPORT_BADGE_CLASSES: Record<string, string> = {
   golf: 'bg-green-500/10 text-green-400 border border-green-500/20',
   rugby: 'bg-violet-500/10 text-violet-400 border border-violet-500/20',
 };
+/** Each sport's accent: the glow behind the spotlight, the dot on its chip. */
+const SPORT_ACCENT: Record<string, string> = {
+  football: '16,185,129', basketball: '249,115,22', fight: '244,63,94', 'motor-sports': '245,158,11',
+  tennis: '132,204,22', cricket: '20,184,166', 'american-football': '59,130,246', baseball: '99,102,241',
+  hockey: '14,165,233', golf: '34,197,94', rugby: '168,85,247', darts: '239,68,68',
+};
+const accentOf = (cat: string) => SPORT_ACCENT[cat] || '245,158,11';
+
 const getSportBadgeClass = (cat: string) => SPORT_BADGE_CLASSES[cat] || 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20';
 
 // Typical max runtime per sport, so a finished event leaves the list promptly
@@ -1054,85 +1062,123 @@ export default function SportsView() {
     return groups;
   }, [visible, sport]);
 
-  const renderEvent = (m: FeedEvent) => {
+  // The spotlight: the most-watched live match with a feed, else the next big one.
+  const featured = useMemo(() => {
+    const withFeed = visible.filter((m) => (m.embeds?.length || 0) > 0);
+    return withFeed.find((m) => eventIsLive(m) && m.popular)
+      || withFeed.find((m) => eventIsLive(m))
+      || withFeed.find((m) => m.popular)
+      || withFeed[0] || null;
+  }, [visible]);
+  const liveCount = useMemo(() => visible.filter((m) => eventIsLive(m)).length, [visible]);
+
+  const renderSpotlight = (m: FeedEvent) => {
     const home = m.teams?.home, away = m.teams?.away;
+    const live = eventIsLive(m);
+    const rgb = accentOf(m.category);
     return (
-      <div key={m.id} onClick={() => openEvent(m)} tabIndex={0} data-tv-focusable role="button" aria-label={m.title}
-        className="card-lift tier-card group relative rounded-2xl p-5 cursor-pointer focus:outline-none flex flex-col justify-between h-full border border-white/5 bg-zinc-900/40 hover:border-amber-500/30 transition-all duration-300">
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 ${getSportBadgeClass(m.category)}`}>
-              <span>{SPORT_EMOJI[m.category] || '🏆'}</span> 
-              <span>{SPORT_LABELS[m.category] || m.category}</span>
-            </span>
-            {eventIsLive(m) ? (
-              <span className="live-badge flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-red-500/10 text-red-400 border border-red-500/20">
-                <span className="live-dot w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> LIVE
+      <section key={'spot-' + m.id} onClick={() => openEvent(m)} onKeyDown={(e) => { if (e.key === 'Enter') openEvent(m); }}
+        tabIndex={0} data-tv-focusable role="button" aria-label={`Watch ${matchTitle(m)}`}
+        className="group relative mb-10 overflow-hidden rounded-[28px] border border-white/10 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 min-h-[300px] md:min-h-[380px] isolate">
+        {m.poster && <img src={m.poster} alt="" decoding="async" className="absolute inset-0 -z-20 w-full h-full object-cover scale-105 opacity-45 group-hover:scale-110 transition-transform duration-[1200ms] ease-out" />}
+        <div aria-hidden className="absolute inset-0 -z-10" style={{ background: `radial-gradient(70% 90% at 50% 120%, rgba(${rgb},0.38), transparent 60%), radial-gradient(40% 60% at 12% 10%, rgba(${rgb},0.22), transparent 70%), linear-gradient(180deg, rgba(9,9,11,0.35) 0%, rgba(9,9,11,0.78) 55%, rgb(9,9,11) 100%)` }} />
+        <div aria-hidden className="absolute inset-0 -z-10 opacity-[0.07]" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)', backgroundSize: '44px 44px', maskImage: 'radial-gradient(ellipse at center, black 30%, transparent 75%)' }} />
+
+        <div className="relative h-full flex flex-col justify-between p-5 md:p-9 min-h-[300px] md:min-h-[380px]">
+          <div className="flex items-center gap-2 flex-wrap">
+            {live ? (
+              <span className="flex items-center gap-1.5 pl-2 pr-2.5 py-1 rounded-full bg-red-600 text-white text-[11px] font-extrabold uppercase tracking-[0.14em] shadow-[0_0_24px_rgba(239,68,68,0.55)]">
+                <span className="relative flex w-2 h-2"><span className="absolute inline-flex w-full h-full rounded-full bg-white opacity-75 animate-ping" /><span className="relative inline-flex w-2 h-2 rounded-full bg-white" /></span>Live
               </span>
             ) : (
-              <span className="flex items-center gap-1 text-[11px] text-zinc-400 font-medium tabular"><CalendarClock className="w-3.5 h-3.5 text-zinc-500" /> {formatEventDateTime(m.date)}</span>
+              <span className="px-2.5 py-1 rounded-full bg-white/10 backdrop-blur text-white text-[11px] font-bold tabular">{formatEventDateTime(m.date)}</span>
             )}
+            <span className="px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white/90 bg-black/30 backdrop-blur border border-white/10">{SPORT_LABELS[m.category] || m.category}</span>
+            <span className="ml-auto hidden sm:inline text-[10px] font-semibold uppercase tracking-[0.22em] text-white/45">Featured match</span>
           </div>
-          
+
           {home?.name && away?.name ? (
-            <div className="flex items-center justify-center gap-4 py-3 my-1">
-              <div className="flex flex-col items-center gap-2 flex-1 min-w-0">
-                <TeamLogo name={home.name} src={home.badge ? badge(home.badge) : undefined} />
-                <span className="text-xs font-semibold text-zinc-200 text-center line-clamp-2 leading-snug group-hover:text-white transition-colors">{home.name}</span>
+            <div className="flex items-center justify-center gap-4 md:gap-14 py-4">
+              <div className="flex flex-col items-center gap-3 flex-1 min-w-0">
+                <div className="relative grid place-items-center w-20 h-20 md:w-32 md:h-32 rounded-full bg-black/45 backdrop-blur-sm ring-1 ring-white/15" style={{ boxShadow: `0 0 0 6px rgba(${rgb},0.08), 0 12px 40px -10px rgba(${rgb},0.45)` }}>
+                  <TeamLogo name={home.name} src={home.badge ? badge(home.badge) : undefined} size="w-12 h-12 md:w-20 md:h-20" text="text-lg md:text-2xl" />
+                </div>
+                <span className="text-sm md:text-xl font-display font-bold text-white text-center line-clamp-2 leading-tight">{home.name}</span>
               </div>
-              <span className="text-zinc-600 text-xs font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-white/5">vs</span>
-              <div className="flex flex-col items-center gap-2 flex-1 min-w-0">
-                <TeamLogo name={away.name} src={away.badge ? badge(away.badge) : undefined} />
-                <span className="text-xs font-semibold text-zinc-200 text-center line-clamp-2 leading-snug group-hover:text-white transition-colors">{away.name}</span>
+              <div className="flex flex-col items-center gap-1 shrink-0">
+                <span className="text-[10px] md:text-xs font-bold uppercase tracking-[0.3em] text-white/40">{live ? 'Now' : 'Kick-off'}</span>
+                <span className="text-2xl md:text-4xl font-display font-black text-white/90 tracking-tight">{live ? 'VS' : eventTime(m.date)}</span>
+              </div>
+              <div className="flex flex-col items-center gap-3 flex-1 min-w-0">
+                <div className="relative grid place-items-center w-20 h-20 md:w-32 md:h-32 rounded-full bg-black/45 backdrop-blur-sm ring-1 ring-white/15" style={{ boxShadow: `0 0 0 6px rgba(${rgb},0.08), 0 12px 40px -10px rgba(${rgb},0.45)` }}>
+                  <TeamLogo name={away.name} src={away.badge ? badge(away.badge) : undefined} size="w-12 h-12 md:w-20 md:h-20" text="text-lg md:text-2xl" />
+                </div>
+                <span className="text-sm md:text-xl font-display font-bold text-white text-center line-clamp-2 leading-tight">{away.name}</span>
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-3 py-3 my-1 min-h-[56px]">
-              <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-xl shrink-0 group-hover:scale-105 transition-transform">{SPORT_EMOJI[m.category] || '🏆'}</div>
-              <h3 className="text-sm font-bold text-zinc-200 leading-snug line-clamp-2 group-hover:text-amber-400 transition-colors">{m.title}</h3>
-            </div>
+            <h3 className="py-6 text-2xl md:text-5xl font-display font-black text-white tracking-tight leading-tight max-w-3xl">{m.title}</h3>
+          )}
+
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <span className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full font-bold text-sm text-amber-950 bg-gradient-to-b from-amber-300 to-amber-500 shadow-[0_10px_30px_-8px_rgba(245,158,11,0.7)] group-hover:from-amber-200 group-hover:to-amber-400 transition-colors self-start">
+              <Play className="w-4 h-4 fill-current" /> {live ? 'Watch live' : 'Open match'}
+            </span>
+            <span className="text-xs text-white/55">{(m.embeds?.length || 0) > 1 ? `${m.embeds!.length} feeds · ` : ''}HD where offered · switches feed by itself if one drops</span>
+          </div>
+        </div>
+      </section>
+    );
+  };
+
+  const renderEvent = (m: FeedEvent) => {
+    const home = m.teams?.home, away = m.teams?.away;
+    const live = eventIsLive(m);
+    const hasFeed = (m.embeds?.length || 0) > 0;
+    const rgb = accentOf(m.category);
+    return (
+      <div key={m.id} onClick={() => openEvent(m)} onKeyDown={(e) => { if (e.key === 'Enter') openEvent(m); }} tabIndex={0} data-tv-focusable role="button" aria-label={matchTitle(m)}
+        className="group relative overflow-hidden rounded-2xl p-4 md:p-5 cursor-pointer flex flex-col gap-4 h-full bg-gradient-to-b from-white/[0.06] to-white/[0.015] border border-white/[0.07] hover:border-amber-400/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_18px_40px_-18px_rgba(0,0,0,0.9)]">
+        <div aria-hidden className="pointer-events-none absolute -top-16 -right-16 w-40 h-40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" style={{ background: `radial-gradient(circle, rgba(${rgb},0.22), transparent 70%)` }} />
+        <div className="flex items-center justify-between gap-2">
+          <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-400">
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: `rgb(${rgb})` }} />{SPORT_LABELS[m.category] || m.category}
+          </span>
+          {live ? (
+            <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-[0.14em] bg-red-500/15 text-red-300 ring-1 ring-red-500/30">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> Live
+            </span>
+          ) : (
+            <span className="text-[11px] text-zinc-400 font-semibold tabular">{formatEventDateTime(m.date)}</span>
           )}
         </div>
 
-        <div>
-          {/* Directly show Server Pills on the card - doesn't need to wait for scheduled time to show! */}
-          {m.embeds && m.embeds.length > 0 && (
-            <div className="mt-2 pt-3 border-t border-white/5 flex flex-wrap items-center gap-1.5">
-              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mr-1">Feeds:</span>
-              {m.embeds.slice(0, 4).map((embed, idx) => (
-                <button
-                  key={idx}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openEvent(m, idx);
-                  }}
-                  className="px-2 py-1 rounded bg-zinc-800 hover:bg-amber-500 hover:text-amber-950 text-[10px] font-bold text-zinc-300 transition-all border border-white/5 hover:border-amber-500/50 shadow-sm"
-                  title={`Open Feed Server ${idx + 1}`}
-                >
-                  Server {idx + 1}
-                </button>
-              ))}
+        {home?.name && away?.name ? (
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+            <div className="flex flex-col items-center gap-2 min-w-0">
+              <div className="grid place-items-center w-14 h-14 rounded-full bg-white/[0.04] ring-1 ring-white/10"><TeamLogo name={home.name} src={home.badge ? badge(home.badge) : undefined} /></div>
+              <span className="text-[13px] font-semibold text-zinc-100 text-center line-clamp-2 leading-snug">{home.name}</span>
             </div>
-          )}
+            <span className="text-[10px] font-black tracking-[0.25em] text-zinc-500">VS</span>
+            <div className="flex flex-col items-center gap-2 min-w-0">
+              <div className="grid place-items-center w-14 h-14 rounded-full bg-white/[0.04] ring-1 ring-white/10"><TeamLogo name={away.name} src={away.badge ? badge(away.badge) : undefined} /></div>
+              <span className="text-[13px] font-semibold text-zinc-100 text-center line-clamp-2 leading-snug">{away.name}</span>
+            </div>
+          </div>
+        ) : (
+          <h3 className="text-[15px] font-display font-bold text-white leading-snug line-clamp-2 min-h-[44px]">{m.title}</h3>
+        )}
 
-          {/* Say which of the two situations this is, instead of promising
-              "Watch Main" for a fixture with no streams. A card that offers a
-              match feed it does not have is how users end up staring at dead
-              servers. */}
-          {(m.embeds?.length || 0) > 0 ? (
-            <button className="mt-4 w-full py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-bold bg-white/5 text-zinc-300 group-hover:bg-amber-500 group-hover:text-amber-950 hover:bg-white/10 transition-all duration-300 pointer-events-none">
-              <Play className="w-4 h-4 fill-current" /> Watch Main
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 group-hover:bg-amber-900/20 group-hover:text-amber-950/80 font-bold tracking-wider">
-                HD
+        <div className="mt-auto flex items-center justify-between gap-2 pt-3 border-t border-white/[0.06]">
+          {hasFeed ? (
+            <>
+              <span className="text-[11px] text-zinc-500">{(m.embeds?.length || 0) > 1 ? `${m.embeds!.length} feeds` : '1 feed'}</span>
+              <span className="inline-flex items-center gap-1.5 pl-3 pr-3.5 py-1.5 rounded-full text-xs font-bold text-zinc-200 bg-white/[0.07] group-hover:bg-gradient-to-b group-hover:from-amber-300 group-hover:to-amber-500 group-hover:text-amber-950 transition-colors">
+                <Play className="w-3.5 h-3.5 fill-current" /> {live ? 'Watch' : 'Open'}
               </span>
-            </button>
+            </>
           ) : (
-            <button className="mt-4 w-full py-2.5 rounded-xl flex flex-col items-center justify-center gap-0.5 text-sm font-bold bg-white/5 text-zinc-400 group-hover:bg-white/10 transition-all duration-300 pointer-events-none">
-              <span className="flex items-center gap-2"><Tv className="w-4 h-4" /> Sports channels</span>
-              <span className="text-[9px] font-medium text-zinc-500 tracking-wide">
-                {eventIsLive(m) ? 'No match feed for this one yet' : 'Match feed appears near kick-off'}
-              </span>
-            </button>
+            <span className="text-[11px] text-zinc-500">{live ? 'No match feed for this one yet' : 'Feed appears near kick-off'}</span>
           )}
         </div>
       </div>
@@ -1177,7 +1223,12 @@ export default function SportsView() {
                 </div>
               </div>
               {activeUrl && !isEmbedUrl ? (
-                <HLSPlayer src={activeUrl} onUnplayable={onUnplayable} />
+                // In the app a feed's playlist plays through the relay with the
+                // headers its own player sent: loaded directly the stream server
+                // refused it (cross-site) or answered 404, so matches never
+                // played in Sahrae's player. Channels already open to all pass
+                // through unchanged on the web.
+                <HLSPlayer src={activeSrc?.kind === 'server' && !activeUrl.startsWith('https://localhost/') ? proxied(activeUrl, activeSrc.referer || activeSrc.embed) : activeUrl} onUnplayable={onUnplayable} />
               ) : activeUrl && isEmbedUrl ? (
                 <div className="absolute inset-0 w-full h-full">
                   <iframe
@@ -1399,19 +1450,20 @@ export default function SportsView() {
       )}
 
       {/* Header + tabs */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-gradient-to-tr from-amber-500 to-rose-500 rounded-2xl flex items-center justify-center"><Trophy className="w-6 h-6 text-white" /></div>
-          <div>
-            <h2 className="text-3xl font-display font-bold text-white leading-tight tracking-tight">Live Sports</h2>
-            <p className="text-sm text-zinc-400">Full schedule · F1 · Football · Cricket · Tennis · NBA · UFC</p>
-          </div>
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-5 mb-8">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-amber-400/90 mb-1.5 flex items-center gap-2"><Trophy className="w-3.5 h-3.5" /> Sahrae Sport</p>
+          <h2 className="text-4xl md:text-5xl font-display font-black text-white leading-[1.02] tracking-tight">Live Sports</h2>
+          <p className="mt-2 text-sm text-zinc-400 flex items-center gap-3">
+            {liveCount > 0 && <span className="flex items-center gap-1.5 text-red-300 font-semibold"><span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />{liveCount} live now</span>}
+            {!loading && <span>{visible.length} matches with a feed</span>}
+          </p>
         </div>
-        <div className="flex gap-1 glass p-1 rounded-xl self-start">
+        <div className="flex p-1 rounded-full bg-white/[0.05] ring-1 ring-white/10 backdrop-blur self-start md:self-end">
           {(['events', 'channels'] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)} tabIndex={0} data-tv-focusable
-              className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2 ${tab === t ? 'bg-amber-500 text-amber-950' : 'text-zinc-400 hover:text-white'}`}>
-              {t === 'events' ? <><Clapperboard className="w-4 h-4" /> Live Events</> : <><Tv className="w-4 h-4" /> Channels</>}
+              className={`px-5 py-2 rounded-full text-sm font-bold transition-all flex items-center gap-2 ${tab === t ? 'bg-gradient-to-b from-amber-300 to-amber-500 text-amber-950 shadow-[0_6px_18px_-6px_rgba(245,158,11,0.7)]' : 'text-zinc-400 hover:text-white'}`}>
+              {t === 'events' ? <><Clapperboard className="w-4 h-4" /> Matches</> : <><Tv className="w-4 h-4" /> Channels</>}
             </button>
           ))}
         </div>
@@ -1444,7 +1496,23 @@ export default function SportsView() {
           ))}
         </div>
       ) : loading ? (
-        <div className="flex flex-col items-center justify-center min-h-[40vh] gap-4 text-zinc-400"><Loader2 className="w-10 h-10 animate-spin text-amber-500" /><span>Loading today's live sports…</span></div>
+        // Placeholder shapes of the spotlight and cards while the schedule loads.
+        <div aria-busy="true" aria-label="Loading today's live sports">
+          <div className="mb-10 rounded-[28px] border border-white/[0.06] bg-white/[0.03] min-h-[300px] md:min-h-[380px] p-6 md:p-9 flex flex-col justify-between animate-pulse">
+            <div className="flex gap-2"><div className="h-6 w-16 rounded-full bg-white/10" /><div className="h-6 w-20 rounded-full bg-white/[0.07]" /></div>
+            <div className="flex items-center justify-center gap-10 md:gap-16"><div className="w-20 h-20 md:w-32 md:h-32 rounded-full bg-white/[0.07]" /><div className="h-8 w-12 rounded bg-white/[0.07]" /><div className="w-20 h-20 md:w-32 md:h-32 rounded-full bg-white/[0.07]" /></div>
+            <div className="h-11 w-40 rounded-full bg-white/10" />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5 h-[188px] flex flex-col justify-between animate-pulse">
+                <div className="flex justify-between"><div className="h-3 w-20 rounded bg-white/10" /><div className="h-3 w-12 rounded bg-white/[0.07]" /></div>
+                <div className="flex items-center justify-around"><div className="w-14 h-14 rounded-full bg-white/[0.07]" /><div className="w-14 h-14 rounded-full bg-white/[0.07]" /></div>
+                <div className="h-7 w-20 rounded-full bg-white/[0.07] self-end" />
+              </div>
+            ))}
+          </div>
+        </div>
       ) : error || events.length === 0 ? (
         <div className="flex flex-col items-center justify-center min-h-[30vh] gap-3 text-center">
           <Radio className="w-10 h-10 text-zinc-600" />
@@ -1453,19 +1521,23 @@ export default function SportsView() {
         </div>
       ) : (
         <>
-          <div className="relative mb-4 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search teams, leagues…"
-              className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500" />
-          </div>
-          <div className="flex overflow-x-auto gap-2 pb-2 mb-6 scrollbar-hide">
-            {filters.map((f) => (
-              <button key={f} onClick={() => setSport(f)} tabIndex={0} data-tv-focusable
-                className={`px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1.5 ${sport === f ? 'bg-white text-zinc-950 shadow-md' : 'bg-zinc-800/60 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>
-                {f === 'live' && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />}
-                {f === 'all' ? 'All' : f === 'live' ? 'Live Now' : SPORT_LABELS[f] || f}
-              </button>
-            ))}
+          {featured && !search && renderSpotlight(featured)}
+          <div className="flex flex-col md:flex-row md:items-center gap-3 mb-6">
+            <div className="relative md:w-80 shrink-0">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search teams or matches"
+                className="w-full bg-white/[0.04] ring-1 ring-white/10 rounded-full pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-amber-400/60" />
+            </div>
+            <div className="flex overflow-x-auto gap-2 pb-1 scrollbar-hide">
+              {filters.map((f) => (
+                <button key={f} onClick={() => setSport(f)} tabIndex={0} data-tv-focusable
+                  className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 ring-1 ${sport === f ? 'bg-white text-zinc-950 ring-white shadow-[0_6px_18px_-8px_rgba(255,255,255,0.6)]' : 'bg-white/[0.03] text-zinc-300 ring-white/10 hover:ring-white/25 hover:text-white'}`}>
+                  {f === 'live' ? <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                    : f !== 'all' && <span className="w-1.5 h-1.5 rounded-full" style={{ background: `rgb(${accentOf(f)})` }} />}
+                  {f === 'all' ? 'All sports' : f === 'live' ? 'Live now' : SPORT_LABELS[f] || f}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Honest account of what is on screen and what is being held back. */}
@@ -1493,15 +1565,16 @@ export default function SportsView() {
                 : 'No fixtures currently have a match feed. Tap “Show full schedule” to see what’s coming, or use the Channels tab for live sports channels.'}
             </p>
           ) : (
-            <div className="space-y-8">
+            <div className="space-y-10">
               {eventGroups.map((g) => (
                 <section key={g.title}>
-                  <div className="flex items-center gap-2 mb-3">
-                    {g.live && <span className="live-dot w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
-                    <h3 className={`text-lg font-display font-bold tracking-tight ${g.live ? 'text-red-400' : 'text-white'}`}>{g.title}</h3>
-                    <span className="text-xs text-zinc-500 tabular">{g.events.length}</span>
+                  <div className="flex items-center gap-3 mb-4">
+                    {g.live && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_12px_rgba(239,68,68,0.8)]" />}
+                    <h3 className="text-xl font-display font-black tracking-tight text-white">{g.title}</h3>
+                    <span className="text-xs font-bold text-zinc-500 tabular px-2 py-0.5 rounded-full bg-white/[0.05]">{g.events.length}</span>
+                    <span aria-hidden className="flex-1 h-px bg-gradient-to-r from-white/10 to-transparent" />
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
                     {g.events.map(renderEvent)}
                   </div>
                 </section>

@@ -24,6 +24,8 @@ export interface FeedEvent {
   category: string;
   date: number;
   popular?: boolean;
+  /** The API's match artwork, as an absolute https URL. */
+  poster?: string;
   live?: boolean;
   teams?: { home?: FeedTeam; away?: FeedTeam } | null;
   /** Ready-to-play embed URLs. */
@@ -50,6 +52,7 @@ interface ApiMatch {
   category: string;
   date: number;
   popular?: boolean;
+  poster?: string;
   teams?: { home?: FeedTeam; away?: FeedTeam } | null;
   sources?: ApiSource[];
 }
@@ -112,6 +115,7 @@ function toFeedEvent(m: ApiMatch, live: boolean): FeedEvent {
     category: m.category,
     date: m.date,
     popular: m.popular,
+    poster: m.poster && m.poster.startsWith('/') ? 'https://streamed.pk' + m.poster : undefined,
     live,
     teams: m.teams,
     embeds,

@@ -130,18 +130,32 @@ function firstVariantUrl(body: string, baseUrl: string): string | null {
 }
 
 /** Resolve a sports embed page to a playable m3u8 (Android only). */
+/** Referer each resolved playlist was requested with, as the app reported it. */
+export const resolvedReferer = new Map<string, string>();
+
 export async function resolveEmbedToStream(embed: string, cfg: StreamConfig = DEFAULT_CONFIG): Promise<string | null> {
   if (!Capacitor.isNativePlatform()) return null;
+  // The app answers at once ({pending} while its hidden page looks; an older
+  // build ignores async=1 and answers when done) and is asked again each second.
+  const deadline = Date.now() + Math.max(cfg.validationTimeoutMs * 2, 16000);
   try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), cfg.validationTimeoutMs * 2);
-    const r = await fetch(`https://localhost/__embed2m3u8?u=${encodeURIComponent(embed)}`, {
-      cache: 'no-store', signal: ctrl.signal,
-    });
-    clearTimeout(timer);
-    if (!r.ok) return null;
-    const j = await r.json();
-    return j && typeof j.m3u8 === 'string' && j.m3u8 ? j.m3u8 : null;
+    while (Date.now() < deadline) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), Math.max(1000, deadline - Date.now()));
+      const r = await fetch(`https://localhost/__embed2m3u8?async=1&u=${encodeURIComponent(embed)}`, {
+        cache: 'no-store', signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      if (!r.ok) return null;
+      const j = await r.json();
+      if (j && j.pending) { await new Promise((res) => setTimeout(res, 1000)); continue; }
+      if (j && typeof j.m3u8 === 'string' && j.m3u8) {
+        if (typeof j.referer === 'string' && j.referer) resolvedReferer.set(j.m3u8, j.referer);
+        return j.m3u8;
+      }
+      return null;
+    }
+    return null;
   } catch {
     return null;
   }
@@ -196,26 +210,29 @@ export async function validateStream(s: Stream, cfg: StreamConfig = DEFAULT_CONF
     return applyScore({ ...markUnverified(s, now), url: s.embed });
   }
 
-  const verdict = await validateHls(target, cfg, s.embed);
+  // The relay must send what the feed page's player sent: usually just the
+  // site, not the full page address (which the stream server answers 404 to).
+  const referer = resolvedReferer.get(target) || s.referer || s.embed;
+  const verdict = await validateHls(target, cfg, referer);
 
   if (verdict.indeterminate) {
     // Environment could not reach a verdict. Record the URL so it can still be
     // offered, but never dressed up as verified.
     metrics.validationsIndeterminate++;
-    return applyScore({ ...markUnverified(s, now), url: target });
+    return applyScore({ ...markUnverified(s, now), url: target, referer });
   }
 
   if (verdict.ok) {
     metrics.validationsOk++;
     metrics.totalLatencyMs += verdict.latencyMs;
     recordSourceResult(s.source, true);
-    return applyScore({ ...markSuccess(s, verdict.latencyMs, cfg, now, verdict.quality), url: target });
+    return applyScore({ ...markSuccess(s, verdict.latencyMs, cfg, now, verdict.quality), url: target, referer });
   }
 
   metrics.validationsFailed++;
   note(verdict.failure || 'UNKNOWN');
   recordSourceResult(s.source, false);
-  return applyScore({ ...markFailure(s, verdict.failure || 'UNKNOWN', cfg, now), url: target });
+  return applyScore({ ...markFailure(s, verdict.failure || 'UNKNOWN', cfg, now), url: target, referer });
 }
 
 function applyScore(s: Stream): Stream {
