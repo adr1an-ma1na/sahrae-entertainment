@@ -1021,7 +1021,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       <CleanPlayer
                         key={clean.url}
                         src={clean.url}
-                        saver={dataSaver}
+                        picture={dataSaver ? 'saver' : picture}
                         onPlaying={() => { window.dispatchEvent(new Event('sahrae:embed-media')); setTimeout(enterFullscreen, 300); }}
                         onProgress={() => { /* progress is saved per episode, as for every server */ }}
                         onEnded={() => window.dispatchEvent(new Event(CLEAN_ENDED))}

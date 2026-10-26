@@ -5,7 +5,7 @@
  * Run: node --experimental-strip-types cleanstream-check.mjs
  */
 import fs from 'node:fs';
-import { pickLevel, heightLabel, cleanFirst, relayUrl } from './src/services/cleanStream.ts';
+import { pickLevel, heightLabel, cleanFirst, relayUrl, pictureRule } from './src/services/cleanStream.ts';
 
 let pass = 0, fail = 0;
 const eq = (name, got, want) => {
@@ -44,6 +44,14 @@ console.log('\nthe relay address');
 eq('playlist and referer are both carried', relayUrl('https://a.test/x.m3u8?t=1&b=2', 'https://vidrock.to/'),
   'https://localhost/__hlsproxy?u=https%3A%2F%2Fa.test%2Fx.m3u8%3Ft%3D1%26b%3D2&r=https%3A%2F%2Fvidrock.to%2F');
 eq('no referer, no r=', relayUrl('https://a.test/x.m3u8', null), 'https://localhost/__hlsproxy?u=https%3A%2F%2Fa.test%2Fx.m3u8');
+
+console.log('\nthe Picture setting is held');
+eq('Best: VidRock opens on 1080p and is locked there', pictureRule(vidrock, 'best'), { start: 1, lock: true, cap: -1, minBitrate: 0 });
+eq('HD: may adapt, never below 720p (3 Mb/s)', pictureRule(vidrock, 'hd'), { start: 1, lock: false, cap: -1, minBitrate: 3_000_000 });
+eq('HD on VidLink: floor at its 720p (0.8 Mb/s)', pictureRule(vidlink, 'hd').minBitrate, 800_000);
+eq('Data Saver: capped at 480p', pictureRule(vidlink, 'saver'), { start: 2, lock: false, cap: 2, minBitrate: 0 });
+eq('HD with nothing at 720p: no floor', pictureRule([{ height: 480, bitrate: 1e6 }], 'hd').minBitrate, 0);
+eq('no renditions: nothing to hold', pictureRule([], 'best').start, -1);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exitCode = fail ? 1 : 0;

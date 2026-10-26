@@ -51,7 +51,7 @@ ds.setDataSaver(false);
 eq('off again: posters back to w500', getImageUrl('/p.jpg', 'w500'), 'https://image.tmdb.org/t/p/w500/p.jpg');
 
 console.log('\npicture setting');
-eq('HD by default', ds.currentPicture(), 'hd');
+eq('Best by default (the owner wants 1080p held)', ds.currentPicture(), 'best');
 ds.setPicture('best');
 eq('Best is remembered, and is not Data Saver', [ds.currentPicture(), ds.isDataSaver(), store.get('sahrae.picture.v1')], ['best', false, 'best']);
 ds.setDataSaver(true); ds.setDataSaver(false);

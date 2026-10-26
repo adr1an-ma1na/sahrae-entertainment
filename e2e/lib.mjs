@@ -292,9 +292,122 @@ export const filmPlayCheck = async () => {
   return out;
 };
 
+/**
+ * Candidate servers, measured on a device instead of by status code: for one
+ * title, each server's hidden page is asked for its stream, the quality menu
+ * and a real segment come through the relay (bitrate = segment bytes over its
+ * duration), then the stream plays for 20 s with hls.js on the sharpest
+ * rendition. A 200 page proves nothing: these sites send one when they have
+ * no copy of the film too.
+ */
+export const CANDIDATES = {
+  vidlink: ['https://vidlink.pro/movie/{id}', 'https://vidlink.pro/tv/{id}/{s}/{e}'],
+  vidsrcto: ['https://vidsrc.to/embed/movie/{id}', 'https://vidsrc.to/embed/tv/{id}/{s}/{e}'],
+  autoembed: ['https://autoembed.co/movie/tmdb/{id}', 'https://autoembed.co/tv/tmdb/{id}-{s}-{e}'],
+  vidsrcsu: ['https://vidsrc.su/embed/movie/{id}', 'https://vidsrc.su/embed/tv/{id}/{s}/{e}'],
+  vidsrcsh: ['https://vidsrc.sh/embed/movie?tmdb={id}', 'https://vidsrc.sh/embed/tv?tmdb={id}&season={s}&episode={e}'],
+  '2embed': ['https://www.2embed.cc/embed/{id}', 'https://www.2embed.cc/embedtv/{id}&s={s}&e={e}'],
+  vidsrcio: ['https://vidsrc.io/embed/movie/{id}', 'https://vidsrc.io/embed/tv/{id}/{s}/{e}'],
+  vidsrcpm: ['https://vidsrc.pm/embed/movie?tmdb={id}', 'https://vidsrc.pm/embed/tv?tmdb={id}&season={s}&episode={e}'],
+  vixsrc: ['https://vixsrc.to/movie/{id}?lang=en', 'https://vixsrc.to/tv/{id}/{s}/{e}?lang=en'],
+  vidrock: ['https://vidrock.to/embed/movie/{id}', 'https://vidrock.to/embed/tv/{id}/{s}/{e}'],
+  vidzee: ['https://player.vidzee.wtf/embed/movie/{id}', 'https://player.vidzee.wtf/embed/tv/{id}/{s}/{e}'],
+};
+
+export const serverMatrix = async (candidates, title) => {
+  if (!window.Hls) {
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js';
+      s.onload = res; s.onerror = () => rej(new Error('hls.js did not load'));
+      document.head.appendChild(s);
+    });
+  }
+  const fill = (t) => t.replace('{id}', title.id).replace('{s}', title.s || 1).replace('{e}', title.e || 1);
+  const relay = (u, r) => `https://localhost/__hlsproxy?u=${encodeURIComponent(u)}${r ? `&r=${encodeURIComponent(r)}` : ''}`;
+  const out = {};
+  for (const [id, pair] of Object.entries(candidates)) {
+    const embed = fill(title.type === 'tv' ? pair[1] : pair[0]);
+    const res = {};
+    let hls, v;
+    try {
+      const t0 = Date.now();
+      let j = { pending: true };
+      while (j.pending && Date.now() - t0 < 40000) {
+        j = await (await fetch(`https://localhost/__filmstream?u=${encodeURIComponent(embed)}`, { cache: 'no-store' })).json();
+        if (j.pending) await new Promise((r) => setTimeout(r, 1000));
+      }
+      res.lookupMs = Date.now() - t0;
+      if (!j.m3u8) { res.why = j.why || (j.pending ? 'no answer in 40 s' : 'no stream'); out[id] = res; continue; }
+      res.host = new URL(j.m3u8).hostname;
+      const src = relay(j.m3u8, j.referer);
+      const mt = await (await fetch(src)).text();
+      const L = mt.split('\n');
+      const menu = [];
+      let best = null, bb = -1;
+      for (let i = 0; i < L.length; i++) {
+        const b = L[i].match(/BANDWIDTH=(\d+)/);
+        if (!b || !/STREAM-INF/.test(L[i])) continue;
+        const h = +((L[i].match(/RESOLUTION=\d+x(\d+)/) || [])[1] || 0);
+        menu.push(`${h || '?'}p@${(+b[1] / 1e6).toFixed(1)}`);
+        if (+b[1] > bb) { bb = +b[1]; best = L.slice(i + 1).find((l) => l.trim() && !l.startsWith('#')); }
+      }
+      res.menu = menu.length ? menu : 'single';
+      const media = best ? await (await fetch(new URL(best.trim(), location.href).href)).text() : mt;
+      const ML = media.split('\n');
+      const segs = [];
+      for (let i = 0; i < ML.length; i++) {
+        const m = ML[i].match(/#EXTINF:([\d.]+)/);
+        if (m) { const s = ML.slice(i + 1).find((l) => l.trim() && !l.startsWith('#')); if (s) segs.push([+m[1], s.trim()]); }
+      }
+      res.minutes = Math.round(segs.reduce((a, s) => a + s[0], 0) / 60);
+      const pick = segs[Math.floor(segs.length * 0.4)];
+      if (pick) {
+        const buf = await (await fetch(new URL(pick[1], location.href).href)).arrayBuffer();
+        res.mbps = +((buf.byteLength * 8) / pick[0] / 1e6).toFixed(2);
+      }
+      // Play it.
+      v = document.createElement('video');
+      v.muted = true; v.playsInline = true;
+      v.style.cssText = 'position:fixed;left:0;top:0;width:320px;height:180px;z-index:99999';
+      document.body.appendChild(v);
+      hls = new window.Hls({ startLevel: -1, capLevelToPlayerSize: false, abrEwmaDefaultEstimate: 8000000 });
+      const errors = [];
+      hls.on(window.Hls.Events.ERROR, (_e, d) => { if (errors.length < 3) errors.push(`${d.fatal ? 'FATAL ' : ''}${d.details}`); });
+      hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
+        let top = 0;
+        hls.levels.forEach((l, i) => { if ((l.height || 0) > (hls.levels[top].height || 0)) top = i; });
+        hls.currentLevel = top;
+        v.play().catch((e) => errors.push('play: ' + e.name));
+      });
+      const t1 = Date.now();
+      hls.loadSource(src);
+      hls.attachMedia(v);
+      let first = null;
+      while (Date.now() - t1 < 20000) {
+        await new Promise((r) => setTimeout(r, 500));
+        if (first === null && v.currentTime > 0.2) first = Date.now() - t1;
+      }
+      res.play = { w: v.videoWidth, h: v.videoHeight, sec: +v.currentTime.toFixed(1), firstFrameMs: first, errors };
+    } catch (e) {
+      res.error = String(e).slice(0, 140);
+    } finally {
+      try { hls && hls.destroy(); } catch {}
+      try { v && v.remove(); } catch {}
+    }
+    out[id] = res;
+  }
+  return out;
+};
+
+const TITLES = {
+  deadpool: { type: 'movie', id: 533535 },
+  breakingbad: { type: 'tv', id: 1396, s: 1, e: 1 },
+  darkknight: { type: 'movie', id: 155 },
+};
+
 export const FLOWS = [
-  { name: '00-film-stream', run: async (p) => p.evaluate(filmStreamCheck) },
-  { name: '00b-film-play', run: async (p) => p.evaluate(filmPlayCheck) },
+  ...Object.entries(TITLES).map(([name, t]) => ({ name: `00-servers-${name}`, run: async (p) => p.evaluate(serverMatrix, CANDIDATES, t) })),
   { name: '01-launch', run: async (p) => { await settle(p, 6000, 20000); } },
   { name: '02-past-onboarding', run: async (p) => ({ clicked: await clickByText(p, ['Skip', 'Get started'], { timeout: 6000 }) }) },
   { name: '03-home', run: async (p) => {

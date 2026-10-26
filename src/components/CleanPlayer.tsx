@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type HlsT from 'hls.js';
 import { Loader2, Subtitles, Languages } from 'lucide-react';
 import { useHls } from '../services/hlsLoader';
-import { pickLevel, heightLabel } from '../services/cleanStream';
+import { pictureRule, heightLabel, type PictureSetting } from '../services/cleanStream';
 
 /**
  * Sahrae's own film and episode player, used in the Android app (phone,
@@ -17,8 +17,8 @@ import { pickLevel, heightLabel } from '../services/cleanStream';
  */
 export interface CleanPlayerProps {
   src: string;
-  /** Data Saver: 480p at most. */
-  saver: boolean;
+  /** The Picture setting: Best locks the sharpest, HD keeps 720p or better, Data Saver caps at 480p. */
+  picture: PictureSetting;
   startAt?: number;
   onPlaying: () => void;
   onProgress: (t: number, d: number) => void;
@@ -27,7 +27,7 @@ export interface CleanPlayerProps {
   onFail: (why: string) => void;
 }
 
-export default function CleanPlayer({ src, saver, startAt = 0, onPlaying, onProgress, onEnded, onFail }: CleanPlayerProps) {
+export default function CleanPlayer({ src, picture, startAt = 0, onPlaying, onProgress, onEnded, onFail }: CleanPlayerProps) {
   const Hls = useHls();
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<HlsT | null>(null);
@@ -61,12 +61,12 @@ export default function CleanPlayer({ src, saver, startAt = 0, onPlaying, onProg
     });
     hlsRef.current = hls;
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
-      const lvl = pickLevel(hls.levels.map((l) => ({ height: l.height, bitrate: l.bitrate })), saver);
-      if (lvl >= 0) {
-        hls.startLevel = lvl;
-        // Data Saver holds the ceiling; otherwise the player may still step
-        // down on a slow line rather than stall.
-        if (saver) hls.autoLevelCapping = lvl;
+      const rule = pictureRule(hls.levels.map((l) => ({ height: l.height, bitrate: l.bitrate })), picture);
+      if (rule.start >= 0) {
+        hls.startLevel = rule.start;
+        if (rule.lock) hls.currentLevel = rule.start;
+        if (rule.cap >= 0) hls.autoLevelCapping = rule.cap;
+        if (rule.minBitrate > 0) hls.config.minAutoBitrate = rule.minBitrate;
       }
       setSubs(hls.subtitleTracks.map((t, i) => ({ id: i, name: t.name || t.lang || `Subtitles ${i + 1}` })));
       setAudio(hls.audioTracks.map((t, i) => ({ id: i, name: t.name || t.lang || `Audio ${i + 1}` })));
@@ -88,7 +88,7 @@ export default function CleanPlayer({ src, saver, startAt = 0, onPlaying, onProg
     // Nothing to show after 25 s: hand back to the provider's player.
     const noStart = setTimeout(() => { if (!v.currentTime) fail('no picture after 25 s'); }, 25000);
     return () => { clearTimeout(noStart); hls.destroy(); hlsRef.current = null; };
-  }, [Hls, src, saver, startAt]);
+  }, [Hls, src, picture, startAt]);
 
   useEffect(() => {
     const v = videoRef.current;

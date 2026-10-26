@@ -82,3 +82,23 @@ export function isCleanOn(): boolean {
 export function setCleanOn(on: boolean) {
   try { localStorage.setItem(CLEAN_KEY, on ? '1' : '0'); } catch { /* private mode */ }
 }
+
+export type PictureSetting = 'saver' | 'hd' | 'best';
+
+/**
+ * How Sahrae's player holds the Picture setting, given the stream's renditions:
+ *   best   open on the sharpest and stay there (lock), whatever the line does
+ *   hd     open on the sharpest; the player may step down on a slow line, but
+ *          never below 720p (minBitrate = the smallest 720p-or-better rendition)
+ *   saver  the best at 480p or below, and no higher (cap)
+ * Indexes refer to the stream's own list. Viewers saw 480p on "1080p" servers
+ * because nothing held the quality up.
+ */
+export function pictureRule(levels: Rendition[], picture: PictureSetting): { start: number; lock: boolean; cap: number; minBitrate: number } {
+  const start = pickLevel(levels, picture === 'saver');
+  if (start < 0) return { start: -1, lock: false, cap: -1, minBitrate: 0 };
+  if (picture === 'saver') return { start, lock: false, cap: start, minBitrate: 0 };
+  if (picture === 'best') return { start, lock: true, cap: -1, minBitrate: 0 };
+  const hd = levels.filter((l) => l.height >= 720).map((l) => l.bitrate || 0).filter((b) => b > 0);
+  return { start, lock: false, cap: -1, minBitrate: hd.length ? Math.min(...hd) : 0 };
+}

@@ -30,10 +30,11 @@ const EVENT = 'sahrae:datasaver';
 
 let on = false;
 try { on = localStorage.getItem(KEY) === '1'; } catch { /* storage blocked: off */ }
-let picture: Picture = 'hd';
+// Best by default: the owner wants 1080p held (2026-10-26). HD is a choice for weak lines.
+let picture: Picture = 'best';
 try {
   const p = localStorage.getItem(PICTURE_KEY);
-  picture = on ? 'saver' : p === 'best' ? 'best' : 'hd';
+  picture = on ? 'saver' : p === 'hd' ? 'hd' : 'best';
 } catch { /* storage blocked: HD */ }
 
 type Caps = { dataSaver?: boolean; traffic?: boolean; quality?: boolean };
@@ -77,8 +78,8 @@ export function setPicture(next: Picture): void {
 }
 
 export function setDataSaver(next: boolean): void {
-  let back: Picture = 'hd';
-  try { back = localStorage.getItem(PICTURE_KEY) === 'best' ? 'best' : 'hd'; } catch { /* HD */ }
+  let back: Picture = 'best';
+  try { back = localStorage.getItem(PICTURE_KEY) === 'hd' ? 'hd' : 'best'; } catch { /* Best */ }
   setPicture(next ? 'saver' : back);
 }
 
