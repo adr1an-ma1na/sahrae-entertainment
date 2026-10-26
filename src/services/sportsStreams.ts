@@ -113,6 +113,8 @@ const RETRYABLE: Record<FailureReason, boolean> = {
 
 export interface Stream {
   id: string;
+  /** The Referer the feed page's player sent for this playlist; the relay sends the same. */
+  referer?: string;
   eventId: string;
   /** Host of the origin the stream comes from — the unit reliability is learned on. */
   source: string;

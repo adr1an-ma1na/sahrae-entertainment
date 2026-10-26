@@ -720,9 +720,41 @@ public class MainActivity extends BridgeActivity {
             new ByteArrayInputStream(body.getBytes(StandardCharsets.UTF_8)));
     }
 
+    private static final Set<String> EMBED_RUNNING = ConcurrentHashMap.newKeySet();
+    private static final Map<String, Long> EMBED_FAILED = new ConcurrentHashMap<>();
+
     private WebResourceResponse embedResolve(Uri uri) {
         final String embed = uri.getQueryParameter("u");
         if (embed == null || embed.isEmpty()) return null;
+
+        // ?async=1 (newer pages): answer at once and look on another thread,
+        // as films do, instead of holding a WebView request thread for up to
+        // 14 s while the hidden page needs those threads itself.
+        if ("1".equals(uri.getQueryParameter("async"))) {
+            Long e2 = EMBED_EXPIRY.get(embed);
+            String hit = (e2 != null && e2 > System.currentTimeMillis()) ? EMBED_CACHE.get(embed) : null;
+            if (hit != null) return jsonResponse("{\"m3u8\":" + jsonStr(hit) + refererJson(hit) + "}");
+            if (EMBED_RUNNING.contains(embed)) return jsonResponse("{\"pending\":true}");
+            Long failed = EMBED_FAILED.remove(embed);
+            if (failed != null && System.currentTimeMillis() - failed < 30000) return jsonResponse("{\"m3u8\":null}");
+            EMBED_RUNNING.add(embed);
+            new Thread(() -> {
+                try {
+                    String r = runEmbedResolver(embed);
+                    if (r != null) {
+                        EMBED_CACHE.put(embed, r);
+                        EMBED_EXPIRY.put(embed, System.currentTimeMillis() + 120000);
+                    } else {
+                        EMBED_FAILED.put(embed, System.currentTimeMillis());
+                    }
+                } catch (Throwable t) {
+                    EMBED_FAILED.put(embed, System.currentTimeMillis());
+                } finally {
+                    EMBED_RUNNING.remove(embed);
+                }
+            }, "sahrae-sport-lookup").start();
+            return jsonResponse("{\"pending\":true}");
+        }
 
         Long exp = EMBED_EXPIRY.get(embed);
         String m3u8 = (exp != null && exp > System.currentTimeMillis()) ? EMBED_CACHE.get(embed) : null;
@@ -733,10 +765,18 @@ public class MainActivity extends BridgeActivity {
                 EMBED_EXPIRY.put(embed, System.currentTimeMillis() + 120000); // 2 min
             }
         }
-        return jsonResponse(m3u8 != null ? "{\"m3u8\":" + jsonStr(m3u8) + "}" : "{\"m3u8\":null}");
+        return jsonResponse(m3u8 != null ? "{\"m3u8\":" + jsonStr(m3u8) + refererJson(m3u8) + "}" : "{\"m3u8\":null}");
+    }
+
+    private static String refererJson(String m3u8) {
+        String r = EMBED_REFERER.get(m3u8);
+        return r != null ? ",\"referer\":" + jsonStr(r) : "";
     }
 
     /** Load the embed in a hidden WebView and capture the first playlist URL it fetches. */
+    /** The Referer each resolved sports playlist was requested with (the relay must send the same). */
+    private static final Map<String, String> EMBED_REFERER = new ConcurrentHashMap<>();
+
     private String runEmbedResolver(final String embed) {
         final String[] result = new String[1];
         final WebView[] holder = new WebView[1];
@@ -778,6 +818,12 @@ public class MainActivity extends BridgeActivity {
                                 if (isAdHost(req.getUrl().getHost())) return blockedResponse();
                                 if (result[0] == null && looksLikeStreamUrl(us)) {
                                     result[0] = us;
+                                    try {
+                                        Map<String, String> rh = req.getRequestHeaders();
+                                        if (rh != null) for (Map.Entry<String, String> e : rh.entrySet()) {
+                                            if (e.getKey() != null && e.getKey().equalsIgnoreCase("Referer") && e.getValue() != null) EMBED_REFERER.put(us, e.getValue());
+                                        }
+                                    } catch (Throwable ignore) {}
                                     latch.countDown();
                                     return blockedResponse(); // don't waste bandwidth in the throwaway view
                                 }
