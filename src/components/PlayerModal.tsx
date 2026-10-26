@@ -493,7 +493,9 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   // With Ad Shield on (web), a server known to refuse the sandbox would only
   // show its "remove the sandbox" screen, so it is left out rather than
   // offered and failed. If that would leave nothing, all are kept.
-  const shielded = poolSnap.current.list.filter((p) => !(shieldAppliesHere() && shieldOn && refusesSandbox(p.movie.replace('{id}', '1'))));
+  const shielded = poolSnap.current.list.filter((p) => !(shieldAppliesHere() && shieldOn && refusesSandbox(p.movie.replace('{id}', '1'))))
+    // Some servers' own pages are not fit to show on the web; the app hides the page.
+    .filter((p) => nativeShell || p.web !== false);
   const SERVERS = (shielded.length ? shielded : poolSnap.current.list).map((p) => ({
     id: p.id,
     name: poolLabel(p),
