@@ -19,9 +19,15 @@ import {
  * §23 exists precisely to forbid the alternative.
  */
 
+/** Streamed playlists (lb*.strmd.st) answer only a real browser on the feed's
+ *  site, so the app fetches them through its hidden page on that site (a=1). */
+export const needsSiteFetch = (url: string): boolean => {
+  try { return new URL(url).hostname.toLowerCase().endsWith('strmd.st'); } catch { return false; }
+};
+
 const nativeProxy = (url: string, referer?: string) =>
   Capacitor.isNativePlatform()
-    ? `https://localhost/__hlsproxy?u=${encodeURIComponent(url)}${referer ? `&r=${encodeURIComponent(referer)}` : ''}`
+    ? `https://localhost/__hlsproxy?${needsSiteFetch(url) ? 'a=1&' : ''}u=${encodeURIComponent(url)}${referer ? `&r=${encodeURIComponent(referer)}` : ''}`
     : url;
 
 export const canValidateDeeply = () => Capacitor.isNativePlatform();
