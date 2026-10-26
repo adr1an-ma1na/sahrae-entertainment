@@ -647,10 +647,10 @@ public class MainActivity extends BridgeActivity {
         if (wv == null) return null;
         final String id = java.util.UUID.randomUUID().toString().replace("-", "");
         final String js = "(function(){window.__sr=window.__sr||{};var id=" + jsonStr(id) + ";"
-            + "fetch(" + jsonStr(url) + ",{cache:'no-store'}).then(function(r){"
+            + "fetch(" + jsonStr(url) + ",{cache:'no-store',credentials:'include'}).then(function(r){"
             + "return r.arrayBuffer().then(function(b){var u=new Uint8Array(b),s='';for(var i=0;i<u.length;i+=32768)s+=String.fromCharCode.apply(null,u.subarray(i,i+32768));"
-            + "window.__sr[id]=[String(r.status),btoa(s),r.url||'',r.headers.get('content-type')||'',location.href];});"
-            + "}).catch(function(e){window.__sr[id]=['0','','',String(e),location.href];});})();";
+            + "window.__sr[id]=[String(r.status),btoa(s),r.url||'',r.headers.get('content-type')||''];});"
+            + "}).catch(function(e){window.__sr[id]=['0','','',String(e)];});})();";
         final MainActivity act = sActivity;
         if (act == null) return null;
         act.runOnUiThread(() -> { try { wv.evaluateJavascript(js, null); } catch (Throwable ignore) {} });
@@ -666,7 +666,7 @@ public class MainActivity extends BridgeActivity {
             if (out[0] != null && !"null".equals(out[0]) && out[0].startsWith("[")) {
                 try {
                     org.json.JSONArray a = new org.json.JSONArray(out[0]);
-                    return new String[] { a.getString(0), a.getString(1), a.getString(2), a.getString(3), a.optString(4, "") };
+                    return new String[] { a.getString(0), a.getString(1), a.getString(2), a.getString(3) };
                 } catch (Throwable ignore) { return null; }
             }
             try { Thread.sleep(120); } catch (InterruptedException ignore) {}
@@ -2198,7 +2198,7 @@ public class MainActivity extends BridgeActivity {
                                 try { byte[] b = android.util.Base64.decode(got[1], android.util.Base64.DEFAULT); head = new String(b, 0, Math.min(b.length, 160), StandardCharsets.UTF_8); } catch (Throwable ignore) {}
                             }
                             return jsonResponse(got == null ? "{\"error\":\"no answer from the agent\",\"ms\":" + (System.currentTimeMillis() - t0) + "}"
-                                : "{\"status\":" + jsonStr(got[0]) + ",\"url\":" + jsonStr(got[2]) + ",\"type\":" + jsonStr(got[3]) + ",\"head\":" + jsonStr(head) + ",\"page\":" + jsonStr(got.length > 4 ? got[4] : "") + ",\"ms\":" + (System.currentTimeMillis() - t0) + "}");
+                                : "{\"status\":" + jsonStr(got[0]) + ",\"url\":" + jsonStr(got[2]) + ",\"type\":" + jsonStr(got[3]) + ",\"head\":" + jsonStr(head) + ",\"ms\":" + (System.currentTimeMillis() - t0) + "}");
                         } else if (path.startsWith("/__filmstream")) {
                             // Films and episodes in Sahrae's own player, without the provider's page.
                             return filmResolve(u);
