@@ -445,7 +445,7 @@ export const sportsLab = async (which) => {
     hls.loadSource(src); hls.attachMedia(v);
     const t0 = Date.now(); let first = null; let stalls = 0;
     v.addEventListener('waiting', () => { stalls++; });
-    while (Date.now() - t0 < 15000) { await new Promise((r) => setTimeout(r, 500)); if (first === null && v.currentTime > 0.2) first = Date.now() - t0; }
+    while (Date.now() - t0 < 25000) { await new Promise((r) => setTimeout(r, 500)); if (first === null && v.currentTime > 0.2) first = Date.now() - t0; }
     const r = { w: v.videoWidth, h: v.videoHeight, sec: +v.currentTime.toFixed(1), firstFrameMs: first, stalls, levels, errors };
     hls.destroy(); v.remove();
     return r;
@@ -465,9 +465,8 @@ export const sportsLab = async (which) => {
       if (!j.m3u8) { rec.why = 'no stream from page'; out.matches.push(rec); continue; }
       rec.host = new URL(j.m3u8).hostname;
       rec.referer = j.referer || null;
-      // As the app now plays it: relay with the referer the feed page sent.
-      rec.relayReferer = await play(`https://localhost/__hlsproxy?u=${encodeURIComponent(j.m3u8)}&r=${encodeURIComponent(j.referer || 'https://embed.st/')}`);
-      if (!rec.relayReferer.sec) rec.relaySite = await play(`https://localhost/__hlsproxy?u=${encodeURIComponent(j.m3u8)}&r=${encodeURIComponent('https://embed.st/')}`);
+      // As the app now plays it: the playlist fetched by the hidden page on the feed's site (a=1).
+      rec.site = await play(`https://localhost/__hlsproxy?a=1&u=${encodeURIComponent(j.m3u8)}&r=${encodeURIComponent(j.referer || 'https://embed.st/')}`);
     } catch (e) { rec.error = String(e).slice(0, 120); }
     out.matches.push(rec);
   }
