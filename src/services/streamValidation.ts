@@ -232,6 +232,15 @@ export async function validateStream(s: Stream, cfg: StreamConfig = DEFAULT_CONF
   metrics.validationsFailed++;
   note(verdict.failure || 'UNKNOWN');
   recordSourceResult(s.source, false);
+  // The feed page gave up a playlist that cannot be played from outside its
+  // own player (on the emulators every Streamed playlist answered 404 to the
+  // relay, whatever the referer, 2026-10-26). The page itself still plays:
+  // offer it, as films fall back to their server's page. The app's native
+  // shield keeps its pop-ups out.
+  if (s.embed && s.kind === 'server') {
+    metrics.validationsIndeterminate++;
+    return applyScore({ ...markUnverified(s, now), url: s.embed });
+  }
   return applyScore({ ...markFailure(s, verdict.failure || 'UNKNOWN', cfg, now), url: target, referer });
 }
 
