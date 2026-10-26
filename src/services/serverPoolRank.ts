@@ -23,6 +23,8 @@ export type PoolServer = {
   failStreak?: number;
   checked?: string;
   note?: string;
+  /** false: the Android app only (its own web page is not fit to show). */
+  web?: boolean;
 };
 
 export type Pool = { version: number; updated: string; servers: PoolServer[] };

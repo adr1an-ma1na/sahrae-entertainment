@@ -3,6 +3,7 @@ import type HlsT from 'hls.js';
 import { Loader2, Subtitles, Languages } from 'lucide-react';
 import { useHls } from '../services/hlsLoader';
 import { pictureRule, heightLabel, type PictureSetting } from '../services/cleanStream';
+import { isTelevision } from '../tv/spatialNavigation';
 
 /**
  * Sahrae's own film and episode player, used in the Android app (phone,
@@ -61,7 +62,7 @@ export default function CleanPlayer({ src, picture, startAt = 0, onPlaying, onPr
     });
     hlsRef.current = hls;
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
-      const rule = pictureRule(hls.levels.map((l) => ({ height: l.height, bitrate: l.bitrate })), picture);
+      const rule = pictureRule(hls.levels.map((l) => ({ height: l.height, bitrate: l.bitrate })), picture, isTelevision());
       if (rule.start >= 0) {
         hls.startLevel = rule.start;
         if (rule.lock) hls.currentLevel = rule.start;

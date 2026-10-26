@@ -83,6 +83,9 @@ const SANDBOX_REFUSERS = [
   // Checked sandboxed on 2026-10-26: refuse it ("can't be embedded in a sandboxed
   // frame", "Restricted Embed Detected"; 2Embed hands over to the same player).
   'vidsrc.to', 'vsembed.ru', 'vidsrc.su', 'vidsrc.sh', '2embed.cc', '2embed.skin', 'vidsrc.io',
+  // 2026-10-26: VidLove "This site broke the player"; VidFast and VidNest are
+  // listed by their own makers as refusing it.
+  'vidlove.cc', '111movies.net', 'vidfast.vc', 'vidfast.pro', 'vidnest.fun',
 ];
 
 export function refusesSandbox(url: string): boolean {
