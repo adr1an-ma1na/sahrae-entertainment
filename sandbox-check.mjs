@@ -34,7 +34,7 @@ eq('junk is not exempt', refusesSandbox('not a url'), false);
 console.log('\nevery film server is accounted for');
 const pool = JSON.parse(fs.readFileSync('src/data/servers.json', 'utf8'));
 const sandboxed = pool.servers.filter((s) => !refusesSandbox(s.movie.replace('{id}', '1'))).map((s) => s.id).join(',');
-eq('only VidZee plays sandboxed (update this when the pool changes)', sandboxed, 'vidzee');
+eq("none of the owner's list is sandboxed (update this when the pool changes)", sandboxed, '');
 eq('VixSrc', playerSandbox(true, 'https://vixsrc.to/tv/226174/1/1?lang=en'), undefined);
 
 console.log('\nreferrer: only to players that refuse to play without it');

@@ -1,89 +1,223 @@
 {
-  "version": 5,
-  "updated": "2026-10-25",
-  "about": "Movie and series servers, in the order the web app offers them, chosen on 2026-10-25 by measuring from Kenya the picture actually decoded, the stream bitrate and the sound, on Matlock (2024) S1E1 and Dune: Part Two. Of the providers still alive that week only VixSrc was new and good enough; VidFast, VidSrc.cc, 111Movies, EmbedWave, Videasy (top level) and Mapple did not play or asked viewers to prove they are human, and VidSrc.su was 720p with a TV channel logo. In the Android app, where Sahrae plays the stream in its own player without the provider page, the order is by bitrate instead (cleanFirst in services/cleanStream.ts).",
+  "version": 6,
+  "updated": "2026-10-26",
+  "about": "Movie and series servers: the owner's list of 2026-10-26, in the owner's order. The app offers them in this order, leaving out any marked down by the daily check or failing for viewers, and moves on from one that has not started within 20 s.",
   "servers": [
     {
-      "id": "vixsrc",
-      "name": "VixSrc · 1080p · subtitles",
-      "movie": "https://vixsrc.to/movie/{id}?lang=en",
-      "tv": "https://vixsrc.to/tv/{id}/{s}/{e}?lang=en",
+      "id": "vidlink",
+      "name": "VidLink Pro",
+      "movie": "https://vidlink.pro/movie/{id}?primaryColor=f59e0b",
+      "tv": "https://vidlink.pro/tv/{id}/{s}/{e}?primaryColor=f59e0b",
       "hosts": [
-        "vixsrc.to"
+        "vidlink.pro"
       ],
       "visual": {
         "maxHeight": 1080,
-        "mbps": 4.5,
+        "mbps": 0,
         "codec": "h264",
         "adaptive": true
       },
       "audio": {
         "channels": 2,
-        "languages": 2
-      },
-      "coverage": 1,
-      "events": true,
-      "status": "active",
-      "failStreak": 0,
-      "checked": "2026-10-25",
-      "note": "Matlock S1E1 and Dune: Part Two: renditions 1080p at 4.5 Mb/s, 720p at 2.1, 480p at 1.2 (H.264, AAC); English and Italian audio, 4 subtitle tracks on Dune. Starts by itself, no pop-up seen. Its web player starts at 720p and climbs; in Sahrae's player it opens at 1080p. Audio channels not measured (encrypted segments)."
-    },
-    {
-      "id": "vidrock",
-      "name": "VidRock · 1080p · sharpest",
-      "movie": "https://vidrock.to/embed/movie/{id}",
-      "tv": "https://vidrock.to/embed/tv/{id}/{s}/{e}",
-      "hosts": [
-        "vidrock.to",
-        "vidrock.ru"
-      ],
-      "visual": {
-        "maxHeight": 1080,
-        "mbps": 5,
-        "codec": "h264",
-        "adaptive": true
-      },
-      "audio": {
-        "channels": 6,
         "languages": 1
       },
       "coverage": 1,
       "events": false,
       "status": "active",
       "failStreak": 0,
-      "checked": "2026-10-25",
-      "note": "Matlock S1E1: renditions 1080p at 5.0 Mb/s, 720p at 3.0, 360p at 0.8; showing 1080p after 34 s, the clearest picture measured. Dolby Digital Plus 5.1 on Dune: Part Two. Slow to start (up to ~20 s), and it was down (504 on vidrock.to and vidrock.net) at 20:05 on 2026-10-25, an hour after playing: the failover covers it. Refuses the web sandbox."
+      "checked": "2026-10-26",
+      "note": "Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished). Measured 2026-10-25 on Matlock: 1080p at 1.6 Mb/s, showing 720p after 40 s."
     },
     {
-      "id": "vidzee",
-      "name": "VidZee · 1080p · 5.1",
-      "movie": "https://player.vidzee.wtf/embed/movie/{id}",
-      "tv": "https://player.vidzee.wtf/embed/tv/{id}/{s}/{e}",
+      "id": "vidsrcto",
+      "name": "VidSrc.to",
+      "movie": "https://vidsrc.to/embed/movie/{id}",
+      "tv": "https://vidsrc.to/embed/tv/{id}/{s}/{e}",
       "hosts": [
-        "vidzee.wtf"
+        "vidsrc.to",
+        "vsembed.ru"
       ],
       "visual": {
         "maxHeight": 1080,
-        "mbps": 3,
+        "mbps": 0,
         "codec": "h264",
-        "adaptive": false
+        "adaptive": true
       },
       "audio": {
-        "channels": 6,
-        "languages": 4
+        "channels": 2,
+        "languages": 1
       },
       "coverage": 1,
-      "events": true,
+      "events": false,
       "status": "active",
       "failStreak": 0,
-      "checked": "2026-10-25",
-      "note": "Matlock S1E1 at 1920x1080, about 3 Mb/s H.264, one rendition (never drops), 5.1 AAC. The only server that plays inside the web Ad Shield sandbox."
+      "checked": "2026-10-26",
+      "note": "Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished)."
+    },
+    {
+      "id": "autoembed",
+      "name": "AutoEmbed",
+      "movie": "https://autoembed.co/movie/tmdb/{id}",
+      "tv": "https://autoembed.co/tv/tmdb/{id}-{s}-{e}",
+      "hosts": [
+        "autoembed.co"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": 0,
+        "codec": "h264",
+        "adaptive": true
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "coverage": 1,
+      "events": false,
+      "status": "active",
+      "failStreak": 0,
+      "checked": "2026-10-26",
+      "note": "Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished)."
+    },
+    {
+      "id": "vidsrcsu",
+      "name": "VidSrc.su",
+      "movie": "https://vidsrc.su/embed/movie/{id}",
+      "tv": "https://vidsrc.su/embed/tv/{id}/{s}/{e}",
+      "hosts": [
+        "vidsrc.su"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": 0,
+        "codec": "h264",
+        "adaptive": true
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "coverage": 1,
+      "events": false,
+      "status": "active",
+      "failStreak": 0,
+      "checked": "2026-10-26",
+      "note": "Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished). Seen 2026-10-25 on Matlock: 720x404 with a TV channel logo."
+    },
+    {
+      "id": "vidsrcsh",
+      "name": "VidSrc.sh",
+      "movie": "https://vidsrc.sh/embed/movie?tmdb={id}",
+      "tv": "https://vidsrc.sh/embed/tv?tmdb={id}&season={s}&episode={e}",
+      "hosts": [
+        "vidsrc.sh"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": 0,
+        "codec": "h264",
+        "adaptive": true
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "coverage": 1,
+      "events": false,
+      "status": "active",
+      "failStreak": 0,
+      "checked": "2026-10-26",
+      "note": "Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished)."
+    },
+    {
+      "id": "2embed",
+      "name": "2Embed",
+      "movie": "https://www.2embed.cc/embed/{id}",
+      "tv": "https://www.2embed.cc/embedtv/{id}&s={s}&e={e}",
+      "hosts": [
+        "2embed.cc",
+        "2embed.skin"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": 0,
+        "codec": "h264",
+        "adaptive": true
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "coverage": 1,
+      "events": false,
+      "status": "active",
+      "failStreak": 0,
+      "checked": "2026-10-26",
+      "note": "Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished)."
+    },
+    {
+      "id": "vidsrcio",
+      "name": "VidSrc.io",
+      "movie": "https://vidsrc.io/embed/movie/{id}",
+      "tv": "https://vidsrc.io/embed/tv/{id}/{s}/{e}",
+      "hosts": [
+        "vidsrc.io"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": 0,
+        "codec": "h264",
+        "adaptive": true
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "coverage": 1,
+      "events": false,
+      "status": "active",
+      "failStreak": 0,
+      "checked": "2026-10-26",
+      "note": "Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished)."
+    },
+    {
+      "id": "vidsrcpm",
+      "name": "VidSrc.pm",
+      "movie": "https://vidsrc.pm/embed/movie?tmdb={id}",
+      "tv": "https://vidsrc.pm/embed/tv?tmdb={id}&season={s}&episode={e}",
+      "hosts": [
+        "vidsrc.pm"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": 0,
+        "codec": "h264",
+        "adaptive": true
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "coverage": 1,
+      "events": false,
+      "status": "active",
+      "failStreak": 0,
+      "checked": "2026-10-26",
+      "note": "Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished)."
     }
   ],
   "retired": [
     {
-      "id": "vidlink",
-      "why": "2026-10-25: 1080p at only 1.6 Mb/s, and it showed 480p to 720p: the softest picture of the pool"
+      "id": "vixsrc",
+      "why": "2026-10-26: replaced by the owner's list"
+    },
+    {
+      "id": "vidrock",
+      "why": "2026-10-26: replaced by the owner's list"
+    },
+    {
+      "id": "vidzee",
+      "why": "2026-10-26: replaced by the owner's list"
     },
     {
       "id": "viduki",
@@ -116,34 +250,6 @@
     {
       "id": "vidlove",
       "why": "2026-10-22: plays, but only at 480p (1150x480) on Dune: Part Two"
-    },
-    {
-      "id": "vidsrcto",
-      "why": "2026-10-22: replaced for quality; quality could not be measured (nested player)"
-    },
-    {
-      "id": "autoembed",
-      "why": "2026-10-22: replaced for quality; earlier showed only a spinner"
-    },
-    {
-      "id": "vidsrcsu",
-      "why": "2026-10-22: replaced for quality; earlier \"No available servers\" on Inception"
-    },
-    {
-      "id": "vidsrcsh",
-      "why": "2026-10-22: replaced for quality; could not be measured"
-    },
-    {
-      "id": "vidsrcio",
-      "why": "2026-10-22: replaced for quality; could not be measured"
-    },
-    {
-      "id": "vidsrcpm",
-      "why": "2026-10-22: replaced for quality; earlier \"Not found\" for new episodes"
-    },
-    {
-      "id": "2embed",
-      "why": "2026-10-22: replaced for quality; could not be measured"
     },
     {
       "id": "multiembed",

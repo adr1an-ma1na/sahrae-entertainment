@@ -21,16 +21,16 @@ const pool = JSON.parse(fs.readFileSync('src/data/servers.json', 'utf8'));
 const ids = (list) => list.map((s) => s.id);
 const NOW = Date.parse('2026-10-22T12:00:00Z');
 const ago = (h) => new Date(NOW - h * 3600_000).toISOString();
-const ORDER = ['vixsrc', 'vidrock', 'vidzee'];
+const ORDER = ['vidlink', 'vidsrcto', 'autoembed', 'vidsrcsu', 'vidsrcsh', '2embed', 'vidsrcio', 'vidsrcpm'];
 
 console.log('\nthe shipped pool');
 eq('is well formed', validPool(pool), true);
-eq('films: VixSrc leads, then VidRock and VidZee', ids(pickServers(pool, 'movie')), ORDER);
+eq("films: the owner's order, VidLink Pro first", ids(pickServers(pool, 'movie')), ORDER);
 eq('series: the same order', ids(pickServers(pool, 'tv')), ORDER);
 eq('the order does not change in a browser', ids(pickServers(pool, 'movie', [], Date.now(), undefined, false)), ORDER);
 eq('no server id appears twice', new Set(pool.servers.map((s) => s.id)).size, pool.servers.length);
-eq('VidRock and VidZee carry 5.1 surround', pool.servers.slice(1).map((s) => s.audio.channels), [6, 6]);
-eq('every server is at least 1080p', pool.servers.every((s) => s.visual.maxHeight >= 1080), true);
+eq('eight servers, as the owner listed them', pool.servers.length, 8);
+eq('every server is listed at up to 1080p', pool.servers.every((s) => s.visual.maxHeight >= 1080), true);
 
 console.log('\nthe quality score (kept for reference; it no longer reorders)');
 const base = { id: 'x', name: 'X', movie: 'https://x.test/{id}', tv: 'https://x.test/{id}/{s}/{e}', hosts: ['x.test'], visual: { maxHeight: 1080, mbps: 4, codec: 'h264', adaptive: true }, audio: { channels: 2, languages: 1 }, coverage: 1, events: true, status: 'active' };
@@ -39,10 +39,10 @@ eq('1080p beats 720p however reliable the 720p is', score(v({ visual: { maxHeigh
 eq('with the same picture, 5.1 sound wins', score(v({ audio: { channels: 6 } })) > score(v({ audio: { channels: 2 } })), true);
 
 console.log('\nwhen a server fails');
-const down = { ...pool, servers: pool.servers.map((s) => (s.id === 'vidrock' ? { ...s, status: 'down' } : s)) };
-eq('a server marked down steps out, the rest keep their order', ids(pickServers(down, 'movie')), ORDER.filter((x) => x !== 'vidrock'));
-const failing = [{ server_id: 'vidzee', ok: 1, fail: 20, last_ok: ago(60), last_fail: ago(1) }];
-eq('a server viewers keep failing on steps out too, and the next leads', ids(pickServers(pool, 'movie', failing, NOW))[0], 'vixsrc');
+const down = { ...pool, servers: pool.servers.map((s) => (s.id === 'vidsrcto' ? { ...s, status: 'down' } : s)) };
+eq('a server marked down steps out, the rest keep their order', ids(pickServers(down, 'movie')), ORDER.filter((x) => x !== 'vidsrcto'));
+const failing = [{ server_id: 'vidlink', ok: 1, fail: 20, last_ok: ago(60), last_fail: ago(1) }];
+eq('a server viewers keep failing on steps out too, and the next leads', ids(pickServers(pool, 'movie', failing, NOW))[0], 'vidsrcto');
 eq('...but a success in the last day keeps it', crowdFailing({ server_id: 'x', ok: 1, fail: 20, last_ok: ago(5), last_fail: ago(1) }, NOW), false);
 eq('...and a handful of failures is not enough', crowdFailing({ server_id: 'x', ok: 0, fail: 5, last_ok: null, last_fail: ago(1) }, NOW), false);
 eq('...nor mostly successes', crowdFailing({ server_id: 'x', ok: 30, fail: 20, last_ok: ago(30), last_fail: ago(1) }, NOW), false);
@@ -58,11 +58,12 @@ eq('junk is refused', [validPool(null), validPool('x'), validPool({})], [false, 
 
 console.log('\nurls and names');
 const by = (id) => pool.servers.find((s) => s.id === id);
-eq('VidZee episode (Matlock S2E16)', fill(by('vidzee').tv, 226174, 2, 16, 'x'), 'https://player.vidzee.wtf/embed/tv/226174/2/16');
-eq('VidRock film (Dune: Part Two)', fill(by('vidrock').movie, 693134, 1, 1, 'x'), 'https://vidrock.to/embed/movie/693134');
-eq('VixSrc episode, English first', fill(by('vixsrc').tv, 226174, 1, 1, 'x'), 'https://vixsrc.to/tv/226174/1/1?lang=en');
-eq('VixSrc film', fill(by('vixsrc').movie, 693134, 1, 1, 'x'), 'https://vixsrc.to/movie/693134?lang=en');
-eq('names say the picture and sound, honestly', pool.servers.map(label), ['VixSrc · 1080p · subtitles', 'VidRock · 1080p · sharpest', 'VidZee · 1080p · 5.1']);
+eq('VidLink Pro episode (Matlock S2E16)', fill(by('vidlink').tv, 226174, 2, 16, 'x'), 'https://vidlink.pro/tv/226174/2/16?primaryColor=f59e0b');
+eq('VidSrc.to film', fill(by('vidsrcto').movie, 693134, 1, 1, 'x'), 'https://vidsrc.to/embed/movie/693134');
+eq('AutoEmbed episode', fill(by('autoembed').tv, 1396, 1, 1, 'x'), 'https://autoembed.co/tv/tmdb/1396-1-1');
+eq('VidSrc.pm episode', fill(by('vidsrcpm').tv, 1396, 1, 1, 'x'), 'https://vidsrc.pm/embed/tv?tmdb=1396&season=1&episode=1');
+eq('2Embed episode', fill(by('2embed').tv, 1396, 1, 1, 'x'), 'https://www.2embed.cc/embedtv/1396&s=1&e=1');
+eq('names', pool.servers.map(label), ['VidLink Pro', 'VidSrc.to', 'AutoEmbed', 'VidSrc.su', 'VidSrc.sh', '2Embed', 'VidSrc.io', 'VidSrc.pm']);
 
 console.log('\nwhich copy of the list wins');
 eq('a newer version wins even on the same day', notOlder({ version: 5, updated: '2026-10-25' }, { version: 4, updated: '2026-10-25' }), true);

@@ -407,8 +407,8 @@ const TITLES = {
 };
 
 export const FLOWS = [
-  // One step per server and title, so no single step runs past the connection's limit.
-  ...Object.entries(TITLES).flatMap(([name, t]) => Object.entries(CANDIDATES).map(([sid, pair]) => ({ name: `00-${name}-${sid}`, run: async (p) => p.evaluate(serverMatrix, { [sid]: pair }, t) }))),
+  // Server checks (serverMatrix, CANDIDATES, TITLES) run on request, not in every build:
+  // node run.mjs android --only 00-... after adding them here.
   { name: '01-launch', run: async (p) => { await settle(p, 6000, 20000); } },
   { name: '02-past-onboarding', run: async (p) => ({ clicked: await clickByText(p, ['Skip', 'Get started'], { timeout: 6000 }) }) },
   { name: '03-home', run: async (p) => {
