@@ -417,8 +417,63 @@ const TITLES = {
   wildwood2026: { type: 'movie', id: 791523 },
 };
 
+/**
+ * Live sport on the device: today's live matches from the Streamed API, each
+ * feed's page resolved by the app (/__embed2m3u8), then played for 15 s two
+ * ways: the stream as the sports player loads it now (direct), and through the
+ * app's relay with the feed page as referer (as its check does).
+ */
+export const sportsLab = async (which) => {
+  const out = { which };
+  const api = 'https://streamed.pk/api';
+  let matches = [];
+  try { matches = await (await fetch(`${api}/matches/live`)).json(); } catch (e) { out.apiError = String(e).slice(0, 80); return out; }
+  out.live = matches.length;
+  const pick = matches.filter((m) => (m.sources || []).length).slice(which * 3, which * 3 + 3);
+  if (!window.Hls) {
+    await new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js'; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
+  }
+  const play = async (src) => {
+    const v = document.createElement('video'); v.muted = true; v.playsInline = true;
+    v.style.cssText = 'position:fixed;left:0;top:0;width:320px;height:180px;z-index:99999';
+    document.body.appendChild(v);
+    const hls = new window.Hls({ startLevel: -1, capLevelToPlayerSize: false, liveSyncDurationCount: 4 });
+    const errors = [];
+    hls.on(window.Hls.Events.ERROR, (_e, d) => { if (errors.length < 3) errors.push(`${d.fatal ? 'FATAL ' : ''}${d.details}${d.response?.code ? ' ' + d.response.code : ''}`); });
+    let levels = [];
+    hls.on(window.Hls.Events.MANIFEST_PARSED, () => { levels = hls.levels.map((l) => `${l.height}p@${(l.bitrate / 1e6).toFixed(1)}`); v.play().catch(() => {}); });
+    hls.loadSource(src); hls.attachMedia(v);
+    const t0 = Date.now(); let first = null; let stalls = 0;
+    v.addEventListener('waiting', () => { stalls++; });
+    while (Date.now() - t0 < 15000) { await new Promise((r) => setTimeout(r, 500)); if (first === null && v.currentTime > 0.2) first = Date.now() - t0; }
+    const r = { w: v.videoWidth, h: v.videoHeight, sec: +v.currentTime.toFixed(1), firstFrameMs: first, stalls, levels, errors };
+    hls.destroy(); v.remove();
+    return r;
+  };
+  out.matches = [];
+  for (const m of pick) {
+    const src = m.sources[0];
+    const rec = { title: m.title, source: src.source };
+    try {
+      const streams = await (await fetch(`${api}/stream/${src.source}/${src.id}`)).json();
+      const s = (streams || []).sort((a, b) => Number(!!b.hd) - Number(!!a.hd) || (b.viewers || 0) - (a.viewers || 0))[0];
+      if (!s) { rec.why = 'no streams'; out.matches.push(rec); continue; }
+      rec.embed = s.embedUrl; rec.hd = s.hd; rec.viewers = s.viewers;
+      const t0 = Date.now();
+      const j = await (await fetch(`https://localhost/__embed2m3u8?u=${encodeURIComponent(s.embedUrl)}`, { cache: 'no-store' })).json();
+      rec.lookupMs = Date.now() - t0;
+      if (!j.m3u8) { rec.why = 'no stream from page'; out.matches.push(rec); continue; }
+      rec.host = new URL(j.m3u8).hostname;
+      rec.direct = await play(j.m3u8);
+      rec.relay = await play(`https://localhost/__hlsproxy?u=${encodeURIComponent(j.m3u8)}&r=${encodeURIComponent(s.embedUrl)}`);
+    } catch (e) { rec.error = String(e).slice(0, 120); }
+    out.matches.push(rec);
+  }
+  return out;
+};
+
 export const FLOWS = [
-  ...Object.entries(TITLES).flatMap(([name, t]) => Object.entries(CANDIDATES).map(([sid, pair]) => ({ name: `00-${name}-${sid}`, run: async (p) => p.evaluate(serverMatrix, { [sid]: pair }, t) }))),
+  ...[0, 1, 2, 3].map((n) => ({ name: `00-sports-${n}`, run: async (p) => p.evaluate(sportsLab, n) })),
 ];
 export const FLOWS_ALL = [
   // Server checks (serverMatrix, CANDIDATES, TITLES) run on request, not in every build:
