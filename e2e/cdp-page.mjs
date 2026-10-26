@@ -79,7 +79,8 @@ export async function connectPage(devtoolsHttp, match = (t) => t.type === 'page'
     const expression = typeof fn === 'function' ? `(${fn.toString()})(...${JSON.stringify(args)})` : String(fn);
     const params = { expression, awaitPromise: true, returnByValue: true, userGesture: true };
     if (contextId) params.contextId = contextId;
-    const r = await send('Runtime.evaluate', params);
+    // Long enough for a server check: a 40 s lookup plus 20 s of playback.
+    const r = await send('Runtime.evaluate', params, 180000);
     if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text);
     return r.result.value;
   };

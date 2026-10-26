@@ -33,7 +33,7 @@ adb forward tcp:9222 "localabstract:$SOCK"
 # the run sees the steady state a person is in, not the first few seconds.
 sleep 25
 
-( cd e2e && timeout 2400 node run.mjs android --out "results/android-$LABEL" ) 2>&1 | tee "$OUT/run.log"
+( cd e2e && timeout 4200 node run.mjs android --out "results/android-$LABEL" ) 2>&1 | tee "$OUT/run.log"
 RC=${PIPESTATUS[0]}
 
 timeout 30 adb exec-out screencap -p > "$OUT/device-screen-at-end.png" || true
