@@ -34,7 +34,9 @@ try { on = localStorage.getItem(KEY) === '1'; } catch { /* storage blocked: off 
 let picture: Picture = 'best';
 try {
   const p = localStorage.getItem(PICTURE_KEY);
-  picture = on ? 'saver' : p === 'hd' ? 'hd' : 'best';
+  // The HD/Best choice is gone from the player, so an old HD pick is not kept.
+  void p;
+  picture = on ? 'saver' : 'best';
 } catch { /* storage blocked: HD */ }
 
 type Caps = { dataSaver?: boolean; traffic?: boolean; quality?: boolean };
@@ -79,7 +81,7 @@ export function setPicture(next: Picture): void {
 
 export function setDataSaver(next: boolean): void {
   let back: Picture = 'best';
-  try { back = localStorage.getItem(PICTURE_KEY) === 'hd' ? 'hd' : 'best'; } catch { /* Best */ }
+  /* Data Saver off always returns to Best. */
   setPicture(next ? 'saver' : back);
 }
 

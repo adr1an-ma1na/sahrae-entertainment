@@ -20,7 +20,7 @@ import { t } from '../i18n';
 import { reportRoomNow } from '../services/room';
 import { OPEN_PARTY } from './WatchParty';
 import { useServerPool, fill as fillTemplate, label as poolLabel, type PoolServer } from '../services/serverPool';
-import { useDataSaver, usePicture, announcePlayerSource, canCapVideo, canMeasure, estimateText, formatBytes, readReceivedBytes, type Picture } from '../services/dataSaver';
+import { useDataSaver, usePicture, announcePlayerSource, canCapVideo, canMeasure, estimateText, formatBytes, readReceivedBytes } from '../services/dataSaver';
 import { NO_CROWD, crowdChoice, fetchProof, fetchSeasonPlayable, nextServerRanked, reportPlay, titleKey, warmUp, type CrowdChoice, type ProofRow } from '../services/playProof';
 
 /** How soon the crowd's answer must arrive to change the opening server; later it would interrupt a loading player. */
@@ -146,7 +146,8 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const crowdRef = useRef<{ choice: CrowdChoice; rows: ProofRow[] }>({ choice: NO_CROWD, rows: [] });
   const [seasonPlayable, setSeasonPlayable] = useState<Set<number>>(() => new Set());
   const [dataSaver, setDataSaverOn] = useDataSaver();
-  const [picture, setPicture] = usePicture();
+  // Films play at Best (the owner removed the choice, 2026-10-26); Data Saver still caps them.
+  const [picture] = usePicture();
   // Data this viewing has used, measured by the Android app; null where it cannot be.
   const [usedBytes, setUsedBytes] = useState<number | null>(null);
   // A server the viewer picked by hand is theirs; the crowd never overrides it.
@@ -1370,30 +1371,6 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       )}
                     </button>
                   ))}
-                </div>
-
-                {/* Picture: Data Saver, HD (default) or Best. Always offered,
-                    because data costs on every device and sharpness matters on all. */}
-                <div className="mt-4 p-3 rounded-xl border border-white/10 bg-zinc-900/50">
-                  <p className="text-sm font-bold text-white flex items-center gap-2"><Gauge className="w-4 h-4 text-amber-400" />Picture</p>
-                  <div className="mt-2 grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Picture quality">
-                    {([['saver', 'Data Saver', 'Up to 480p'], ['hd', 'HD', '720p and up'], ['best', 'Best', '1080p']] as [Picture, string, string][]).map(([id, name, sub]) => (
-                      <button key={id} onClick={() => { setPicture(id); haptics.tap(); }} role="radio" aria-checked={picture === id} data-tv-focusable
-                        className={`rounded-lg px-2 py-2 text-left border transition-colors ${picture === id ? 'border-amber-400 bg-amber-400/10' : 'border-zinc-700 bg-zinc-900 hover:border-zinc-500'}`}>
-                        <span className={`block text-xs font-bold ${picture === id ? 'text-amber-300' : 'text-white'}`}>{name}</span>
-                        <span className="block text-[10px] text-zinc-400">{sub}</span>
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-xs text-zinc-400 leading-snug mt-2">
-                    {!canCapVideo()
-                      ? 'In a browser the player picks its own quality; Data Saver here loads smaller pictures and skips previews. The Sahrae Android app applies all three settings to films and episodes.'
-                      : picture === 'saver'
-                        ? 'Films and episodes at up to 480p, about a third of the data of full HD, and smaller pictures across the app.'
-                        : picture === 'best'
-                          ? 'Full HD only, the sharpest these servers offer. Needs a steady connection; if it keeps pausing, choose HD.'
-                          : 'Never drops below 720p, so a film does not stay blurry after a slow start. If it keeps pausing, choose Data Saver.'}
-                  </p>
                 </div>
 
                 {/* Ad Shield toggle — web only. On Android the native shell
