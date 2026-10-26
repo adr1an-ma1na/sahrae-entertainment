@@ -875,7 +875,7 @@ public class MainActivity extends BridgeActivity {
         if (FILM_RUNNING.contains(embed)) return jsonResponse("{\"pending\":true}");
         Long failed = FILM_FAILED.remove(embed);
         if (failed != null && System.currentTimeMillis() - failed < 60000) {
-            return jsonResponse("{\"m3u8\":null,\"why\":\"the page asked for no stream within 24 s\"}");
+            return jsonResponse("{\"m3u8\":null,\"why\":\"the page asked for no stream within 10 s\"}");
         }
         FILM_RUNNING.add(embed);
         new Thread(() -> {
@@ -987,8 +987,9 @@ public class MainActivity extends BridgeActivity {
             }
         });
 
-        // VidRock can take ~20 s to ask for its playlist.
-        try { latch.await(24, TimeUnit.SECONDS); } catch (InterruptedException ignore) {}
+        // Every server that hands over a stream did so within 3.2 s on the emulators
+        // (2026-10-26); waiting 24 s only delayed the fallback for the ones that never do.
+        try { latch.await(10, TimeUnit.SECONDS); } catch (InterruptedException ignore) {}
         runOnUiThread(() -> {
             try {
                 if (holder[0] != null) {
