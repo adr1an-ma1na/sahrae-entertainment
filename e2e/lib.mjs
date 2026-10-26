@@ -301,17 +301,27 @@ export const filmPlayCheck = async () => {
  * no copy of the film too.
  */
 export const CANDIDATES = {
-  vidlink: ['https://vidlink.pro/movie/{id}', 'https://vidlink.pro/tv/{id}/{s}/{e}'],
-  vidsrcto: ['https://vidsrc.to/embed/movie/{id}', 'https://vidsrc.to/embed/tv/{id}/{s}/{e}'],
-  autoembed: ['https://autoembed.co/movie/tmdb/{id}', 'https://autoembed.co/tv/tmdb/{id}-{s}-{e}'],
-  vidsrcsu: ['https://vidsrc.su/embed/movie/{id}', 'https://vidsrc.su/embed/tv/{id}/{s}/{e}'],
-  vidsrcsh: ['https://vidsrc.sh/embed/movie?tmdb={id}', 'https://vidsrc.sh/embed/tv?tmdb={id}&season={s}&episode={e}'],
-  '2embed': ['https://www.2embed.cc/embed/{id}', 'https://www.2embed.cc/embedtv/{id}&s={s}&e={e}'],
-  vidsrcio: ['https://vidsrc.io/embed/movie/{id}', 'https://vidsrc.io/embed/tv/{id}/{s}/{e}'],
-  vidsrcpm: ['https://vidsrc.pm/embed/movie?tmdb={id}', 'https://vidsrc.pm/embed/tv?tmdb={id}&season={s}&episode={e}'],
-  vixsrc: ['https://vixsrc.to/movie/{id}?lang=en', 'https://vixsrc.to/tv/{id}/{s}/{e}?lang=en'],
+  // Baseline: known to hand over 1080p streams (2026-10-26).
   vidrock: ['https://vidrock.to/embed/movie/{id}', 'https://vidrock.to/embed/tv/{id}/{s}/{e}'],
   vidzee: ['https://player.vidzee.wtf/embed/movie/{id}', 'https://player.vidzee.wtf/embed/tv/{id}/{s}/{e}'],
+  vixsrc: ['https://vixsrc.to/movie/{id}?lang=en', 'https://vixsrc.to/tv/{id}/{s}/{e}?lang=en'],
+  // New candidates (provider lists on GitHub, 2026-10-27).
+  xpass: ['https://play.xpass.top/e/movie/{id}', 'https://play.xpass.top/e/tv/{id}/{s}/{e}'],
+  nextgen: ['https://nextgencloudfabric.com/embed/movie/{id}', 'https://nextgencloudfabric.com/embed/tv/{id}/{s}/{e}'],
+  nxsha: ['https://nxsha.space/embed/movie/{id}', 'https://nxsha.space/embed/tv/{id}/{s}/{e}'],
+  movies111: ['https://111movies.net/movie/{id}', 'https://111movies.net/tv/{id}/{s}/{e}'],
+  peachify: ['https://peachify.top/embed/movie/{id}', 'https://peachify.top/embed/tv/{id}/{s}/{e}'],
+  vidstorm: ['https://vidstorm.ru/movie/{id}', 'https://vidstorm.ru/tv/{id}/{s}/{e}'],
+  vidking: ['https://www.vidking.net/embed/movie/{id}?autoPlay=true', 'https://www.vidking.net/embed/tv/{id}/{s}/{e}?autoPlay=true'],
+  vidnest: ['https://vidnest.fun/movie/{id}', 'https://vidnest.fun/tv/{id}/{s}/{e}'],
+  vidout: ['https://watchout-player.netlify.app/movie/{id}', 'https://watchout-player.netlify.app/tv/{id}/S{s}/E{e}'],
+  nebulaflix: ['https://nebulaflix.stream/player?mt={id}', 'https://nebulaflix.stream/player?st={id}&season={s}&episode={e}'],
+  vidsrcvip: ['https://vidsrc.vip/embed/movie/{id}', 'https://vidsrc.vip/embed/tv/{id}/{s}/{e}'],
+  autoembedcc: ['https://player.autoembed.cc/embed/movie/{id}', 'https://player.autoembed.cc/embed/tv/{id}/{s}/{e}'],
+  vidfastvc: ['https://vidfast.vc/movie/{id}?autoPlay=true', 'https://vidfast.vc/tv/{id}/{s}/{e}?autoPlay=true'],
+  videasyto: ['https://player.videasy.to/movie/{id}', 'https://player.videasy.to/tv/{id}/{s}/{e}'],
+  vidsrcwtf2: ['https://vidsrc.wtf/api/2/movie/?id={id}', 'https://vidsrc.wtf/api/2/tv/?id={id}&s={s}&e={e}'],
+  vidlink: ['https://vidlink.pro/movie/{id}', 'https://vidlink.pro/tv/{id}/{s}/{e}'],
 };
 
 export const serverMatrix = async (candidates, title) => {
@@ -323,7 +333,7 @@ export const serverMatrix = async (candidates, title) => {
       document.head.appendChild(s);
     });
   }
-  const fill = (t) => t.replace('{id}', title.id).replace('{s}', title.s || 1).replace('{e}', title.e || 1);
+  const fill = (t) => t.split('{id}').join(title.id).split('{s}').join(title.s || 1).split('{e}').join(title.e || 1);
   const relay = (u, r) => `https://localhost/__hlsproxy?u=${encodeURIComponent(u)}${r ? `&r=${encodeURIComponent(r)}` : ''}`;
   const out = {};
   for (const [id, pair] of Object.entries(candidates)) {
@@ -401,12 +411,16 @@ export const serverMatrix = async (candidates, title) => {
 };
 
 const TITLES = {
-  deadpool: { type: 'movie', id: 533535 },
+  matlock: { type: 'tv', id: 226174, s: 1, e: 1 },
+  dune2: { type: 'movie', id: 693134 },
   breakingbad: { type: 'tv', id: 1396, s: 1, e: 1 },
-  darkknight: { type: 'movie', id: 155 },
+  wildwood2026: { type: 'movie', id: 791523 },
 };
 
 export const FLOWS = [
+  ...Object.entries(TITLES).flatMap(([name, t]) => Object.entries(CANDIDATES).map(([sid, pair]) => ({ name: `00-${name}-${sid}`, run: async (p) => p.evaluate(serverMatrix, { [sid]: pair }, t) }))),
+];
+export const FLOWS_ALL = [
   // Server checks (serverMatrix, CANDIDATES, TITLES) run on request, not in every build:
   // node run.mjs android --only 00-... after adding them here.
   { name: '01-launch', run: async (p) => { await settle(p, 6000, 20000); } },
