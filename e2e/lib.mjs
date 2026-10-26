@@ -465,6 +465,9 @@ export const sportsLab = async (which) => {
       if (!j.m3u8) { rec.why = 'no stream from page'; out.matches.push(rec); continue; }
       rec.host = new URL(j.m3u8).hostname;
       rec.referer = j.referer || null;
+      const ag = async (page) => { const t = Date.now(); try { const r = await (await fetch(`https://localhost/__agentfetch?u=${encodeURIComponent(j.m3u8)}&r=${encodeURIComponent(j.referer || 'https://embed.st/')}${page ? `&p=${encodeURIComponent(page)}` : ''}`, { cache: 'no-store' })).json(); return { ...r, sinceLookupMs: t - t0 - rec.lookupMs }; } catch (e) { return { error: String(e).slice(0, 80) }; } };
+      rec.agentEmbedPage = await ag(s.embedUrl);
+      rec.agentFrontPage = await ag(null);
       // As the app now plays it: the playlist fetched by the hidden page on the feed's site (a=1).
       rec.site = await play(`https://localhost/__hlsproxy?a=1&u=${encodeURIComponent(j.m3u8)}&r=${encodeURIComponent(j.referer || 'https://embed.st/')}`);
     } catch (e) { rec.error = String(e).slice(0, 120); }
