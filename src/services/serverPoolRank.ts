@@ -32,8 +32,8 @@ export type Pool = { version: number; updated: string; servers: PoolServer[] };
 /** Server-wide results from viewers over the last few days (play_proof, server_health). */
 export type ServerHealth = { server_id: string; ok: number; fail: number; last_ok: string | null; last_fail: string | null };
 
-/** At most this many servers are offered; the owner's list is ten. */
-export const ACTIVE_COUNT = 12;
+/** At most this many servers are offered: the six measured leads and the owner's eight. */
+export const ACTIVE_COUNT = 14;
 /** Bitrate assumed where it could not be measured: modest, so an unmeasured server never outranks a measured one by guesswork. */
 export const UNMEASURED_MBPS = 2;
 

@@ -1,7 +1,7 @@
 {
-  "version": 8,
+  "version": 9,
   "updated": "2026-10-27",
-  "about": "Movie and series servers chosen on 2026-10-26 from 19 candidates measured in the Android app on emulators (stream handed over, quality menu, bitrate of a real segment, picture size after 20 s of playback) and from a Kenyan connection. In the Android app the order is by measured bitrate (cleanFirst), so VidFast (4K, 1080p at 6 Mb/s) leads; on the web, with Ad Shield on, only servers that play inside it are offered (VidZee first) and VidNest is app only.",
+  "about": "Movie and series servers. The 2026-10-26 measured leads first (VidZee, VidFast, VidRock, VixSrc, VidNest, VidLove), then the owner's list in the owner's order (VidLink Pro, VidSrc.to, AutoEmbed, VidSrc.su, VidSrc.sh, 2Embed, VidSrc.io, VidSrc.pm), all kept at the owner's request. In the Android app the order is by measured bitrate (cleanFirst), so VidFast leads; on the web, with Ad Shield on, servers that refuse its sandbox are left out (VidZee first) and VidNest is app only.",
   "servers": [
     {
       "id": "vidzee",
@@ -183,6 +183,32 @@
       "note": "Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished). Measured 2026-10-25 on Matlock: 1080p at 1.6 Mb/s, showing 720p after 40 s."
     },
     {
+      "id": "vidsrcto",
+      "name": "VidSrc.to",
+      "movie": "https://vidsrc.to/embed/movie/{id}",
+      "tv": "https://vidsrc.to/embed/tv/{id}/{s}/{e}",
+      "hosts": [
+        "vidsrc.to",
+        "vsembed.ru"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": 0,
+        "codec": "h264",
+        "adaptive": true
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "coverage": 1,
+      "events": false,
+      "status": "active",
+      "failStreak": 0,
+      "checked": "2026-10-27",
+      "note": "Owner's list; reinstated 2026-10-27 at the owner's request after the 2026-10-26 line-up dropped it. Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished)."
+    },
+    {
       "id": "autoembed",
       "name": "AutoEmbed",
       "movie": "https://autoembed.co/movie/tmdb/{id}",
@@ -206,6 +232,107 @@
       "failStreak": 1,
       "checked": "2026-10-27",
       "note": "Kept as a web backup inside Ad Shield; not proven to play (black screen sandboxed on 2026-10-26)."
+    },
+    {
+      "id": "vidsrcsu",
+      "name": "VidSrc.su",
+      "movie": "https://vidsrc.su/embed/movie/{id}",
+      "tv": "https://vidsrc.su/embed/tv/{id}/{s}/{e}",
+      "hosts": [
+        "vidsrc.su"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": 0,
+        "codec": "h264",
+        "adaptive": true
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "coverage": 1,
+      "events": false,
+      "status": "active",
+      "failStreak": 0,
+      "checked": "2026-10-27",
+      "note": "Owner's list; reinstated 2026-10-27 at the owner's request after the 2026-10-26 line-up dropped it. Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished). Seen 2026-10-25 on Matlock: 720x404 with a TV channel logo."
+    },
+    {
+      "id": "vidsrcsh",
+      "name": "VidSrc.sh",
+      "movie": "https://vidsrc.sh/embed/movie?tmdb={id}",
+      "tv": "https://vidsrc.sh/embed/tv?tmdb={id}&season={s}&episode={e}",
+      "hosts": [
+        "vidsrc.sh"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": 0,
+        "codec": "h264",
+        "adaptive": true
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "coverage": 1,
+      "events": false,
+      "status": "active",
+      "failStreak": 0,
+      "checked": "2026-10-27",
+      "note": "Owner's list; reinstated 2026-10-27 at the owner's request after the 2026-10-26 line-up dropped it. Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished)."
+    },
+    {
+      "id": "2embed",
+      "name": "2Embed",
+      "movie": "https://www.2embed.cc/embed/{id}",
+      "tv": "https://www.2embed.cc/embedtv/{id}&s={s}&e={e}",
+      "hosts": [
+        "2embed.cc",
+        "2embed.skin"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": 0,
+        "codec": "h264",
+        "adaptive": true
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "coverage": 1,
+      "events": false,
+      "status": "active",
+      "failStreak": 0,
+      "checked": "2026-10-27",
+      "note": "Owner's list; reinstated 2026-10-27 at the owner's request after the 2026-10-26 line-up dropped it. Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished)."
+    },
+    {
+      "id": "vidsrcio",
+      "name": "VidSrc.io",
+      "movie": "https://vidsrc.io/embed/movie/{id}",
+      "tv": "https://vidsrc.io/embed/tv/{id}/{s}/{e}",
+      "hosts": [
+        "vidsrc.io"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": 0,
+        "codec": "h264",
+        "adaptive": true
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "coverage": 1,
+      "events": false,
+      "status": "active",
+      "failStreak": 0,
+      "checked": "2026-10-27",
+      "note": "Owner's list; reinstated 2026-10-27 at the owner's request after the 2026-10-26 line-up dropped it. Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished)."
     },
     {
       "id": "vidsrcpm",
@@ -234,26 +361,6 @@
     }
   ],
   "retired": [
-    {
-      "id": "vidsrcto",
-      "why": "2026-10-26: never handed over a stream on the Android emulators and refuses the web Ad Shield"
-    },
-    {
-      "id": "vidsrcsu",
-      "why": "2026-10-26: never handed over a stream on the Android emulators and refuses the web Ad Shield"
-    },
-    {
-      "id": "vidsrcsh",
-      "why": "2026-10-26: never handed over a stream on the Android emulators and refuses the web Ad Shield"
-    },
-    {
-      "id": "2embed",
-      "why": "2026-10-26: never handed over a stream on the Android emulators and refuses the web Ad Shield"
-    },
-    {
-      "id": "vidsrcio",
-      "why": "2026-10-26: never handed over a stream on the Android emulators and refuses the web Ad Shield"
-    },
     {
       "id": "viduki",
       "why": "2026-10-25: the same stream as VidZee through another front end, so no gain in picture or sound"

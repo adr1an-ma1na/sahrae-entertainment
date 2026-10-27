@@ -37,8 +37,8 @@ eq('4K', heightLabel(2160), '4K');
 
 console.log('\nserver order in Sahrae\'s player: clearest first');
 const pool = JSON.parse(fs.readFileSync('src/data/servers.json', 'utf8')).servers;
-eq('in the app, sharpest first: VidFast, VidRock, VixSrc, VidZee, VidNest', cleanFirst(pool).map((s) => s.id), ['vidfast', 'vidrock', 'vixsrc', 'vidzee', 'vidnest', 'vidlink', 'vidlove', 'autoembed', 'vidsrcpm']);
-eq('the pool itself is untouched', pool.map((s) => s.id), ['vidzee', 'vidfast', 'vidrock', 'vixsrc', 'vidnest', 'vidlove', 'vidlink', 'autoembed', 'vidsrcpm']);
+eq('in the app, sharpest first: VidFast, VidRock, VixSrc, VidZee, VidNest', cleanFirst(pool).map((s) => s.id), ['vidfast', 'vidrock', 'vixsrc', 'vidzee', 'vidnest', 'vidlink', 'vidlove', 'vidsrcto', 'autoembed', 'vidsrcsu', 'vidsrcsh', '2embed', 'vidsrcio', 'vidsrcpm']);
+eq('the pool itself is untouched', pool.map((s) => s.id), ['vidzee', 'vidfast', 'vidrock', 'vixsrc', 'vidnest', 'vidlove', 'vidlink', 'vidsrcto', 'autoembed', 'vidsrcsu', 'vidsrcsh', '2embed', 'vidsrcio', 'vidsrcpm']);
 
 console.log('\nthe relay address');
 eq('playlist and referer are both carried', relayUrl('https://a.test/x.m3u8?t=1&b=2', 'https://vidrock.to/'),
