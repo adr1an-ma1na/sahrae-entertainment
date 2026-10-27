@@ -1568,6 +1568,13 @@ html.tv-mode .lux-spot::before { display: none; }
   .lux-stage .lux-kicker { color: var(--acc-300); }
   .lux-stage .lux-kicker::before { background: linear-gradient(90deg, transparent, var(--acc-300)); }
 
+  /* The showcase dissolves into whatever lies behind it (the room glow), so
+     there is no seam where the artwork ends. TVs keep the cheaper gradient foot. */
+  .lux-fade-foot {
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 110px), transparent);
+            mask-image: linear-gradient(to bottom, #000 calc(100% - 110px), transparent);
+  }
+
   /* Round previous/next on a shelf header. */
   .lux-arrow {
     width: 2.25rem; height: 2.25rem; border-radius: 9999px; align-items: center; justify-content: center;
@@ -1595,3 +1602,4 @@ html.tv-mode .lux-spot::before { display: none; }
 }
 @keyframes lux-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 html.tv-mode .lux-rank, html.low-gfx .lux-rank { text-shadow: none; }
+html.tv-mode .lux-fade-foot, html.low-gfx .lux-fade-foot { -webkit-mask-image: none; mask-image: none; }

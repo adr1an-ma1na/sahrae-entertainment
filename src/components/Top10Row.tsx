@@ -8,9 +8,10 @@ interface Top10RowProps {
   items: MediaItem[];
   onPlay: (id: number, type: 'movie' | 'tv', startInInfo?: boolean) => void;
   title?: string;
+  kicker?: string;
 }
 
-export default function Top10Row({ items, onPlay, title = "Top 10 Trending Today" }: Top10RowProps) {
+export default function Top10Row({ items, onPlay, title = "Top 10 Trending Today", kicker = "Trending this week" }: Top10RowProps) {
   const top10Items = items.slice(0, 10);
   const rail = useRail([items]);
 
@@ -19,7 +20,7 @@ export default function Top10Row({ items, onPlay, title = "Top 10 Trending Today
   return (
     <div className="px-4 md:px-12 py-6 relative">
       <RailHeader
-        title={t(title)} kicker="Ranked today"
+        title={t(title)} kicker={kicker}
         canPrev={rail.canPrev} canNext={rail.canNext} onPrev={rail.prev} onNext={rail.next}
       />
       <div

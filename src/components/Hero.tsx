@@ -12,18 +12,20 @@ interface HeroProps {
   genreName?: (id: number) => string | undefined;
   inList?: (id: number) => boolean;
   onToggleList?: (item: MediaItem) => void;
+  /** What the rank counts, after "No. 1": TMDB trending is weekly. */
+  rankLabel?: string;
 }
 
 const SLIDES = 5;
 const SLIDE_MS = 9000;
 
 /**
- * The showcase at the top of Home: today's top five, one at a time, with the
+ * The showcase at the top of Home: this week's top five, one at a time, with the
  * artwork cross-fading and a strip of the others to jump between. It holds
  * still while it is pointed at, focused, off screen, in a background tab, or
  * when the viewer has asked for less motion.
  */
-export default function Hero({ items, onPlay, genreName, inList, onToggleList }: HeroProps) {
+export default function Hero({ items, onPlay, genreName, inList, onToggleList, rankLabel = 'this week' }: HeroProps) {
   const slides = items.filter((m) => m.backdrop_path).slice(0, SLIDES);
   const [i, setI] = useState(() => Math.floor(Math.random() * Math.max(1, Math.min(3, slides.length))));
   const [held, setHeld] = useState(false);
@@ -66,7 +68,7 @@ export default function Hero({ items, onPlay, genreName, inList, onToggleList }:
   return (
     <div
       ref={rootRef}
-      className="lux-stage relative h-[85vh] min-h-[520px] w-full overflow-hidden bg-zinc-950"
+      className="lux-stage lux-fade-foot relative h-[85vh] min-h-[520px] w-full overflow-hidden bg-zinc-950"
       onMouseEnter={() => setHeld(true)}
       onMouseLeave={() => setHeld(false)}
       onFocusCapture={() => setHeld(true)}
@@ -101,7 +103,7 @@ export default function Hero({ items, onPlay, genreName, inList, onToggleList }:
         <div className="flex flex-col 2xl:flex-row 2xl:items-end 2xl:justify-between gap-6 2xl:gap-8">
           <div key={item.id} className="max-w-2xl lux-enter">
             <p className="lux-kicker mb-3">
-              {rank > 0 ? `No. ${rank} today` : 'Featured'} · {type === 'movie' ? 'Film' : 'Series'}
+              {rank > 0 ? `No. ${rank} ${rankLabel}` : 'Featured'} · {type === 'movie' ? 'Film' : 'Series'}
             </p>
 
             <h1 className="tv-hero-title lux-title mb-4 drop-shadow-2xl text-4xl md:text-6xl lg:text-7xl pb-1">

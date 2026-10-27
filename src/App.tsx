@@ -578,9 +578,9 @@ export default function App() {
           </>
         );
       case 'movies':
-        return <DiscoveryView type="movie" genres={movieGenres} onPlay={handlePlay} />;
+        return <DiscoveryView type="movie" genres={movieGenres} onPlay={handlePlay} inList={(id) => myList.some((m) => m.id === id)} onToggleList={toggleMyList} />;
       case 'series':
-        return <DiscoveryView type="tv" genres={tvGenres} onPlay={handlePlay} />;
+        return <DiscoveryView type="tv" genres={tvGenres} onPlay={handlePlay} inList={(id) => myList.some((m) => m.id === id)} onToggleList={toggleMyList} />;
       case 'channels':
         return <FlowChannelsView onPlay={handlePlay} />;
       case 'mylist':
