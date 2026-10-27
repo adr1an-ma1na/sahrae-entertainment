@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { useRail } from '../hooks/useRail';
+import { haptics } from '../services/haptics';
 import type HlsT from 'hls.js';
 import { useHls } from '../services/hlsLoader';
-import { X, Maximize, Search, Heart, RadioTower, Loader2, WifiOff, Play } from 'lucide-react';
+import { X, Maximize, Search, Heart, Loader2, WifiOff, Play } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import Coachmark from './Coachmark';
 import Illustration from './ui/Illustration';
-import { LuxHeader, LuxGlow, LiveMeta } from './ui/Lux';
+import { LiveMeta, LuxChapter, RailHeader } from './ui/Lux';
 
 interface Channel { name: string; country: string; category: Category; url: string; kind?: 'hls' | 'yt' }
 type Category = 'News' | 'Regional' | 'Sports' | 'Documentary' | 'Science' | 'Wildlife' | 'Anime' | 'Music' | 'Kids' | 'Lifestyle';
@@ -206,6 +208,202 @@ function HLSPlayer({ src, onOffline }: { src: string; onOffline: () => void }) {
   return <video ref={videoRef} className="absolute inset-0 w-full h-full object-contain bg-black" controls autoPlay playsInline />;
 }
 
+// What each kind of channel is, in a line, for the showcase.
+const CAT_NOTE: Record<Category, string> = {
+  News: 'Round-the-clock news, live from the newsroom.',
+  Regional: 'Local stations, live.',
+  Sports: 'Live sport, highlights and the shows around them.',
+  Documentary: 'True stories, history and the world in depth.',
+  Science: 'Space and science, around the clock.',
+  Wildlife: 'Nature and wildlife, all day long.',
+  Anime: 'Anime and cartoons, all day.',
+  Music: 'Music channels, non-stop.',
+  Kids: 'Shows for children, all day.',
+  Lifestyle: 'Fashion and lifestyle, around the clock.',
+};
+// The shelf title for each category.
+const CAT_TITLE: Record<Category, string> = {
+  News: 'World news', Regional: 'Regional', Sports: 'Live sport', Documentary: 'Documentaries',
+  Science: 'Science and space', Wildlife: 'Wildlife and nature', Anime: 'Anime and cartoons',
+  Music: 'Music', Kids: 'Kids', Lifestyle: 'Fashion and lifestyle',
+};
+// The page in chapters, each a few categories.
+const CHAPTERS: { kicker: string; title: string; cats: Category[] }[] = [
+  { kicker: 'The news desk', title: 'Live from the newsroom', cats: ['News', 'Regional'] },
+  { kicker: 'Sport', title: 'Game on', cats: ['Sports'] },
+  { kicker: 'The world around us', title: 'Stories of the planet', cats: ['Documentary', 'Science', 'Wildlife'] },
+  { kicker: 'Entertainment', title: 'Something for everyone', cats: ['Anime', 'Music', 'Lifestyle', 'Kids'] },
+];
+// The showcase: one channel from each corner of the guide.
+const SHOWCASE = ['Al Jazeera English', 'Red Bull TV', 'Love Nature', 'DW Documentary', 'Sky News'];
+const SLIDE_MS = 8000;
+
+/**
+ * The top of Live TV: a channel at a time, full width, in its category's
+ * colours with its monogram as a broadcast ident. It holds still while pointed
+ * at, focused, off screen, in a background tab, or under reduced motion.
+ */
+function LiveShowcase({ channels, resumed, favs, onWatch, onFav }: {
+  channels: Channel[]; resumed: boolean; favs: string[];
+  onWatch: (ch: Channel) => void; onFav: (name: string) => void;
+}) {
+  const [i, setI] = useState(0);
+  const [held, setHeld] = useState(false);
+  const [away, setAway] = useState(false);
+  const rootRef = useRef<HTMLElement>(null);
+  const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const count = channels.length;
+  const idx = count ? i % count : 0;
+
+  useEffect(() => {
+    const el = rootRef.current;
+    let visible = true;
+    const sync = () => setAway(!visible || document.hidden);
+    const io = el && 'IntersectionObserver' in window
+      ? new IntersectionObserver(([e]) => { visible = e.isIntersecting; sync(); }, { threshold: 0.35 })
+      : null;
+    if (el && io) io.observe(el);
+    document.addEventListener('visibilitychange', sync);
+    return () => { io?.disconnect(); document.removeEventListener('visibilitychange', sync); };
+  }, []);
+
+  const running = count > 1 && !held && !away && !reduce;
+  useEffect(() => {
+    if (!running) return;
+    const timer = setTimeout(() => setI((x) => (x + 1) % count), SLIDE_MS);
+    return () => clearTimeout(timer);
+  }, [running, idx, count]);
+
+  if (!count) return null;
+  const ch = channels[idx];
+  const fav = favs.includes(ch.name);
+
+  return (
+    <section
+      ref={rootRef}
+      aria-label="Featured channels"
+      className="lux-stage lux-fade-foot relative h-[72vh] min-h-[500px] w-full overflow-hidden bg-zinc-950"
+      onMouseEnter={() => setHeld(true)}
+      onMouseLeave={() => setHeld(false)}
+      onFocusCapture={() => setHeld(true)}
+      onBlurCapture={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setHeld(false); }}
+    >
+      {channels.map((c, n) => (
+        <div key={c.name} aria-hidden className={`absolute inset-0 transition-opacity duration-[1200ms] ease-out ${n === idx ? 'opacity-100' : 'opacity-0'}`}>
+          <div className={`absolute inset-0 bg-gradient-to-br ${CAT_STYLE[c.category]} opacity-70`} />
+          <span className="absolute right-[-6%] top-[42%] -translate-y-1/2 font-display font-black leading-none tracking-tighter text-[#fff]/[0.09] select-none text-[44vw] md:text-[24vw]">
+            {initials(c.name)}
+          </span>
+        </div>
+      ))}
+      <div aria-hidden className="absolute inset-0 lux-scan" />
+      <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-black/90 via-black/55 to-black/10" />
+      <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-black via-black/35 to-transparent" />
+
+      <div className="tv-hero-body absolute bottom-0 left-0 w-full px-4 md:px-12 pb-24 md:pb-28 pt-28 z-10">
+        <div key={ch.name} className="max-w-2xl lux-enter">
+          <div className="flex flex-wrap items-center gap-3 mb-3">
+            <span className="flex items-center gap-1.5 bg-red-500 text-[#fff] px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider"><span className="w-1.5 h-1.5 rounded-full bg-[#fff] animate-pulse" /> On air</span>
+            <p className="lux-kicker">{resumed && idx === 0 ? 'Pick up where you left off' : `Live now · ${ch.category}`}</p>
+          </div>
+          <h1 className="tv-hero-title lux-title text-5xl md:text-7xl pb-1 mb-3">{ch.name}</h1>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-semibold text-zinc-200 mb-4">
+            <span>{ch.country}</span>
+            <span className="w-1 h-1 rounded-full bg-zinc-500" />
+            <LiveMeta>{CHANNELS.length} channels on air</LiveMeta>
+          </div>
+          <p className="tv-hero-desc text-zinc-300 text-base md:text-lg mb-7 max-w-xl">{CAT_NOTE[ch.category]}</p>
+          <div className="flex items-center gap-3">
+            <button onClick={() => { haptics.press(); onWatch(ch); }} data-tv-focusable className="lux-btn px-7 md:px-9 py-3 text-base md:text-lg">
+              <Play className="w-5 h-5 fill-current" /> Watch live
+            </button>
+            <button
+              onClick={() => { haptics.tap(); onFav(ch.name); }} data-tv-focusable aria-pressed={fav}
+              aria-label={fav ? `Remove ${ch.name} from favourites` : `Add ${ch.name} to favourites`}
+              className={`btn-glass w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${fav ? 'text-amber-300' : ''}`}
+            >
+              <Heart className={`w-5 h-5 ${fav ? 'fill-current' : ''}`} />
+            </button>
+          </div>
+        </div>
+        {count > 1 && (
+          <div className="mt-8 flex gap-2 w-full max-w-[220px]" role="tablist" aria-label="Featured channels">
+            {channels.map((c, n) => (
+              <button
+                key={c.name} type="button" role="tab" aria-selected={n === idx} aria-label={`Show ${c.name}`} data-tv-focusable
+                onClick={() => { haptics.tap(); setI(n); }}
+                className="flex-1 py-2 focus:outline-none group"
+              >
+                <span className="block h-[3px] rounded-full bg-[#fff]/20 overflow-hidden group-focus-visible:ring-2 group-focus-visible:ring-amber-400">
+                  <span
+                    key={n === idx ? `on-${idx}-${running}` : 'off'}
+                    className={`block h-full origin-left rounded-full ${n === idx ? (running ? 'lux-slide-fill' : 'bg-amber-400') : 'scale-x-0'}`}
+                    style={n === idx && running ? { animationDuration: `${SLIDE_MS}ms` } : undefined}
+                  />
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/** A channel as a 16:9 ident card: its category's colours, its monogram, live. */
+function ChannelTile({ ch, fav, onOpen, onFav }: { ch: Channel; fav: boolean; onOpen: () => void; onFav: () => void }) {
+  return (
+    <div
+      role="button" tabIndex={0} data-tv-focusable aria-label={`Watch ${ch.name}`} onClick={onOpen}
+      className="lux-card group flex-none w-[220px] md:w-[270px] snap-start cursor-pointer focus:outline-none"
+    >
+      <div className="relative aspect-video overflow-hidden rounded-[inherit]">
+        <div className={`absolute inset-0 bg-gradient-to-br ${CAT_STYLE[ch.category]} transition-transform duration-700 group-hover:scale-105`} />
+        <span aria-hidden className="absolute inset-0 bg-gradient-to-br from-white/25 via-transparent to-black/50" />
+        <span aria-hidden className="absolute -right-2 -bottom-5 font-display font-black leading-none tracking-tighter text-[#fff]/[0.16] text-[104px] md:text-[124px] select-none">{initials(ch.name)}</span>
+        <span className="absolute top-2.5 left-2.5 flex items-center gap-1.5 bg-black/45 backdrop-blur px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider text-[#fff]">
+          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> Live
+        </span>
+        <button
+          onClick={(e) => { e.stopPropagation(); haptics.tap(); onFav(); }}
+          aria-label={fav ? `Remove ${ch.name} from favourites` : `Add ${ch.name} to favourites`} aria-pressed={fav}
+          className={`absolute top-1.5 right-1.5 p-2 rounded-full bg-black/35 backdrop-blur ${fav ? 'text-amber-300' : 'text-[#fff]/80 hover:text-[#fff]'}`}
+        >
+          <Heart className={`w-3.5 h-3.5 ${fav ? 'fill-current' : ''}`} />
+        </button>
+        <span aria-hidden className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+          <span className="btn-gold w-11 h-11 rounded-full flex items-center justify-center shadow-lg"><Play className="w-5 h-5 fill-current ml-0.5" /></span>
+        </span>
+        <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/80 to-transparent">
+          <p className="text-sm font-bold text-[#fff] truncate">{ch.name}</p>
+          <p className="text-[11px] text-[#fff]/70 truncate">{ch.country}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChannelRail({ title, kicker, channels, favs, onOpen, onFav }: {
+  title: string; kicker?: string; channels: Channel[]; favs: string[];
+  onOpen: (ch: Channel) => void; onFav: (name: string) => void;
+}) {
+  const rail = useRail([channels.length]);
+  if (!channels.length) return null;
+  return (
+    <div className="px-4 md:px-12 py-5">
+      <RailHeader
+        title={title} kicker={kicker} count={channels.length} unit="channels"
+        canPrev={rail.canPrev} canNext={rail.canNext} onPrev={rail.prev} onNext={rail.next}
+      />
+      <div ref={rail.ref} className="flex gap-3 md:gap-4 overflow-x-auto pt-1 pb-4 scrollbar-hide snap-x scroll-smooth">
+        {channels.map((ch) => (
+          <ChannelTile key={ch.name} ch={ch} fav={favs.includes(ch.name)} onOpen={() => onOpen(ch)} onFav={() => onFav(ch.name)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function LiveTVView() {
   const [cat, setCat] = useState<string>('All');
   const [query, setQuery] = useState('');
@@ -238,7 +436,12 @@ export default function LiveTVView() {
   }, [cat, query, favs]);
 
   const recentChannels = (recent.map((n) => CHANNELS.find((c) => c.name === n)).filter(Boolean) as Channel[]);
-  const featured: Channel | undefined = recentChannels[0] || CHANNELS.find((c) => c.category === 'News') || CHANNELS[0];
+  const showcase = useMemo(() => {
+    const names = [recent[0], ...SHOWCASE].filter((n): n is string => !!n);
+    return [...new Set(names)].map((n) => CHANNELS.find((c) => c.name === n)).filter(Boolean).slice(0, 5) as Channel[];
+  }, [recent]);
+  const favChannels = favs.map((n) => CHANNELS.find((c) => c.name === n)).filter(Boolean) as Channel[];
+  const searching = !!query.trim() || cat !== 'All';
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && active) setActive(null); };
@@ -272,9 +475,7 @@ export default function LiveTVView() {
   );
 
   return (
-    <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-12 relative">
-      {/* Aurora glow behind the header */}
-      <LuxGlow />
+    <div className="min-h-screen pb-16 relative">
       {/* Player */}
       {active && (
         <div role="dialog" data-tv-layer className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center backdrop-blur-sm p-3 md:p-10">
@@ -321,70 +522,64 @@ export default function LiveTVView() {
         </div>
       )}
 
-      {/* Header */}
-      <LuxHeader kicker={<><RadioTower className="w-3.5 h-3.5" /> Sahrae · Live</>} title="Live TV"
-        meta={<><LiveMeta>{CHANNELS.length} channels on air</LiveMeta><span>News, sport, documentary and more</span></>}
-        right={
-          <div className="relative w-72 max-w-full">
-            <Search className="absolute z-10 left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search channels…" className="w-full lux-field pl-10 pr-4 py-3 text-sm" />
-          </div>
-        } />
 
-      {/* Featured: the channel you watched last, else the first news channel. */}
-      {featured && !query.trim() && cat === 'All' && (
-        <section role="button" tabIndex={0} data-tv-focusable aria-label={`Watch ${featured.name}`} onClick={() => open(featured)}
-          className="lux-spot mb-10 p-6 md:p-9 cursor-pointer group lux-enter">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-6">
-            <div className={`w-28 h-28 md:w-36 md:h-36 rounded-3xl bg-gradient-to-br ${CAT_STYLE[featured.category]} flex items-center justify-center shrink-0 relative overflow-hidden ring-1 ring-white/20 shadow-2xl`}>
-              <span aria-hidden className="absolute inset-0 bg-gradient-to-br from-white/30 via-transparent to-black/30" />
-              <span className="relative font-display font-black text-white text-4xl md:text-5xl drop-shadow">{initials(featured.name)}</span>
+      <LiveShowcase channels={showcase} resumed={recentChannels.length > 0} favs={favs} onWatch={open} onFav={toggleFav} />
+
+      <div className="-mt-16 relative z-10">
+        <div className="px-4 md:px-12"><Coachmark id="livetv" text="Tap any channel to start watching. The news channels stream live 24/7." /></div>
+
+        {(recentChannels.length > 0 || favChannels.length > 0) && (
+          <>
+            <LuxChapter kicker="Your channels" title="Back to your channels" note="What you watched last, and the ones you keep." />
+            <ChannelRail title="Recently watched" channels={recentChannels} favs={favs} onOpen={open} onFav={toggleFav} />
+            <ChannelRail title="Favourites" channels={favChannels} favs={favs} onOpen={open} onFav={toggleFav} />
+          </>
+        )}
+
+        {CHAPTERS.map((chap) => {
+          const rails = chap.cats.map((c) => ({ c, list: CHANNELS.filter((x) => x.category === c) })).filter((r) => r.list.length);
+          if (!rails.length) return null;
+          return (
+            <section key={chap.kicker}>
+              <LuxChapter kicker={chap.kicker} title={chap.title} />
+              {rails.map((r) => (
+                <ChannelRail key={r.c} title={CAT_TITLE[r.c]} channels={r.list} favs={favs} onOpen={open} onFav={toggleFav} />
+              ))}
+            </section>
+          );
+        })}
+
+        <LuxChapter kicker="The guide" title="Every channel" note="Search by name or country, or pick a category." />
+        <div className="px-4 md:px-12 mt-4">
+          <div className="flex flex-col md:flex-row md:items-center gap-3 mb-6">
+            <div className="relative w-full md:w-80 shrink-0">
+              <Search className="absolute z-10 left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search channels…" aria-label="Search channels" className="w-full lux-field pl-10 pr-4 py-3 text-sm" />
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="flex items-center gap-1.5 bg-red-500 text-white px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider"><span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> On air</span>
-                <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-zinc-400">{recentChannels.length ? 'Pick up where you left off' : 'Featured channel'}</span>
-              </div>
-              <h3 className="lux-title text-3xl md:text-5xl truncate pb-1">{featured.name}</h3>
-              <p className="text-sm text-zinc-400 mt-1">{featured.country} · {featured.category}</p>
+            <div className="flex overflow-x-auto gap-2 pb-1 scrollbar-hide min-w-0">
+              {cats.map((c) => (
+                <button key={c} onClick={() => setCat(c)} tabIndex={0} data-tv-focusable
+                  aria-pressed={cat === c} className="lux-chip">
+                  {c === 'Favorites' && <Heart className="w-3 h-3" />}{c === 'Favorites' ? 'Favourites' : c}
+                </button>
+              ))}
             </div>
-            <span className="lux-btn px-7 py-3.5 text-sm self-start sm:self-center"><Play className="w-4 h-4 fill-current" /> Watch live</span>
           </div>
-        </section>
-      )}
 
-      <Coachmark id="livetv" text="Tap any channel to start watching. The news channels stream live 24/7." />
-
-      {/* Categories */}
-      <div className="flex overflow-x-auto gap-2 pb-2 mb-8 scrollbar-hide">
-        {cats.map((c) => (
-          <button key={c} onClick={() => setCat(c)} tabIndex={0} data-tv-focusable
-            aria-pressed={cat === c} className="lux-chip">
-            {c === 'Favorites' && <Heart className="w-3 h-3" />}{c}
-          </button>
-        ))}
+          {searching && <p className="text-xs font-semibold text-zinc-500 mb-3 tabular">{visible.length} of {CHANNELS.length} channels</p>}
+          {visible.length === 0 ? (
+            <div className="flex flex-col items-center text-center py-10">
+              <Illustration name={cat === 'Favorites' ? 'favorites' : 'tv'} className="w-44 md:w-52 h-auto mb-4" />
+              <p className="text-white font-semibold mb-1">{cat === 'Favorites' ? 'No favourite channels yet' : 'No channels match'}</p>
+              <p className="text-zinc-400 text-sm max-w-xs">{cat === 'Favorites' ? 'Tap the heart on any channel to keep it here.' : 'Try a different search or category.'}</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
+              {visible.map(renderCard)}
+            </div>
+          )}
+        </div>
       </div>
-
-      {/* Recently watched */}
-      {!query.trim() && cat === 'All' && recentChannels.length > 0 && (
-        <section className="mb-8">
-          <h3 className="lux-h text-xl mb-4">Recently watched</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">{recentChannels.map(renderCard)}</div>
-        </section>
-      )}
-
-      {/* Channels */}
-      {visible.length === 0 ? (
-        <div className="flex flex-col items-center text-center py-10">
-          <Illustration name={cat === 'Favorites' ? 'favorites' : 'tv'} className="w-44 md:w-52 h-auto mb-4" />
-          <p className="text-white font-semibold mb-1">{cat === 'Favorites' ? 'No favourite channels yet' : 'No channels match'}</p>
-          <p className="text-zinc-400 text-sm max-w-xs">{cat === 'Favorites' ? 'Tap the heart on any channel to keep it here.' : 'Try a different search or category.'}</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
-          {visible.map(renderCard)}
-        </div>
-      )}
     </div>
   );
 }

@@ -490,12 +490,17 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   // In Sahrae's own player every server plays without its adverts, so the
   // clearest picture (highest bitrate, measured) goes first.
   if (poolSnap.current.key !== poolKey) poolSnap.current = { key: poolKey, list: nativeShell && canPlayClean() && isCleanOn() ? cleanFirst(livePool) : livePool };
-  // With Ad Shield on (web), a server known to refuse the sandbox would only
-  // show its "remove the sandbox" screen, so it is left out rather than
-  // offered and failed. If that would leave nothing, all are kept.
-  const shielded = poolSnap.current.list.filter((p) => !(shieldAppliesHere() && shieldOn && refusesSandbox(p.movie.replace('{id}', '1'))))
+  // Every server in the pool is offered (the owner's list stays whole). With
+  // Ad Shield on (web), the servers that play inside it come first; the ones
+  // that refuse it follow and load without it (playerSandbox), with a note
+  // saying so under the player.
+  const refuses = (p: PoolServer) => shieldAppliesHere() && shieldOn && refusesSandbox(p.movie.replace('{id}', '1'));
+  const shielded = poolSnap.current.list
     // Some servers' own pages are not fit to show on the web; the app hides the page.
-    .filter((p) => nativeShell || p.web !== false);
+    .filter((p) => nativeShell || p.web !== false)
+    .map((p, i) => ({ p, i }))
+    .sort((a, b) => Number(refuses(a.p)) - Number(refuses(b.p)) || a.i - b.i)
+    .map((x) => x.p);
   const SERVERS = (shielded.length ? shielded : poolSnap.current.list).map((p) => ({
     id: p.id,
     name: poolLabel(p),

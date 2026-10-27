@@ -56,8 +56,8 @@ export function LiveMeta({ children }: { children: ReactNode }) {
  * round previous/next buttons on pointer screens (touch and D-pad scroll the
  * rail themselves).
  */
-export function RailHeader({ title, kicker, icon, count, canPrev, canNext, onPrev, onNext }: {
-  title: ReactNode; kicker?: ReactNode; icon?: ReactNode; count?: number;
+export function RailHeader({ title, kicker, icon, count, unit = "titles", canPrev, canNext, onPrev, onNext }: {
+  title: ReactNode; kicker?: ReactNode; icon?: ReactNode; count?: number; unit?: string;
   canPrev?: boolean; canNext?: boolean; onPrev?: () => void; onNext?: () => void;
 }) {
   return (
@@ -68,7 +68,7 @@ export function RailHeader({ title, kicker, icon, count, canPrev, canNext, onPre
       </div>
       {(onPrev || onNext || count) ? (
         <div className="shrink-0 flex items-center gap-2">
-          {count ? <span className="hidden sm:inline text-xs font-semibold text-zinc-500 tabular mr-1">{count} titles</span> : null}
+          {count ? <span className="hidden sm:inline text-xs font-semibold text-zinc-500 tabular mr-1">{count} {unit}</span> : null}
           {onPrev && (
             <button type="button" onClick={onPrev} disabled={!canPrev} aria-label="Scroll back" className="lux-arrow hidden md:inline-flex">
               <ChevronLeft className="w-4 h-4" />
