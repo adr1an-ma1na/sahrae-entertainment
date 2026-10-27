@@ -600,7 +600,7 @@ export default function PodcastsHome() {
             </div>
             <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 mb-1">
               {EP_FILTERS.map((f) => (
-                <button key={f.k} onClick={() => setEpFilter(f.k)} className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap border transition-colors ${epFilter === f.k ? 'bg-sauti text-amber-950 border-transparent' : 'glass-liquid text-white border-transparent'}`}>{f.label}</button>
+                <button key={f.k} onClick={() => setEpFilter(f.k)} aria-pressed={epFilter === f.k} className="lux-chip">{f.label}</button>
               ))}
             </div>
             {filteredEps.length === 0 ? (
@@ -610,7 +610,7 @@ export default function PodcastsHome() {
               const played = pr?.state === 'played';
               const inProg = pr?.state === 'in_progress';
               return (
-                <div key={ep.id} className="tier-card card-lift rounded-xl p-3 flex items-center gap-3">
+                <div key={ep.id} className="lux-card p-3 flex items-center gap-3">
                   <button onClick={() => setEpisodeView(ep)} tabIndex={0} data-tv-focusable className="flex items-center gap-3 min-w-0 flex-1 text-left">
                     <div className={`w-14 h-14 rounded-lg overflow-hidden bg-zinc-800 shrink-0 relative ${played ? 'opacity-60' : ''}`}><CoverArt imageUrl={ep.artwork} dominantColor={ep.dominantColor} rounded="" className="absolute inset-0 w-full h-full" /></div>
                     <div className="min-w-0 flex-1">
@@ -638,8 +638,8 @@ export default function PodcastsHome() {
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Search */}
       <div className="relative mb-6 max-w-lg">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search podcasts…" className="w-full bg-zinc-900/70 border border-white/10 rounded-full pl-10 pr-4 py-3 text-sm text-white focus:outline-none focus:border-amber-500/60" />
+        <Search className="absolute z-10 left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search podcasts…" className="w-full lux-field pl-10 pr-4 py-3 text-sm" />
       </div>
 
       {query.trim() ? (
@@ -682,7 +682,7 @@ export default function PodcastsHome() {
                   <button key={b.id} onClick={() => setBucket(on ? null : b.id)} tabIndex={0} data-tv-focusable
                     aria-pressed={on}
                     className={`card-lift relative overflow-hidden rounded-2xl border p-4 min-h-[88px] text-left transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${
-                      on ? `${b.ring} bg-gradient-to-br ${b.grad}` : 'border-white/10 bg-zinc-900/50 hover:border-white/20'
+                      on ? `${b.ring} bg-gradient-to-br ${b.grad}` : 'border-white/10 bg-zinc-900/60 hover:border-amber-400/40 hover:shadow-[0_16px_36px_-18px_rgb(var(--acc-rgb)/0.5)]'
                     }`}>
                     {/* A waveform, not a clock icon — it reads as audio at a
                         glance and gives each tile a bit of character. */}
@@ -707,7 +707,7 @@ export default function PodcastsHome() {
                     {bucketEps.map((e) => (
                       <button key={e.id} onClick={() => onListen(e)} tabIndex={0} data-tv-focusable
                         aria-label={`Play ${e.title}`}
-                        className="card-lift tier-card rounded-xl p-2.5 flex items-center gap-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400">
+                        className="lux-card p-2.5 flex items-center gap-3 text-left focus:outline-none">
                         <div className="w-12 h-12 rounded-lg overflow-hidden bg-zinc-800 shrink-0 relative"><CoverArt imageUrl={e.artwork} dominantColor={e.dominantColor} rounded="" className="absolute inset-0 w-full h-full" /></div>
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-semibold text-white truncate">{e.title}</p>
@@ -827,8 +827,7 @@ export default function PodcastsHome() {
             <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2 mb-3">
               {CHART_MARKETS.map((m) => (
                 <button key={m.cc} onClick={() => { setChartCountry(m.cc); setChartAll(false); }} tabIndex={0} data-tv-focusable
-                  aria-pressed={chartCountry === m.cc}
-                  className={`px-3.5 py-2 rounded-full text-xs font-bold whitespace-nowrap border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${chartCountry === m.cc ? 'bg-sauti text-amber-950 border-transparent' : 'glass-liquid text-white border-transparent'}`}>{m.flag} {m.name}</button>
+                  aria-pressed={chartCountry === m.cc} className="lux-chip focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400">{m.flag} {m.name}</button>
               ))}
             </div>
             {chartLoading && !charts[chartCountry]?.length ? (
@@ -839,7 +838,7 @@ export default function PodcastsHome() {
                   {(charts[chartCountry] || []).slice(0, 3).map((t, i) => (
                     <button key={t.id} onClick={() => setShowView(t)} tabIndex={0} data-tv-focusable
                       aria-label={`${t.title}, number ${i + 1}`}
-                      className="card-lift group relative rounded-2xl overflow-hidden border border-white/10 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400">
+                      className="lux-card group text-left focus:outline-none">
                       <div className="aspect-square relative bg-zinc-800">
                         <CoverArt imageUrl={t.artworkLarge || t.artwork} dominantColor={t.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />

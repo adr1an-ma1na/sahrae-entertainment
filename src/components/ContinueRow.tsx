@@ -34,8 +34,7 @@ export default function ContinueRow({
   return (
     <div className="px-4 md:px-12 py-6">
       <div className="flex items-center gap-3 mb-4">
-        <span className="w-1 h-5 md:h-6 rounded-full bg-gradient-to-b from-amber-300 to-amber-600" />
-        <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">{t('Jump back in')}</h2>
+        <h2 className="lux-h text-xl md:text-2xl">{t('Jump back in')}</h2>
       </div>
 
       <div className="flex gap-3 md:gap-4 overflow-x-auto pb-4 custom-scrollbar snap-x">

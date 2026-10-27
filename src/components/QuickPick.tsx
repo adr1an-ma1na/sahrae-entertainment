@@ -34,7 +34,7 @@ export default function QuickPick({ onPlay }: { onPlay: (id: number, type: 'movi
   return (
     <section className="mt-8">
       <div className="px-4 md:px-12">
-        <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight flex items-center gap-2"><Sparkles className="w-5 h-5 text-amber-400" />{t('What fits right now?')}</h2>
+        <h2 className="lux-h text-xl md:text-2xl"><Sparkles className="w-5 h-5 text-amber-400" />{t('What fits right now?')}</h2>
         <div className="mt-3 flex flex-col gap-2">
           <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
             <span className="shrink-0 text-xs text-zinc-400 flex items-center gap-1"><Clock3 className="w-3.5 h-3.5" />{t('Time you have')}</span>

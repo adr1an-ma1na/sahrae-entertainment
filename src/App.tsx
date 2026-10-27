@@ -46,7 +46,7 @@ import AddToPlaylistSheet from './components/AddToPlaylistSheet';
 import { BrowseSkeleton, GridSkeleton, ListSkeleton } from './components/PageSkeleton';
 import SpotlightBand from './components/SpotlightBand';
 import ContinueRow from './components/ContinueRow';
-import { ChevronDown, AlertCircle, RefreshCw, Heart } from 'lucide-react';
+import { ChevronDown, AlertCircle, RefreshCw, Heart, Search, Film, Users } from 'lucide-react';
 import { fetchTrending, fetchDiscover, searchMedia, fetchGenres, fetchRecommendations, MediaItem, Genre } from './services/tmdb';
 import { useMyList } from './hooks/useMyList';
 import { useWatchProgress } from './hooks/useWatchProgress';
@@ -60,6 +60,7 @@ import Coachmark from './components/Coachmark';
 import { applyEq, loadEq } from './services/eq';
 import { startSync } from './services/cloudSync';
 import Illustration from './components/ui/Illustration';
+import { LuxHeader, LuxGlow, LuxSeg } from './components/ui/Lux';
 import { crumb } from './services/bootCrumbs';
 
 export default function App() {
@@ -567,28 +568,14 @@ export default function App() {
         return <ContinueWatchingView onPlay={handlePlay} onBrowse={() => navigate('movies')} />;
       case 'search':
         return (
-          <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto pb-12">
-            {/* Category Toggle Tabs */}
-            <div className="flex gap-6 border-b border-white/10 pb-4 mb-6">
-              <button
-                onClick={() => { haptics.tap(); setSearchCategory('media'); }}
-                className={`text-lg md:text-xl font-display font-bold pb-1 transition-all relative outline-none cursor-pointer ${
-                  searchCategory === 'media' ? 'text-amber-500' : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                Movies & Shows
-                {searchCategory === 'media' && <div className="absolute -bottom-[17px] left-0 right-0 h-0.5 bg-amber-500 rounded-full" />}
-              </button>
-              <button
-                onClick={() => { haptics.tap(); setSearchCategory('talent'); }}
-                className={`text-lg md:text-xl font-display font-bold pb-1 transition-all relative outline-none cursor-pointer ${
-                  searchCategory === 'talent' ? 'text-amber-500' : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                Directors & Actors
-                {searchCategory === 'talent' && <div className="absolute -bottom-[17px] left-0 right-0 h-0.5 bg-amber-500 rounded-full" />}
-              </button>
-            </div>
+          <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto pb-12 relative">
+            <LuxGlow />
+            <LuxHeader kicker={<><Search className="w-3.5 h-3.5" /> Sahrae · Discover</>} title="Search"
+              meta={<span>Every film and series, and the people who make them</span>}
+              right={<LuxSeg active={searchCategory} onChange={(c) => { haptics.tap(); setSearchCategory(c); }} items={[
+                { id: 'media', label: 'Movies & Shows', icon: Film },
+                { id: 'talent', label: 'Directors & Actors', icon: Users },
+              ]} />} />
 
             {searchCategory === 'talent' ? (
               <TalentExplorer onPlay={handlePlay} />
@@ -596,15 +583,15 @@ export default function App() {
               <>
                 <SearchBox value={searchQuery} onSearch={handleSearch} />
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-                  <h2 className="text-2xl font-bold text-white">
-                    {searchQuery ? `Search Results for "${searchQuery}"` : 'Discover'}
+                  <h2 className="lux-h text-2xl">
+                    {searchQuery ? `Results for "${searchQuery}"` : 'Discover'}
                   </h2>
                   
-                  <div className="flex flex-wrap items-center gap-3 bg-zinc-900/80 p-2 rounded-xl border border-white/5">
+                  <div className="flex flex-wrap items-center gap-2">
                     <select 
                       value={searchType} 
                       onChange={(e) => setSearchType(e.target.value as any)}
-                      className="bg-zinc-800 text-white text-sm rounded-lg px-3 py-1.5 border border-white/10 focus:outline-none focus:border-amber-500 cursor-pointer"
+                      className="lux-field text-sm font-semibold pl-4 py-2.5"
                     >
                       <option value="all">All Types</option>
                       <option value="movie">Movies</option>
@@ -614,7 +601,7 @@ export default function App() {
                     <select 
                       value={searchGenre || ''} 
                       onChange={(e) => setSearchGenre(e.target.value ? Number(e.target.value) : null)}
-                      className="bg-zinc-800 text-white text-sm rounded-lg px-3 py-1.5 border border-white/10 focus:outline-none focus:border-amber-500 cursor-pointer"
+                      className="lux-field text-sm font-semibold pl-4 py-2.5"
                     >
                       <option value="">All Genres</option>
                       {movieGenres.map(g => (
@@ -625,7 +612,7 @@ export default function App() {
                     <select 
                       value={searchSortBy} 
                       onChange={(e) => setSearchSortBy(e.target.value)}
-                      className="bg-zinc-800 text-white text-sm rounded-lg px-3 py-1.5 border border-white/10 focus:outline-none focus:border-amber-500 cursor-pointer"
+                      className="lux-field text-sm font-semibold pl-4 py-2.5"
                     >
                       <option value="popularity.desc">Most Popular</option>
                       <option value="vote_average.desc">Highest Rated</option>
@@ -636,7 +623,7 @@ export default function App() {
                     <select 
                       value={searchYear} 
                       onChange={(e) => setSearchYear(e.target.value)}
-                      className="bg-zinc-800 text-white text-sm rounded-lg px-3 py-1.5 border border-white/10 focus:outline-none focus:border-amber-500 cursor-pointer"
+                      className="lux-field text-sm font-semibold pl-4 py-2.5"
                     >
                       <option value="">Any Year</option>
                       {Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - i).map(y => (
@@ -660,7 +647,7 @@ export default function App() {
                       <button
                         onClick={loadMoreSearchResults}
                         disabled={loading}
-                        className="bg-amber-500 hover:bg-amber-400 text-amber-950 px-8 py-3 rounded-full font-bold transition-all hover:scale-105 disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-2"
+                        className="lux-btn px-9 py-3.5"
                       >
                         {loading ? (
                           <><div className="w-5 h-5 border-2 border-amber-950 border-t-transparent rounded-full animate-spin"></div> Loading…</>

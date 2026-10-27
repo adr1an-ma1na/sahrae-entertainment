@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Play, Flame, Ghost, Heart, Rocket, Compass, Layers, Tv, Volume2, VolumeX, AlertCircle, Sparkles, Swords, ShieldAlert, Film, Library, Drama } from 'lucide-react';
 import { fetchDiscover, fetchMediaDetails, getImageUrl, MediaDetails } from '../services/tmdb';
+import { LuxHeader, LuxGlow, LiveMeta } from './ui/Lux';
 
 const CHANNELS = [
   { id: '1', name: 'Action Cinema', icon: Flame, genreId: 28, color: 'from-orange-500 to-red-600', tag: 'Action' },
@@ -181,23 +182,16 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
   const ytId = videoUrl ? (videoUrl.match(/[?&]v=([^&]+)/)?.[1] || '') : '';
 
   return (
-    <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-[1600px] mx-auto pb-24">
-      {/* Page Header */}
-      <div className="mb-8 flex items-center gap-3">
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-rose-500 flex items-center justify-center shrink-0">
-          <Tv className="w-6 h-6 text-white animate-pulse" />
-        </div>
-        <div>
-          <h2 className="text-3xl font-display font-bold text-white leading-tight tracking-tight">Flow Channels</h2>
-          <p className="text-sm text-zinc-400">Continuous 24/7 themed cinematic streams. Sit back and discover.</p>
-        </div>
-      </div>
+    <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-[1600px] mx-auto pb-24 relative">
+      <LuxGlow />
+      <LuxHeader kicker={<><Tv className="w-3.5 h-3.5" /> Sahrae · Flow</>} title="Flow Channels"
+        meta={<><LiveMeta>{CHANNELS.length} channels, always on</LiveMeta><span>Themed cinema that never stops. Sit back and discover.</span></>} />
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
         
         {/* Main TV Player (3 cols wide) */}
         <div className="lg:col-span-3">
-          <div className="relative w-full aspect-video bg-zinc-950 rounded-2xl overflow-hidden border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.6)] group">
+          <div className="relative w-full aspect-video bg-black rounded-3xl overflow-hidden ring-1 ring-white/10 shadow-[0_30px_70px_-25px_rgba(0,0,0,0.85)] group">
             
             {loading && (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900 z-20">
@@ -258,23 +252,23 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
                   <div className="max-w-2xl text-left">
                     <div className="flex items-center gap-3 mb-2">
                       {activeChannel?.icon && <activeChannel.icon className="w-5 h-5 text-amber-500 animate-pulse" />}
-                      <span className="text-amber-500 font-bold tracking-widest text-xs uppercase">{activeChannel?.name}</span>
+                      <span className="lux-kicker">{activeChannel?.name}</span>
                     </div>
-                    <h2 className="text-2xl md:text-4xl font-black text-white mb-2 line-clamp-1">{playingMedia.title}</h2>
+                    <h2 className="lux-title text-3xl md:text-5xl mb-2 line-clamp-1 pb-1">{playingMedia.title}</h2>
                     <p className="text-zinc-300 line-clamp-2 text-xs md:text-sm leading-relaxed mb-4">
                       {playingMedia.overview}
                     </p>
                     <div className="flex items-center gap-3 pointer-events-auto">
                       <button 
                         onClick={() => onPlay(playingMedia.id, 'movie')}
-                        className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold rounded-xl flex items-center gap-2 transition-all hover:scale-105 shadow-xl text-xs"
+                        className="lux-btn px-6 py-3 text-sm"
                       >
                         <Play className="w-4 h-4 fill-current" />
-                        Play Movie Fullscreen
+                        Watch the film
                       </button>
                       <button 
                         onClick={() => handleEnded()}
-                        className="btn-glass px-5 py-2.5 font-bold rounded-xl text-xs"
+                        className="btn-glass px-5 py-3 font-bold rounded-full text-sm"
                       >
                         Skip Trailer
                       </button>
@@ -307,10 +301,10 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
         </div>
 
         {/* Channel Switcher (1 col wide, tall list for 12 channels) */}
-        <div className="lg:col-span-1 glass rounded-2xl p-4 flex flex-col h-[56.25vw] max-h-[500px] lg:h-auto lg:max-h-[56.25vw] overflow-hidden">
+        <div className="lg:col-span-1 lux-card p-4 flex flex-col h-[56.25vw] max-h-[500px] lg:h-auto lg:max-h-[56.25vw] overflow-hidden" style={{ transform: 'none' }}>
           <div className="flex items-center justify-between mb-3 px-2 border-b border-white/5 pb-2">
-            <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Channel Guide</h3>
-            <span className="text-[10px] font-mono font-bold text-amber-500 animate-pulse">● 12 ACTIVE CHANNELS</span>
+            <h3 className="lux-kicker">Channel guide</h3>
+            <span className="text-[10px] font-bold text-zinc-400 tabular">{CHANNELS.length} channels</span>
           </div>
           <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
             {CHANNELS.map(channel => {
@@ -323,7 +317,7 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
                   onClick={() => setActiveChannelId(channel.id)}
                   className={`w-full flex items-center gap-3 p-2.5 rounded-xl transition-all border text-left ${
                     isActive 
-                      ? 'bg-zinc-900 border-amber-500/50 shadow-lg scale-[1.01]' 
+                      ? 'bg-amber-500/10 border-amber-400/50 shadow-[0_8px_24px_-12px_rgb(var(--acc-rgb)/0.6)]' 
                       : 'bg-zinc-950/40 border-transparent hover:bg-zinc-900/60 hover:border-white/5'
                   }`}
                 >
@@ -354,7 +348,7 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
                         <span className="text-[10px] text-zinc-400 block mt-0.5 animate-pulse">Tuning signal...</span>
                       )
                     ) : (
-                      <span className="text-[10px] text-zinc-500 block mt-0.5">Static broadcast</span>
+                      <span className="text-[10px] text-zinc-500 block mt-0.5">Tap to tune in</span>
                     )}
                   </div>
                 </button>

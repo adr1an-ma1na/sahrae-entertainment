@@ -2,6 +2,10 @@ import { useState, FormEvent } from 'react';
 import { X, User, LogOut, Key, Camera, Check, Database, Trash2, ShieldAlert, Languages, Sun, Moon, Palette } from 'lucide-react';
 import { currentLang, setLang } from '../i18n';
 import { useTheme } from '../hooks/useTheme';
+import ThemePicker from './ui/ThemePicker';
+import { THEMES } from '../hooks/useTheme';
+
+const THEME_NAMES = Object.fromEntries(THEMES.map((t) => [t.id, t.name])) as Record<string, string>;
 import { useAuth } from '../hooks/useAuth';
 import { updateProfile, updatePassword } from '../firebase';
 import { getCacheStats, clearMediaCache, CacheStats } from '../services/cacheManager';
@@ -24,7 +28,8 @@ interface ProfileModalProps {
 
 export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
   const { user, logout, reloadUser, activeProfile, updateProfileData, setActiveProfile } = useAuth();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, pick } = useTheme();
+  const [themeOpen, setThemeOpen] = useState(false);
   const [tab, setTab] = useState<'profile' | 'security' | 'cache'>('profile');
   const [name, setName] = useState(activeProfile?.name || user?.displayName || '');
   const [selectedAvatar, setSelectedAvatar] = useState(activeProfile?.avatar || user?.photoURL || AVATARS[0]);
@@ -137,12 +142,14 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
             <span className="ml-auto text-xs font-bold text-zinc-300">{currentLang() === 'sw' ? 'Kiswahili' : 'English'}</span>
           </button>
           <button
-            onClick={toggleTheme}
+            onClick={() => setThemeOpen((v) => !v)}
+            aria-expanded={themeOpen}
             className="flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-zinc-400 hover:bg-white/5 hover:text-white transition-colors"
           >
             {theme === 'light' ? <Sun className="w-5 h-5" /> : theme === 'dark' ? <Moon className="w-5 h-5" /> : <Palette className="w-5 h-5" />} Theme
-            <span className="ml-auto text-xs font-bold text-zinc-300 capitalize">{theme}</span>
+            <span className="ml-auto text-xs font-bold text-zinc-300">{THEME_NAMES[theme]}</span>
           </button>
+          {themeOpen && <div className="px-2 pb-2"><ThemePicker theme={theme} onPick={pick} compact /></div>}
           <div className="mt-auto pt-6 flex flex-col gap-2">
             <button 
               onClick={() => { setActiveProfile(null); onClose(); }}

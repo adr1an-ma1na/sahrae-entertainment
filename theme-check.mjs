@@ -34,6 +34,9 @@ const themes = {
   Sand: block(':root'),
   Obsidian: block('.dark'),
   Cosmic: block('.midnight'),
+  Royal: block('.royal'),
+  Emerald: block('.emerald'),
+  'Rosé': block('.rose'),
 };
 /** Follow var(--x) references inside one theme block to the colour they name. */
 const resolve = (t, v) => {
@@ -86,10 +89,11 @@ for (const [name, t] of Object.entries(themes)) {
 }
 
 // A later `:root` block once re-declared the bright gold and silently overrode
-// Sand's darker accent. Only the three theme blocks may declare it.
+// Sand's darker accent. Only the theme blocks may declare it.
 {
   const golds = [...css.matchAll(/--gold-400:/g)].length;
-  if (golds !== 3) { fail++; console.log(`\n  FAIL --gold-400 declared ${golds} times (expected once per theme)`); }
+  const expected = Object.keys(themes).length;
+  if (golds !== expected) { fail++; console.log(`\n  FAIL --gold-400 declared ${golds} times (expected once per theme, ${expected})`); }
   else { pass++; console.log('\n  ok   the accent is declared once per theme'); }
 }
 

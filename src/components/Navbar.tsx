@@ -10,6 +10,7 @@ import { getImageUrl } from '../services/tmdb';
 import { useAuth } from '../hooks/useAuth';
 import AuthModal from './AuthModal';
 import ProfileModal from './ProfileModal';
+import ThemePicker from './ui/ThemePicker';
 
 interface NavbarProps {
   activeTab: string;
@@ -20,7 +21,9 @@ interface NavbarProps {
 
 export default function Navbar({ activeTab, setActiveTab, onPlay }: NavbarProps) {
   const [isScrolled, setIsScrolled] = useState(false);
-  const { theme, toggleTheme } = useTheme();
+  const { theme, pick } = useTheme();
+  const [isThemeOpen, setIsThemeOpen] = useState(false);
+  const themeRef = useRef<HTMLDivElement>(null);
   const { notifications, unreadCount, markAsRead, markAllAsRead, clearNotifications, checkUpdates } = useNotifications();
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -187,13 +190,26 @@ export default function Navbar({ activeTab, setActiveTab, onPlay }: NavbarProps)
             <MonitorSmartphone className="w-5 h-5" />
           </button>
 
-          <button
-            onClick={toggleTheme}
-            className="hidden sm:inline-flex text-white p-2 hover:bg-white/10 rounded-full transition-colors"
-            aria-label="Toggle theme"
-          >
-            {theme === 'light' ? <Sun className="w-5 h-5" /> : theme === 'dark' ? <Moon className="w-5 h-5" /> : <Palette className="w-5 h-5" />}
-          </button>
+          <div className="relative hidden sm:block" ref={themeRef}>
+            <button
+              onClick={() => setIsThemeOpen((v) => !v)}
+              className="inline-flex text-white p-2 hover:bg-white/10 rounded-full transition-colors"
+              aria-label="Choose theme"
+              aria-expanded={isThemeOpen}
+            >
+              {theme === 'light' ? <Sun className="w-5 h-5" /> : theme === 'dark' ? <Moon className="w-5 h-5" /> : <Palette className="w-5 h-5" />}
+            </button>
+            {isThemeOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setIsThemeOpen(false)} aria-hidden />
+                <div className="absolute right-0 mt-3 w-[22rem] z-50 glass rounded-3xl p-4 shadow-2xl lux-enter">
+                  <p className="lux-kicker mb-1">Appearance</p>
+                  <p className="text-lg font-display font-extrabold text-white mb-3">Choose your room</p>
+                  <ThemePicker theme={theme} onPick={(t) => { pick(t); }} />
+                </div>
+              </>
+            )}
+          </div>
           
           {user ? (
             <div className="flex items-center gap-2">

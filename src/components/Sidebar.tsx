@@ -45,7 +45,7 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
         <button key={t.id} onClick={() => setActiveTab(t.id)} tabIndex={0} data-tv-focusable
           className={`w-full flex items-center gap-3 px-4 py-3 rounded-full text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
             active
-              ? 'bg-amber-700 text-amber-100'
+              ? 'bg-amber-700 text-amber-100 shadow-[inset_0_0_0_1px_rgb(var(--acc-rgb)/0.35),0_8px_20px_-10px_rgb(var(--acc-rgb)/0.6)]'
               : 'text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.08]'
           }`}>
           {/* Material 3 navigation drawer: inactive destinations have no
@@ -67,7 +67,7 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
       <button key={t.id} onClick={() => setActiveTab(t.id)} tabIndex={0} data-tv-focusable title={tr(t.label)} aria-label={tr(t.label)}
         className={`w-14 h-8 rounded-full flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
           active
-            ? 'bg-amber-700 text-amber-100'
+            ? 'bg-amber-700 text-amber-100 shadow-[inset_0_0_0_1px_rgb(var(--acc-rgb)/0.35),0_8px_20px_-10px_rgb(var(--acc-rgb)/0.6)]'
             : 'text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.08]'
         }`}>
         <Icon className="w-5 h-5" />

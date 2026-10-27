@@ -4,8 +4,9 @@ import { useDownloads, downloads } from '../services/downloads';
 import { useMusic } from '../hooks/useMusic';
 import { CoverArt } from './ui/CoverArt';
 import { useVideoDownloads } from '../hooks/useVideoDownloads';
-import { getImageUrl } from '../services/tmdb';
+
 import Illustration from './ui/Illustration';
+import { LuxHeader, LuxGlow, LuxSeg } from './ui/Lux';
 
 interface DownloadsViewProps {
   onPlay?: (id: number, type: 'movie' | 'tv', startInInfo?: boolean, playTrailer?: boolean, season?: number, episode?: number) => void;
@@ -23,52 +24,37 @@ export default function DownloadsView({ onPlay }: DownloadsViewProps) {
   const fmtSize = (b: number) => (b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : b >= 1e6 ? `${Math.round(b / 1e6)} MB` : `${Math.round(b / 1e3)} KB`);
 
   return (
-    <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-5xl mx-auto min-h-screen pb-40">
-      <div className="overline text-sauti mb-1.5">Sahrae · Offline</div>
-      <div className="flex items-center gap-3 mb-8">
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-400 to-amber-600 flex items-center justify-center">
-          <Download className="w-6 h-6 text-white" />
-        </div>
-        <div>
-          <h2 className="text-3xl font-display font-bold text-white leading-tight tracking-tight">Downloads</h2>
-          <p className="text-sm text-zinc-400">
-            {downloadedVideos.length + tracks.length} {(downloadedVideos.length + tracks.length) === 1 ? 'item' : 'items'}
-            {usedBytes > 0 ? ` · ${fmtSize(usedBytes)} used` : ''} · plays offline, in-app
-          </p>
-        </div>
+    <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-5xl mx-auto min-h-screen pb-40 relative">
+      <LuxGlow />
+      <LuxHeader kicker={<><Download className="w-3.5 h-3.5" /> Sahrae · Offline</>} title="Downloads"
+        meta={<span>Saved inside the app. Plays with no internet.</span>} />
+
+      {/* The vault: what is saved, at a glance. */}
+      <div className="lux-spot p-5 md:p-6 mb-8 grid grid-cols-3 gap-3 text-center lux-enter">
+        {[
+          { k: 'Films & series', v: String(downloadedVideos.length), icon: Film },
+          { k: 'Songs & episodes', v: String(tracks.length), icon: Music2 },
+          { k: 'Music space used', v: usedBytes > 0 ? fmtSize(usedBytes) : '0 MB', icon: Download },
+        ].map(({ k, v, icon: Icon }) => (
+          <div key={k} className="flex flex-col items-center gap-1">
+            <Icon className="w-5 h-5 text-amber-400 mb-1" />
+            <span className="lux-title text-2xl md:text-4xl tabular">{v}</span>
+            <span className="text-[10px] md:text-xs font-bold uppercase tracking-[0.18em] text-zinc-400">{k}</span>
+          </div>
+        ))}
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-white/5 pb-4 mb-6">
-        <button
-          onClick={() => setActiveTab('videos')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-bold transition-all ${
-            activeTab === 'videos'
-              ? 'bg-amber-500 text-amber-950'
-              : 'text-zinc-400 hover:text-white bg-white/5 hover:bg-white/10'
-          }`}
-        >
-          <Film className="w-4 h-4" />
-          Movies &amp; Series ({downloadedVideos.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('audio')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-bold transition-all ${
-            activeTab === 'audio'
-              ? 'bg-amber-500 text-amber-950'
-              : 'text-zinc-400 hover:text-white bg-white/5 hover:bg-white/10'
-          }`}
-        >
-          <Music2 className="w-4 h-4" />
-          Music &amp; Podcasts ({tracks.length})
-        </button>
-      </div>
+      <LuxSeg className="mb-7" active={activeTab} onChange={setActiveTab} items={[
+        { id: 'videos', label: `Movies & Series (${downloadedVideos.length})`, icon: Film },
+        { id: 'audio', label: `Music & Podcasts (${tracks.length})`, icon: Music2 },
+      ]} />
 
       {/* ── Movies & Series Tab ── */}
       {activeTab === 'videos' && (
         <div className="space-y-4 animate-in fade-in duration-200">
           {playingFile && (
-            <div className="rounded-xl overflow-hidden border border-white/10 bg-black mb-2">
+            <div className="rounded-3xl overflow-hidden ring-1 ring-white/10 bg-black mb-2 shadow-2xl">
               <video src={playingFile.src} controls autoPlay className="w-full aspect-video bg-black" />
               <div className="flex items-center justify-between gap-3 px-3 py-2">
                 <p className="text-sm text-white font-semibold truncate">{playingFile.title}</p>
@@ -84,11 +70,11 @@ export default function DownloadsView({ onPlay }: DownloadsViewProps) {
                 return (
                   <div key={video.id} tabIndex={0} data-tv-focusable role="button"
                     onClick={() => { if (src) setPlayingFile({ src, title: video.title }); }}
-                    className={`card-lift group flex flex-col md:flex-row items-start md:items-center gap-4 p-3 rounded-xl border border-white/5 bg-zinc-900/40 focus:outline-none ${src ? 'cursor-pointer' : 'cursor-default'}`}>
+                    className={`lux-card group flex flex-col md:flex-row items-start md:items-center gap-4 p-3 focus:outline-none ${src ? 'cursor-pointer' : 'cursor-default'}`}>
 
-                    <div className="relative w-full md:w-32 aspect-video rounded-lg overflow-hidden bg-zinc-800 shrink-0 shadow-inner">
-                      <div className="absolute inset-0 flex items-center justify-center bg-zinc-900">
-                        <Film className="w-6 h-6 text-zinc-600" />
+                    <div className="relative w-full md:w-36 aspect-video rounded-xl overflow-hidden shrink-0 ring-1 ring-white/10" style={{ background: 'radial-gradient(90% 120% at 0% 0%, rgb(var(--acc-rgb) / .35), transparent 60%), radial-gradient(80% 120% at 100% 100%, rgb(var(--acc2-rgb) / .45), transparent 60%), var(--zinc-800)' }}>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="font-display font-black text-white/90 text-2xl drop-shadow">{video.title.split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase()}</span>
                       </div>
                       {src && (
                         <div className="absolute inset-0 bg-black/45 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -130,7 +116,7 @@ export default function DownloadsView({ onPlay }: DownloadsViewProps) {
               })}
             </div>
           ) : (
-            <div className="glass rounded-3xl px-6 py-8 text-sm text-zinc-400 leading-relaxed text-center flex flex-col items-center">
+            <div className="lux-card px-6 py-10 text-sm text-zinc-400 leading-relaxed text-center flex flex-col items-center">
               <Illustration name="downloads" className="w-48 md:w-56 h-auto mb-4" />
               {supported ? (
                 <>
@@ -157,7 +143,7 @@ export default function DownloadsView({ onPlay }: DownloadsViewProps) {
         <div className="space-y-4 animate-in fade-in duration-200">
           {tracks.length > 0 ? (
             <>
-              <button onClick={() => playQueue(tracks, 0, 'Downloads')} className="btn-sauti mb-4 inline-flex items-center gap-2 px-6 py-2.5 rounded-full font-bold">
+              <button onClick={() => playQueue(tracks, 0, 'Downloads')} className="lux-btn mb-4 px-7 py-3 text-sm">
                 <Play className="w-4 h-4 fill-current" /> Play all
               </button>
               <div className="space-y-1.5">
@@ -166,7 +152,7 @@ export default function DownloadsView({ onPlay }: DownloadsViewProps) {
                   return (
                     <div key={track.id} tabIndex={0} data-tv-focusable role="button"
                       onClick={() => (active ? toggle() : playQueue(tracks, tracks.findIndex((t) => t.id === track.id), 'Downloads'))}
-                      className="card-lift group flex items-center gap-3 p-2 rounded-xl border border-white/5 bg-zinc-900/40 cursor-pointer focus:outline-none">
+                      className="lux-card group flex items-center gap-3 p-2.5 cursor-pointer focus:outline-none">
                       <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-zinc-800 shrink-0">
                         <CoverArt imageUrl={track.artwork} dominantColor={track.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
                         {!track.artwork && <Music2 className="w-5 h-5 text-zinc-600 absolute inset-0 m-auto" />}
@@ -186,7 +172,7 @@ export default function DownloadsView({ onPlay }: DownloadsViewProps) {
               </div>
             </>
           ) : (
-            <div className="glass rounded-3xl px-6 py-8 text-sm text-zinc-400 leading-relaxed text-center flex flex-col items-center">
+            <div className="lux-card px-6 py-10 text-sm text-zinc-400 leading-relaxed text-center flex flex-col items-center">
               <Illustration name="music" className="w-48 md:w-56 h-auto mb-4" />
               <h4 className="text-white font-bold text-lg mb-1">No songs or episodes saved</h4>
               <p className="max-w-md">In Music or Podcasts, tap <span className="text-sauti font-semibold">Download</span> on a song or episode to play it here with no internet.</p>

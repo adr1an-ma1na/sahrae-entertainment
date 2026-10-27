@@ -68,7 +68,7 @@
      that put the page's dark ink on a dark artwork bleed — an invisible title.
      Declaring the same mappings inside each theme block makes them resolve
      again wherever a theme class appears, including on a nested element. */
-  :root, .light, .dark, .midnight {
+  :root, .light, .dark, .midnight, .royal, .emerald, .rose {
     --color-zinc-950: var(--zinc-950);
     --color-zinc-900: var(--zinc-900);
     --color-zinc-800: var(--zinc-800);
@@ -281,6 +281,157 @@
     --glass-sheen: rgba(237, 233, 254, 0.60);
     --glare-1: rgba(221, 214, 254, 0.92); /* lavender */
     --glare-2: rgba(96, 141, 235, 0.26);  /* soft royal blue */
+  }
+
+  /* ── The three "house" themes (2026-10) ────────────────────────────────
+     Dark grounds, each with a metal that belongs to it, in the manner of a
+     private members' club rather than a palette swap: sapphire with
+     champagne, emerald with old gold, onyx with rose gold. Same ramp layout
+     as Obsidian (950 is the page, 50 the brightest ink). The second accent
+     (--acc2-rgb) is the room's own colour, so the ambient light behind each
+     page carries it. */
+  .royal {
+    /* ROYAL — midnight sapphire, champagne gold. */
+    --zinc-950: #060A18;
+    --zinc-900: #0C1226;
+    --zinc-800: #141C36;
+    --zinc-700: #2A3558;
+    --zinc-600: #4A5680;
+    --zinc-500: #8C97B8;
+    --zinc-400: #C3CAE0;
+    --zinc-300: #DDE2F0;
+    --zinc-200: #E9ECF6;
+    --zinc-100: #F3F5FB;
+    --zinc-50: #FFFFFF;
+    --white: #ffffff;
+    --black: #000000;
+    --acc-50: #FFF9EB;
+    --acc-100: #FBEFD0;
+    --acc-200: #F5DFA8;
+    --acc-300: #EDCD85;
+    --acc-400: #E6C06A;
+    --acc-500: #D4A64A;
+    --acc-600: #B8892F;
+    --acc-700: #7A5A1C;
+    --acc-800: #5E4413;
+    --acc-900: #47330E;
+    --acc-950: #221804;
+    --acc-rgb: 230 192 106;
+    --acc2-rgb: 70 100 230;
+    --logo-1: #F5DFA8;
+    --logo-2: #E6C06A;
+    --logo-3: #D4A64A;
+    --logo-hi: #FFF9EB;
+    --logo-deep: #5E4413;
+    --gold-100: #FBEFD0;
+    --gold-300: var(--acc-300);
+    --gold-400: var(--acc-400);
+    --gold-500: var(--acc-500);
+    --on-gold:  var(--acc-950);
+    --glass-alpha: 58%;
+    --glass-alpha-strong: 40%;
+    --glass-edge: rgba(200, 215, 255, 0.14);
+    --glass-rim: rgba(220, 228, 255, 0.24);
+    --glass-shadow: 0 16px 44px rgba(2, 6, 24, 0.60);
+    --glass-sheen: rgba(200, 215, 255, 0.10);
+    --glare-1: rgba(245, 223, 168, 0.55);
+    --glare-2: rgba(120, 150, 255, 0.14);
+  }
+
+  .emerald {
+    /* EMERALD — deep club green, old gold. */
+    --zinc-950: #04110C;
+    --zinc-900: #0A1C15;
+    --zinc-800: #11281E;
+    --zinc-700: #24443A;
+    --zinc-600: #42645A;
+    --zinc-500: #86A497;
+    --zinc-400: #C0D4CA;
+    --zinc-300: #DCE8E1;
+    --zinc-200: #E9F1EC;
+    --zinc-100: #F2F8F4;
+    --zinc-50: #FFFFFF;
+    --white: #ffffff;
+    --black: #000000;
+    --acc-50: #FFFAEC;
+    --acc-100: #FBF0D2;
+    --acc-200: #F6E2B0;
+    --acc-300: #F0D08A;
+    --acc-400: #E8BE5E;
+    --acc-500: #CF9C36;
+    --acc-600: #A97A22;
+    --acc-700: #6E4F14;
+    --acc-800: #553C0F;
+    --acc-900: #3F2C0B;
+    --acc-950: #1F1604;
+    --acc-rgb: 232 190 94;
+    --acc2-rgb: 16 160 110;
+    --logo-1: #F6E2B0;
+    --logo-2: #E8BE5E;
+    --logo-3: #CF9C36;
+    --logo-hi: #FFFAEC;
+    --logo-deep: #553C0F;
+    --gold-100: #FBF0D2;
+    --gold-300: var(--acc-300);
+    --gold-400: var(--acc-400);
+    --gold-500: var(--acc-500);
+    --on-gold:  var(--acc-950);
+    --glass-alpha: 58%;
+    --glass-alpha-strong: 40%;
+    --glass-edge: rgba(190, 255, 225, 0.12);
+    --glass-rim: rgba(210, 255, 235, 0.22);
+    --glass-shadow: 0 16px 44px rgba(0, 12, 6, 0.60);
+    --glass-sheen: rgba(190, 255, 225, 0.08);
+    --glare-1: rgba(246, 226, 176, 0.50);
+    --glare-2: rgba(60, 220, 160, 0.12);
+  }
+
+  .rose {
+    /* ROSÉ — onyx, rose gold. */
+    --zinc-950: #0D0A0B;
+    --zinc-900: #171213;
+    --zinc-800: #231B1D;
+    --zinc-700: #3F3236;
+    --zinc-600: #645459;
+    --zinc-500: #A08E93;
+    --zinc-400: #D4C7CB;
+    --zinc-300: #E8DEE1;
+    --zinc-200: #F1EAEC;
+    --zinc-100: #F8F3F4;
+    --zinc-50: #FFFFFF;
+    --white: #ffffff;
+    --black: #000000;
+    --acc-50: #FFF5F1;
+    --acc-100: #FDE4DA;
+    --acc-200: #F8CDBC;
+    --acc-300: #F2B6A0;
+    --acc-400: #EDA58B;
+    --acc-500: #DB8A6E;
+    --acc-600: #BF6D52;
+    --acc-700: #7C3F2D;
+    --acc-800: #5F2F21;
+    --acc-900: #452218;
+    --acc-950: #2A130C;
+    --acc-rgb: 237 165 139;
+    --acc2-rgb: 170 30 90;
+    --logo-1: #F8CDBC;
+    --logo-2: #EDA58B;
+    --logo-3: #DB8A6E;
+    --logo-hi: #FFF5F1;
+    --logo-deep: #5F2F21;
+    --gold-100: #FDE4DA;
+    --gold-300: var(--acc-300);
+    --gold-400: var(--acc-400);
+    --gold-500: var(--acc-500);
+    --on-gold:  var(--acc-950);
+    --glass-alpha: 58%;
+    --glass-alpha-strong: 40%;
+    --glass-edge: rgba(255, 220, 210, 0.13);
+    --glass-rim: rgba(255, 228, 220, 0.22);
+    --glass-shadow: 0 16px 44px rgba(10, 0, 4, 0.60);
+    --glass-sheen: rgba(255, 220, 210, 0.08);
+    --glare-1: rgba(248, 205, 188, 0.55);
+    --glare-2: rgba(220, 80, 140, 0.12);
   }
 }
 
@@ -1213,3 +1364,182 @@ html.lite section { content-visibility: auto; contain-intrinsic-size: auto 320px
    it hides the system bars natively and declines the provider's own full screen. */
 .player-shell.is-max { position: fixed; inset: 0; z-index: 400; width: 100vw; height: 100vh; height: 100dvh; }
 .player-shell.is-max .player-frame { aspect-ratio: auto; flex: 1 1 auto; min-height: 0; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LUX — the "expensive" layer (2026-10).
+   The language Live Sports introduced, made shared: a kicker over a heavy
+   display title, metal on the type, pill segmented controls, cards that catch
+   the light, and an ambient room glow in the theme's own colours. Everything
+   reads theme tokens, so all six themes get it, and every effect that costs
+   GPU is switched off under .tv-mode, .low-gfx and reduced motion.
+   ══════════════════════════════════════════════════════════════════════════ */
+@layer components {
+  /* Hairlines that read on every ground: light rules on the dark themes,
+     warm ink on Sand, royal blue on Cosmic. */
+  :root { --lux-line: rgba(61, 44, 20, 0.14); --lux-line-2: rgba(61, 44, 20, 0.26); --lux-live: #B42318; }
+  .dark, .royal, .emerald, .rose { --lux-line: rgba(255, 255, 255, 0.10); --lux-line-2: rgba(255, 255, 255, 0.18); --lux-live: #FCA5A5; }
+  .midnight { --lux-line: rgba(30, 58, 138, 0.16); --lux-line-2: rgba(30, 58, 138, 0.28); --lux-live: #B42318; }
+
+  /* The room: two soft lights in the accent and the theme's own colour, and a
+     whisper of film grain so large dark areas read as material, not as #000. */
+  /* Film grain over the app's ambient light (.aurora-glow), so large dark
+     areas read as material rather than as flat #000. */
+  .aurora-glow::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.06'/%3E%3C/svg%3E");
+  }
+
+  /* Kicker: the small tracked label above a title ("SAHRAE · LISTEN"). */
+  .lux-kicker {
+    display: inline-flex; align-items: center; gap: .5rem;
+    font-family: var(--font-display); font-size: 11px; font-weight: 700;
+    letter-spacing: .28em; text-transform: uppercase; color: var(--gold-400);
+  }
+  .lux-kicker::before {
+    content: ''; width: 18px; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--gold-400));
+  }
+
+  /* Display title with a metal finish: ink at the top, warming into the
+     accent at the base, like light falling on engraved lettering. */
+  .lux-title {
+    font-family: var(--font-display); font-weight: 900; letter-spacing: -0.035em; line-height: 1.02;
+    background: linear-gradient(180deg, var(--zinc-50) 35%, color-mix(in srgb, var(--zinc-50) 55%, rgb(var(--acc-rgb))) 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  /* Section heading: gold bar + title, one look on every shelf. */
+  .lux-h {
+    display: flex; align-items: center; gap: .75rem;
+    font-family: var(--font-display); font-weight: 800; letter-spacing: -0.02em; color: var(--white);
+  }
+  .lux-h::before {
+    content: ''; width: 4px; height: 1.15em; border-radius: 9999px; flex: none;
+    background: linear-gradient(180deg, var(--gold-300), var(--gold-500));
+    box-shadow: 0 0 12px rgb(var(--acc-rgb) / .45);
+  }
+
+  /* Pill segmented control (Matches | Channels, Music | Podcasts …). */
+  .lux-seg {
+    display: inline-flex; gap: .25rem; padding: .25rem; border-radius: 9999px; max-width: 100%; overflow-x: auto; scrollbar-width: none;
+    background: color-mix(in srgb, var(--zinc-800) 60%, transparent);
+    box-shadow: inset 0 0 0 1px var(--lux-line), inset 0 1px 0 var(--glass-sheen);
+    -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  }
+  .lux-seg::-webkit-scrollbar { display: none; }
+  .lux-seg > button {
+    display: inline-flex; align-items: center; gap: .5rem; white-space: nowrap; flex: none;
+    padding: .5rem 1.1rem; border-radius: 9999px; font-size: .875rem; font-weight: 700;
+    color: var(--zinc-400); transition: color .2s var(--ease-premium), background .2s var(--ease-premium), box-shadow .2s var(--ease-premium);
+  }
+  .lux-seg > button:hover { color: var(--white); }
+  .lux-seg > button[aria-pressed="true"] {
+    color: var(--on-gold);
+    background: linear-gradient(180deg, var(--gold-300), var(--gold-500));
+    box-shadow: 0 6px 18px -6px rgb(var(--acc-rgb) / .75), inset 0 1px 0 rgba(255,255,255,.35);
+  }
+
+  /* Filter chip, Sports-style: a quiet pill, gold when on. */
+  .lux-chip {
+    display: inline-flex; align-items: center; gap: .4rem; white-space: nowrap; flex: none;
+    padding: .4rem .9rem; border-radius: 9999px; font-size: .75rem; font-weight: 700;
+    color: var(--zinc-300); background: color-mix(in srgb, var(--zinc-800) 55%, transparent);
+    box-shadow: inset 0 0 0 1px var(--lux-line);
+    transition: color .2s var(--ease-premium), background .2s var(--ease-premium), box-shadow .2s var(--ease-premium);
+  }
+  .lux-chip:hover { color: var(--white); box-shadow: inset 0 0 0 1px var(--lux-line-2); }
+  .lux-chip[aria-pressed="true"] {
+    color: var(--on-gold); background: linear-gradient(180deg, var(--gold-300), var(--gold-500));
+    box-shadow: 0 4px 14px -6px rgb(var(--acc-rgb) / .7);
+  }
+
+  /* The card: a top-lit surface with a hairline that warms to gold on hover,
+     and a slow sheen that crosses it once, like light on lacquer. */
+  .lux-card {
+    position: relative; overflow: hidden; border-radius: 1.25rem;
+    background:
+      linear-gradient(180deg, var(--glass-sheen), transparent 40%),
+      var(--zinc-900);
+    box-shadow: inset 0 0 0 1px var(--lux-line), 0 1px 0 rgba(0,0,0,.2);
+    transition: transform .35s var(--ease-premium), box-shadow .35s var(--ease-premium);
+  }
+  .lux-card::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+    background: linear-gradient(115deg, transparent 35%, rgb(var(--acc-rgb) / .10) 50%, transparent 65%);
+    transform: translateX(-120%); transition: transform .9s var(--ease-premium);
+  }
+  .lux-card:hover, .lux-card:focus-visible {
+    transform: translateY(-3px);
+    box-shadow: inset 0 0 0 1px rgb(var(--acc-rgb) / .45), 0 18px 40px -18px rgb(var(--acc-rgb) / .45), 0 10px 30px -12px rgba(0,0,0,.6);
+  }
+  .lux-card:hover::after, .lux-card:focus-visible::after { transform: translateX(120%); }
+  .lux-card:focus-visible { outline: 2px solid var(--gold-400); outline-offset: 2px; }
+
+  /* Feature panel: the big "spotlight" block at the top of a section. */
+  .lux-spot {
+    position: relative; overflow: hidden; border-radius: 1.75rem; isolation: isolate;
+    background:
+      radial-gradient(80% 120% at 0% 0%, rgb(var(--acc-rgb) / .20), transparent 60%),
+      radial-gradient(70% 120% at 100% 100%, rgb(var(--acc2-rgb) / .22), transparent 60%),
+      var(--zinc-900);
+    box-shadow: inset 0 0 0 1px var(--lux-line-2), 0 30px 60px -30px rgba(0,0,0,.7);
+  }
+  .lux-spot::before {
+    content: ''; position: absolute; inset: 0; z-index: -1; opacity: .35; pointer-events: none;
+    background-image: linear-gradient(var(--lux-line) 1px, transparent 1px), linear-gradient(90deg, var(--lux-line) 1px, transparent 1px);
+    background-size: 32px 32px;
+    -webkit-mask-image: radial-gradient(70% 80% at 50% 50%, #000, transparent);
+            mask-image: radial-gradient(70% 80% at 50% 50%, #000, transparent);
+  }
+
+  /* Primary button with a travelling glint. */
+  .lux-btn {
+    position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+    border-radius: 9999px; font-weight: 800; color: var(--on-gold);
+    background: linear-gradient(180deg, var(--gold-300), var(--gold-500));
+    box-shadow: 0 10px 24px -10px rgb(var(--acc-rgb) / .8), inset 0 1px 0 rgba(255,255,255,.4);
+    transition: transform .2s var(--ease-premium), box-shadow .2s var(--ease-premium);
+  }
+  .lux-btn::after {
+    content: ''; position: absolute; top: 0; bottom: 0; width: 40%; left: -60%;
+    background: linear-gradient(100deg, transparent, rgba(255,255,255,.45), transparent);
+    transform: skewX(-20deg); animation: lux-glint 4.5s ease-in-out infinite; pointer-events: none;
+  }
+  .lux-btn:hover { transform: translateY(-1px); box-shadow: 0 14px 30px -10px rgb(var(--acc-rgb) / .9), inset 0 1px 0 rgba(255,255,255,.45); }
+  .lux-btn:focus-visible { outline: 2px solid var(--gold-400); outline-offset: 3px; }
+  .lux-btn:disabled { opacity: .5; transform: none; }
+
+  /* Glass form field (search boxes, selects). */
+  .lux-field {
+    color: var(--white); border-radius: 9999px;
+    background-color: color-mix(in srgb, var(--zinc-800) 60%, transparent);
+    box-shadow: inset 0 0 0 1px var(--lux-line), inset 0 1px 0 var(--glass-sheen);
+    -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+    transition: box-shadow .2s var(--ease-premium);
+  }
+  .lux-field::placeholder { color: var(--zinc-500); }
+  .lux-field:focus, .lux-field:focus-within { outline: none; box-shadow: inset 0 0 0 1px rgb(var(--acc-rgb) / .6), 0 0 0 4px rgb(var(--acc-rgb) / .12); }
+  select.lux-field { appearance: none; -webkit-appearance: none; padding-right: 2rem; cursor: pointer;
+    background-image: linear-gradient(45deg, transparent 50%, var(--zinc-400) 50%), linear-gradient(135deg, var(--zinc-400) 50%, transparent 50%);
+    background-position: calc(100% - 16px) 55%, calc(100% - 11px) 55%; background-size: 5px 5px; background-repeat: no-repeat; }
+  select.lux-field option { background: var(--zinc-900); color: var(--white); }
+
+  /* Page entrance: content rises into place once, never on every render. */
+  .lux-enter { animation: lux-rise .55s var(--ease-premium) both; }
+}
+
+@keyframes lux-glint { 0%, 70% { left: -60%; } 100% { left: 130%; } }
+/* Movement only, never opacity: a stalled animation (a backgrounded page, a busy phone) must not leave a title invisible. */
+@keyframes lux-rise { from { transform: translateY(12px); } to { transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .lux-btn::after, .lux-enter { animation: none !important; }
+  .lux-card, .lux-card::after { transition: none !important; }
+}
+html.tv-mode .aurora-glow::after, html.low-gfx .aurora-glow::after { display: none; }
+html.tv-mode .lux-btn::after, html.low-gfx .lux-btn::after { animation: none; display: none; }
+html.tv-mode .lux-enter, html.low-gfx .lux-enter { animation: none; }
+html.tv-mode .lux-card, html.low-gfx .lux-card { transition: none; }
+html.tv-mode .lux-card:hover, html.low-gfx .lux-card:hover { transform: none; }
+html.tv-mode .lux-card::after, html.low-gfx .lux-card::after { display: none; }
+html.tv-mode .lux-seg, html.tv-mode .lux-field, html.low-gfx .lux-seg, html.low-gfx .lux-field { -webkit-backdrop-filter: none; backdrop-filter: none; background-color: var(--zinc-800); }
+html.tv-mode .lux-spot::before { display: none; }

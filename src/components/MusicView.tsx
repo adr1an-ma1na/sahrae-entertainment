@@ -18,6 +18,7 @@ import EmptyState from './EmptyState';
 const YEAR = new Date().getFullYear();
 import SautiOnboarding from './SautiOnboarding';
 import ListenTabs from './ListenTabs';
+import { LuxHeader, LuxSeg } from './ui/Lux';
 import Coachmark from './Coachmark';
 
 const fmt = (s: number) => {
@@ -962,26 +963,15 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
       {showOnboarding && <SautiOnboarding onComplete={seedFromArtists} onSkip={closeOnboarding} />}
       {/* Living aurora glow — tinted by the most recently played track (spec §1.2.4) */}
       <div aria-hidden className="pointer-events-none absolute -top-10 left-0 right-0 h-64 -z-0 opacity-70"
-        style={{ background: `radial-gradient(60% 70% at 12% 0%, ${recentlyPlayed[0]?.dominantColor || 'rgba(251,191,36,0.5)'}, transparent 70%), radial-gradient(50% 60% at 80% 10%, rgba(251,191,36,0.12), transparent 72%)`, filter: 'blur(8px)', transition: 'background 700ms ease' }} />
+        style={{ background: `radial-gradient(60% 70% at 12% 0%, ${recentlyPlayed[0]?.dominantColor || 'rgb(var(--acc-rgb) / 0.45)'}, transparent 70%), radial-gradient(50% 60% at 85% 8%, rgb(var(--acc2-rgb) / 0.22), transparent 72%)`, filter: 'blur(8px)', transition: 'background 700ms ease' }} />
+      <LuxHeader className="relative" kicker={<><Music2 className="w-3.5 h-3.5" /> Sauti · sound on Sahrae</>}
+        title={tab === 'home' ? greeting() : 'Your Library'}
+        meta={<span>Songs, artists, albums and playlists</span>}
+        right={<LuxSeg active={tab} onChange={(t) => { setTab(t); setOpenId(null); }} items={[
+          { id: 'home', label: 'Home', icon: Music2 },
+          { id: 'library', label: 'Library', icon: Library },
+        ]} />} />
       <div className="relative"><ListenTabs active="music" onNav={onNav ?? (() => {})} /></div>
-      <div className="relative overline text-sauti mb-1.5">Sauti · sound on Sahrae</div>
-      <div className="relative flex items-center justify-between gap-3 mb-6">
-        <div className="flex items-center gap-3">
-          <div className="relative w-12 h-12 shrink-0" aria-hidden>
-            <div className="absolute inset-0 rounded-full bg-[#0b0b0d]" style={{ backgroundImage: 'repeating-radial-gradient(circle at 50% 50%, rgba(251,191,36,0.20) 0 1px, transparent 1px 4px)' }} />
-            <div className="absolute inset-0 rounded-full ring-1 ring-white/10" />
-            <div className="absolute inset-0 m-auto w-[22px] h-[22px] rounded-full bg-gradient-to-tr from-amber-300 via-amber-500 to-amber-600 flex items-center justify-center shadow-inner"><Music2 className="w-3.5 h-3.5 text-amber-950" /></div>
-          </div>
-          <div><h2 className="text-3xl font-display font-bold text-white leading-tight tracking-tight">{tab === 'home' ? greeting() : 'Your Library'}</h2><p className="text-sm text-zinc-400">Songs · artists · albums · playlists</p></div>
-        </div>
-        <div className="flex gap-1 glass p-1 rounded-xl self-start">
-          {(['home', 'library'] as const).map((t) => (
-            <button key={t} onClick={() => { setTab(t); setOpenId(null); }} tabIndex={0} data-tv-focusable className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2 ${tab === t ? 'bg-sauti text-amber-950' : 'text-zinc-400 hover:text-white'}`}>
-              {t === 'home' ? <><Music2 className="w-4 h-4" /> Home</> : <><Library className="w-4 h-4" /> Library</>}
-            </button>
-          ))}
-        </div>
-      </div>
 
       {tab === 'home' ? (
         <>
@@ -989,8 +979,8 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
           
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
             <div className="relative flex-1 max-w-lg">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search songs, artists, albums…" className="w-full bg-zinc-900/70 border border-white/10 rounded-full pl-10 pr-4 py-3 text-sm text-white focus:outline-none focus:border-amber-500/60" />
+              <Search className="absolute z-10 left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search songs, artists, albums…" className="w-full lux-field pl-10 pr-4 py-3 text-sm" />
             </div>
 
             {/* YouTube Music style Mood filter pills */}
@@ -1004,11 +994,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                       setActiveMood(m);
                       setGenre(null); // Close other genres
                     }}
-                    className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap border ${
-                      isActive
-                        ? 'bg-sauti border-sauti text-amber-950 font-black scale-105'
-                        : 'bg-zinc-900/60 border-white/5 text-zinc-300 hover:text-white hover:bg-zinc-800'
-                    }`}
+                    aria-pressed={isActive} className="lux-chip"
                   >
                     {m}
                   </button>

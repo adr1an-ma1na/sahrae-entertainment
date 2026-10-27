@@ -14,13 +14,12 @@ const TABS: { id: string; label: string; icon: typeof Music2 }[] = [
  */
 export default function ListenTabs({ active, onNav }: { active: string; onNav: (tab: string) => void }) {
   return (
-    <div className="flex gap-1 glass p-1 rounded-xl w-fit mb-6">
+    <div className="lux-seg mb-7" role="tablist">
       {TABS.map((t) => {
         const on = active === t.id;
         const Icon = t.icon;
         return (
-          <button key={t.id} onClick={() => onNav(t.id)} tabIndex={0} data-tv-focusable
-            className={`px-4 md:px-5 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2 ${on ? 'bg-sauti text-amber-950' : 'text-zinc-400 hover:text-white'}`}>
+          <button key={t.id} onClick={() => onNav(t.id)} tabIndex={0} data-tv-focusable role="tab" aria-selected={on} aria-pressed={on}>
             <Icon className="w-4 h-4" /> {t.label}
           </button>
         );

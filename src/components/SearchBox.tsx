@@ -44,7 +44,7 @@ export default function SearchBox({ value, onSearch }: { value: string; onSearch
 
   return (
     <form role="search" onSubmit={(e) => { e.preventDefault(); send(text); inputRef.current?.blur(); }} className="relative mb-6">
-      <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400 pointer-events-none" />
+      <Search className="absolute z-10 left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400 pointer-events-none" />
       <input
         ref={inputRef}
         type="search"
@@ -55,7 +55,7 @@ export default function SearchBox({ value, onSearch }: { value: string; onSearch
         onChange={(e) => setText(e.target.value)}
         placeholder={t('Films, series, actors, genres')}
         aria-label={t('Search')}
-        className="w-full bg-zinc-900/80 border border-white/10 rounded-2xl pl-12 pr-12 py-3.5 text-base text-white placeholder:text-zinc-500 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/25 [&::-webkit-search-cancel-button]:hidden"
+        className="w-full lux-field rounded-2xl pl-12 pr-12 py-4 text-base md:text-lg [&::-webkit-search-cancel-button]:hidden"
       />
       {text && (
         <button type="button" aria-label={t('Clear search')} onClick={() => { setText(''); inputRef.current?.focus(); }}

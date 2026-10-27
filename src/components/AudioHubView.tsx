@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Play, Pause, Radio, Signal, Search } from 'lucide-react';
 import { useRadio } from '../hooks/useRadio';
 import ListenTabs from './ListenTabs';
+import { LuxHeader, LiveMeta } from './ui/Lux';
 import Illustration from './ui/Illustration';
 
 const COUNTRIES = [
@@ -123,7 +124,6 @@ export default function AudioHubView({ onNav }: { onNav?: (tab: string) => void 
   const [radioCategory, setRadioCategory] = useState<string>('All');
   const [selectedCountry, setSelectedCountry] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [eqPreset, setEqPreset] = useState<string>('Studio Flat');
   const { playingUrl, togglePlay } = useRadio();
 
   const radioCategories = ['All', ...Array.from(new Set(STATIONS.map((s) => s.category)))].sort();
@@ -146,16 +146,8 @@ export default function AudioHubView({ onNav }: { onNav?: (tab: string) => void 
       <div aria-hidden className="pointer-events-none absolute -top-10 left-0 right-0 h-64 -z-10 opacity-70"
         style={{ background: 'radial-gradient(60% 70% at 12% 0%, rgba(251,191,36,0.22), transparent 70%), radial-gradient(50% 60% at 80% 10%, rgba(251,191,36,0.12), transparent 72%)', filter: 'blur(8px)' }} />
       {/* Header */}
-      <div className="overline mb-1.5">Sahrae · Listen</div>
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-300 via-amber-500 to-amber-600 flex items-center justify-center">
-          <Radio className="w-6 h-6 text-white" />
-        </div>
-        <div>
-          <h2 className="text-3xl font-display font-bold text-white leading-tight tracking-tight">Radio</h2>
-          <p className="text-sm text-zinc-400">Live stations · news · music</p>
-        </div>
-      </div>
+      <LuxHeader kicker={<><Radio className="w-3.5 h-3.5" /> Sahrae · Listen</>} title="Radio"
+        meta={<><LiveMeta>{STATIONS.length} stations on air</LiveMeta><span>News, talk and music, live</span></>} />
 
       {/* Music and Podcasts render this same switcher, so all three Listen
           destinations sit under one control instead of Radio being a dead end. */}
@@ -165,7 +157,7 @@ export default function AudioHubView({ onNav }: { onNav?: (tab: string) => void 
         
         {/* Live Radio Studio Desk (Analog Console + Active EQ + Controls) */}
         {nowPlaying && (
-          <div className="relative overflow-hidden rounded-2xl mb-8 border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.5)] bg-zinc-950 p-6 md:p-8 animate-in fade-in duration-500">
+          <div className="lux-spot mb-10 p-6 md:p-8 animate-in fade-in duration-500">
             {/* Colored atmospheric glow corresponding to station gradient */}
             <div className={`absolute -right-24 -top-24 w-80 h-80 rounded-full bg-gradient-to-br ${gradFor(nowPlaying.name)} blur-3xl opacity-20 pointer-events-none`} />
             
@@ -213,16 +205,16 @@ export default function AudioHubView({ onNav }: { onNav?: (tab: string) => void 
               {/* Station Meta & Signal Dashboard Column */}
               <div className="md:col-span-5 flex flex-col gap-4">
                 <div>
-                  <span className="text-amber-500 font-bold tracking-widest text-xs uppercase block mb-1">Live Broadcast · {nowPlaying.country}</span>
-                  <h3 className="text-2xl md:text-4xl font-display font-bold text-white tracking-tight leading-tight mb-2 truncate">{nowPlaying.name}</h3>
+                  <span className="lux-kicker mb-2">Live broadcast · {nowPlaying.country}</span>
+                  <h3 className="lux-title text-3xl md:text-5xl mb-2 truncate pb-1">{nowPlaying.name}</h3>
                   <p className="text-sm text-zinc-400 font-medium">{nowPlaying.category} Stream · {nowPlaying.frequency}</p>
                 </div>
                 
                 {/* Animated Digital Signal Analyzer */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
-                    <span>Spectrum Monitor</span>
-                    <span className="text-amber-500">Preset: {eqPreset}</span>
+                    <span>On air</span>
+                    <span className="text-amber-500">{playingUrl ? 'Live' : 'Paused'}</span>
                   </div>
                   
                   {/* Spectrum bars inside desk */}
@@ -255,54 +247,25 @@ export default function AudioHubView({ onNav }: { onNav?: (tab: string) => void 
                   </div>
                   
                   {/* Audio Console Signal Stats */}
-                  <div className="grid grid-cols-3 gap-2 text-center text-[10px] font-mono">
-                    <div className="bg-white/5 border border-white/5 rounded-lg p-1.5">
-                      <span className="text-zinc-500 block">BITRATE</span>
-                      <span className="text-zinc-300 font-bold">128kbps AAC</span>
-                    </div>
-                    <div className="bg-white/5 border border-white/5 rounded-lg p-1.5">
-                      <span className="text-zinc-500 block">STABILITY</span>
-                      <span className="text-emerald-500 font-bold animate-pulse">99.8% LIVE</span>
-                    </div>
-                    <div className="bg-white/5 border border-white/5 rounded-lg p-1.5">
-                      <span className="text-zinc-500 block">LATENCY</span>
-                      <span className="text-zinc-300 font-bold">~1.4s (Stereo)</span>
-                    </div>
+                  <div className="grid grid-cols-3 gap-2 text-center text-[10px]">
+                    {[['Station', nowPlaying.frequency], ['Genre', nowPlaying.category], ['From', nowPlaying.country]].map(([k, v]) => (
+                      <div key={k} className="rounded-xl p-2 bg-white/[0.04] ring-1 ring-white/10">
+                        <span className="text-zinc-500 block uppercase tracking-widest font-bold">{k}</span>
+                        <span className="text-zinc-200 font-bold text-xs truncate block">{v}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
               
               {/* Equalizer Console Presets & Controls Column */}
               <div className="md:col-span-3 flex flex-col justify-between h-full gap-4 md:border-l md:border-white/5 md:pl-6">
-                <div className="space-y-3">
-                  <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Audio Profile</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-1 gap-2">
-                    {['Studio Flat', 'Bass Booster', 'Warm Vocal', 'Concert Surround'].map((p) => {
-                      const active = eqPreset === p;
-                      return (
-                        <button
-                          key={p}
-                          onClick={() => setEqPreset(p)}
-                          className={`px-3 py-2 text-left text-xs font-bold rounded-xl border transition-all ${
-                            active 
-                              ? 'bg-amber-500/10 border-amber-500 text-amber-400' 
-                              : 'bg-zinc-900 border-white/5 text-zinc-400 hover:text-white hover:border-white/10'
-                          }`}
-                        >
-                          <span className="flex items-center gap-1.5">
-                            <span className={`w-1.5 h-1.5 rounded-full ${active ? 'bg-amber-400 animate-pulse' : 'bg-transparent border border-zinc-600'}`} />
-                            {p}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                <p className="text-xs text-zinc-400 leading-relaxed">Streaming live from {nowPlaying.name}. It keeps playing while you browse the rest of Sahrae.</p>
                 
                 {/* Main Console Play/Pause trigger */}
                 <button
                   onClick={() => togglePlay(nowPlaying.url, nowPlaying.name)}
-                  className="w-full btn-gold py-3 px-4 rounded-full font-bold flex items-center justify-center gap-2.5 text-xs"
+                  className="w-full lux-btn py-3.5 px-4 text-sm"
                 >
                   {playingUrl ? (
                     <>
@@ -325,13 +288,13 @@ export default function AudioHubView({ onNav }: { onNav?: (tab: string) => void 
         {/* Search & Filter bar for stations */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+            <Search className="absolute z-10 left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search radio stations, categories or countries..."
-              className="w-full bg-zinc-950 text-white text-sm pl-10 pr-9 py-2 rounded-xl border border-white/10 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/30 outline-none transition-all"
+              className="w-full lux-field text-sm pl-10 pr-14 py-3"
             />
             {searchQuery && (
               <button
@@ -360,11 +323,8 @@ export default function AudioHubView({ onNav }: { onNav?: (tab: string) => void 
                 <button
                   key={c.code}
                   onClick={() => setSelectedCountry(c.code)}
-                  className={`px-4 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 whitespace-nowrap transition-all ${
-                    active 
-                      ? 'bg-amber-500 text-amber-950 scale-[1.02]' 
-                      : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-white/5 hover:border-white/10'
-                  }`}
+                  aria-pressed={active}
+                  className="lux-chip"
                 >
                   <span className="text-sm leading-none">{c.flag}</span>
                   {c.name}
@@ -386,11 +346,8 @@ export default function AudioHubView({ onNav }: { onNav?: (tab: string) => void 
                 <button
                   key={category}
                   onClick={() => setRadioCategory(category)}
-                  className={`px-4 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
-                    active 
-                      ? 'bg-zinc-100 text-zinc-950 border border-zinc-100' 
-                      : 'bg-zinc-900/50 hover:bg-zinc-800 text-zinc-400 border border-white/5 hover:text-white'
-                  }`}
+                  aria-pressed={active}
+                  className="lux-chip"
                 >
                   {category}
                 </button>
@@ -411,7 +368,7 @@ export default function AudioHubView({ onNav }: { onNav?: (tab: string) => void 
                   data-tv-focusable
                   role="button"
                   aria-pressed={active}
-                  className={`card-lift tier-card rounded-2xl p-3 group relative overflow-hidden flex flex-col cursor-pointer focus:outline-none ${active ? 'border-amber-400/60' : ''}`}
+                  className={`lux-card p-3 group flex flex-col cursor-pointer focus:outline-none ${active ? 'ring-2 ring-amber-400/70' : ''}`}
                   onClick={() => togglePlay(station.url, station.name)}
                 >
                   {/* Station "cover" — its signature colour + vinyl grooves + monogram */}
@@ -449,7 +406,7 @@ export default function AudioHubView({ onNav }: { onNav?: (tab: string) => void 
             })}
           </div>
         ) : (
-          <div className="text-center py-16 bg-zinc-950/40 border border-white/5 rounded-2xl">
+          <div className="text-center py-16 lux-card">
             <Illustration name="radio" className="w-44 md:w-52 h-auto mx-auto mb-4" />
             <h4 className="text-lg font-bold text-white mb-1">No stations found</h4>
             <p className="text-sm text-zinc-500 max-w-md mx-auto px-4">
