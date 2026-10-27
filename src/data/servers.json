@@ -1,6 +1,6 @@
 {
   "version": 8,
-  "updated": "2026-10-26",
+  "updated": "2026-10-27",
   "about": "Movie and series servers chosen on 2026-10-26 from 19 candidates measured in the Android app on emulators (stream handed over, quality menu, bitrate of a real segment, picture size after 20 s of playback) and from a Kenyan connection. In the Android app the order is by measured bitrate (cleanFirst), so VidFast (4K, 1080p at 6 Mb/s) leads; on the web, with Ad Shield on, only servers that play inside it are offered (VidZee first) and VidNest is app only.",
   "servers": [
     {
@@ -24,8 +24,8 @@
       "coverage": 1,
       "events": true,
       "status": "active",
-      "failStreak": 0,
-      "checked": "2026-10-26",
+      "failStreak": 1,
+      "checked": "2026-10-27",
       "note": "Back first on 2026-10-26 (owner). The only film server measured to play inside the web Ad Shield sandbox (no pop-ups). On the Android emulators it handed its stream to Sahrae's player in 2-3 s: 1920x800 on The Dark Knight and Deadpool & Wolverine, but only 854x480 on Breaking Bad S1E1."
     },
     {
@@ -203,8 +203,8 @@
       "coverage": 1,
       "events": false,
       "status": "active",
-      "failStreak": 0,
-      "checked": "2026-10-26",
+      "failStreak": 1,
+      "checked": "2026-10-27",
       "note": "Kept as a web backup inside Ad Shield; not proven to play (black screen sandboxed on 2026-10-26)."
     },
     {
