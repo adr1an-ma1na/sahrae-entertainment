@@ -112,6 +112,18 @@ const cleanSaved = (list: Track[]): Track[] =>
   Array.isArray(list) ? list.map((t) => (t && !t.audioUrl ? { ...t, ...cleanTrackText(t.title, t.artist) } : t)) : [];
 const saveLS = (k: string, v: unknown) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ } };
 
+// Media hosts that refuse CORS, so their audio must skip the EQ element.
+// Seeded with the ones measured on 2026-10-27; learned and persisted after that.
+const NO_CORS_KEY = 'sahrae.audio.noCorsHosts.v1';
+const hostOf = (u: string) => { try { return new URL(u).hostname; } catch { return ''; } };
+const noCorsHosts = (() => {
+  const set = new Set<string>(['anchor.fm', 'hearthis.at', 'stitcher.simplecastaudio.com', 'rsv.simplecastaudio.com']);
+  for (const h of loadLS<string[]>(NO_CORS_KEY, [])) set.add(h);
+  const add = set.add.bind(set);
+  set.add = (h: string) => { if (h && !set.has(h)) { add(h); saveLS(NO_CORS_KEY, [...set].slice(-200)); } return set; };
+  return set;
+})();
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 let apiLoading = false;
 function loadYT(): Promise<any> {
@@ -142,8 +154,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   // The tracking URL to retry with if the unwrapped direct URL is refused, and a
   // flag so we only ever fall back once per track rather than looping.
   const altSrcRef = useRef<string | null>(null);
-  // Guards the no-CORS retry so one failing source cannot loop.
-  const noCorsRetryRef = useRef<string | null>(null);
+  // The EQ-processed element and a plain one for hosts that refuse CORS (see
+  // the audio effect). audioElRef points at whichever is playing.
+  const eqElRef = useRef<HTMLAudioElement | null>(null);
+  const plainElRef = useRef<HTMLAudioElement | null>(null);
   // Latest control fns + live position, for the OS MediaSession handlers (which
   // are registered once but must always act on current state).
   const ctrlRef = useRef<{ next: () => void; prev: () => void; stop: () => void; seek: (s: number) => void }>({ next: () => {}, prev: () => {}, stop: () => {}, seek: () => {} });
@@ -383,69 +397,107 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ── the offline <audio> element (downloaded tracks play here) ──
+  //
+  // TWO ELEMENTS, because the equaliser cannot be taken off one.
+  // The EQ element is crossOrigin='anonymous' and wired into Web Audio, which is
+  // only audible for media served with CORS. About a third of the top podcasts
+  // are not (measured 2026-10-27: Anchor/Spotify, hearthis.at, Simplecast — 17
+  // of 59 shows across US/KE/GB). The old fallback dropped the attribute and
+  // replayed on the SAME element, which is still routed through Web Audio, so it
+  // played silence: the bar moved and nothing came out. Those sources now play
+  // on a plain element that never touches Web Audio; the EQ is honestly off for
+  // them (eqReachable false) and their host is remembered for next time.
   useEffect(() => {
-    const a = new Audio();
-    a.preload = 'auto';
-    // Required before any src is set: a MediaElementSource over cross-origin
-    // media WITHOUT CORS outputs silence instead of erroring, and silence is
-    // impossible to debug. With it, a source that refuses CORS raises a load
-    // error we can catch and retry unprocessed (see onError).
-    a.crossOrigin = 'anonymous';
-    audioElRef.current = a;
-    // Build the EQ graph once, around this element.
-    attachEq(a);
-    applyWebEq(loadEq());
-    const onPlay = () => { resumeEq(); setIsPlaying(true); setBuffering(false); setActive(true); window.dispatchEvent(new CustomEvent('sahrae:audioclaim', { detail: 'music' })); };
-    const onPause = () => setIsPlaying(false);
-    const onWaiting = () => setBuffering(true);
-    const onEnded = () => endedRef.current();
-    const onError = () => {
-      // Some publishers sign their tracking chain and refuse the direct file, so
-      // one retry with the original URL before giving up. Only once — a second
-      // failure is a real failure, and retrying forever would spin silently.
-      const alt = altSrcRef.current;
-      if (alt) {
-        altSrcRef.current = null;
-        try { a.src = alt; a.play().catch(() => {}); return; } catch { /* fall through */ }
-      }
-      // Second chance: the source may simply not allow CORS, which the
-      // crossOrigin attribute turns into this very error. Retry without it —
-      // playback matters more than the equaliser, so drop the processing and
-      // keep the audio.
-      if (a.crossOrigin && noCorsRetryRef.current !== a.src) {
-        noCorsRetryRef.current = a.src;
-        const src = a.src;
-        try { a.removeAttribute('crossorigin'); a.src = src; a.play().catch(() => {}); return; } catch { /* fall through */ }
-      }
-      // MediaError codes: 2 network, 3 decode, 4 unsupported/404. A podcast MP3
-      // that 404s or redirects to HTML lands on 4, which is by far the common
-      // case and used to leave the player sitting at 0:00 pretending to play.
-      const code = a.error?.code;
-      setIsPlaying(false);
-      setBuffering(false);
-      setPlaybackError(
-        code === 2 ? 'Lost the connection while loading this episode.'
-          : code === 3 ? 'This episode is in a format the browser cannot play.'
-            : 'This episode could not be loaded. The file may have moved or been removed.',
-      );
+    const make = (withEq: boolean) => {
+      const a = new Audio();
+      a.preload = 'auto';
+      // Required before any src is set on the EQ element: without it a
+      // non-CORS source would play silently instead of raising an error.
+      if (withEq) a.crossOrigin = 'anonymous';
+      const mine = () => audioElRef.current === a;
+      const onPlay = () => { if (!mine()) return; if (withEq) resumeEq(); setIsPlaying(true); setBuffering(false); setActive(true); window.dispatchEvent(new CustomEvent('sahrae:audioclaim', { detail: 'music' })); };
+      const onPause = () => { if (mine()) setIsPlaying(false); };
+      const onWaiting = () => { if (mine()) setBuffering(true); };
+      const onEnded = () => { if (mine()) endedRef.current(); };
+      const onError = () => {
+        if (!mine() || !a.getAttribute('src')) return;
+        // Some publishers sign their tracking chain and refuse the direct file, so
+        // one retry with the original URL before giving up. Only once — a second
+        // failure is a real failure, and retrying forever would spin silently.
+        const alt = altSrcRef.current;
+        if (alt) {
+          altSrcRef.current = null;
+          try { a.src = alt; a.play().catch(() => {}); return; } catch { /* fall through */ }
+        }
+        // The source may simply not allow CORS, which the crossOrigin attribute
+        // turns into this very error. Playback matters more than the equaliser:
+        // hand the same URL to the plain element.
+        if (withEq && plainElRef.current) {
+          const src = a.src;
+          noCorsHosts.add(hostOf(src));
+          playPlain(src, a.playbackRate);
+          return;
+        }
+        // MediaError codes: 2 network, 3 decode, 4 unsupported/404. A podcast MP3
+        // that 404s or redirects to HTML lands on 4, which is by far the common
+        // case and used to leave the player sitting at 0:00 pretending to play.
+        const code = a.error?.code;
+        setIsPlaying(false);
+        setBuffering(false);
+        setPlaybackError(
+          code === 2 ? 'Lost the connection while loading this episode.'
+            : code === 3 ? 'This episode is in a format the browser cannot play.'
+              : 'This episode could not be loaded. The file may have moved or been removed.',
+        );
+      };
+      const onTime = () => { if (mine() && usingLocalRef.current) { setPosition(a.currentTime || 0); if (a.duration && isFinite(a.duration)) setDuration(a.duration); } };
+      a.addEventListener('play', onPlay); a.addEventListener('playing', onPlay);
+      a.addEventListener('pause', onPause); a.addEventListener('waiting', onWaiting);
+      a.addEventListener('ended', onEnded); a.addEventListener('timeupdate', onTime);
+      a.addEventListener('error', onError);
+      a.addEventListener('stalled', onWaiting);
+      return a;
     };
-    const onTime = () => { if (usingLocalRef.current) { setPosition(a.currentTime || 0); if (a.duration && isFinite(a.duration)) setDuration(a.duration); } };
-    a.addEventListener('play', onPlay); a.addEventListener('playing', onPlay);
-    a.addEventListener('pause', onPause); a.addEventListener('waiting', onWaiting);
-    a.addEventListener('ended', onEnded); a.addEventListener('timeupdate', onTime);
-    a.addEventListener('error', onError);
-    a.addEventListener('stalled', onWaiting);
-    return () => { try { a.pause(); a.removeAttribute('src'); } catch { /* ignore */ } };
+    const eqEl = make(true);
+    const plainEl = make(false);
+    eqElRef.current = eqEl;
+    plainElRef.current = plainEl;
+    audioElRef.current = eqEl;
+    // Build the EQ graph once, around the EQ element only.
+    attachEq(eqEl);
+    applyWebEq(loadEq());
+    return () => { for (const a of [eqEl, plainEl]) { try { a.pause(); a.removeAttribute('src'); } catch { /* ignore */ } } };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Move playback onto the unprocessed element (a source that refuses CORS).
+  const playPlain = (src: string, rate = 1) => {
+    const eqEl = eqElRef.current, plainEl = plainElRef.current;
+    if (!plainEl) return;
+    audioElRef.current = plainEl;
+    try { if (eqEl) { eqEl.pause(); eqEl.removeAttribute('src'); } } catch { /* ignore */ }
+    setEqReachable(false);
+    plainEl.src = src;
+    plainEl.playbackRate = rate;
+    plainEl.play().catch((err: unknown) => {
+      if ((err as { name?: string })?.name === 'NotAllowedError') return;
+      setPlaybackError('Could not start this episode. Tap play to try again.');
+    });
+  };
 
   // Route a resolved source to the right lane: the <audio> element for a real
   // file, otherwise the YouTube iframe. Split out of the effect below so the
   // effect can await the source without nesting all of this inside a callback.
   const applyLocal = (local: string | null, c: Track) => {
-    const a = audioElRef.current;
+    // A new source starts on the EQ element unless its host is known to refuse
+    // CORS, in which case it goes straight to the plain one (no failed first load).
+    const plain = !!local && noCorsHosts.has(hostOf(local));
+    const a = (plain ? plainElRef.current : eqElRef.current) || audioElRef.current;
     if (local && a) {
-      usingLocalRef.current = true; setEqReachable(true);
+      const other = a === eqElRef.current ? plainElRef.current : eqElRef.current;
+      try { if (other) { other.pause(); other.removeAttribute('src'); } } catch { /* ignore */ }
+      audioElRef.current = a;
+      usingLocalRef.current = true; setEqReachable(!plain);
       try { playerRef.current?.pauseVideo?.(); } catch { /* ignore */ }
       a.src = local;
       // Only meaningful when the source we just set is the unwrapped one.
@@ -461,7 +513,9 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       setActive(true);
     } else {
       usingLocalRef.current = false; setEqReachable(false);
-      try { if (a) { a.pause(); a.removeAttribute('src'); a.load(); } } catch { /* ignore */ }
+      for (const el of [eqElRef.current, plainElRef.current]) {
+        try { if (el) { el.pause(); el.removeAttribute('src'); el.load(); } } catch { /* ignore */ }
+      }
       if (readyRef.current && playerRef.current) {
         playerRef.current.loadVideoById(c.id);
         // Nudge play in case autoplay doesn't kick in on the WebView.
