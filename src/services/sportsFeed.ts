@@ -16,7 +16,7 @@ import { recordSourceOutcome, rankSources } from './sportsSources.ts';
  * the Android shell (which could have proxied around it anyway).
  */
 
-export interface FeedTeam { name?: string; badge?: string }
+export interface FeedTeam { name?: string; badge?: string; /** Team colour, when the source has no crest. */ color?: string }
 
 export interface FeedEvent {
   id: string;
@@ -26,6 +26,8 @@ export interface FeedEvent {
   popular?: boolean;
   /** The API's match artwork, as an absolute https URL. */
   poster?: string;
+  /** Competition, as the source names it ("Serie A", "NBA", "24/7 channel"). */
+  league?: string;
   live?: boolean;
   teams?: { home?: FeedTeam; away?: FeedTeam } | null;
   /** Ready-to-play embed URLs. */
@@ -42,7 +44,7 @@ const FALLBACK_URLS = [
   'https://raw.githubusercontent.com/adr1an-ma1na/sahrae-sports-feed/main/feed.json',
   'https://cdn.jsdelivr.net/gh/adr1an-ma1na/sahrae-sports-feed@main/feed.json',
 ];
-const CACHE_KEY = 'sahrae.sportsFeed.v2';
+const CACHE_KEY = 'sahrae.sportsFeed.v3'; // v3: ppv.st, after Streamed closed
 const CACHE_TTL_MS = 5 * 60_000;
 
 interface ApiSource { source: string; id: string }
@@ -166,30 +168,14 @@ export async function loadSportsFeed(): Promise<Feed> {
   const cached = readCache();
   if (cached) return cached;
 
-  const [all, live] = await Promise.all([
-    getJson<ApiMatch[]>(`${API_BASE}/matches/all`),
-    getJson<ApiMatch[]>(`${API_BASE}/matches/live`),
-  ]);
-
-  if (Array.isArray(all) && all.length) {
-    const liveIds = new Set((live || []).map((m) => m.id));
-    sourcesById.clear();
-    // Stored ranked, so whoever expands them on open tries the most promising
-    // first and a slice of four is four real chances rather than three wasted
-    // slots behind a source that never answers.
-    for (const m of all) if (m.sources?.length) sourcesById.set(m.id, rankSources(m.sources));
-    for (const m of live || []) if (m.sources?.length) sourcesById.set(m.id, rankSources(m.sources));
-
-    // `live` occasionally carries a match `all` has not picked up yet.
-    const merged = new Map<string, ApiMatch>();
-    for (const m of all) merged.set(m.id, m);
-    for (const m of live || []) if (!merged.has(m.id)) merged.set(m.id, m);
-
-    const feed: Feed = {
-      events: Array.from(merged.values()).map((m) => toFeedEvent(m, liveIds.has(m.id))),
-    };
-    writeCache(feed);
-    return feed;
+  // Streamed (streamed.pk) closed on 2026-10-26 ("We are no longer operating
+  // Streamed") and every API address now forwards to that notice, so the
+  // schedule comes from ppv.st, the first site Streamed points to. Its feed is
+  // public and CORS-open.
+  const ppv = await loadPpvFeed();
+  if (ppv && ppv.events.length) {
+    writeCache(ppv);
+    return ppv;
   }
 
   for (const url of FALLBACK_URLS) {
@@ -201,4 +187,92 @@ export async function loadSportsFeed(): Promise<Feed> {
   }
 
   return readStaleCache() || { events: [] };
+}
+
+// ── ppv.st ───────────────────────────────────────────────────────────────
+interface PpvStream {
+  id: number; name: string; tag?: string; poster?: string; uri_name?: string;
+  starts_at: number; ends_at: number; always_live?: number; category_name?: string;
+  iframe?: string; viewers?: string | number; colors?: string[];
+}
+const PPV_API = 'https://api.ppv.st/api/streams';
+
+/** ppv.st's sport names onto the app's categories. Not sport (cartoons, 24/7 shows): dropped. */
+export function ppvCategory(name: string): string | null {
+  const n = (name || '').toLowerCase();
+  if (n === 'football' || n === 'soccer') return 'football';
+  if (n.includes('american football')) return 'american-football';
+  if (n.includes('basketball')) return 'basketball';
+  if (n.includes('baseball')) return 'baseball';
+  if (n.includes('hockey')) return 'hockey';
+  if (n.includes('cricket')) return 'cricket';
+  if (n.includes('tennis')) return 'tennis';
+  if (n.includes('golf')) return 'golf';
+  if (n.includes('rugby') || n.includes('australian football')) return 'rugby';
+  if (n.includes('motor') || n.includes('formula') || n.includes('racing') || n.includes('f1')) return 'motor-sports';
+  if (n.includes('wrestling') || n.includes('mma') || n.includes('ufc') || n.includes('boxing') || n.includes('combat') || n.includes('fight')) return 'fight';
+  if (n.includes('darts')) return 'darts';
+  if (n.includes('24/7')) return null;
+  return 'other';
+}
+
+const HEX = /^#[0-9a-f]{6}$/i;
+function withColors(t: FeedEvent['teams'], colors?: string[]): FeedEvent['teams'] {
+  if (!t || !Array.isArray(colors)) return t;
+  return {
+    home: { ...t.home, color: HEX.test(colors[0] || '') ? colors[0] : undefined },
+    away: { ...t.away, color: HEX.test(colors[1] || '') ? colors[1] : undefined },
+  };
+}
+
+/** "Sassuolo vs. Lazio" → home Sassuolo, away Lazio. */
+export function ppvTeams(name: string): FeedEvent['teams'] {
+  const m = (name || '').match(/^(.+?)\s+(?:vs\.?|v\.?|@)\s+(.+)$/i);
+  return m ? { home: { name: m[1].trim() }, away: { name: m[2].trim() } } : null;
+}
+
+export function ppvToEvent(s: PpvStream, category: string, nowSec: number): FeedEvent | null {
+  if (!s.iframe || !/^https:\/\//.test(s.iframe)) return null;
+  const always = !!s.always_live;
+  const live = always || (s.starts_at > 0 && s.starts_at <= nowSec && nowSec <= (s.ends_at || s.starts_at + 3 * 3600));
+  return {
+    id: `ppv-${s.id}`,
+    title: s.name,
+    category,
+    // A 24/7 channel has no kick-off; 0 keeps it listed as always on.
+    date: always || !s.starts_at ? 0 : s.starts_at * 1000,
+    popular: Number(s.viewers || 0) >= 500,
+    poster: s.poster && /^https:\/\//.test(s.poster) ? s.poster : undefined,
+    league: s.tag || undefined,
+    live,
+    teams: withColors(ppvTeams(s.name), s.colors),
+    embeds: [s.iframe],
+  };
+}
+
+async function loadPpvFeed(): Promise<Feed | null> {
+  const j = await getJson<{ streams?: { category: string; streams: PpvStream[] }[] }>(PPV_API, 15000);
+  if (!j || !Array.isArray(j.streams)) return null;
+  const now = Date.now() / 1000;
+  const events: FeedEvent[] = [];
+  const hosts = new Set<string>();
+  for (const group of j.streams) {
+    const cat = ppvCategory(group.category);
+    if (!cat) continue;
+    for (const st of group.streams || []) {
+      const e = ppvToEvent(st, cat, now);
+      if (!e) continue;
+      events.push(e);
+      try { hosts.add(new URL(st.iframe!).hostname); } catch { /* skip */ }
+    }
+  }
+  shareEmbedHosts([...hosts]);
+  return { events };
+}
+
+/** Tell the Android app the player's site, so it plays like the built-in hosts (it moves domains). */
+function shareEmbedHosts(hosts: string[]) {
+  const caps = (window as unknown as { __sahraeCaps?: { embedHosts?: boolean } }).__sahraeCaps;
+  if (!caps?.embedHosts || !hosts.length) return;
+  fetch(`https://localhost/__embedhosts?h=${encodeURIComponent(hosts.join(','))}`, { cache: 'no-store' }).catch(() => {});
 }

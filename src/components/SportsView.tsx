@@ -137,10 +137,11 @@ const SPORT_EMOJI: Record<string, string> = {
 };
 /** Team crest with a graceful fallback: shows the badge image, but if it's
  *  missing or 404s, draws the team's initials so every event has a logo. */
-function TeamLogo({ name, src, size = 'w-10 h-10', text = 'text-[11px]' }: { name: string; src?: string; size?: string; text?: string }) {
+function TeamLogo({ name, src, size = 'w-10 h-10', text = 'text-[11px]', color }: { name: string; src?: string; size?: string; text?: string; color?: string }) {
   const [err, setErr] = useState(false);
   if (src && !err) return <img loading="lazy" decoding="async" src={src} alt="" onError={() => setErr(true)} className={`${size} object-contain drop-shadow-[0_6px_18px_rgba(0,0,0,0.6)]`} />;
-  return <div className={`${size} rounded-full bg-gradient-to-br from-zinc-600 to-zinc-800 border border-white/15 flex items-center justify-center ${text} font-extrabold text-white`}>{initials(name) || '?'}</div>;
+  // No crest: the team's own colour, from the source, when it gives one.
+  return <div className={`${size} rounded-full ${color ? '' : 'bg-gradient-to-br from-zinc-600 to-zinc-800'} border border-white/20 flex items-center justify-center ${text} font-extrabold text-white [text-shadow:0_1px_4px_rgba(0,0,0,0.6)]`} style={color ? { background: `radial-gradient(circle at 30% 25%, ${color}, color-mix(in srgb, ${color} 55%, black))` } : undefined}>{initials(name) || '?'}</div>;
 }
 
 // FeedEvent / Feed now come from services/sportsFeed.ts, which loads fixtures
@@ -188,6 +189,17 @@ const SPORT_DURATION_MS: Record<string, number> = {
 /** An event counts as "live" from 10 min before its start time (feeds flip the
  *  live flag late) until its typical runtime elapses — so the LIVE state shows
  *  even when the provider hasn't marked it yet. */
+/** A 24/7 sports channel rather than a match (ppv.st tags them so). */
+const isChannelEvent = (m: FeedEvent) => (m.league || '').toLowerCase().includes('24/7');
+
+/** "Kick-off 20:30" today, "Kick-off Sat 20:30" later in the week. */
+function kickOffLabel(ms: number): string {
+  const d = new Date(ms);
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const today = d.toDateString() === new Date().toDateString();
+  return `Kick-off ${today ? '' : d.toLocaleDateString([], { weekday: 'short' }) + ' '}${time}`;
+}
+
 function eventIsLive(m: FeedEvent): boolean {
   // Feed-confirmed live always shows (openEvent always adds a channel fallback,
   // so there's always something to watch).
@@ -509,6 +521,8 @@ interface Playing {
   failed: Set<string>;
   /** Every source was asked and none had a stream for this match. */
   noFeeds?: boolean;
+  /** Kick-off (ms) for a match that has not started: the header shows it instead of "Live". */
+  startsAt?: number;
 }
 
 export default function SportsView() {
@@ -766,7 +780,11 @@ export default function SportsView() {
     );
 
     const idx = initialServerIdx !== undefined && initialServerIdx < sources.length ? initialServerIdx : 0;
-    setPlaying({ title: matchTitle(m), tokens, sources, idx, failed: new Set(), noFeeds: sources.length === 0 && !(sourcesById.get(m.id)?.length) });
+    const opened = { title: matchTitle(m), tokens, sources, idx, failed: new Set<string>(), noFeeds: sources.length === 0 && !(sourcesById.get(m.id)?.length), startsAt: !eventIsLive(m) && m.date > Date.now() ? m.date : undefined };
+    // checkStream reads the ref: point it at this match now, or the checks below
+    // find nothing and the player waits on "Getting the stream ready" for ever.
+    playingRef.current = opened;
+    setPlaying(opened);
 
     // Expand the API's per-stream detail for this match: exact embed URLs plus
     // REAL hd/language flags. Quality is only ever labelled from what the
@@ -1042,16 +1060,19 @@ export default function SportsView() {
     const order = ['football', 'basketball', 'fight', 'motor-sports', 'tennis', 'cricket', 'american-football', 'baseball', 'hockey', 'golf', 'rugby'];
     const live = visible.filter((m) => eventIsLive(m));
     const groups: { title: string; live?: boolean; events: FeedEvent[] }[] = [];
+    const channels247 = visible.filter(isChannelEvent);
     if (sport === 'all') {
-      if (live.length) groups.push({ title: 'Live Now', live: true, events: live });
+      const liveMatches = live.filter((m) => !isChannelEvent(m));
+      if (liveMatches.length) groups.push({ title: 'Live Now', live: true, events: liveMatches });
       const byCat = new Map<string, FeedEvent[]>();
       for (const m of visible) {
-        if (eventIsLive(m)) continue;
+        if (eventIsLive(m) || isChannelEvent(m)) continue;
         if (!byCat.has(m.category)) byCat.set(m.category, []);
         byCat.get(m.category)!.push(m);
       }
       const cats = Array.from(byCat.keys()).sort((a, b) => (order.indexOf(a) < 0 ? 99 : order.indexOf(a)) - (order.indexOf(b) < 0 ? 99 : order.indexOf(b)));
       for (const c of cats) groups.push({ title: SPORT_LABELS[c] || c, events: byCat.get(c)! });
+      if (channels247.length) groups.push({ title: '24/7 sports channels', live: true, events: channels247 });
     } else if (sport === 'live') {
       groups.push({ title: 'Live Now', live: true, events: visible });
     } else {
@@ -1064,13 +1085,13 @@ export default function SportsView() {
 
   // The spotlight: the most-watched live match with a feed, else the next big one.
   const featured = useMemo(() => {
-    const withFeed = visible.filter((m) => (m.embeds?.length || 0) > 0);
+    const withFeed = visible.filter((m) => (m.embeds?.length || 0) > 0 && !isChannelEvent(m));
     return withFeed.find((m) => eventIsLive(m) && m.popular)
       || withFeed.find((m) => eventIsLive(m))
       || withFeed.find((m) => m.popular)
       || withFeed[0] || null;
   }, [visible]);
-  const liveCount = useMemo(() => visible.filter((m) => eventIsLive(m)).length, [visible]);
+  const liveCount = useMemo(() => visible.filter((m) => eventIsLive(m) && !isChannelEvent(m)).length, [visible]);
 
   const renderSpotlight = (m: FeedEvent) => {
     const home = m.teams?.home, away = m.teams?.away;
@@ -1093,7 +1114,7 @@ export default function SportsView() {
             ) : (
               <span className="px-2.5 py-1 rounded-full bg-white/10 backdrop-blur text-white text-[11px] font-bold tabular">{formatEventDateTime(m.date)}</span>
             )}
-            <span className="px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white/90 bg-black/30 backdrop-blur border border-white/10">{SPORT_LABELS[m.category] || m.category}</span>
+            <span className="px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white/90 bg-black/30 backdrop-blur border border-white/10">{m.league || SPORT_LABELS[m.category] || m.category}</span>
             <span className="ml-auto hidden sm:inline text-[10px] font-semibold uppercase tracking-[0.22em] text-white/45">Featured match</span>
           </div>
 
@@ -1101,7 +1122,7 @@ export default function SportsView() {
             <div className="flex items-center justify-center gap-4 md:gap-14 py-4">
               <div className="flex flex-col items-center gap-3 flex-1 min-w-0">
                 <div className="relative grid place-items-center w-20 h-20 md:w-32 md:h-32 rounded-full bg-black/45 backdrop-blur-sm ring-1 ring-white/15" style={{ boxShadow: `0 0 0 6px rgba(${rgb},0.08), 0 12px 40px -10px rgba(${rgb},0.45)` }}>
-                  <TeamLogo name={home.name} src={home.badge ? badge(home.badge) : undefined} size="w-12 h-12 md:w-20 md:h-20" text="text-lg md:text-2xl" />
+                  <TeamLogo name={home.name} color={home.color} src={home.badge ? badge(home.badge) : undefined} size="w-12 h-12 md:w-20 md:h-20" text="text-lg md:text-2xl" />
                 </div>
                 <span className="text-sm md:text-xl font-display font-bold text-white text-center line-clamp-2 leading-tight">{home.name}</span>
               </div>
@@ -1111,7 +1132,7 @@ export default function SportsView() {
               </div>
               <div className="flex flex-col items-center gap-3 flex-1 min-w-0">
                 <div className="relative grid place-items-center w-20 h-20 md:w-32 md:h-32 rounded-full bg-black/45 backdrop-blur-sm ring-1 ring-white/15" style={{ boxShadow: `0 0 0 6px rgba(${rgb},0.08), 0 12px 40px -10px rgba(${rgb},0.45)` }}>
-                  <TeamLogo name={away.name} src={away.badge ? badge(away.badge) : undefined} size="w-12 h-12 md:w-20 md:h-20" text="text-lg md:text-2xl" />
+                  <TeamLogo name={away.name} color={away.color} src={away.badge ? badge(away.badge) : undefined} size="w-12 h-12 md:w-20 md:h-20" text="text-lg md:text-2xl" />
                 </div>
                 <span className="text-sm md:text-xl font-display font-bold text-white text-center line-clamp-2 leading-tight">{away.name}</span>
               </div>
@@ -1142,7 +1163,7 @@ export default function SportsView() {
         <div aria-hidden className="pointer-events-none absolute -top-16 -right-16 w-40 h-40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" style={{ background: `radial-gradient(circle, rgba(${rgb},0.22), transparent 70%)` }} />
         <div className="flex items-center justify-between gap-2">
           <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-400">
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: `rgb(${rgb})` }} />{SPORT_LABELS[m.category] || m.category}
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: `rgb(${rgb})` }} />{m.league && !isChannelEvent(m) ? m.league : SPORT_LABELS[m.category] || m.category}
           </span>
           {live ? (
             <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-[0.14em] bg-red-500/15 text-red-300 ring-1 ring-red-500/30">
@@ -1156,12 +1177,12 @@ export default function SportsView() {
         {home?.name && away?.name ? (
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
             <div className="flex flex-col items-center gap-2 min-w-0">
-              <div className="grid place-items-center w-14 h-14 rounded-full bg-white/[0.04] ring-1 ring-white/10"><TeamLogo name={home.name} src={home.badge ? badge(home.badge) : undefined} /></div>
+              <div className="grid place-items-center w-14 h-14 rounded-full bg-white/[0.04] ring-1 ring-white/10"><TeamLogo name={home.name} color={home.color} src={home.badge ? badge(home.badge) : undefined} /></div>
               <span className="text-[13px] font-semibold text-zinc-100 text-center line-clamp-2 leading-snug">{home.name}</span>
             </div>
             <span className="text-[10px] font-black tracking-[0.25em] text-zinc-500">VS</span>
             <div className="flex flex-col items-center gap-2 min-w-0">
-              <div className="grid place-items-center w-14 h-14 rounded-full bg-white/[0.04] ring-1 ring-white/10"><TeamLogo name={away.name} src={away.badge ? badge(away.badge) : undefined} /></div>
+              <div className="grid place-items-center w-14 h-14 rounded-full bg-white/[0.04] ring-1 ring-white/10"><TeamLogo name={away.name} color={away.color} src={away.badge ? badge(away.badge) : undefined} /></div>
               <span className="text-[13px] font-semibold text-zinc-100 text-center line-clamp-2 leading-snug">{away.name}</span>
             </div>
           </div>
@@ -1203,7 +1224,9 @@ export default function SportsView() {
           <div className="md:hidden w-full flex items-center gap-2 px-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-2">
             <button onClick={() => setPlaying(null)} tabIndex={0} data-tv-focusable aria-label="Close" className="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center shrink-0"><X className="w-5 h-5" /></button>
             <div className="min-w-0 flex-1">
-              <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-red-400"><span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> Live</p>
+              {playing.startsAt
+                ? <p className="text-[11px] font-bold uppercase tracking-wider text-amber-400">{kickOffLabel(playing.startsAt)}</p>
+                : <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-red-400"><span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> Live</p>}
               <h3 className="text-white font-bold text-sm truncate">{playing.title}</h3>
             </div>
             <button onClick={toggleFullScreen} tabIndex={0} aria-label="Full screen" className="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center shrink-0"><Maximize className="w-5 h-5" /></button>
@@ -1214,7 +1237,9 @@ export default function SportsView() {
               : 'w-full aspect-video bg-black rounded-xl shadow-2xl overflow-hidden relative border border-white/10'}>
               <div className={`absolute top-0 left-0 right-0 p-3 md:p-4 bg-gradient-to-b from-black/80 to-transparent z-10 justify-between items-center ${maxed ? 'flex' : 'hidden md:flex'}`}>
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="flex items-center gap-1.5 bg-red-500 text-white px-2.5 py-1 rounded-sm shrink-0"><div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /><span className="text-xs font-bold uppercase tracking-wider">Live</span></div>
+                  {playing.startsAt
+                    ? <div className="bg-amber-500 text-amber-950 px-2.5 py-1 rounded-sm shrink-0 text-xs font-bold uppercase tracking-wider">{kickOffLabel(playing.startsAt)}</div>
+                    : <div className="flex items-center gap-1.5 bg-red-500 text-white px-2.5 py-1 rounded-sm shrink-0"><div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /><span className="text-xs font-bold uppercase tracking-wider">Live</span></div>}
                   <h3 className="text-white font-bold text-sm md:text-lg drop-shadow-md truncate">{playing.title}</h3>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -1247,7 +1272,7 @@ export default function SportsView() {
                     // the header and the server list as the escape hatch. On
                     // Android this is undefined: the native shell blocks popups
                     // already, without breaking any provider.
-                    sandbox={playerSandbox(shieldOn, activeUrl)}
+                    sandbox={activeSrc?.kind === 'server' ? undefined : playerSandbox(shieldOn, activeUrl)}
                   />
                   {isSandboxed && (
                     <div className="absolute top-0 left-0 w-full z-40 bg-amber-500/95 text-amber-950 text-xs md:text-sm font-bold px-4 py-3 flex flex-col md:flex-row items-center justify-center gap-3 md:gap-4 text-center backdrop-blur shadow-2xl border-b border-amber-400/30 animate-in slide-in-from-top-2">

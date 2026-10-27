@@ -173,6 +173,12 @@ export async function validateStream(s: Stream, cfg: StreamConfig = DEFAULT_CONF
   let target = s.url;
   // A server that is still just an embed page: try to pull a direct manifest out
   // of it so the native player can take over and we can really validate it.
+  // Sports feeds play in their provider's own page: Sahrae does not pull the
+  // stream out of it (2026-10-27). Offered as the page, unverified.
+  if (!target && s.embed && s.kind === 'server') {
+    metrics.validationsIndeterminate++;
+    return applyScore({ ...markUnverified(s, now), url: s.embed });
+  }
   if (!target && s.embed) {
     const resolved = await resolveEmbedToStream(s.embed, cfg);
     if (resolved) {
@@ -283,7 +289,7 @@ export function buildStreams(
       embed,
       kind: 'server',
       type: 'hls',
-      label: `Server ${i + 1}`,
+      label: `Feed ${i + 1}`,
       status: 'unknown',
       healthScore: 50,
       consecutiveFailures: 0,
