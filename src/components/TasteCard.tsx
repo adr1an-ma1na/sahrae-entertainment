@@ -14,12 +14,12 @@ export default function TasteCard({ profile, onGenre, onNavigate }: {
 }) {
   const any = profile.screen.length || profile.music.length || profile.sports.length;
   if (!any) return null;
-  const pill = 'shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border border-white/10 bg-zinc-900/80 text-zinc-200 hover:text-white flex items-center gap-1.5';
+  const pill = 'lux-chip';
   return (
-    <section className="px-4 md:px-12 mt-8">
-      <div className="tier-card rounded-2xl p-4">
-        <h2 className="text-sm font-bold text-white flex items-center gap-2"><UserRound className="w-4 h-4 text-amber-400" />{t('Your taste')}</h2>
-        <p className="text-xs text-zinc-400 mt-0.5">From what you watch, listen to and follow, on this device only.</p>
+    <section className="px-4 md:px-12 mt-6">
+      <div className="lux-card p-4 md:p-5">
+        <p className="lux-kicker"><UserRound className="w-3.5 h-3.5" />{t('Your taste')}</p>
+        <p className="text-xs text-zinc-400 mt-1.5">From what you watch, listen to and follow, on this device only.</p>
         <div className="flex gap-2 overflow-x-auto mt-3 pb-1 custom-scrollbar">
           {profile.screen.slice(0, 3).map((g) => (
             <button key={g.id} onClick={() => onGenre(g.name)} data-tv-focusable className={pill}><Film className="w-3.5 h-3.5" />{g.name}</button>

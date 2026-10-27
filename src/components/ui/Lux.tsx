@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 /**
  * The section header every destination shares, in the Live Sports language:
@@ -48,4 +49,52 @@ export function LuxGlow() {
 /** A live count for a header meta line: pulsing red dot + text. */
 export function LiveMeta({ children }: { children: ReactNode }) {
   return <span className="flex items-center gap-1.5 font-semibold" style={{ color: 'var(--lux-live)' }}><span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />{children}</span>;
+}
+
+/**
+ * A shelf header: optional kicker over the gold-bar title, a quiet count, and
+ * round previous/next buttons on pointer screens (touch and D-pad scroll the
+ * rail themselves).
+ */
+export function RailHeader({ title, kicker, icon, count, canPrev, canNext, onPrev, onNext }: {
+  title: ReactNode; kicker?: ReactNode; icon?: ReactNode; count?: number;
+  canPrev?: boolean; canNext?: boolean; onPrev?: () => void; onNext?: () => void;
+}) {
+  return (
+    <div className="flex items-end justify-between gap-4 mb-4">
+      <div className="min-w-0">
+        {kicker && <p className="lux-kicker mb-1.5">{kicker}</p>}
+        <h2 className="lux-h text-xl md:text-2xl">{icon}{title}</h2>
+      </div>
+      {(onPrev || onNext || count) ? (
+        <div className="shrink-0 flex items-center gap-2">
+          {count ? <span className="hidden sm:inline text-xs font-semibold text-zinc-500 tabular mr-1">{count} titles</span> : null}
+          {onPrev && (
+            <button type="button" onClick={onPrev} disabled={!canPrev} aria-label="Scroll back" className="lux-arrow hidden md:inline-flex">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+          )}
+          {onNext && (
+            <button type="button" onClick={onNext} disabled={!canNext} aria-label="Scroll on" className="lux-arrow hidden md:inline-flex">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** A chapter break on a long page: kicker, display title, a hairline that fades out. */
+export function LuxChapter({ kicker, title, note }: { kicker: ReactNode; title: ReactNode; note?: ReactNode }) {
+  return (
+    <div className="px-4 md:px-12 pt-12 md:pt-16 pb-1 flex items-end gap-5">
+      <div className="min-w-0">
+        <p className="lux-kicker mb-2">{kicker}</p>
+        <h2 className="lux-title text-3xl md:text-5xl pb-1">{title}</h2>
+        {note && <p className="mt-1 text-sm text-zinc-400">{note}</p>}
+      </div>
+      <span aria-hidden className="hidden md:block flex-1 h-px mb-4" style={{ background: 'linear-gradient(90deg, var(--lux-line-2), transparent)' }} />
+    </div>
+  );
 }

@@ -68,7 +68,10 @@
      that put the page's dark ink on a dark artwork bleed — an invisible title.
      Declaring the same mappings inside each theme block makes them resolve
      again wherever a theme class appears, including on a nested element. */
-  :root, .light, .dark, .midnight, .royal, .emerald, .rose {
+  /* The page colour as the theme sets it, for art that must fade into the page
+     from inside a .lux-stage (which redefines --zinc-950 for its own ground). */
+  :root, .light, .dark, .midnight, .royal, .emerald, .rose { --page-ground: var(--zinc-950); }
+  :root, .light, .dark, .midnight, .royal, .emerald, .rose, .lux-stage {
     --color-zinc-950: var(--zinc-950);
     --color-zinc-900: var(--zinc-900);
     --color-zinc-800: var(--zinc-800);
@@ -1543,3 +1546,52 @@ html.tv-mode .lux-card:hover, html.low-gfx .lux-card:hover { transform: none; }
 html.tv-mode .lux-card::after, html.low-gfx .lux-card::after { display: none; }
 html.tv-mode .lux-seg, html.tv-mode .lux-field, html.low-gfx .lux-seg, html.low-gfx .lux-field { -webkit-backdrop-filter: none; backdrop-filter: none; background-color: var(--zinc-800); }
 html.tv-mode .lux-spot::before { display: none; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LUX · Home (2026-10). The showcase and the spotlight sit on film artwork, so
+   they keep a dark ground in every theme: .lux-stage gives them Obsidian's ink
+   and glass (the accent stays the theme's own). Plus the shelf arrows, the
+   engraved Top 10 rank, and the showcase's timer bar.
+   ══════════════════════════════════════════════════════════════════════════ */
+@layer components {
+  .lux-stage {
+    --zinc-950: #09090B; --zinc-900: #131316; --zinc-800: #1F1F23; --zinc-700: #3A3A40; --zinc-600: #5E5E66;
+    --zinc-500: #8E8E97; --zinc-400: #C4C4CC; --zinc-300: #E4E4E7; --zinc-200: #EDEDF0; --zinc-100: #F5F5F7; --zinc-50: #FFFFFF;
+    --white: #ffffff; --black: #000000;
+    --glass-alpha: 58%; --glass-alpha-strong: 40%;
+    --glass-edge: rgba(255, 255, 255, 0.16); --glass-rim: rgba(255, 255, 255, 0.24); --glass-sheen: rgba(255, 255, 255, 0.10);
+    --lux-line: rgba(255, 255, 255, 0.10); --lux-line-2: rgba(255, 255, 255, 0.18);
+    color: var(--white);
+  }
+
+  /* Labels a step brighter on the dark art (Sand and Cosmic carry a deeper gold). */
+  .lux-stage .lux-kicker { color: var(--acc-300); }
+  .lux-stage .lux-kicker::before { background: linear-gradient(90deg, transparent, var(--acc-300)); }
+
+  /* Round previous/next on a shelf header. */
+  .lux-arrow {
+    width: 2.25rem; height: 2.25rem; border-radius: 9999px; align-items: center; justify-content: center;
+    color: var(--zinc-300); background: color-mix(in srgb, var(--zinc-800) 60%, transparent);
+    box-shadow: inset 0 0 0 1px var(--lux-line);
+    transition: color .2s var(--ease-premium), box-shadow .2s var(--ease-premium), opacity .2s;
+  }
+  .lux-arrow:hover:not(:disabled) { color: var(--on-gold); background: linear-gradient(180deg, var(--gold-300), var(--gold-500)); box-shadow: 0 6px 16px -6px rgb(var(--acc-rgb) / .7); }
+  .lux-arrow:disabled { opacity: .35; cursor: default; }
+  .lux-arrow:focus-visible { outline: 2px solid var(--gold-400); outline-offset: 2px; }
+
+  /* Top 10 rank: an accent outline over the page colour, lit from above. */
+  .lux-rank {
+    font-family: var(--font-display); font-weight: 900; line-height: 1; letter-spacing: -0.06em;
+    color: var(--zinc-950);
+    -webkit-text-stroke: 3px rgb(var(--acc-rgb) / .85);
+    text-shadow: 0 12px 30px rgb(var(--acc-rgb) / .25);
+  }
+
+  /* Showcase timer: the current slide's bar fills over its time on screen. */
+  .lux-slide-fill {
+    background: linear-gradient(90deg, var(--gold-300), var(--gold-500));
+    animation-name: lux-fill; animation-timing-function: linear; animation-fill-mode: both;
+  }
+}
+@keyframes lux-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+html.tv-mode .lux-rank, html.low-gfx .lux-rank { text-shadow: none; }

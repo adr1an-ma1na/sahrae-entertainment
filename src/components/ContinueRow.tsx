@@ -2,6 +2,8 @@ import { t } from '../i18n';
 import { Play, X } from 'lucide-react';
 import { MediaItem, getImageUrl } from '../services/tmdb';
 import { haptics } from '../services/haptics';
+import { RailHeader } from './ui/Lux';
+import { useRail } from '../hooks/useRail';
 
 export interface ContinueEntry {
   mediaId: number;
@@ -29,15 +31,17 @@ export default function ContinueRow({
   onPlay: (id: number, type: 'movie' | 'tv', startInInfo?: boolean, playTrailer?: boolean, season?: number, episode?: number) => void;
   onRemove?: (mediaId: number) => void;
 }) {
+  const rail = useRail([entries.length]);
   if (!entries.length) return null;
 
   return (
     <div className="px-4 md:px-12 py-6">
-      <div className="flex items-center gap-3 mb-4">
-        <h2 className="lux-h text-xl md:text-2xl">{t('Jump back in')}</h2>
-      </div>
+      <RailHeader
+        title={t('Jump back in')} kicker="Your sessions"
+        canPrev={rail.canPrev} canNext={rail.canNext} onPrev={rail.prev} onNext={rail.next}
+      />
 
-      <div className="flex gap-3 md:gap-4 overflow-x-auto pb-4 custom-scrollbar snap-x">
+      <div ref={rail.ref} className="flex gap-3 md:gap-4 overflow-x-auto pt-1 pb-4 scrollbar-hide snap-x scroll-smooth">
         {entries.map((e) => {
           const art = e.item.backdrop_path || e.item.poster_path;
           const title = e.item.title || e.item.name || '';
@@ -52,7 +56,7 @@ export default function ContinueRow({
               data-tv-focusable
               aria-label={`Resume ${title}`}
               onClick={() => { haptics.press(); onPlay(e.mediaId, e.mediaType, false, false, e.season, e.episode); }}
-              className="card-lift group relative flex-none w-[220px] md:w-[280px] snap-start rounded-xl overflow-hidden border border-white/10 bg-zinc-900/60 cursor-pointer focus:outline-none"
+              className="lux-card group flex-none w-[230px] md:w-[300px] snap-start cursor-pointer focus:outline-none"
             >
               <div className="relative aspect-video bg-zinc-800">
                 {art ? (
@@ -60,7 +64,7 @@ export default function ContinueRow({
                 ) : null}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
                 <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity">
-                  <span className="w-11 h-11 rounded-full bg-white/95 text-black flex items-center justify-center shadow-lg">
+                  <span className="btn-gold w-12 h-12 rounded-full flex items-center justify-center shadow-lg">
                     <Play className="w-5 h-5 fill-current ml-0.5" />
                   </span>
                 </div>
@@ -74,8 +78,8 @@ export default function ContinueRow({
                   </button>
                 )}
                 <div className="absolute bottom-0 left-0 right-0 p-3">
-                  <p className="text-sm font-bold text-white truncate">{title}</p>
-                  <p className="text-[11px] text-zinc-400 font-semibold mt-0.5">{where}</p>
+                  <p className="text-sm font-bold text-[#fff] truncate drop-shadow">{title}</p>
+                  <p className="mt-1 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-amber-300"><span className="w-1 h-1 rounded-full bg-amber-400" />{where}</p>
                 </div>
               </div>
             </div>

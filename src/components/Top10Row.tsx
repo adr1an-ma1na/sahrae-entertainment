@@ -1,7 +1,8 @@
 import { t } from '../i18n';
-import { Play, ChevronLeft, ChevronRight, Star } from 'lucide-react';
+import { Play, Star } from 'lucide-react';
 import { MediaItem, getImageUrl } from '../services/tmdb';
-import { useRef, useState, useEffect } from 'react';
+import { RailHeader } from './ui/Lux';
+import { useRail } from '../hooks/useRail';
 
 interface Top10RowProps {
   items: MediaItem[];
@@ -10,135 +11,69 @@ interface Top10RowProps {
 }
 
 export default function Top10Row({ items, onPlay, title = "Top 10 Trending Today" }: Top10RowProps) {
-  const rowRef = useRef<HTMLDivElement>(null);
-  const [isScrolled, setIsScrolled] = useState(false);
-  const [isScrolledEnd, setIsScrolledEnd] = useState(false);
-
   const top10Items = items.slice(0, 10);
-
-  const handleScroll = (direction: 'left' | 'right') => {
-    if (rowRef.current) {
-      const { scrollLeft, clientWidth } = rowRef.current;
-      const scrollTo = direction === 'left' ? scrollLeft - clientWidth : scrollLeft + clientWidth;
-      
-      rowRef.current.scrollTo({ left: scrollTo, behavior: 'smooth' });
-    }
-  };
-
-  useEffect(() => {
-    const handleScrollEvent = () => {
-      if (rowRef.current) {
-        const { scrollLeft, scrollWidth, clientWidth } = rowRef.current;
-        setIsScrolled(scrollLeft > 0);
-        setIsScrolledEnd(Math.ceil(scrollLeft + clientWidth) >= scrollWidth);
-      }
-    };
-
-    const currentRef = rowRef.current;
-    if (currentRef) {
-      currentRef.addEventListener('scroll', handleScrollEvent);
-      setTimeout(handleScrollEvent, 100);
-    }
-
-    window.addEventListener('resize', handleScrollEvent);
-
-    return () => {
-      if (currentRef) {
-        currentRef.removeEventListener('scroll', handleScrollEvent);
-      }
-      window.removeEventListener('resize', handleScrollEvent);
-    };
-  }, [items]);
+  const rail = useRail([items]);
 
   if (!top10Items || top10Items.length === 0) return null;
 
   return (
-    <div className="px-4 md:px-12 py-6 relative group/row">
-      <h2 className="lux-h text-xl md:text-2xl mb-4">{t(title)}</h2>
-      
-      <div className="relative">
-        {isScrolled && (
-          <button 
-            onClick={() => handleScroll('left')}
-            className="absolute left-0 top-0 bottom-4 z-40 w-12 bg-black/50 hover:bg-black/80 text-white flex items-center justify-center opacity-0 group-hover/row:opacity-100 transition-opacity duration-300 backdrop-blur-sm rounded-r-xl"
-          >
-            <ChevronLeft className="w-8 h-8" />
-          </button>
-        )}
+    <div className="px-4 md:px-12 py-6 relative">
+      <RailHeader
+        title={t(title)} kicker="Ranked today"
+        canPrev={rail.canPrev} canNext={rail.canNext} onPrev={rail.prev} onNext={rail.next}
+      />
+      <div
+        ref={rail.ref}
+        className="flex overflow-x-auto gap-4 pb-4 scrollbar-hide snap-x scroll-smooth pl-10 md:pl-12 pr-12 md:pr-20"
+      >
+        {top10Items.map((item, index) => {
+          const type = item.media_type || 'movie';
+          return (
+            <div
+              key={`top10-${type}-${item.id}`}
+              tabIndex={0}
+              data-tv-focusable
+              role="button"
+              aria-label={`${index + 1}. ${item.title || item.name}`}
+              className="relative flex-none w-[130px] md:w-[160px] lg:w-[200px] aspect-[2/3] rounded-xl group cursor-pointer snap-start flex items-center focus:outline-none"
+              onClick={() => onPlay(item.id, type, true)}
+            >
+              {/* The rank, engraved: an accent outline over a dark fill, so it
+                  reads as metal in every theme. */}
+              <div className="absolute -left-8 md:-left-10 bottom-0 z-10 select-none pointer-events-none">
+                <span className="lux-rank text-[100px] md:text-[130px]">{index + 1}</span>
+              </div>
 
-        <div
-          ref={rowRef}
-          className="flex overflow-x-auto gap-4 pb-4 scrollbar-hide snap-x scroll-smooth pl-10 md:pl-12 pr-12 md:pr-20"
-        >
-          {top10Items.map((item, index) => {
-            const type = item.media_type || 'movie';
-            return (
-              <div
-                key={`top10-${type}-${item.id}`}
-                tabIndex={0}
-                data-tv-focusable
-                role="button"
-                aria-label={item.title || item.name}
-                className="relative flex-none w-[130px] md:w-[160px] lg:w-[200px] aspect-[2/3] rounded-xl group cursor-pointer snap-start flex items-center focus:outline-none"
-                onClick={() => onPlay(item.id, type, true)}
-              >
-                {/* Giant Number */}
-                <div className="absolute -left-8 md:-left-10 bottom-0 z-10 select-none pointer-events-none drop-shadow-2xl">
-                  <span 
-                    className="text-[100px] md:text-[130px] font-display font-black leading-none tracking-tighter"
-                    style={{
-                      WebkitTextStroke: '3px rgba(255,255,255,0.7)',
-                      color: 'rgba(0,0,0,0.8)',
-                    }}
-                  >
-                    {index + 1}
+              <div className="w-full h-full rounded-xl overflow-hidden relative bg-zinc-900 z-20 ml-6 md:ml-8 shadow-2xl transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ring-1 ring-white/10 group-hover:-translate-y-1 group-hover:ring-2 group-hover:ring-amber-400/70 group-hover:shadow-[0_22px_44px_-16px_rgb(var(--acc-rgb)/0.55)] group-focus-visible:-translate-y-1 group-focus-visible:ring-2 group-focus-visible:ring-amber-400">
+                <img
+                  src={getImageUrl(item.poster_path)}
+                  alt={item.title || item.name}
+                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  loading="lazy"
+                />
+
+                {item.vote_average ? (
+                  <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md px-1.5 py-0.5 rounded text-[10px] font-bold text-amber-400 border border-white/10 shadow-lg z-20 flex items-center gap-1">
+                    <Star className="w-2.5 h-2.5 fill-current" />
+                    <span>{item.vote_average.toFixed(1)}</span>
+                  </div>
+                ) : null}
+
+                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-3 md:p-4">
+                  <h3 className="text-[#fff] font-display font-semibold text-xs md:text-sm line-clamp-2 mb-2 drop-shadow-md">
+                    {item.title || item.name}
+                  </h3>
+                  <span className="btn-gold w-8 h-8 rounded-full flex items-center justify-center shadow-lg">
+                    <Play className="w-4 h-4 fill-current ml-0.5" />
                   </span>
                 </div>
-
-                {/* Poster Image */}
-                <div className="w-full h-full rounded-xl overflow-hidden relative bg-zinc-900 z-20 ml-6 md:ml-8 shadow-2xl border border-white/5 transition-all duration-300 group-hover:scale-105 group-hover: group-hover:border-white/20 group-focus-within:scale-105 group-focus-within:border-amber-400">
-                  <img
-                    src={getImageUrl(item.poster_path)}
-                    alt={item.title || item.name}
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                    loading="lazy"
-                  />
-
-                  {/* Rating Badge */}
-                  {item.vote_average ? (
-                    <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md px-1.5 py-0.5 rounded text-[10px] font-bold text-amber-500 border border-white/10 shadow-lg z-20 flex items-center gap-1 opacity-90 group-hover:opacity-100 transition-opacity">
-                      <Star className="w-2.5 h-2.5 fill-current" />
-                      <span>{item.vote_average.toFixed(1)}</span>
-                    </div>
-                  ) : null}
-
-                  <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-3 md:p-4">
-                    <h3 className="text-white font-display font-medium text-xs md:text-sm line-clamp-2 mb-1.5 drop-shadow-md">
-                      {item.title || item.name}
-                    </h3>
-                    <div className="flex items-center gap-2">
-                      <button className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-amber-500 text-amber-950 flex items-center justify-center hover:bg-amber-400 hover:scale-110 transition-all">
-                        <Play className="w-3 h-3 md:w-4 md:h-4 fill-current ml-0.5" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
               </div>
-            );
-          })}
-          {/* Trailing spacer guarantees rank 9 & 10 scroll fully into view even
-              where WebView ignores padding-right on a flex scroll container. */}
-          <div aria-hidden className="flex-none w-4 md:w-8" />
-        </div>
-
-        {!isScrolledEnd && (
-          <button 
-            onClick={() => handleScroll('right')}
-            className="absolute right-0 top-0 bottom-4 z-40 w-12 bg-black/50 hover:bg-black/80 text-white flex items-center justify-center opacity-0 group-hover/row:opacity-100 transition-opacity duration-300 backdrop-blur-sm rounded-l-xl"
-          >
-            <ChevronRight className="w-8 h-8" />
-          </button>
-        )}
+            </div>
+          );
+        })}
+        {/* Trailing spacer guarantees rank 9 & 10 scroll fully into view even
+            where WebView ignores padding-right on a flex scroll container. */}
+        <div aria-hidden className="flex-none w-4 md:w-8" />
       </div>
     </div>
   );

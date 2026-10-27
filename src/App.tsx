@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
+import { LuxChapter } from './components/ui/Lux';
 import MediaRow from './components/MediaRow';
 import Top10Row from './components/Top10Row';
 import MediaGrid from './components/MediaGrid';
@@ -146,14 +147,21 @@ export default function App() {
   const [forYou, setForYou] = useState<MediaItem[]>([]);
   const [kenyaItems, setKenyaItems] = useState<MediaItem[]>([]);
   const [africaItems, setAfricaItems] = useState<MediaItem[]>([]);
+  // The showcase is today's top five; the spotlight band further down never repeats one.
+  const heroIds = useMemo(() => new Set(trending.filter((m) => m.backdrop_path).slice(0, 5).map((m) => m.id)), [trending]);
+  const genreName = useMemo(() => {
+    const names = new Map<number, string>();
+    [...movieGenres, ...tvGenres].forEach((g) => names.set(g.id, g.name));
+    return (id: number) => names.get(id);
+  }, [movieGenres, tvGenres]);
   const spotlightItem = useMemo(() => {
     const pool = [...awardDramas, ...sciFi, ...bingeShows, ...movies]
-      .filter((m) => m && m.backdrop_path && m.id !== heroItem?.id);
+      .filter((m) => m && m.backdrop_path && !heroIds.has(m.id));
     if (!pool.length) return null;
     // Stable for the day so the page does not reshuffle on every render.
     const dayKey = Math.floor(Date.now() / 86400000);
     return pool[dayKey % pool.length];
-  }, [awardDramas, sciFi, bingeShows, movies, heroItem?.id]);
+  }, [awardDramas, sciFi, bingeShows, movies, heroIds]);
   useEffect(() => {
     if (authLoading) return; // wait until we know who (if anyone) is signed in
     try {
@@ -518,8 +526,14 @@ export default function App() {
 
         return (
           <>
-            <Hero item={heroItem} onPlay={handlePlay} />
-            <div className="-mt-16 relative z-10 pb-12">
+            <Hero
+              items={heroItem ? trending : []}
+              onPlay={handlePlay}
+              genreName={genreName}
+              inList={(id) => myList.some((m) => m.id === id)}
+              onToggleList={toggleMyList}
+            />
+            <div className="-mt-16 relative z-10 pb-16">
               <div className="px-4 md:px-12"><Coachmark id="home" text="Press Play on any title to start, or tap a poster for details, trailers, and episodes." /></div>
               {/* Somewhere to return to, before anything to discover. */}
               <ContinueRow
@@ -528,20 +542,33 @@ export default function App() {
                 }))}
                 onPlay={handlePlay}
               />
+              {/* The page reads in chapters, each with its own title, so a long
+                  run of shelves has a shape: tonight, you, home, the collection. */}
+              <LuxChapter kicker="Tonight" title="Made for tonight" note="Today's charts, and titles that fit the time you have." />
               <QuickPick onPlay={handlePlay} />
               <Top10Row items={trending} onPlay={handlePlay} />
-              <TasteCard profile={profile} onGenre={(name) => handleSearch(name)} onNavigate={navigate} />
-              {forYou.length > 0 && topScreen && <MediaRow title={`For You · ${topScreen.name}`} items={forYou} onPlay={handlePlay} defaultType={topScreen.type} isLoading={loading} />}
               <Top10Row items={trendingSeries} onPlay={handlePlay} title={t('Top 10 Series Today')} />
+
+              {(forYou.length > 0 || (recommendations && recommendations.items.length > 0) || profile.screen.length > 0 || profile.music.length > 0 || profile.sports.length > 0) && (
+                <LuxChapter kicker="For you" title="Picked for you" note="From what you watch on this device." />
+              )}
+              <TasteCard profile={profile} onGenre={(name) => handleSearch(name)} onNavigate={navigate} />
+              {forYou.length > 0 && topScreen && <MediaRow kicker="Your taste" title={`For You · ${topScreen.name}`} items={forYou} onPlay={handlePlay} defaultType={topScreen.type} isLoading={loading} />}
+              {recommendations && recommendations.items.length > 0 && (
+                <MediaRow kicker="Because you watched" title={recommendations.basedOn} items={recommendations.items} onPlay={handlePlay} isLoading={loading} />
+              )}
+
+              {(kenyaItems.length > 0 || africaItems.length > 0) && (
+                <LuxChapter kicker="Close to home" title="Stories from here" note="Made in Kenya, and across Africa." />
+              )}
               {kenyaItems.length > 0 && <MediaRow title="Made in Kenya" items={kenyaItems} onPlay={handlePlay} isLoading={loading} />}
               {africaItems.length > 0 && <MediaRow title="African stories" items={africaItems} onPlay={handlePlay} defaultType="movie" isLoading={loading} />}
-              {recommendations && recommendations.items.length > 0 && (
-                <MediaRow title={`Because you watched ${recommendations.basedOn}`} items={recommendations.items} onPlay={handlePlay} isLoading={loading} />
-              )}
-              {awardDramas.length > 0 && <MediaRow title="Award-Winning Dramas" items={awardDramas} onPlay={handlePlay} defaultType="movie" isLoading={loading} />}
-              {/* A moment of scale partway down, so the page has a cadence
-                  instead of nine identically-shaped rails in a row. */}
+
+              {/* A moment of scale before the long run of shelves. */}
               {spotlightItem && <SpotlightBand item={spotlightItem} onPlay={handlePlay} />}
+
+              <LuxChapter kicker="The collection" title="The big screen" note="Award winners, crowd favourites, and series worth a weekend." />
+              {awardDramas.length > 0 && <MediaRow title="Award-Winning Dramas" items={awardDramas} onPlay={handlePlay} defaultType="movie" isLoading={loading} />}
               <MediaRow title="Trending Now" items={trending} onPlay={handlePlay} isLoading={loading} />
               {sciFi.length > 0 && <MediaRow title="Sci-Fi Masterpieces" items={sciFi} onPlay={handlePlay} defaultType="movie" isLoading={loading} />}
               <MediaRow title="Popular Movies" items={movies} onPlay={handlePlay} defaultType="movie" isLoading={loading} />

@@ -38,15 +38,15 @@ export default function SpotlightBand({
   const year = (item.release_date || item.first_air_date || '').slice(0, 4);
 
   return (
-    <section className="relative my-10 overflow-hidden">
-      <div className="relative mx-4 md:mx-12 rounded-3xl overflow-hidden border border-white/10 shadow-[0_24px_70px_rgba(0,0,0,0.55)]">
-        <div className="relative h-[240px] md:h-[340px]">
+    <section className="lux-stage relative my-10 overflow-hidden">
+      <div className="relative mx-4 md:mx-12 rounded-[1.75rem] overflow-hidden shadow-[inset_0_0_0_1px_var(--lux-line-2),0_30px_70px_-24px_rgba(0,0,0,0.7)]">
+        <div className="relative h-[280px] md:h-[380px]">
           {art && (
             <img
               src={getImageUrl(art, 'w780')}
               alt=""
               loading="lazy"
-              className="absolute inset-0 w-full h-full object-cover"
+              className="absolute inset-0 w-full h-full object-cover kenburns"
             />
           )}
           {/* Colour wash from the artwork, then a readability scrim. Order
@@ -62,8 +62,8 @@ export default function SpotlightBand({
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
 
           <div className="absolute inset-0 flex flex-col justify-end gap-3 p-6 md:p-10 max-w-xl">
-            <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-400">{eyebrow}</span>
-            <h3 className="text-2xl md:text-4xl font-display font-extrabold text-white leading-tight tracking-tight drop-shadow-lg">
+            <span className="lux-kicker">{eyebrow}</span>
+            <h3 className="lux-title text-3xl md:text-5xl pb-1 drop-shadow-lg">
               {title}
             </h3>
             <div className="flex items-center gap-2 text-xs text-zinc-300 font-semibold">
@@ -80,14 +80,14 @@ export default function SpotlightBand({
               <button
                 onClick={() => { haptics.press(); onPlay(item.id, type, false); }}
                 data-tv-focusable tabIndex={0}
-                className="px-5 py-2.5 rounded-xl bg-white text-black font-bold text-sm flex items-center gap-2 hover:bg-white/85 transition-colors active:scale-95"
+                className="lux-btn px-6 py-2.5 text-sm"
               >
                 <Play className="w-4 h-4 fill-current" /> Play
               </button>
               <button
                 onClick={() => { haptics.tap(); onPlay(item.id, type, true); }}
                 data-tv-focusable tabIndex={0}
-                className="px-5 py-2.5 rounded-xl bg-white/10 text-white font-bold text-sm flex items-center gap-2 border border-white/20 hover:bg-white/20 transition-colors active:scale-95 backdrop-blur"
+                className="btn-glass px-6 py-2.5 rounded-full font-bold text-sm flex items-center gap-2"
               >
                 <Info className="w-4 h-4" /> Details
               </button>

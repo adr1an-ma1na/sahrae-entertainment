@@ -1,8 +1,10 @@
 import { t } from '../i18n';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { MediaItem } from '../services/tmdb';
-import { useRef, useState, useEffect, Fragment } from 'react';
+import { Fragment } from 'react';
 import PosterCard from './PosterCard';
+import { RailHeader } from './ui/Lux';
+import { useRail } from '../hooks/useRail';
 
 interface MediaRowProps {
   title: string;
@@ -10,55 +12,20 @@ interface MediaRowProps {
   onPlay: (id: number, type: 'movie' | 'tv', startInInfo?: boolean) => void;
   defaultType?: 'movie' | 'tv';
   isLoading?: boolean;
+  /** Small tracked label over the title ("Because you watched"). */
+  kicker?: ReactNode;
+  /** No side padding: the row sits inside a panel that already has it. */
+  bare?: boolean;
 }
 
-export default function MediaRow({ title, items, onPlay, defaultType = 'movie', isLoading = false }: MediaRowProps) {
-  const rowRef = useRef<HTMLDivElement>(null);
-  const [isScrolled, setIsScrolled] = useState(false);
-  const [isScrolledEnd, setIsScrolledEnd] = useState(false);
-
-  const handleScroll = (direction: 'left' | 'right') => {
-    if (rowRef.current) {
-      const { scrollLeft, clientWidth } = rowRef.current;
-      const scrollTo = direction === 'left' ? scrollLeft - clientWidth : scrollLeft + clientWidth;
-      
-      rowRef.current.scrollTo({ left: scrollTo, behavior: 'smooth' });
-    }
-  };
-
-  useEffect(() => {
-    const handleScrollEvent = () => {
-      if (rowRef.current) {
-        const { scrollLeft, scrollWidth, clientWidth } = rowRef.current;
-        setIsScrolled(scrollLeft > 0);
-        setIsScrolledEnd(Math.ceil(scrollLeft + clientWidth) >= scrollWidth);
-      }
-    };
-
-    const currentRef = rowRef.current;
-    if (currentRef) {
-      currentRef.addEventListener('scroll', handleScrollEvent);
-      // Check initial state
-      // Use setTimeout to ensure DOM is fully rendered before checking scrollWidth
-      setTimeout(handleScrollEvent, 100);
-    }
-
-    window.addEventListener('resize', handleScrollEvent);
-
-    return () => {
-      if (currentRef) {
-        currentRef.removeEventListener('scroll', handleScrollEvent);
-      }
-      window.removeEventListener('resize', handleScrollEvent);
-    };
-  }, [items]);
+export default function MediaRow({ title, items, onPlay, defaultType = 'movie', isLoading = false, kicker, bare = false }: MediaRowProps) {
+  const rail = useRail([items]);
+  const pad = bare ? '' : 'px-4 md:px-12';
 
   if (isLoading) {
     return (
-      <div className="px-4 md:px-12 py-6 relative">
-        <div className="flex items-center gap-3 mb-4">
-          <h2 className="lux-h text-xl md:text-2xl">{t(title)}</h2>
-        </div>
+      <div className={`${pad} py-6 relative`}>
+        <RailHeader title={t(title)} kicker={kicker} />
         <div className="flex overflow-x-hidden gap-2.5 md:gap-3 lg:gap-3.5 xl:gap-4 pb-4">
           {[...Array(8)].map((_, i) => (
             <div
@@ -74,43 +41,23 @@ export default function MediaRow({ title, items, onPlay, defaultType = 'movie', 
   if (!items || items.length === 0) return null;
 
   return (
-    <div className="px-4 md:px-12 py-6 relative group/row">
-      <div className="flex items-center gap-3 mb-4">
-        <h2 className="lux-h text-xl md:text-2xl">{t(title)}</h2>
-      </div>
-      
-      <div className="relative">
-        {isScrolled && (
-          <button 
-            onClick={() => handleScroll('left')}
-            className="absolute left-0 top-0 bottom-4 z-40 w-12 bg-black/50 hover:bg-black/80 text-white flex items-center justify-center opacity-0 group-hover/row:opacity-100 transition-opacity duration-300 backdrop-blur-sm rounded-r-xl"
-          >
-            <ChevronLeft className="w-8 h-8" />
-          </button>
-        )}
-
-        <div
-          ref={rowRef}
-          className="flex overflow-x-auto gap-2.5 md:gap-3 lg:gap-3.5 xl:gap-4 pt-1 pb-6 scrollbar-hide snap-x scroll-smooth"
-        >
-          {items.map((item) => {
-            const type = item.media_type || defaultType;
-            return (
-              <Fragment key={`${type}-${item.id}`}>
-                <PosterCard item={item} type={type} onPlay={() => onPlay(item.id, type, true)} />
-              </Fragment>
-            );
-          })}
-        </div>
-
-        {!isScrolledEnd && (
-          <button 
-            onClick={() => handleScroll('right')}
-            className="absolute right-0 top-0 bottom-4 z-40 w-12 bg-black/50 hover:bg-black/80 text-white flex items-center justify-center opacity-0 group-hover/row:opacity-100 transition-opacity duration-300 backdrop-blur-sm rounded-l-xl"
-          >
-            <ChevronRight className="w-8 h-8" />
-          </button>
-        )}
+    <div className={`${pad} py-6 relative`}>
+      <RailHeader
+        title={t(title)} kicker={kicker} count={items.length}
+        canPrev={rail.canPrev} canNext={rail.canNext} onPrev={rail.prev} onNext={rail.next}
+      />
+      <div
+        ref={rail.ref}
+        className="flex overflow-x-auto gap-2.5 md:gap-3 lg:gap-3.5 xl:gap-4 pt-1 pb-6 scrollbar-hide snap-x scroll-smooth"
+      >
+        {items.map((item) => {
+          const type = item.media_type || defaultType;
+          return (
+            <Fragment key={`${type}-${item.id}`}>
+              <PosterCard item={item} type={type} onPlay={() => onPlay(item.id, type, true)} />
+            </Fragment>
+          );
+        })}
       </div>
     </div>
   );

@@ -29,28 +29,27 @@ export default function QuickPick({ onPlay }: { onPlay: (id: number, type: 'movi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [time, mood]);
 
-  const chip = (active: boolean) => `shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${active ? 'bg-amber-500 text-amber-950 border-amber-400' : 'bg-zinc-900/80 text-zinc-300 border-zinc-700 hover:text-white'}`;
-
   return (
-    <section className="mt-8">
-      <div className="px-4 md:px-12">
-        <h2 className="lux-h text-xl md:text-2xl"><Sparkles className="w-5 h-5 text-amber-400" />{t('What fits right now?')}</h2>
-        <div className="mt-3 flex flex-col gap-2">
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
+    <section className="mt-6 mx-4 md:mx-12 lux-spot p-5 md:p-8">
+      <div>
+        <p className="lux-kicker mb-2"><Sparkles className="w-3.5 h-3.5" />Concierge</p>
+        <h2 className="lux-title text-2xl md:text-4xl pb-1">{t('What fits right now?')}</h2>
+        <div className="mt-4 flex flex-col gap-2.5">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
             <span className="shrink-0 text-xs text-zinc-400 flex items-center gap-1"><Clock3 className="w-3.5 h-3.5" />{t('Time you have')}</span>
-            {TIMES.map((x) => <button key={x.id} onClick={() => setTime(x.id)} data-tv-focusable aria-pressed={time === x.id} className={chip(time === x.id)}>{t(x.label)}</button>)}
+            {TIMES.map((x) => <button key={x.id} onClick={() => setTime(x.id)} data-tv-focusable aria-pressed={time === x.id} className="lux-chip">{t(x.label)}</button>)}
           </div>
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
             <span className="shrink-0 text-xs text-zinc-400">{t('In the mood for')}</span>
-            {MOODS.map((m) => <button key={m.id} onClick={() => setMood(m.id)} data-tv-focusable aria-pressed={mood === m.id} className={chip(mood === m.id)}>{t(m.label)}</button>)}
+            {MOODS.map((m) => <button key={m.id} onClick={() => setMood(m.id)} data-tv-focusable aria-pressed={mood === m.id} className="lux-chip">{t(m.label)}</button>)}
           </div>
         </div>
       </div>
       {items === null
-        ? <div className="px-4 md:px-12 mt-4 flex gap-3">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="w-32 md:w-40 aspect-[2/3] rounded-xl bg-zinc-900/60 animate-pulse" />)}</div>
+        ? <div className="mt-6 flex gap-3 overflow-hidden">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="skeleton flex-none w-[120px] md:w-[140px] aspect-[2/3] rounded-lg" />)}</div>
         : items.length === 0
-          ? <p className="px-4 md:px-12 mt-3 text-sm text-zinc-400">Nothing well-rated fits that exactly. Try a little more time or another mood.</p>
-          : <MediaRow title={fitsLabel(time)} items={items} onPlay={onPlay} defaultType={q.type} />}
+          ? <p className="mt-4 text-sm text-zinc-400">Nothing well-rated fits that exactly. Try a little more time or another mood.</p>
+          : <div className="-mb-6"><MediaRow bare title={fitsLabel(time)} items={items} onPlay={onPlay} defaultType={q.type} /></div>}
     </section>
   );
 }
