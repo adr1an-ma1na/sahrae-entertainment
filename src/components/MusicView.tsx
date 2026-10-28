@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, Fragment, ReactNode, type MouseEvent as RMouseEvent } from 'react';
 import { isSong } from '../services/musicCatalog';
+import { isMusicTrack } from '../services/musicFilter';
 import { dailyMixes, releaseRadar, artistsIn, genrePage, myGenres, catalogueSongsBy, GENRES as CATALOG_GENRES, genreById, type GenrePage } from '../services/musicLibrary';
 import { ytDataApi } from '../services/ytDataApi';
 import { Search, Play, Pause, Heart, Loader2, Music2, Plus, X, ListMusic, Shuffle, Trash2, ChevronLeft, Library, Sparkles, Disc3, User, Youtube, Link2 as LinkIcon, Radio as RadioIcon, Sunrise } from 'lucide-react';
@@ -52,6 +53,7 @@ function freshFirst(pool: Track[], seed: number, count: number): Track[] {
 const JUNK_RE = /(\bdj\s|nonstop|non-stop|mashup|megamix|mega\s?mix|\bmix\b|bass\s?boosted|ultra\s?beats|top\s?hits\s?(vol|v\d|\d{2,})|vol\.?\s*\d|hour[s]?\s(of|mix)|full\salbum|compilation|greatest\shits|the\stop\sdeep|slowed|reverb|\bremix\b)/i;
 function isCleanSong(t: Track): boolean {
   if (!t) return false;
+  if (!isMusicTrack(t)) return false; // a video about music, or many songs at once (services/musicFilter.ts)
   if (t.duration && t.duration > 600) return false; // >10 min → almost always a mix/compilation
   // YouTube Shorts and behind-the-scenes clips: a song title does not tag
   // itself #shorts, and three or more hashtags is promotion rather than a name.
@@ -156,15 +158,17 @@ const REGION_MUSIC: Record<string, { name: string; releases: string; discover: s
 };
 const regionMusic = (code: string) => REGION_MUSIC[code] || REGION_MUSIC.KE;
 
-function TrackRow({ track, onPlay, onRemove, index }: { track: Track; onPlay: () => void; onRemove?: () => void; index?: number }) {
+function TrackRow({ track, onPlay, onRemove, index, list = false }: { track: Track; onPlay: () => void; onRemove?: () => void; index?: number; list?: boolean }) {
   const { current, isPlaying, toggle, toggleLike, isLiked, openAddSheet } = useMusic();
   const active = current?.id === track.id;
   const { handlers, consumed } = useLongPress(() => openAddSheet(track));
   return (
     <div tabIndex={0} data-tv-focusable role="button" {...handlers} onClick={() => { if (consumed()) return; active ? toggle() : onPlay(); }}
-      className="card-lift group flex items-center gap-3 p-2 pr-2 rounded-xl border border-white/5 bg-zinc-900/40 cursor-pointer focus:outline-none">
+      className={list
+        ? `group flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer focus:outline-none transition-colors hover:bg-white/[0.06] focus-visible:bg-white/[0.08] ${active ? 'bg-amber-400/[0.08]' : ''}`
+        : 'card-lift group flex items-center gap-3 p-2 pr-2 rounded-xl border border-white/5 bg-zinc-900/40 cursor-pointer focus:outline-none'}>
       {typeof index === 'number' && (
-        <span className="w-6 text-center text-xs font-semibold text-zinc-500 tabular shrink-0 hidden sm:block">{index + 1}</span>
+        <span className={`w-6 text-center text-xs font-semibold tabular shrink-0 hidden sm:block ${active ? 'text-sauti' : 'text-zinc-500'}`}>{active && isPlaying ? <Equalizer /> : index + 1}</span>
       )}
       <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-zinc-800 shrink-0">
         <CoverArt imageUrl={track.artworkLarge || track.artwork} fallbackUrl={track.artwork} dominantColor={track.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
@@ -177,7 +181,7 @@ function TrackRow({ track, onPlay, onRemove, index }: { track: Track; onPlay: ()
         <p className={`text-sm font-semibold truncate ${active ? 'text-sauti' : 'text-white'}`}>{track.title}</p>
         <p className="text-xs text-zinc-400 truncate">{track.artist}</p>
       </div>
-      {active && isPlaying && <Equalizer />}
+      {active && isPlaying && !list && <Equalizer />}
       {fmtDur(track.duration) && (
         <span className="text-xs text-zinc-500 tabular shrink-0 hidden sm:block">{fmtDur(track.duration)}</span>
       )}
@@ -187,6 +191,68 @@ function TrackRow({ track, onPlay, onRemove, index }: { track: Track; onPlay: ()
       ) : (
         <button onClick={(e) => { e.stopPropagation(); openAddSheet(track); }} className="p-2 rounded-full text-zinc-500 hover:text-white" aria-label="Add to playlist"><Plus className="w-4 h-4" /></button>
       )}
+    </div>
+  );
+}
+
+/** "1 h 22 min", "38 min": a collection's running time. */
+function runtime(tracks: Track[]): string {
+  const s = tracks.reduce((n, t) => n + (t.duration || 0), 0);
+  if (!s) return '';
+  const m = Math.round(s / 60);
+  return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`;
+}
+
+/**
+ * The top of a playlist, mix, album or artist: its artwork blown up into the
+ * room's light, the cover on a pedestal (four covers as a collage for a
+ * playlist, the way Spotify and Apple Music show one), a kicker, a metal title,
+ * the count and running time, and the actions.
+ */
+function CollectionHero({ kicker, title, tracks, image, icon, round = false, tint, children }: {
+  kicker: ReactNode; title: string; tracks: Track[]; image?: string; icon?: ReactNode; round?: boolean; tint?: string; children?: ReactNode;
+}) {
+  const covers = [...new Set(tracks.map((t) => t.artworkLarge || t.artwork).filter(Boolean) as string[])].slice(0, 4);
+  const lead = image || covers[0];
+  const glow = tint || tracks[0]?.dominantColor || 'rgb(var(--acc-rgb) / .45)';
+  const meta = [tracks.length ? `${tracks.length} songs` : '', runtime(tracks)].filter(Boolean).join(' · ');
+  return (
+    <section className="lux-stage relative overflow-hidden rounded-[2rem] mb-8 shadow-[inset_0_0_0_1px_var(--lux-line-2),0_30px_70px_-28px_rgba(0,0,0,0.75)]">
+      {lead && <img src={lead} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover scale-125 blur-3xl opacity-60" />}
+      <div aria-hidden className="absolute inset-0" style={{ background: `radial-gradient(80% 100% at 15% 0%, ${glow}, transparent 70%)`, opacity: 0.7 }} />
+      <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/45 to-black/20" />
+      <div className="relative flex flex-col sm:flex-row sm:items-end gap-6 p-6 md:p-10">
+        <div className={`relative shrink-0 w-44 h-44 md:w-56 md:h-56 overflow-hidden shadow-[0_30px_60px_-20px_rgba(0,0,0,0.85),0_0_0_1px_rgba(255,255,255,0.12)] ${round ? 'rounded-full' : 'rounded-2xl'}`}>
+          {icon ? icon
+            : !image && covers.length >= 4 ? (
+              <div className="grid grid-cols-2 grid-rows-2 w-full h-full">
+                {covers.map((c) => <img key={c} src={c} alt="" className="w-full h-full object-cover" />)}
+              </div>
+            ) : lead ? <img src={lead} alt="" className="absolute inset-0 w-full h-full object-cover" />
+            : <div className={`absolute inset-0 bg-gradient-to-br ${gradFor(title)} flex items-center justify-center`}><ListMusic className="w-16 h-16 text-[#fff] drop-shadow" /></div>}
+          <span aria-hidden className="absolute inset-0 bg-gradient-to-br from-white/15 via-transparent to-transparent pointer-events-none" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="lux-kicker mb-2">{kicker}</p>
+          <h2 className="lux-title text-4xl md:text-6xl pb-1 line-clamp-2">{title}</h2>
+          {meta && <p className="mt-2 text-sm font-semibold text-zinc-300 tabular">{meta}</p>}
+          <div className="mt-5 flex flex-wrap items-center gap-3">{children}</div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** The songs of a collection, as one clean list: number, title, length. */
+function SongList({ tracks, onPlay, onRemove }: { tracks: Track[]; onPlay: (i: number) => void; onRemove?: (t: Track) => void }) {
+  return (
+    <div>
+      <div className="hidden sm:flex items-center gap-3 px-3 pb-2 mb-1 text-[11px] font-bold uppercase tracking-[0.16em] text-zinc-500 border-b" style={{ borderColor: 'var(--lux-line)' }}>
+        <span className="w-6 text-center">#</span><span className="flex-1">Title</span><span className="pr-24">Time</span>
+      </div>
+      {tracks.map((t, i) => (
+        <Fragment key={t.id}><TrackRow track={t} index={i} list onPlay={() => onPlay(i)} onRemove={onRemove ? () => onRemove(t) : undefined} /></Fragment>
+      ))}
     </div>
   );
 }
@@ -295,12 +361,14 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   const closeOnboarding = () => { completeOnboarding(); setRedoTaste(false); };
   const seedFromArtists = async (names: string[]) => {
     try {
-      const lists = await Promise.all(names.map((n) => ytmusic.search(`${n} songs`).catch(() => [] as Track[])));
+      // One search per artist, for the first ten picked: each costs a share of
+      // the day's YouTube allowance. Four of their songs each seed the taste.
+      const lists = await Promise.all(names.slice(0, 10).map((n) => ytmusic.search(`${n} songs`).catch(() => [] as Track[])));
       const seen = new Set<string>(); const seeds: Track[] = [];
       for (const list of lists) {
         let added = 0;
         for (const t of list) {
-          if (added >= 3) break;
+          if (added >= 4) break;
           if (!isCleanSong(t) || seen.has(t.id)) continue;
           seen.add(t.id); seeds.push(t); added++;
         }
@@ -545,6 +613,14 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
 
   useEffect(() => {
     let cancelled = false;
+    // Kept for the moment it belongs to (this part of this day): three searches
+    // cost 300 of the day's YouTube allowance, which every listener shares.
+    const DAYLIST_KEY = 'sahrae.music.daylist.v1';
+    const stamp = `${moment.title}|${new Date().toDateString()}`;
+    try {
+      const saved = JSON.parse(localStorage.getItem(DAYLIST_KEY) || 'null') as { stamp: string; tracks: Track[] } | null;
+      if (saved?.stamp === stamp && saved.tracks?.length >= 6) { setDaylist(saved.tracks); return; }
+    } catch { /* nothing kept */ }
     Promise.all(moment.queries.map((q) => ytmusic.search(q).catch(() => [] as Track[])))
       .then((lists) => {
         if (cancelled) return;
@@ -561,6 +637,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
           }
         }
         setDaylist(out);
+        if (out.length >= 6) { try { localStorage.setItem(DAYLIST_KEY, JSON.stringify({ stamp, tracks: out })); } catch { /* storage full */ } }
       });
     return () => { cancelled = true; };
   }, [moment.queries]);
@@ -860,7 +937,8 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   // "Your sound lately": the artists you keep coming back to, from what you
   // played and liked on this device.
   const leadArtist = (a: string) => (a || '').split(/,|&|\sfeat\.?\s|\sft\.?\s|\sx\s/i)[0].trim();
-  const soundPool = [...recentlyPlayed, ...likedTracks].filter((t, i, arr) => arr.findIndex((x) => x.id === t.id) === i);
+  // The artists picked at first run count from day one; plays and likes take over as they come.
+  const soundPool = [...recentlyPlayed, ...likedTracks, ...tasteSeeds].filter((t, i, arr) => arr.findIndex((x) => x.id === t.id) === i);
   const soundLately = (() => {
     const by = new Map<string, { name: string; tracks: Track[] }>();
     for (const t of soundPool) {
@@ -971,22 +1049,12 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
       <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
         <div aria-hidden className="absolute inset-x-0 top-0 h-80 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${hc} 0%, transparent 100%)`, opacity: 0.5 }} />
         <button onClick={() => setViewMix(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-5 text-sm px-3.5 py-2 rounded-full bg-zinc-900/85 backdrop-blur-xl border border-white/10 shadow-lg"><ChevronLeft className="w-4 h-4" /> Back</button>
-        <div className="flex items-end gap-5 mb-8">
-          <div className="w-32 h-32 md:w-40 md:h-40 rounded-2xl overflow-hidden bg-zinc-800 border border-white/10 shrink-0 shadow-xl relative">
-            <CoverArt imageUrl={viewMix.tracks[0]?.artworkLarge || viewMix.tracks[0]?.artwork} dominantColor={viewMix.tracks[0]?.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
-          </div>
-          <div className="min-w-0">
-            <div className="overline mb-1">Made for you</div>
-            <h2 className="text-3xl md:text-5xl font-display font-bold text-white truncate">{viewMix.title}</h2>
-            <p className="text-sm text-zinc-400 mb-4">{viewMix.subtitle} · {viewMix.tracks.length} songs</p>
-            <div className="flex gap-2">
-              <button onClick={() => playQueue(shown, 0, viewMix.title)} className="btn-sauti px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Play className="w-4 h-4 fill-current" /> Play</button>
-              <button onClick={() => { const arr = [...viewMix.tracks].sort(() => Math.random() - 0.5); playQueue(arr, 0, viewMix.title); }} className="btn-glass px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Shuffle className="w-4 h-4" /> Shuffle</button>
-              {sortSelect}
-            </div>
-          </div>
-        </div>
-        <div className="grid sm:grid-cols-2 gap-2">{shown.map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(shown, i, viewMix.title)} /></Fragment>)}</div>
+        <CollectionHero kicker={`Made for you · ${viewMix.subtitle}`} title={viewMix.title} tracks={viewMix.tracks}>
+          <button onClick={() => playQueue(shown, 0, viewMix.title)} data-tv-focusable className="lux-btn px-7 py-3 text-sm md:text-base"><Play className="w-4 h-4 fill-current" /> Play</button>
+          <button onClick={() => { const arr = [...viewMix.tracks].sort(() => Math.random() - 0.5); playQueue(arr, 0, viewMix.title); }} data-tv-focusable aria-label="Shuffle" className="btn-glass w-12 h-12 rounded-full flex items-center justify-center"><Shuffle className="w-5 h-5" /></button>
+          {sortSelect}
+        </CollectionHero>
+        <SongList tracks={shown} onPlay={(i) => playQueue(shown, i, viewMix.title)} />
       </div>
     );
   }
@@ -998,21 +1066,15 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
       <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
         <div aria-hidden className="absolute inset-x-0 top-0 h-80 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${heroColor} 0%, transparent 100%)`, opacity: 0.5 }} />
         <button onClick={() => setDetail(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-5 text-sm px-3.5 py-2 rounded-full bg-zinc-900/85 backdrop-blur-xl border border-white/10 shadow-lg"><ChevronLeft className="w-4 h-4" /> Back</button>
-        <div className="flex items-end gap-5 mb-8">
-          <div className={`w-32 h-32 md:w-40 md:h-40 ${detail.kind === 'artist' ? 'rounded-full' : 'rounded-2xl'} overflow-hidden bg-zinc-800 border border-white/10 shrink-0 shadow-xl`}>
-            {detail.thumbnail ? <img loading="lazy" decoding="async" src={detail.thumbnail} alt="" className="w-full h-full object-cover" /> : (detail.kind === 'artist' ? <User className="w-14 h-14 text-zinc-600 absolute inset-0 m-auto" /> : <Disc3 className="w-14 h-14 text-zinc-600 absolute inset-0 m-auto" />)}
-          </div>
-          <div className="min-w-0">
-            <div className="overline mb-1">{detail.subtitle}</div>
-            <h2 className="text-3xl md:text-5xl font-display font-bold text-white truncate">{detail.name}</h2>
-            {detailTracks.length > 0 && (
-              <div className="flex gap-2 mt-4">
-                <button onClick={() => playQueue(detailTracks, 0)} className="btn-sauti px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Play className="w-4 h-4 fill-current" /> Play</button>
-                <button onClick={() => { const arr = [...detailTracks].sort(() => Math.random() - 0.5); playQueue(arr, 0); }} className="btn-glass px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Shuffle className="w-4 h-4" /> Shuffle</button>
-              </div>
-            )}
-          </div>
-        </div>
+        <CollectionHero kicker={detail.subtitle} title={detail.name} tracks={detailTracks} image={detail.thumbnail} round={detail.kind === 'artist'}
+          icon={detail.thumbnail ? undefined : <div className="absolute inset-0 bg-zinc-800 flex items-center justify-center">{detail.kind === 'artist' ? <User className="w-16 h-16 text-zinc-500" /> : <Disc3 className="w-16 h-16 text-zinc-500" />}</div>}>
+          {detailTracks.length > 0 && (
+            <>
+              <button onClick={() => playQueue(detailTracks, 0)} data-tv-focusable className="lux-btn px-7 py-3 text-sm md:text-base"><Play className="w-4 h-4 fill-current" /> Play</button>
+              <button onClick={() => { const arr = [...detailTracks].sort(() => Math.random() - 0.5); playQueue(arr, 0); }} data-tv-focusable aria-label="Shuffle" className="btn-glass w-12 h-12 rounded-full flex items-center justify-center"><Shuffle className="w-5 h-5" /></button>
+            </>
+          )}
+        </CollectionHero>
 
         {detailLoading ? (
           <div className="flex items-center gap-2 text-zinc-400 py-10"><Loader2 className="w-6 h-6 animate-spin text-amber-500" /> Loading…</div>
@@ -1024,7 +1086,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                   <SectionHead>{detail.kind === 'artist' ? 'Popular' : 'Songs'}</SectionHead>
                   {sortSelect}
                 </div>
-                <div className="grid sm:grid-cols-2 gap-2">{shownTracks.map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(shownTracks, i)} /></Fragment>)}</div>
+                <SongList tracks={shownTracks} onPlay={(i) => playQueue(shownTracks, i)} />
               </section>
             )}
             {detail.kind === 'artist' && detailAlbums.length > 0 && (
@@ -1253,14 +1315,14 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
               })()}
 
               {/* ── YouTube Music Real-Time Trending Charts Section ── */}
-              <section className="mb-10 bg-zinc-900/30 border border-white/5 rounded-3xl p-5 md:p-6 relative overflow-hidden">
+              <section className="mb-10 lux-card p-5 md:p-7" style={{ transform: 'none' }}>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                   <SectionHead icon={<span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />}>
                     Live Trending Charts
                   </SectionHead>
 
                   {/* Region Tabs */}
-                  <div className="flex items-center gap-1 bg-zinc-950 p-1 rounded-xl border border-white/5 overflow-x-auto scrollbar-hide">
+                  <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
                     {[
                       { code: 'US', label: 'US 🇺🇸' },
                       { code: 'GB', label: 'UK 🇬🇧' },
@@ -1271,11 +1333,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                       <button
                         key={r.code}
                         onClick={() => setChartRegion(r.code)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
-                          chartRegion === r.code
-                            ? 'bg-amber-500/10 text-sauti border border-amber-500/20'
-                            : 'text-zinc-400 hover:text-white hover:bg-white/5'
-                        }`}
+                        aria-pressed={chartRegion === r.code} data-tv-focusable className="lux-chip"
                       >
                         {r.label}
                       </button>
@@ -1382,30 +1440,19 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
         <section className="relative">
           <div aria-hidden className="absolute inset-x-0 -top-24 h-72 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${openList.tracks[0]?.dominantColor || 'rgba(251,191,36,0.4)'} 0%, transparent 100%)`, opacity: 0.5 }} />
           <button onClick={() => setOpenId(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-4 text-sm px-3.5 py-2 rounded-full bg-zinc-900/85 backdrop-blur-xl border border-white/10 shadow-lg"><ChevronLeft className="w-4 h-4" /> Library</button>
-          <div className="flex items-end gap-4 mb-6">
-            <div className={`w-28 h-28 rounded-2xl bg-gradient-to-br ${
-              openList.id === 'liked' ? 'from-amber-400 via-orange-500 to-rose-600' :
-              openList.id === 'yt_liked' ? 'from-red-600 via-rose-500 to-amber-500' :
-              gradFor(openList.name)
-            } flex items-center justify-center shadow-xl shrink-0`}>
-              {openList.id === 'liked' || openList.id === 'yt_liked' ? (
-                <Heart className="w-12 h-12 text-white fill-current drop-shadow" />
-              ) : (
-                <ListMusic className="w-12 h-12 text-white drop-shadow" />
-              )}
-            </div>
-            <div className="min-w-0">
-              <h3 className="text-3xl font-display font-bold text-white truncate">{openList.name}</h3>
-              <p className="text-sm text-zinc-400 tabular">{openList.tracks.length} songs</p>
-              <div className="flex gap-2 mt-3">
-                <button disabled={!openList.tracks.length || ytTracksLoading} onClick={() => playQueue(openList.tracks, 0)} className="btn-sauti px-5 py-2 rounded-full text-sm font-bold flex items-center gap-2 disabled:opacity-40"><Play className="w-4 h-4 fill-current" /> Play</button>
-                <button disabled={!openList.tracks.length || ytTracksLoading} onClick={() => { const arr = [...openList.tracks].sort(() => Math.random() - 0.5); playQueue(arr, 0); }} className="btn-glass px-5 py-2 rounded-full text-sm font-bold flex items-center gap-2 disabled:opacity-40"><Shuffle className="w-4 h-4" /> Shuffle</button>
-                {openList.id !== 'liked' && openList.id !== 'yt_liked' && !openList.id.startsWith('yt_') && (
-                  <button onClick={() => { deletePlaylist(openList.id); setOpenId(null); }} className="px-4 py-2 rounded-full text-sm font-bold text-red-400 border border-red-500/30 hover:bg-red-500/10 flex items-center gap-2"><Trash2 className="w-4 h-4" /></button>
-                )}
-              </div>
-            </div>
-          </div>
+          <CollectionHero
+            kicker={openList.id === 'liked' ? 'Your library' : openList.id.startsWith('yt_') ? 'From YouTube Music' : 'Playlist'}
+            title={openList.name} tracks={openList.tracks}
+            icon={openList.id === 'liked' || openList.id === 'yt_liked'
+              ? <div className={`absolute inset-0 bg-gradient-to-br ${openList.id === 'liked' ? 'from-amber-400 via-orange-500 to-rose-600' : 'from-red-600 via-rose-500 to-amber-500'} flex items-center justify-center`}><Heart className="w-20 h-20 text-[#fff] fill-current drop-shadow-lg" /></div>
+              : undefined}>
+            <button disabled={!openList.tracks.length || ytTracksLoading} onClick={() => playQueue(openList.tracks, 0)} data-tv-focusable className="lux-btn px-7 py-3 text-sm md:text-base disabled:opacity-40"><Play className="w-4 h-4 fill-current" /> Play</button>
+            <button disabled={!openList.tracks.length || ytTracksLoading} onClick={() => { const arr = [...openList.tracks].sort(() => Math.random() - 0.5); playQueue(arr, 0); }} data-tv-focusable aria-label="Shuffle" className="btn-glass w-12 h-12 rounded-full flex items-center justify-center disabled:opacity-40"><Shuffle className="w-5 h-5" /></button>
+            {openList.tracks.length > 0 && sortSelect}
+            {openList.id !== 'liked' && openList.id !== 'yt_liked' && !openList.id.startsWith('yt_') && (
+              <button onClick={() => { deletePlaylist(openList.id); setOpenId(null); }} aria-label="Delete playlist" className="w-12 h-12 rounded-full text-red-300 border border-red-400/30 hover:bg-red-500/15 flex items-center justify-center"><Trash2 className="w-5 h-5" /></button>
+            )}
+          </CollectionHero>
           {ytTracksLoading ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3 text-zinc-400">
               <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
@@ -1415,8 +1462,8 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
             <EmptyState compact illustration="music" title="No songs yet" message="Like songs on YouTube Music, or connect your account, and they appear here." />
           ) : (
             <>
-              <div className="flex justify-end mb-3">{sortSelect}</div>
-              <div className="grid sm:grid-cols-2 gap-2">{sortTracks(openList.tracks).map((t, i) => <Fragment key={t.id}><TrackRow track={t} index={i} onPlay={() => playQueue(sortTracks(openList.tracks), i)} onRemove={(!openList.id.startsWith('yt_') && openList.id !== 'liked' && openList.id !== 'yt_liked') ? () => removeFromPlaylist(openList.id, t.id) : undefined} /></Fragment>)}</div>
+              <SongList tracks={sortTracks(openList.tracks)} onPlay={(i) => playQueue(sortTracks(openList.tracks), i)}
+                onRemove={(!openList.id.startsWith('yt_') && openList.id !== 'liked' && openList.id !== 'yt_liked') ? (t) => removeFromPlaylist(openList.id, t.id) : undefined} />
             </>
           )}
         </section>

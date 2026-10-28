@@ -1,3 +1,4 @@
+import { isMusicTrack } from './musicFilter';
 import { tryFetch } from './http.ts';
 import { ytDataApi } from './ytDataApi';
 import { cleanTrackText } from './trackText.ts';
@@ -288,9 +289,14 @@ async function official<T>(
   return fallback().catch(() => [] as T[]);
 }
 
+// Songs only: search, radio and charts pass through musicFilter, because YouTube
+// files compilations, reactions and interviews under Music too. Podcasts
+// (searchVideos, channelVideos) and a listener's own playlists are not filtered.
+const songsOnly = (list: Track[]): Track[] => list.filter(isMusicTrack);
+
 export const ytmusic = {
   search: (q: string, opts: { order?: 'relevance' | 'date' | 'viewCount'; region?: string; withinDays?: number } = {}): Promise<Track[]> =>
-    official(() => ytDataApi.search(q, 'song', opts), () => searchRaw(q, 'music_songs').then(mapItems)),
+    official(() => ytDataApi.search(q, 'song', opts), () => searchRaw(q, 'music_songs').then(mapItems)).then(songsOnly),
 
   // Video search — used for Podcasts (which live as videos on YouTube). Returns
   // the same Track shape (id = videoId) so it plays through the music engine for
@@ -339,7 +345,7 @@ export const ytmusic = {
   // Related songs ("up next" radio) for a video — powers autoplay + mixes.
   // NEVER returns empty: if the source has no relatedStreams, backfill from the
   // track's own artist, then a popular fallback (so "Related" is always full).
-  related: async (videoId: string): Promise<Track[]> => official(() => ytDataApi.radio(videoId), async () => {
+  related: async (videoId: string): Promise<Track[]> => (await official(() => ytDataApi.radio(videoId), async () => {
     const j = await pipedGet(`/streams/${videoId}`);
     const out = mapItems(j?.relatedStreams || []);
     if (out.length >= 5) return out;
@@ -351,15 +357,15 @@ export const ytmusic = {
     if (seed) push(await ytmusic.search(`${seed} songs`).catch(() => [] as Track[]));
     if (out.length < 5) push(await ytmusic.search(`top hits ${YEAR}`).catch(() => [] as Track[]));
     return out;
-  }),
+  })).filter(isMusicTrack),
 
   // Real, auto-updated YouTube music chart for a country (region = ISO-2:
   // US, KE, NG, GB, ZA…). Song-length items only.
-  trending: async (region: string): Promise<Track[]> => official(() => ytDataApi.chart(region), async () => {
+  trending: async (region: string): Promise<Track[]> => (await official(() => ytDataApi.chart(region), async () => {
     const j = await pipedGet(`/trending?region=${encodeURIComponent(region)}`);
     const arr = Array.isArray(j) ? j : (j && Array.isArray(j.items) ? j.items : []);
     return mapItems(arr).filter((t) => t.duration >= 60 && t.duration <= 600);
-  }),
+  })).filter(isMusicTrack),
 
   // Best directly-playable AUDIO stream for a video (used for offline downloads).
   // Prefers m4a/mp4 (broadest <audio> support) at a sane bitrate, then anything.
