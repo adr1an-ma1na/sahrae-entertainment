@@ -2,7 +2,9 @@ import { useState, useEffect, useRef, Fragment, ReactNode, type MouseEvent as RM
 import { isSong } from '../services/musicCatalog';
 import { dailyMixes, releaseRadar, artistsIn, genrePage, myGenres, catalogueSongsBy, GENRES as CATALOG_GENRES, genreById, type GenrePage } from '../services/musicLibrary';
 import { ytDataApi } from '../services/ytDataApi';
-import { Search, Play, Pause, Heart, Loader2, Music2, Plus, X, ListMusic, Shuffle, Trash2, ChevronLeft, Library, Sparkles, Disc3, User, Youtube, Link2 as LinkIcon } from 'lucide-react';
+import { Search, Play, Pause, Heart, Loader2, Music2, Plus, X, ListMusic, Shuffle, Trash2, ChevronLeft, Library, Sparkles, Disc3, User, Youtube, Link2 as LinkIcon, Radio as RadioIcon, Sunrise } from 'lucide-react';
+import AudioShowcase, { type ShowcaseSlide } from './ui/AudioShowcase';
+import { momentFor } from '../services/discoverCore';
 import { ytmusic, Track, Artist, Album, GENRES, SECTIONS } from '../services/ytmusic';
 import { getApiState, ENABLE_URL, type ApiState } from '../services/ytDataApi';
 import { buildMix, diverseSample } from '../services/recommend';
@@ -274,7 +276,7 @@ function greeting(): string {
 }
 
 export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) {
-  const { playQueue, likedTracks, playlists, recentlyPlayed: rawRecent, tasteSeeds, onboarded, addTasteSeeds, completeOnboarding, createPlaylist, importPlaylist, deletePlaylist, removeFromPlaylist, openAddSheet, setVideoMode, setExpanded } = useMusic();
+  const { playQueue, startRadio, likedTracks, playlists, recentlyPlayed: rawRecent, tasteSeeds, onboarded, addTasteSeeds, completeOnboarding, createPlaylist, importPlaylist, deletePlaylist, removeFromPlaylist, openAddSheet, setVideoMode, setExpanded } = useMusic();
   // One hover preview at a time across the Music videos shelf.
   const [videoPreviewId, setVideoPreviewId] = useState<string | null>(null);
   // Sauti is music only — podcasts play through the shared engine, so strip them
@@ -318,6 +320,9 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
 
   // YouTube Music style Mood filter chips
   const [activeMood, setActiveMood] = useState<string>('All');
+  // "Right now": the hour and the day pick a mix (discoverCore.momentFor).
+  const [moment] = useState(() => momentFor(new Date(), YEAR));
+  const [daylist, setDaylist] = useState<Track[]>([]);
   const [moodTracks, setMoodTracks] = useState<Track[]>([]);
   const [moodLoading, setMoodLoading] = useState(false);
 
@@ -537,6 +542,28 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
     })();
     return () => { cancelled = true; };
   }, [chartRegion]);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(moment.queries.map((q) => ytmusic.search(q).catch(() => [] as Track[])))
+      .then((lists) => {
+        if (cancelled) return;
+        // Interleaved, so the mix moves between its styles instead of playing
+        // one search's results end to end; one song per title.
+        const seen = new Set<string>();
+        const out: Track[] = [];
+        const clean = lists.map((l) => l.filter(isCleanSong));
+        for (let i = 0; out.length < 30 && clean.some((l) => i < l.length); i++) {
+          for (const l of clean) {
+            const t = l[i];
+            const key = t && `${t.title}|${t.artist}`.toLowerCase();
+            if (t && !seen.has(t.id) && !seen.has(key)) { seen.add(t.id); seen.add(key); out.push(t); }
+          }
+        }
+        setDaylist(out);
+      });
+    return () => { cancelled = true; };
+  }, [moment.queries]);
 
   // Fetch in-place tracks for active mood filter chip
   useEffect(() => {
@@ -792,9 +819,61 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   }
 
   // Featured spotlight for the Home hero — the freshest thing we have.
-  const featuredList = mix.length ? mix : (sections[0]?.tracks ?? []);
-  const featured = featuredList[0];
-  const featuredSource = mix.length ? 'Your Mix' : (sections[0]?.title ?? 'Sauti');
+  // The showcase: the right-now mix, your top mix, the chart's number one, and
+  // radio from the last song played. Each slide only when it has something in it.
+  const slides: ShowcaseSlide[] = [];
+  if (daylist.length >= 6) slides.push({
+    id: 'daylist', kicker: 'Right now', title: moment.title, subtitle: moment.blurb,
+    art: daylist[0].artworkLarge || daylist[0].artwork, tint: daylist[0].dominantColor,
+    note: `${daylist.length} songs · changes with the time of day`,
+    primary: { label: 'Play', icon: <Play className="w-4 h-4 fill-current" />, onClick: () => playQueue(daylist, 0, moment.title) },
+    secondary: { label: 'Shuffle', icon: <Shuffle className="w-4 h-4" />, onClick: () => playQueue(seededShuffle(daylist, Date.now()), 0, moment.title) },
+  });
+  if (madeForYou[0]?.tracks.length) {
+    const m = madeForYou[0];
+    slides.push({
+      id: `mix-${m.id}`, kicker: 'Made for you', title: m.title, subtitle: m.subtitle,
+      art: m.tracks[0].artworkLarge || m.tracks[0].artwork, tint: m.tracks[0].dominantColor,
+      primary: { label: 'Play', icon: <Play className="w-4 h-4 fill-current" />, onClick: () => playQueue(m.tracks, 0, m.title) },
+      secondary: { label: 'Open', icon: <ListMusic className="w-4 h-4" />, onClick: () => setViewMix(m) },
+    });
+  }
+  if (chartTracks[0]) {
+    const top = chartTracks[0];
+    slides.push({
+      id: `chart-${top.id}`, kicker: `No. 1 in ${regionMusic(chartRegion).name}`, title: top.title, subtitle: top.artist,
+      art: top.artworkLarge || top.artwork, tint: top.dominantColor, note: 'From the live chart below',
+      primary: { label: 'Play the chart', icon: <Play className="w-4 h-4 fill-current" />, onClick: () => playQueue(chartTracks, 0, `${chartRegion} Charts`) },
+      secondary: { label: 'Start radio', icon: <RadioIcon className="w-4 h-4" />, onClick: () => startRadio(top) },
+    });
+  }
+  if (recentlyPlayed[0]) {
+    const last = recentlyPlayed[0];
+    slides.push({
+      id: `radio-${last.id}`, kicker: 'Keep it going', title: `${last.artist} radio`, subtitle: `Songs like ${last.title}, picked to follow on from it.`,
+      art: last.artworkLarge || last.artwork, tint: last.dominantColor,
+      primary: { label: 'Start radio', icon: <RadioIcon className="w-4 h-4" />, onClick: () => startRadio(last) },
+      secondary: { label: 'Play the song', icon: <Play className="w-4 h-4 fill-current" />, onClick: () => playQueue([last], 0, 'Recently played') },
+    });
+  }
+
+  // "Your sound lately": the artists you keep coming back to, from what you
+  // played and liked on this device.
+  const leadArtist = (a: string) => (a || '').split(/,|&|\sfeat\.?\s|\sft\.?\s|\sx\s/i)[0].trim();
+  const soundPool = [...recentlyPlayed, ...likedTracks].filter((t, i, arr) => arr.findIndex((x) => x.id === t.id) === i);
+  const soundLately = (() => {
+    const by = new Map<string, { name: string; tracks: Track[] }>();
+    for (const t of soundPool) {
+      const name = leadArtist(t.artist);
+      if (!name) continue;
+      const k = name.toLowerCase();
+      const c = by.get(k) || { name, tracks: [] };
+      c.tracks.push(t);
+      by.set(k, c);
+    }
+    return [...by.values()].filter((c) => c.tracks.length >= 2).sort((a, b) => b.tracks.length - a.tracks.length).slice(0, 6);
+  })();
+
 
   // "Quick picks" (YouTube-Music-style 4-row tap-to-play grid): personalised mix
   // if we have one, else the freshest catalog shelf, deduped.
@@ -1070,6 +1149,8 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
             </div>
           ) : (
             <>
+              <AudioShowcase slides={slides} label="Featured in Sauti" />
+
               {/* ── Quick access ───────────────────────────────────────────
                   Spotify's home opens with a grid of short wide tiles: the
                   shortest path back to what you were already playing. Liked
@@ -1089,6 +1170,37 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                     onClick={() => playQueue(recentlyPlayed, i, 'Recently played')} />
                 ))}
               </div>
+
+              {/* ── Your sound lately ─────────────────────────────────────────
+                  A small, always-current "wrapped": the artists this listener
+                  keeps returning to. Each plays their songs from your own
+                  history; the button plays them all, most-played artist first. */}
+              {soundLately.length >= 2 && (
+                <section className="lux-card p-5 md:p-6 mb-9">
+                  <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
+                    <div>
+                      <p className="lux-kicker mb-1.5"><Sunrise className="w-3.5 h-3.5" />Your sound lately</p>
+                      <h3 className="text-xl md:text-2xl font-display font-bold text-white">The artists you keep coming back to</h3>
+                    </div>
+                    <button onClick={() => playQueue(soundLately.flatMap((a) => a.tracks), 0, 'Your sound lately')} data-tv-focusable className="lux-btn px-5 py-2.5 text-sm">
+                      <Play className="w-4 h-4 fill-current" /> Play them all
+                    </button>
+                  </div>
+                  <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-1">
+                    {soundLately.map((a, i) => (
+                      <button key={a.name} onClick={() => playQueue(a.tracks, 0, a.name)} data-tv-focusable aria-label={`Play ${a.name}`}
+                        className="group shrink-0 w-[104px] text-center focus:outline-none">
+                        <span className="relative block w-[88px] h-[88px] mx-auto rounded-full overflow-hidden ring-2 ring-white/10 group-hover:ring-amber-400/70 group-focus-visible:ring-amber-400 transition-shadow">
+                          <CoverArt imageUrl={a.tracks[0].artwork} dominantColor={a.tracks[0].dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
+                          <span className="absolute top-1 left-1 w-6 h-6 rounded-full bg-black/60 text-[11px] font-extrabold text-amber-300 flex items-center justify-center tabular">{i + 1}</span>
+                        </span>
+                        <span className="block mt-2 text-xs font-bold text-white truncate">{a.name}</span>
+                        <span className="block text-[11px] text-zinc-500 tabular">{a.tracks.length} songs</span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
 
               {/* ── Quick picks — YouTube-Music's signature 4-row tap-to-play grid ── */}
               {quickPicks.length > 0 && (
@@ -1202,28 +1314,6 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                   </div>
                 )}
               </section>
-
-              {/* ── Featured spotlight hero ── */}
-              {featured && (
-                <section className="relative mb-9 rounded-3xl overflow-hidden border border-white/10 shadow-lg">
-                  <img loading="lazy" decoding="async" aria-hidden alt="" src={featured.artworkLarge || featured.artwork} className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-40" />
-                  <div className="absolute inset-0" style={{ background: 'linear-gradient(90deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.65) 50%, rgba(0,0,0,0.35) 100%)' }} />
-                  <div className="relative flex items-center gap-4 md:gap-7 p-5 md:p-6">
-                    <div className="relative w-24 h-24 md:w-36 md:h-36 shrink-0">
-                      <CoverArt imageUrl={featured.artworkLarge || featured.artwork} fallbackUrl={featured.artwork} dominantColor={featured.dominantColor} rounded="rounded-2xl" className="np-art w-full h-full" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="overline mb-1 text-[10px]">Featured · {featuredSource}</div>
-                      <h3 className="np-title text-xl md:text-3xl font-display font-bold text-white truncate">{featured.title}</h3>
-                      <p className="text-zinc-300 truncate mb-4 text-xs md:text-sm font-medium">{featured.artist}</p>
-                      <div className="flex gap-2">
-                        <button onClick={() => playQueue(featuredList, 0, featuredSource)} tabIndex={0} data-tv-focusable className="btn-sauti px-5 py-2 rounded-full text-xs font-bold flex items-center gap-1.5"><Play className="w-3.5 h-3.5 fill-current" /> Play</button>
-                        <button onClick={() => openAddSheet(featured)} tabIndex={0} data-tv-focusable className="btn-glass px-4 py-2 rounded-full text-xs font-bold flex items-center gap-1.5"><Plus className="w-3.5 h-3.5" /> Add</button>
-                      </div>
-                    </div>
-                  </div>
-                </section>
-              )}
 
               {madeForYou.length > 0 && (
                 <section className="mb-9">

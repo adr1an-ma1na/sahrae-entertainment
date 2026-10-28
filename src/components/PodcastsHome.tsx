@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type MouseEvent as RMouseEvent } from 'react';
-import { Search, Loader2, Heart, Play, ChevronLeft, ChevronRight, Check, Circle, Video, X, ListTree, Download, Trash2, TrendingUp } from 'lucide-react';
+import { Search, Loader2, Heart, Play, ChevronLeft, ChevronRight, Check, Circle, Video, X, ListTree, Download, Trash2, TrendingUp, ListPlus, Info } from 'lucide-react';
 import { Track, ytmusic } from '../services/ytmusic';
 import { searchPodcastShows, getPodcastEpisodes, fetchChapters, getShowsLatest, PodShow } from '../services/podcastRss';
 import { getEpisodesById, mergeEpisodes } from '../services/itunesPodcasts';
@@ -10,6 +10,7 @@ import { CoverArt } from './ui/CoverArt';
 import { Shelf, ShelfHeader, ArtCard, WideRow, QuickTile, greeting } from './ui/Shelf';
 import { getFollows, isFollowed, toggleFollow, listInProgress, getProgress, getMany, getSeen, markShowSeen, markPlayed, markUnplayed, EpisodeProgress } from '../services/podcasts';
 import VideoCard from './ui/VideoCard';
+import AudioShowcase, { type ShowcaseSlide } from './ui/AudioShowcase';
 import EmptyState from './EmptyState';
 import { loadVideoPodcasts, VIDEO_SHOWS, type VideoEpisode } from '../services/videoPodcasts';
 import { listenerRegion } from '../services/region';
@@ -371,6 +372,56 @@ export default function PodcastsHome() {
   const resume = (p: EpisodeProgress) => { playQueue([p.track], 0, 'Podcasts'); window.setTimeout(() => { try { seek(p.positionMs / 1000); } catch { /* ignore */ } }, 1200); };
   const togglePlayed = (t: Track) => { if (getProgress(t.id)?.completed) markUnplayed(t.id); else markPlayed(t); setProgV((v) => v + 1); };
 
+  // New episodes not yet finished, newest first: "Play all new" queues them so
+  // a commute is one tap, not one tap per episode.
+  const unplayedFresh = fresh.filter((e) => getProgress(e.id)?.state !== 'played');
+
+  // The showcase: where you left off, what is new from your shows, the
+  // country's number one, and a video episode. Each only when it exists.
+  const slides: ShowcaseSlide[] = [];
+  const left = cont[0];
+  if (left) {
+    const remaining = Math.max(0, (left.durationMs - left.positionMs) / 1000);
+    slides.push({
+      id: `cont-${left.track.id}`, kicker: 'Continue listening', title: left.track.title, subtitle: left.track.artist,
+      art: left.track.artworkLarge || left.track.artwork, tint: left.track.dominantColor,
+      progress: left.durationMs ? (left.positionMs / left.durationMs) * 100 : 0,
+      note: remaining ? `${fmt(remaining)} left` : undefined,
+      primary: { label: 'Resume', icon: <Play className="w-4 h-4 fill-current" />, onClick: () => resume(left) },
+      secondary: { label: 'Episode', icon: <Info className="w-4 h-4" />, onClick: () => setEpisodeView(left.track) },
+    });
+  }
+  const newest = unplayedFresh.find((e) => e.id !== left?.track.id);
+  if (newest) slides.push({
+    id: `new-${newest.id}`, kicker: follows.length ? `New from ${newest.artist}` : 'Fresh episode', title: newest.title,
+    subtitle: [newest.date, newest.duration ? fmt(newest.duration) : ''].filter(Boolean).join(' · '),
+    art: newest.artworkLarge || newest.artwork, tint: newest.dominantColor,
+    primary: { label: 'Play', icon: <Play className="w-4 h-4 fill-current" />, onClick: () => onListen(newest) },
+    secondary: unplayedFresh.length > 1
+      ? { label: `Play all ${unplayedFresh.length} new`, icon: <ListPlus className="w-4 h-4" />, onClick: () => playQueue(unplayedFresh, 0, 'New episodes') }
+      : { label: 'Episode', icon: <Info className="w-4 h-4" />, onClick: () => setEpisodeView(newest) },
+  });
+  const topShow = charts[chartCountry]?.[0];
+  if (topShow) {
+    const market = CHART_MARKETS.find((m) => m.cc === chartCountry);
+    const followed = follows.some((f) => f.id === topShow.id);
+    slides.push({
+      id: `top-${topShow.id}`, kicker: `No. 1 in ${market?.name || 'the charts'}`, title: topShow.title || topShow.artist, subtitle: topShow.artist !== topShow.title ? topShow.artist : undefined,
+      art: topShow.artworkLarge || topShow.artwork, tint: topShow.dominantColor,
+      primary: { label: 'Open the show', icon: <Play className="w-4 h-4 fill-current" />, onClick: () => setShowView(topShow) },
+      secondary: { label: followed ? 'Following' : 'Follow', icon: followed ? <Check className="w-4 h-4" /> : <Heart className="w-4 h-4" />, onClick: () => onFollow(topShow) },
+    });
+  }
+  if (videoEps[0]) {
+    const v = videoEps[0].track;
+    slides.push({
+      id: `video-${v.id}`, kicker: 'Watch · video podcast', title: v.title, subtitle: v.artist,
+      art: v.artworkLarge || v.artwork, tint: v.dominantColor,
+      primary: { label: 'Watch', icon: <Video className="w-4 h-4" />, onClick: () => watchVideoEpisode(0) },
+      secondary: { label: 'Listen', icon: <Play className="w-4 h-4 fill-current" />, onClick: () => { setVideoMode(false); playQueue([v], 0, 'Podcasts'); } },
+    });
+  }
+
   // Seek to a chapter / timestamp: if this episode is already playing, seek now;
   // otherwise start it, then seek once it has loaded.
   const seekTo = (ep: Track, seconds: number) => {
@@ -650,6 +701,8 @@ export default function PodcastsHome() {
         ) : <EmptyState compact illustration="podcast" title="No podcasts found" message="Try the show's name, a host, or a topic like 'football' or 'business'." />
       ) : (
         <>
+          <AudioShowcase slides={slides} label="Featured in Podcasts" />
+
           {/* ── 1. Greeting + quick access ──────────────────────────────────
               Spotify's home opens with a time-of-day greeting and a two-column
               grid of short wide tiles: artwork flush left, one bold line, and a
@@ -736,6 +789,11 @@ export default function PodcastsHome() {
                 <h3 className="text-xl font-display font-bold text-white tracking-tight">
                   {follows.length ? 'New from your shows' : 'Fresh episodes'}
                 </h3>
+                {unplayedFresh.length > 1 && (
+                  <button onClick={() => playQueue(unplayedFresh, 0, 'New episodes')} tabIndex={0} data-tv-focusable className="lux-chip shrink-0">
+                    <ListPlus className="w-3.5 h-3.5" /> Play all {unplayedFresh.length}
+                  </button>
+                )}
               </div>
               {freshLoading && !fresh.length ? (
                 <div className="grid sm:grid-cols-2 gap-2">

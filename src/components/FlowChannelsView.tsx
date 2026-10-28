@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Flame, Ghost, Heart, Rocket, Compass, Layers, Tv, Volume2, VolumeX, AlertCircle, Sparkles, Swords, ShieldAlert, Film, Library, Drama } from 'lucide-react';
+import { Play, Flame, Ghost, Heart, Rocket, Compass, Volume2, VolumeX, AlertCircle, Sparkles, Swords, ShieldAlert, Film, Library, Drama } from 'lucide-react';
 import { fetchDiscover, fetchMediaDetails, getImageUrl, MediaDetails } from '../services/tmdb';
-import { LuxHeader, LuxGlow, LiveMeta } from './ui/Lux';
+import { LiveMeta, LuxChapter, RailHeader } from './ui/Lux';
+import { useRail } from '../hooks/useRail';
 
 const CHANNELS = [
   { id: '1', name: 'Action Cinema', icon: Flame, genreId: 28, color: 'from-orange-500 to-red-600', tag: 'Action' },
@@ -46,8 +47,8 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
       const entries = await Promise.all(CHANNELS.map(async (c) => {
         try {
           const res = await fetchDiscover('movie', 1, c.genreId);
-          const withArt = res.find((m) => m.poster_path || m.backdrop_path);
-          return [c.id, withArt ? getImageUrl(withArt.poster_path || withArt.backdrop_path, 'w300') : ''] as const;
+          const withArt = res.find((m) => m.backdrop_path || m.poster_path);
+          return [c.id, withArt ? getImageUrl(withArt.backdrop_path || withArt.poster_path, 'w300') : ''] as const;
         } catch { return [c.id, ''] as const; }
       }));
       if (!cancelled) setChannelArt(Object.fromEntries(entries.filter(([, u]) => u)));
@@ -56,7 +57,10 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
   }, []);
 
   useEffect(() => {
-    // Auto-hide overlay after 5 seconds of no mouse movement
+    // Auto-hide overlay after 5 seconds of no mouse movement. Only where there
+    // is a mouse: on a phone or a TV the title and buttons stay, since there is
+    // no pointer to bring them back with a glance.
+    if (!window.matchMedia?.('(hover: hover)').matches) { setShowOverlay(true); return; }
     const handleMouseMove = () => {
       setShowOverlay(true);
       if (overlayTimeoutRef.current) clearTimeout(overlayTimeoutRef.current);
@@ -66,11 +70,15 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
     };
 
     window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('pointerdown', handleMouseMove);
+    window.addEventListener('keydown', handleMouseMove);
     // Initial timeout
     overlayTimeoutRef.current = setTimeout(() => setShowOverlay(false), 5000);
 
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('pointerdown', handleMouseMove);
+      window.removeEventListener('keydown', handleMouseMove);
       if (overlayTimeoutRef.current) clearTimeout(overlayTimeoutRef.current);
     };
   }, []);
@@ -138,6 +146,11 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
     setLoading(false);
   };
 
+  const jumpTo = (index: number) => {
+    playlistIndexRef.current = index;
+    playNext(playlist, index);
+  };
+
   const handleEnded = () => {
     playlistIndexRef.current += 1;
     playNext();
@@ -181,186 +194,108 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
   const activeChannel = CHANNELS.find(c => c.id === activeChannelId);
   const ytId = videoUrl ? (videoUrl.match(/[?&]v=([^&]+)/)?.[1] || '') : '';
 
+  const upNext = playlist.slice(playlistIndexRef.current + 1).map((m, n) => ({ m, index: playlistIndexRef.current + 1 + n }));
+
   return (
-    <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-[1600px] mx-auto pb-24 relative">
-      <LuxGlow />
-      <LuxHeader kicker={<><Tv className="w-3.5 h-3.5" /> Sahrae · Flow</>} title="Flow Channels"
-        meta={<><LiveMeta>{CHANNELS.length} channels, always on</LiveMeta><span>Themed cinema that never stops. Sit back and discover.</span></>} />
+    <div className="min-h-screen pb-24 relative">
+      {/* The stage: the channel playing full width, the trailer cropped to fill
+          it (container units where the WebView has them, letterboxed where not). */}
+      <section className="lux-stage lux-fade-foot relative w-full h-[64vh] md:h-[80vh] min-h-[420px] overflow-hidden bg-zinc-950 group">
+        {loading && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center z-20">
+            <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+            <p className="text-zinc-400 font-medium animate-pulse">Tuning to {activeChannel?.name}...</p>
+          </div>
+        )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
-        
-        {/* Main TV Player (3 cols wide) */}
-        <div className="lg:col-span-3">
-          <div className="relative w-full aspect-video bg-black rounded-3xl overflow-hidden ring-1 ring-white/10 shadow-[0_30px_70px_-25px_rgba(0,0,0,0.85)] group">
-            
-            {loading && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900 z-20">
-                <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                <p className="text-zinc-400 font-medium animate-pulse">Tuning to {activeChannel?.name}...</p>
-              </div>
+        {error && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center z-20 text-center px-4">
+            <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
+            <p className="text-zinc-300 font-medium">Channel signal lost.</p>
+            <button onClick={() => loadChannel(activeChannelId)} className="lux-btn mt-4 px-6 py-2.5 text-sm">Retune channel</button>
+          </div>
+        )}
+
+        {/* The film's still under the video: the stage is never black while a
+            trailer tunes in, or where the video cannot play. */}
+        {playingMedia?.backdrop_path && (
+          <img key={playingMedia.id} src={getImageUrl(playingMedia.backdrop_path, 'original')} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover kenburns" />
+        )}
+
+        {ytId && (
+          <div className="flow-cover absolute inset-0 z-0 pointer-events-none">
+            <iframe
+              key={ytId}
+              ref={ytFrameRef}
+              src={`https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&controls=0&playsinline=1&enablejsapi=1&rel=0&modestbranding=1&iv_load_policy=3&disablekb=1&fs=0`}
+              title="Flow Channel"
+              className="flow-cover-frame border-none bg-black"
+              allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
+              onLoad={() => { try { ytFrameRef.current?.contentWindow?.postMessage(JSON.stringify({ event: 'listening' }), '*'); } catch { /* ignore */ } if (!muted) post('unMute'); }}
+            />
+          </div>
+        )}
+
+        <div aria-hidden className="absolute inset-0 z-[1] bg-gradient-to-r from-black/85 via-black/35 to-transparent" />
+        <div aria-hidden className="absolute inset-0 z-[1] bg-gradient-to-t from-black via-black/30 to-transparent" />
+        <div aria-hidden className="absolute inset-0 z-[1] lux-scan opacity-60" />
+
+        {/* The HUD: hides after a few quiet seconds, back on any touch, key or move. */}
+        <div className={`absolute inset-0 z-10 flex flex-col justify-end px-4 md:px-12 pb-24 md:pb-28 transition-opacity duration-500 ${showOverlay || !videoUrl ? 'opacity-100' : 'opacity-0'}`}>
+          <div className="absolute top-24 md:top-20 right-4 md:right-12 flex items-center gap-3">
+            {isActuallyPlaying && (
+              <span className="flex items-center gap-1.5 bg-red-500 text-[#fff] px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider"><span className="w-1.5 h-1.5 rounded-full bg-[#fff] animate-pulse" /> On air</span>
             )}
-            
-            {error && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900 z-20 text-center px-4">
-                <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-                <p className="text-zinc-300 font-medium">Channel signal lost.</p>
-                <button 
-                  onClick={() => loadChannel(activeChannelId)}
-                  className="mt-4 px-6 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-full transition-colors text-sm font-bold"
-                >
-                  Retune Channel
+            {isActuallyPlaying && (
+              <button onClick={toggleMute} data-tv-focusable aria-label={muted ? 'Unmute' : 'Mute'} className="btn-glass w-11 h-11 rounded-full flex items-center justify-center">
+                {muted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+              </button>
+            )}
+          </div>
+
+          {playingMedia && (
+            <div key={playingMedia.id} className="max-w-2xl lux-enter">
+              <div className="flex flex-wrap items-center gap-3 mb-3">
+                {activeChannel?.icon && <activeChannel.icon className="w-4 h-4 text-amber-400" />}
+                <span className="lux-kicker">{activeChannel?.name} · Flow</span>
+              </div>
+              <h1 className="tv-hero-title lux-title text-4xl md:text-6xl pb-1 mb-3 line-clamp-2">{playingMedia.title}</h1>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-semibold text-zinc-200 mb-3">
+                {playingMedia.vote_average ? <span className="text-amber-300 tabular">★ {playingMedia.vote_average.toFixed(1)}</span> : null}
+                {playingMedia.release_date && <span className="tabular">{playingMedia.release_date.slice(0, 4)}</span>}
+                {playingMedia.runtime ? <span className="tabular">{playingMedia.runtime} min</span> : null}
+                <LiveMeta>{CHANNELS.length} channels, always on</LiveMeta>
+              </div>
+              <p className="tv-hero-desc text-zinc-300 text-sm md:text-base leading-relaxed mb-6 line-clamp-2 max-w-xl">{playingMedia.overview}</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <button onClick={() => onPlay(playingMedia.id, 'movie')} data-tv-focusable className="lux-btn px-6 md:px-8 py-3 text-sm md:text-base">
+                  <Play className="w-4 h-4 fill-current" /> Watch the film
+                </button>
+                <button onClick={() => handleEnded()} data-tv-focusable className="btn-glass px-5 py-3 font-bold rounded-full text-sm md:text-base">
+                  Next trailer
                 </button>
               </div>
-            )}
-
-            {ytId && (
-              <div className="absolute inset-0 z-0 pointer-events-none">
-                <iframe
-                  key={ytId}
-                  ref={ytFrameRef}
-                  src={`https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&controls=0&playsinline=1&enablejsapi=1&rel=0&modestbranding=1&iv_load_policy=3&disablekb=1&fs=0`}
-                  title="Flow Channel"
-                  className="w-full h-full border-none bg-black"
-                  allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
-                  onLoad={() => { try { ytFrameRef.current?.contentWindow?.postMessage(JSON.stringify({ event: 'listening' }), '*'); } catch { /* ignore */ } if (!muted) post('unMute'); }}
-                />
-              </div>
-            )}
-
-            {/* TV Overlay HUD */}
-            <div className={`absolute inset-0 z-10 bg-gradient-to-t from-zinc-950 via-zinc-950/20 to-transparent flex flex-col justify-end p-6 md:p-8 transition-opacity duration-500 ${showOverlay || !videoUrl ? 'opacity-100' : 'opacity-0'}`}>
-              
-              <div className="absolute top-6 right-6 flex items-center gap-3">
-                {isActuallyPlaying && (
-                  <button
-                    onClick={toggleMute}
-                    className="p-3 bg-black/50 hover:bg-black/80 backdrop-blur-md rounded-full text-white transition-colors pointer-events-auto shadow-lg"
-                  >
-                    {muted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-                  </button>
-                )}
-                {isActuallyPlaying && (
-                  <div className={`px-4 py-2 bg-gradient-to-r ${activeChannel?.color} rounded-xl text-white font-bold text-xs shadow-xl border border-white/20 flex items-center gap-2 transition-all`}>
-                    <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                    LIVE STREAM
-                  </div>
-                )}
-              </div>
-
-              {playingMedia && (
-                <div className="flex flex-col md:flex-row items-end justify-between gap-6 w-full animate-in slide-in-from-bottom-4">
-                  <div className="max-w-2xl text-left">
-                    <div className="flex items-center gap-3 mb-2">
-                      {activeChannel?.icon && <activeChannel.icon className="w-5 h-5 text-amber-500 animate-pulse" />}
-                      <span className="lux-kicker">{activeChannel?.name}</span>
-                    </div>
-                    <h2 className="lux-title text-3xl md:text-5xl mb-2 line-clamp-1 pb-1">{playingMedia.title}</h2>
-                    <p className="text-zinc-300 line-clamp-2 text-xs md:text-sm leading-relaxed mb-4">
-                      {playingMedia.overview}
-                    </p>
-                    <div className="flex items-center gap-3 pointer-events-auto">
-                      <button 
-                        onClick={() => onPlay(playingMedia.id, 'movie')}
-                        className="lux-btn px-6 py-3 text-sm"
-                      >
-                        <Play className="w-4 h-4 fill-current" />
-                        Watch the film
-                      </button>
-                      <button 
-                        onClick={() => handleEnded()}
-                        className="btn-glass px-5 py-3 font-bold rounded-full text-sm"
-                      >
-                        Skip Trailer
-                      </button>
-                    </div>
-                  </div>
-                  
-                  {/* Up Next Queue Overlay */}
-                  {playlist.length > 1 && (
-                    <div className="hidden lg:flex flex-col gap-2 shrink-0 self-end">
-                      <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest text-right">Up Next</h4>
-                      <div className="flex items-end gap-2.5 justify-end pointer-events-none">
-                        {playlist.slice(playlistIndexRef.current + 1, playlistIndexRef.current + 4).map((item, idx) => (
-                           <div key={item.id + idx} className={`relative rounded-lg overflow-hidden border border-white/10 shadow-lg ${idx === 0 ? 'w-28 aspect-video opacity-100' : 'w-20 aspect-video opacity-50'}`}>
-                             <img loading="lazy" decoding="async" src={getImageUrl(item.backdrop_path, 'w300')} alt={item.title} className="w-full h-full object-cover" />
-                             <div className="absolute inset-0 bg-gradient-to-t from-black/80 flex items-end p-1.5">
-                               <p className="text-white text-[9px] font-bold line-clamp-1">{item.title}</p>
-                             </div>
-                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
-            
-            {/* Scanlines Effect */}
-            <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%)] bg-[length:100%_4px] z-10 opacity-30"></div>
-          </div>
+          )}
         </div>
+      </section>
 
-        {/* Channel Switcher (1 col wide, tall list for 12 channels) */}
-        <div className="lg:col-span-1 lux-card p-4 flex flex-col h-[56.25vw] max-h-[500px] lg:h-auto lg:max-h-[56.25vw] overflow-hidden" style={{ transform: 'none' }}>
-          <div className="flex items-center justify-between mb-3 px-2 border-b border-white/5 pb-2">
-            <h3 className="lux-kicker">Channel guide</h3>
-            <span className="text-[10px] font-bold text-zinc-400 tabular">{CHANNELS.length} channels</span>
-          </div>
-          <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-            {CHANNELS.map(channel => {
-              const Icon = channel.icon;
-              const isActive = activeChannelId === channel.id;
-              
-              return (
-                <button
-                  key={channel.id}
-                  onClick={() => setActiveChannelId(channel.id)}
-                  className={`w-full flex items-center gap-3 p-2.5 rounded-xl transition-all border text-left ${
-                    isActive 
-                      ? 'bg-amber-500/10 border-amber-400/50 shadow-[0_8px_24px_-12px_rgb(var(--acc-rgb)/0.6)]' 
-                      : 'bg-zinc-950/40 border-transparent hover:bg-zinc-900/60 hover:border-white/5'
-                  }`}
-                >
-                  <div className="w-10 h-10 rounded-lg overflow-hidden relative flex items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900 shrink-0 shadow-inner">
-                    {channelArt[channel.id] ? (
-                      <img src={channelArt[channel.id]} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
-                    ) : (
-                      <Icon className="w-5 h-5 text-zinc-500" />
-                    )}
-                    <div className="absolute inset-0 bg-black/20" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-1.5">
-                      <h4 className={`font-bold text-xs truncate ${isActive ? 'text-amber-400 font-black' : 'text-zinc-200'}`}>{channel.name}</h4>
-                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/5 text-zinc-400 font-bold border border-white/5 scale-90">{channel.tag}</span>
-                    </div>
-                    {isActive ? (
-                      isActuallyPlaying ? (
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <div className="flex gap-0.5 items-end h-2.5">
-                            <span className="w-0.5 h-1.5 bg-amber-500 rounded-full animate-[eq_0.9s_ease-in-out_infinite_alternate]" style={{ animationDelay: '0.1s' }}></span>
-                            <span className="w-0.5 h-2.5 bg-amber-500 rounded-full animate-[eq_0.9s_ease-in-out_infinite_alternate]" style={{ animationDelay: '0.2s' }}></span>
-                            <span className="w-0.5 h-1 bg-amber-500 rounded-full animate-[eq_0.9s_ease-in-out_infinite_alternate]" style={{ animationDelay: '0.3s' }}></span>
-                          </div>
-                          <span className="text-[10px] text-amber-500 font-bold">ON AIR</span>
-                        </div>
-                      ) : (
-                        <span className="text-[10px] text-zinc-400 block mt-0.5 animate-pulse">Tuning signal...</span>
-                      )
-                    ) : (
-                      <span className="text-[10px] text-zinc-500 block mt-0.5">Tap to tune in</span>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
+      <div className="-mt-16 relative z-10">
+        <ChannelGuide
+          active={activeChannelId}
+          playing={isActuallyPlaying}
+          art={channelArt}
+          onTune={setActiveChannelId}
+        />
 
+        {upNext.length > 0 && (
+          <UpNextRail items={upNext} channel={activeChannel?.name || ''} onJump={jumpTo} />
+        )}
+
+        {playingMedia && <LuxChapter kicker={`Now on ${activeChannel?.name}`} title={playingMedia.title} />}
       {/* Redesigned Active Channel Interactive Dashboard (Effective Space Use) */}
       {playingMedia && (
-        <div className="mt-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start animate-in fade-in slide-in-from-bottom-6 duration-700">
+        <div className="px-4 md:px-12 mt-4 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
           {/* Column 1: Poster and Essential Quick Info (3 cols) */}
           <div className="lg:col-span-3 flex flex-col gap-4 text-left">
@@ -377,7 +312,7 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
             </div>
             
             {/* Quick Specs */}
-            <div className="bg-zinc-950/80 border border-white/5 rounded-2xl p-4 space-y-3">
+            <div className="lux-card p-4 space-y-3">
               <div className="flex justify-between items-center text-xs text-zinc-500 font-bold uppercase tracking-wider border-b border-white/5 pb-2">
                 <span>Release Year</span>
                 <span className="text-white">{playingMedia.release_date?.split('-')[0] || 'N/A'}</span>
@@ -403,7 +338,7 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
           <div className="lg:col-span-9 space-y-6 text-left">
             
             {/* Show Overview / Details Card */}
-            <div className="bg-zinc-950/40 border border-white/5 rounded-3xl p-6 md:p-8 space-y-5">
+            <div className="lux-card p-6 md:p-8 space-y-5">
               <div>
                 <span className="text-amber-500 font-bold text-[10px] uppercase tracking-widest block mb-1">Now Streaming on {activeChannel?.name}</span>
                 <h3 className="text-2xl md:text-3xl font-display font-black text-white tracking-tight">{playingMedia.title}</h3>
@@ -457,6 +392,87 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
           </div>
         </div>
       )}
+      </div>
+    </div>
+  );
+}
+
+/** The guide: every channel as a wide still in its colours, the live one lit. */
+function ChannelGuide({ active, playing, art, onTune }: {
+  active: string; playing: boolean; art: Record<string, string>; onTune: (id: string) => void;
+}) {
+  const rail = useRail([Object.keys(art).length]);
+  return (
+    <div className="px-4 md:px-12 py-5">
+      <RailHeader
+        title="Channel guide" kicker="Tune in" count={CHANNELS.length} unit="channels"
+        canPrev={rail.canPrev} canNext={rail.canNext} onPrev={rail.prev} onNext={rail.next}
+      />
+      <div ref={rail.ref} className="flex gap-3 md:gap-4 overflow-x-auto pt-1 pb-4 scrollbar-hide snap-x scroll-smooth">
+        {CHANNELS.map((c) => {
+          const Icon = c.icon;
+          const on = c.id === active;
+          return (
+            <button
+              key={c.id} onClick={() => onTune(c.id)} data-tv-focusable aria-pressed={on} aria-label={`Tune to ${c.name}`}
+              className={`lux-card group flex-none w-[200px] md:w-[250px] snap-start text-left focus:outline-none ${on ? 'ring-2 ring-amber-400' : ''}`}
+            >
+              <span className="relative block aspect-video overflow-hidden rounded-[inherit]">
+                <span className={`absolute inset-0 bg-gradient-to-br ${c.color}`} />
+                {art[c.id] && <img src={art[c.id]} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover opacity-60 mix-blend-luminosity transition-transform duration-700 group-hover:scale-105" />}
+                <span className={`absolute inset-0 bg-gradient-to-br ${c.color} opacity-55 mix-blend-multiply`} />
+                <span className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+                {on && (
+                  <span className="absolute top-2.5 left-2.5 flex items-center gap-1.5 bg-red-500 text-[#fff] px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#fff] animate-pulse" /> {playing ? 'On air' : 'Tuning'}
+                  </span>
+                )}
+                <span className="absolute bottom-0 inset-x-0 p-3 flex items-center gap-2">
+                  <Icon className="w-4 h-4 text-[#fff] shrink-0" />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-[#fff] truncate">{c.name}</span>
+                    <span className="block text-[11px] text-[#fff]/70 truncate">{on ? 'Now playing' : c.tag}</span>
+                  </span>
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** What the channel plays next; any one can be pulled forward. */
+function UpNextRail({ items, channel, onJump }: { items: { m: MediaDetails; index: number }[]; channel: string; onJump: (index: number) => void }) {
+  const rail = useRail([items.length]);
+  return (
+    <div className="px-4 md:px-12 py-5">
+      <RailHeader
+        title="Up next" kicker={channel} count={items.length} unit="trailers"
+        canPrev={rail.canPrev} canNext={rail.canNext} onPrev={rail.prev} onNext={rail.next}
+      />
+      <div ref={rail.ref} className="flex gap-3 md:gap-4 overflow-x-auto pt-1 pb-4 scrollbar-hide snap-x scroll-smooth">
+        {items.map(({ m, index }, n) => (
+          <button
+            key={`${m.id}-${index}`} onClick={() => onJump(index)} data-tv-focusable aria-label={`Play the trailer for ${m.title}`}
+            className="lux-card group flex-none w-[200px] md:w-[250px] snap-start text-left focus:outline-none"
+          >
+            <span className="relative block aspect-video overflow-hidden rounded-[inherit] bg-zinc-800">
+              <img src={getImageUrl(m.backdrop_path || m.poster_path, 'w300')} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+              <span className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-transparent" />
+              {n === 0 && <span className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-full bg-black/55 backdrop-blur text-[9px] font-bold uppercase tracking-wider text-amber-300">Next</span>}
+              <span aria-hidden className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                <span className="btn-gold w-10 h-10 rounded-full flex items-center justify-center"><Play className="w-4 h-4 fill-current ml-0.5" /></span>
+              </span>
+              <span className="absolute bottom-0 inset-x-0 p-3">
+                <span className="block text-sm font-bold text-[#fff] truncate">{m.title}</span>
+                <span className="block text-[11px] text-[#fff]/70 tabular">{m.release_date?.slice(0, 4) || 'Film'}</span>
+              </span>
+            </span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

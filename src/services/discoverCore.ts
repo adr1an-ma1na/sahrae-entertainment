@@ -63,3 +63,28 @@ export const LOCAL_ROWS = {
 export function localQuery(origin: string, type: 'movie' | 'tv'): Record<string, string> {
   return { with_origin_country: origin, sort_by: 'popularity.desc', include_adult: 'false', ...(type === 'movie' ? { 'vote_count.gte': '3' } : {}) };
 }
+
+/**
+ * Sauti's "right now" mix: the day and the hour name the moment, and the moment
+ * picks the music. A weekday evening winds down; a Friday or Saturday night
+ * warms up; Sunday morning is gospel. Pure, so the same hour always gives the
+ * same mix and it can be tested.
+ */
+export interface Moment { id: string; title: string; blurb: string; queries: string[] }
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+// Several narrow searches, merged: one broad search returns mostly hour-long DJ
+// mixes, which the song filter rightly drops, leaving a mix of two songs.
+export function momentFor(d: Date, year = d.getFullYear()): Moment {
+  const day = DAYS[d.getDay()];
+  const h = d.getHours();
+  const weekend = d.getDay() === 5 || d.getDay() === 6;
+  const m = (id: string, title: string, blurb: string, queries: string[]): Moment => ({ id, title, blurb, queries });
+  if (d.getDay() === 0 && h >= 5 && h < 13) return m('sunday-gospel', 'Sunday morning praise', 'Gospel and worship to start the day.', [`gospel songs ${year}`, 'worship songs', 'kenyan gospel songs']);
+  if (h >= 5 && h < 9) return m('early', `Ease into ${day}`, 'Soft acoustic, soul and calm afro for the first hour.', ['acoustic soul songs', 'calm afro soul songs', 'morning acoustic pop songs']);
+  if (h >= 9 && h < 12) return m('morning', `${day} morning lift`, 'Bright, upbeat songs to get going.', [`feel good pop songs ${year}`, `afrobeats songs ${year}`, 'upbeat happy songs']);
+  if (h >= 12 && h < 17) return m('afternoon', `${day} afternoon groove`, 'Afrobeats, amapiano and bongo to carry the afternoon.', [`afrobeats songs ${year}`, `amapiano songs ${year}`, 'bongo flava songs']);
+  if (h >= 17 && h < 21) return weekend
+    ? m('warmup', `${day} night warm-up`, 'Dance, afrobeats and amapiano to start the night.', [`dance songs ${year}`, `amapiano songs ${year}`, `afrobeats party songs ${year}`])
+    : m('unwind', `${day} evening, unwind`, 'R&B, soul and slow grooves after the day.', [`rnb songs ${year}`, 'neo soul songs', 'afro rnb songs']);
+  return m('late', `Late-night ${day}`, 'Slow jams and low lights.', ['slow jams rnb songs', 'late night rnb songs', 'quiet storm soul songs']);
+}
