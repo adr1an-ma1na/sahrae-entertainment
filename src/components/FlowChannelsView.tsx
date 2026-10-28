@@ -261,9 +261,11 @@ export default function FlowChannelsView({ onPlay, paused = false }: { onPlay: (
           </div>
         )}
 
-        <div aria-hidden className="absolute inset-0 z-[1] bg-gradient-to-r from-black/85 via-black/35 to-transparent" />
-        <div aria-hidden className="absolute inset-0 z-[1] bg-gradient-to-t from-black via-black/30 to-transparent" />
-        <div aria-hidden className="absolute inset-0 z-[1] lux-scan opacity-60" />
+        {/* A clear view of the trailer: no texture over it, only a soft shade in
+            the lower left where the title and buttons sit, and a short fade at
+            the foot into the page. */}
+        <div aria-hidden className="absolute inset-0 z-[1]" style={{ background: 'radial-gradient(85% 70% at 0% 100%, rgba(0,0,0,0.78), rgba(0,0,0,0.35) 45%, transparent 75%)' }} />
+        <div aria-hidden className="absolute inset-x-0 bottom-0 h-32 z-[1] bg-gradient-to-t from-black/70 to-transparent" />
 
         {/* The HUD: hides after a few quiet seconds, back on any touch, key or move. */}
         <div className={`absolute inset-0 z-10 flex flex-col justify-end px-4 md:px-12 pb-24 md:pb-28 transition-opacity duration-500 ${showOverlay || !videoUrl ? 'opacity-100' : 'opacity-0'}`}>
