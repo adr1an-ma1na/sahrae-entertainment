@@ -7,6 +7,7 @@ import { AuthProvider } from './hooks/useAuth.tsx';
 import { RadioProvider } from './hooks/useRadio.tsx';
 import { MusicProvider } from './hooks/useMusic.tsx';
 import { initSpatialNavigation } from './tv/spatialNavigation.ts';
+import { applyTvViewport } from './tv/tvViewport.ts';
 import { startErrorReporting } from './services/errorReporter';
 import { applyGraphicsTier } from './services/graphicsTier.ts';
 import { applyDeviceTier } from './services/deviceTier.ts';
@@ -18,6 +19,9 @@ startHeartbeat();
 // Before anything else mounts, so a crash during boot is caught too — that is
 // the failure least likely to be reported and hardest to reproduce.
 startErrorReporting();
+
+// Sahrae TV: a wider page fitted to the screen, not a phone-sized one blown up.
+applyTvViewport();
 
 // Enable D-pad / arrow-key navigation for TV remotes & keyboards.
 initSpatialNavigation();

@@ -268,7 +268,7 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
               </div>
               <p className="tv-hero-desc text-zinc-300 text-sm md:text-base leading-relaxed mb-6 line-clamp-2 max-w-xl">{playingMedia.overview}</p>
               <div className="flex flex-wrap items-center gap-3">
-                <button onClick={() => onPlay(playingMedia.id, 'movie')} data-tv-focusable className="lux-btn px-6 md:px-8 py-3 text-sm md:text-base">
+                <button onClick={() => onPlay(playingMedia.id, 'movie')} data-tv-focusable data-tv-initial className="lux-btn px-6 md:px-8 py-3 text-sm md:text-base">
                   <Play className="w-4 h-4 fill-current" /> Watch the film
                 </button>
                 <button onClick={() => handleEnded()} data-tv-focusable className="btn-glass px-5 py-3 font-bold rounded-full text-sm md:text-base">

@@ -129,7 +129,7 @@ export default function Hero({ items, onPlay, genreName, inList, onToggleList, r
 
             {/* On a phone, Trailer opens the details too, so the info button steps aside. */}
             <div className="flex flex-wrap items-center gap-3 md:gap-4">
-              <button onClick={() => { haptics.press(); onPlay(item.id, type, false); }} className="lux-btn px-6 md:px-9 py-3 text-base md:text-lg">
+              <button onClick={() => { haptics.press(); onPlay(item.id, type, false); }} data-tv-initial className="lux-btn px-6 md:px-9 py-3 text-base md:text-lg">
                 <Play className="w-6 h-6 fill-current" />
                 {t('Play')}
               </button>

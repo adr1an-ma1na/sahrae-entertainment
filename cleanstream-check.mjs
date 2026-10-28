@@ -53,11 +53,10 @@ eq('Data Saver: capped at 480p', pictureRule(vidlink, 'saver'), { start: 2, lock
 eq('HD with nothing at 720p: no floor', pictureRule([{ height: 480, bitrate: 1e6 }], 'hd').minBitrate, 0);
 eq('no renditions: nothing to hold', pictureRule([], 'best').start, -1);
 
-console.log('\n4K: held back on phones, allowed on TVs');
+console.log('\n4K: held back on phones and TVs (a 16 Mb/s rendition stalls a home line)');
 const vidfast = [{ height: 2160, bitrate: 16_000_000 }, { height: 1080, bitrate: 6_000_000 }, { height: 720, bitrate: 3_000_000 }, { height: 480, bitrate: 1_300_000 }];
 eq('Best on a phone: locked on 1080p, not the 16 Mb/s 4K', pictureRule(vidfast, 'best'), { start: 1, lock: true, cap: -1, minBitrate: 0 });
-eq('Best on a TV: opens on 1080p, may climb to 4K, never below 1080p', pictureRule(vidfast, 'best', true), { start: 1, lock: false, cap: -1, minBitrate: 6_000_000 });
-eq('Best with no 4K on offer: unchanged (top, locked)', pictureRule(vidrock, 'best', true), { start: 1, lock: true, cap: -1, minBitrate: 0 });
+eq('Best with no 4K on offer: unchanged (top, locked)', pictureRule(vidrock, 'best'), { start: 1, lock: true, cap: -1, minBitrate: 0 });
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exitCode = fail ? 1 : 0;

@@ -314,7 +314,7 @@ function LiveShowcase({ channels, resumed, favs, onWatch, onFav }: {
           </div>
           <p className="tv-hero-desc text-zinc-300 text-base md:text-lg mb-7 max-w-xl">{CAT_NOTE[ch.category]}</p>
           <div className="flex items-center gap-3">
-            <button onClick={() => { haptics.press(); onWatch(ch); }} data-tv-focusable className="lux-btn px-7 md:px-9 py-3 text-base md:text-lg">
+            <button onClick={() => { haptics.press(); onWatch(ch); }} data-tv-focusable data-tv-initial className="lux-btn px-7 md:px-9 py-3 text-base md:text-lg">
               <Play className="w-5 h-5 fill-current" /> Watch live
             </button>
             <button

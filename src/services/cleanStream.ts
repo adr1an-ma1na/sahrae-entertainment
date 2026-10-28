@@ -94,16 +94,15 @@ export type PictureSetting = 'saver' | 'hd' | 'best';
  * Indexes refer to the stream's own list. Viewers saw 480p on "1080p" servers
  * because nothing held the quality up.
  */
-export function pictureRule(levels: Rendition[], picture: PictureSetting, allow4k = false): { start: number; lock: boolean; cap: number; minBitrate: number } {
-  // VidFast offers 2160p at 16 Mb/s: locking a phone onto that stalls it. Best
-  // means the sharpest up to 1080p there; a TV may climb to 4K when the line
-  // allows, and never drops below 1080p.
+export function pictureRule(levels: Rendition[], picture: PictureSetting): { start: number; lock: boolean; cap: number; minBitrate: number } {
+  // VidFast offers 2160p at 16 Mb/s: locking onto that stalls a home line that
+  // carries 1080p easily. Best means the sharpest up to 1080p, on phones and TVs
+  // alike (TVs used to climb to 4K and never drop below 1080p, and took ages to
+  // start a film on the same line a phone played well; 2026-10-28).
   const upTo1080 = levels.map((l, i) => ({ l, i })).filter((x) => !x.l.height || x.l.height <= 1080);
   if (picture === 'best' && levels.some((l) => l.height > 1080) && upTo1080.length) {
     const sub = pickLevel(upTo1080.map((x) => x.l), false);
-    const start = upTo1080[sub].i;
-    if (!allow4k) return { start, lock: true, cap: -1, minBitrate: 0 };
-    return { start, lock: false, cap: -1, minBitrate: levels[start].bitrate || 0 };
+    return { start: upTo1080[sub].i, lock: true, cap: -1, minBitrate: 0 };
   }
   const start = pickLevel(levels, picture === 'saver');
   if (start < 0) return { start: -1, lock: false, cap: -1, minBitrate: 0 };

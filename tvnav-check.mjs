@@ -102,5 +102,16 @@ check('nav-home', 'up', null);
 check('r1c3', 'right', null);
 check('btn-b', 'down', null);
 
+// The TV page width (src/tv/tvViewport.ts): a double-density TV reports a
+// 960 px page, which looked zoomed in; it is laid out at 1536 instead.
+const { tvLayoutWidth, TV_LAYOUT_WIDTH } = await import('./src/tv/tvViewport.ts');
+const same = (name, got, want) => { if (got === want) { pass++; console.log('  ok   ' + name); } else { fail++; console.log(`  FAIL ${name}: got ${got}, want ${want}`); } };
+console.log('\nthe TV page width');
+same('a 1080p TV at double density (960 px) is laid out wider', tvLayoutWidth(960), TV_LAYOUT_WIDTH);
+same('anything under 1200 px is laid out wider', tvLayoutWidth(1199), TV_LAYOUT_WIDTH);
+same('a TV that already reports a wide page is left alone', tvLayoutWidth(1920), null);
+same('an unknown width is left alone', tvLayoutWidth(0), null);
+same('the wider page is wider than any phone-sized one', TV_LAYOUT_WIDTH > 1200, true);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

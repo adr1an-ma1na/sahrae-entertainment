@@ -289,7 +289,11 @@ export function initSpatialNavigation() {
     // part of why a remote felt unresponsive.
     const claim = () => {
       if (document.activeElement && document.activeElement !== document.body) return;
+      // A page may name where a remote should start ([data-tv-initial]: the
+      // showcase Play), so the TV opens on it instead of whatever sits
+      // nearest the corner.
       const first = document.querySelector<HTMLElement>('[data-tv-autofocus]')
+        || document.querySelector<HTMLElement>('[data-tv-initial]')
         || nearestToViewportTopLeft(getFocusables());
       if (first) focusElement(first);
     };
