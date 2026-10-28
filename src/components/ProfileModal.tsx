@@ -1,5 +1,6 @@
 import { useState, FormEvent } from 'react';
-import { X, User, LogOut, Key, Camera, Check, Database, Trash2, ShieldAlert, Languages, Sun, Moon, Palette } from 'lucide-react';
+import { X, User, LogOut, Key, Camera, Check, Database, Trash2, ShieldAlert, Languages, Sun, Moon, Palette, Tv } from 'lucide-react';
+import { isTvBuild, tvZoom, setTvZoom, TV_ZOOMS } from '../tv/tvViewport';
 import { currentLang, setLang } from '../i18n';
 import { useTheme } from '../hooks/useTheme';
 import ThemePicker from './ui/ThemePicker';
@@ -30,6 +31,7 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
   const { user, logout, reloadUser, activeProfile, updateProfileData, setActiveProfile } = useAuth();
   const { theme, pick } = useTheme();
   const [themeOpen, setThemeOpen] = useState(false);
+  const [zoom, setZoom] = useState(() => tvZoom());
   const [tab, setTab] = useState<'profile' | 'security' | 'cache'>('profile');
   const [name, setName] = useState(activeProfile?.name || user?.displayName || '');
   const [selectedAvatar, setSelectedAvatar] = useState(activeProfile?.avatar || user?.photoURL || AVATARS[0]);
@@ -150,6 +152,20 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
             <span className="ml-auto text-xs font-bold text-zinc-300">{THEME_NAMES[theme]}</span>
           </button>
           {themeOpen && <div className="px-2 pb-2"><ThemePicker theme={theme} onPick={pick} compact /></div>}
+          {/* TV only: a television has no zoom, so the app offers its own sizes. */}
+          {isTvBuild() && (
+            <div className="px-4 py-3">
+              <p className="flex items-center gap-3 font-medium text-zinc-400"><Tv className="w-5 h-5" /> Screen size</p>
+              <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Screen size">
+                {TV_ZOOMS.map((z) => (
+                  <button key={z} type="button" data-tv-focusable aria-pressed={zoom === z} className="lux-chip"
+                    onClick={() => { setZoom(z); setTvZoom(z); }}>
+                    {z}%{z === 90 ? ' (standard)' : ''}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="mt-auto pt-6 flex flex-col gap-2">
             <button 
               onClick={() => { setActiveProfile(null); onClose(); }}

@@ -102,16 +102,20 @@ check('nav-home', 'up', null);
 check('r1c3', 'right', null);
 check('btn-b', 'down', null);
 
-// The TV page width (src/tv/tvViewport.ts): a double-density TV reports a
-// 960 px page, which looked zoomed in; it is laid out at 1536 instead.
-const { tvLayoutWidth, TV_LAYOUT_WIDTH } = await import('./src/tv/tvViewport.ts');
+// The TV screen size (src/tv/tvViewport.ts): a TV cannot zoom, so the app
+// lays the page out wider and the WebView fits it; 90% is the standard.
+const { tvLayoutWidth, tvZoom, TV_DEFAULT_ZOOM, TV_ZOOMS } = await import('./src/tv/tvViewport.ts');
 const same = (name, got, want) => { if (got === want) { pass++; console.log('  ok   ' + name); } else { fail++; console.log(`  FAIL ${name}: got ${got}, want ${want}`); } };
-console.log('\nthe TV page width');
-same('a 1080p TV at double density (960 px) is laid out wider', tvLayoutWidth(960), TV_LAYOUT_WIDTH);
-same('anything under 1200 px is laid out wider', tvLayoutWidth(1199), TV_LAYOUT_WIDTH);
-same('a TV that already reports a wide page is left alone', tvLayoutWidth(1920), null);
-same('an unknown width is left alone', tvLayoutWidth(0), null);
-same('the wider page is wider than any phone-sized one', TV_LAYOUT_WIDTH > 1200, true);
+console.log('\nthe TV screen size');
+same('90% is the standard', TV_DEFAULT_ZOOM, 90);
+same('at 90%, a 960 px Google TV page is laid out at 1067 px', tvLayoutWidth(960, 90), 1067);
+same('at 80%, at 1200 px', tvLayoutWidth(960, 80), 1200);
+same('at 70%, at 1371 px', tvLayoutWidth(960, 70), 1371);
+same('100% leaves the page as the TV reports it', tvLayoutWidth(960, 100), null);
+same('a TV that reports 1920 px is still sized to 90%', tvLayoutWidth(1920, 90), 2133);
+same('an unknown width is left alone', tvLayoutWidth(0, 90), null);
+same('nothing chosen yet (no storage here) means the standard', tvZoom(), 90);
+same('the choices run from 70% to 100%', TV_ZOOMS.join(','), '70,80,90,100');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

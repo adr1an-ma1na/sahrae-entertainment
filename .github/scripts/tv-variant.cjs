@@ -33,8 +33,8 @@ must(m.includes('android.software.leanback" android:required="true"'), 'leanback
 must(m.includes('android.intent.category.LEANBACK_LAUNCHER'), 'TV launcher entry missing');
 fs.writeFileSync(manifest, m);
 
-// 4. Fit a wide page to the screen. The page asks for a 1536 px layout on a
-//    high-density TV (src/tv/tvViewport.ts); the WebView honours that only with
+// 4. Fit a wider page to the screen. The page asks for a layout wider than the
+//    TV reports (90% by default, src/tv/tvViewport.ts); the WebView honours it only with
 //    useWideViewPort, and loadWithOverviewMode scales it to fit the screen.
 const activity = 'android/app/src/main/java/com/sahrae/entertainment/MainActivity.java';
 let j = fs.readFileSync(activity, 'utf8');
