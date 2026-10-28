@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import qrcode from 'qrcode-generator';
 import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Home, MonitorSmartphone, Search, Smartphone, Tv, X } from 'lucide-react';
 import { useRemoteControl, useScreen } from '../services/remote';
-import { normalizeCode, type Key } from '../services/linkCore';
+import { normalizeCode, SCREEN_ZOOMS, type Key } from '../services/linkCore';
 import { linkAvailable } from '../services/link';
 import { isTelevision } from '../tv/spatialNavigation';
 import { haptics } from '../services/haptics';
@@ -110,6 +110,22 @@ function PhoneSide({ initialCode, onShowCode }: { initialCode: string; onShowCod
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* The TV app's screen size, from the sofa: a TV has no zoom of its own. */}
+      {typeof screen?.zoom === 'number' && (
+        <div className="rounded-xl bg-zinc-900 border border-white/10 p-3">
+          <p className="text-[11px] uppercase tracking-wider text-zinc-400 font-bold">Screen size on the TV</p>
+          <div className="grid grid-cols-4 gap-1.5 mt-2" role="group" aria-label="Screen size on the TV">
+            {SCREEN_ZOOMS.map((z) => (
+              <button key={z} onClick={() => { haptics.tap(); send({ t: 'zoom', z }); }} aria-pressed={screen.zoom === z}
+                className={`py-2 rounded-lg text-sm font-bold border ${screen.zoom === z ? 'bg-amber-400 text-amber-950 border-amber-300' : 'bg-zinc-800 text-zinc-200 border-zinc-700'}`}>
+                {z}%
+              </button>
+            ))}
+          </div>
+          <p className="text-[11px] text-zinc-500 mt-1.5">90% is the standard. Smaller fits more on the screen.</p>
         </div>
       )}
 

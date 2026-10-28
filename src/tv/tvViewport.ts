@@ -45,8 +45,11 @@ export function applyTvViewport(zoom = tvZoom()): void {
   } catch { /* leave the page as it is */ }
 }
 
-/** Choose a size: kept for next time, applied now. */
+export const TV_ZOOM_EVENT = 'sahrae:tvzoom';
+
+/** Choose a size: kept for next time, applied now, and announced (Profile shows it; the phone remote may set it). */
 export function setTvZoom(zoom: number): void {
   try { localStorage.setItem(KEY, String(zoom)); } catch { /* applied for this session only */ }
   applyTvViewport(zoom);
+  try { window.dispatchEvent(new Event(TV_ZOOM_EVENT)); } catch { /* not in a browser */ }
 }

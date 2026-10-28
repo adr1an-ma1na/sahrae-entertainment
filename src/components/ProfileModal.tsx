@@ -1,6 +1,6 @@
-import { useState, FormEvent } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { X, User, LogOut, Key, Camera, Check, Database, Trash2, ShieldAlert, Languages, Sun, Moon, Palette, Tv } from 'lucide-react';
-import { isTvBuild, tvZoom, setTvZoom, TV_ZOOMS } from '../tv/tvViewport';
+import { isTvBuild, tvZoom, setTvZoom, TV_ZOOMS, TV_ZOOM_EVENT } from '../tv/tvViewport';
 import { currentLang, setLang } from '../i18n';
 import { useTheme } from '../hooks/useTheme';
 import ThemePicker from './ui/ThemePicker';
@@ -32,6 +32,12 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
   const { theme, pick } = useTheme();
   const [themeOpen, setThemeOpen] = useState(false);
   const [zoom, setZoom] = useState(() => tvZoom());
+  // A size chosen from the phone remote shows here too.
+  useEffect(() => {
+    const sync = () => setZoom(tvZoom());
+    window.addEventListener(TV_ZOOM_EVENT, sync);
+    return () => window.removeEventListener(TV_ZOOM_EVENT, sync);
+  }, []);
   const [tab, setTab] = useState<'profile' | 'security' | 'cache'>('profile');
   const [name, setName] = useState(activeProfile?.name || user?.displayName || '');
   const [selectedAvatar, setSelectedAvatar] = useState(activeProfile?.avatar || user?.photoURL || AVATARS[0]);

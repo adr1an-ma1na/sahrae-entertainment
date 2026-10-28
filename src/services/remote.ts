@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { openLink, type Link, type Peer } from './link';
 import { makeCode, validCommand, validState, type Key, type RemoteCommand, type ScreenState } from './linkCore';
+import { isTvBuild, tvZoom, setTvZoom } from '../tv/tvViewport';
+
+// The TV app's screen size, told to phones so the remote shows it; none elsewhere.
+const zoomNow = (): { zoom?: number } => (isTvBuild() ? { zoom: tvZoom() } : {});
 
 /**
  * Phone as the TV remote.
@@ -28,7 +32,7 @@ export function setScreenHandlers(h: ScreenHandlers) { handlers = h; }
 // ── The screen ────────────────────────────────────────────────────────────────
 
 let host: { code: string; link: Link } | null = null;
-let lastState: ScreenState = { t: 'state' };
+let lastState: ScreenState = { t: 'state', ...zoomNow() };
 let phones: Peer[] = [];
 const listeners = new Set<() => void>();
 const changed = () => listeners.forEach((f) => f());
@@ -70,6 +74,13 @@ function act(cmd: RemoteCommand) {
     case 'search': handlers?.search(cmd.q); break;
     case 'open': handlers?.play(cmd.id, cmd.type, false, false, cmd.s, cmd.e); break;
     case 'server': window.dispatchEvent(new CustomEvent('sahrae:remote-server', { detail: cmd.idx })); break;
+    case 'zoom':
+      // Only the TV app has a screen size; anywhere else the request is ignored.
+      if (!isTvBuild()) break;
+      setTvZoom(cmd.z);
+      lastState = { ...lastState, ...zoomNow() };
+      host?.link.send('state', lastState);
+      break;
   }
 }
 
@@ -94,7 +105,7 @@ export function startScreen(): string {
 
 /** What is on screen now; sent to any connected phone. */
 export function reportScreen(s: Omit<ScreenState, 't'>) {
-  lastState = { t: 'state', ...s };
+  lastState = { t: 'state', ...s, ...zoomNow() };
   host?.link.send('state', lastState);
 }
 

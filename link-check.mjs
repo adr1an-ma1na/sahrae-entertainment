@@ -40,6 +40,15 @@ eq('the screen state, trimmed to size', validState({ t: 'state', title: 'x'.repe
   { t: 'state', title: 'x'.repeat(120), type: 'tv', id: 5, s: 1, e: 2, servers: ['A', 'B'], server: 1 });
 eq('not a state, nothing', validState({ t: 'cmd' }), null);
 
+console.log('\nscreen size from the phone');
+eq('a screen size the TV offers', validCommand({ t: 'zoom', z: 80 }), { t: 'zoom', z: 80 });
+eq('any other size is dropped', [validCommand({ t: 'zoom', z: 85 }), validCommand({ t: 'zoom', z: 10 }), validCommand({ t: 'zoom', z: '90' }), validCommand({ t: 'zoom' })], [null, null, null, null]);
+eq('the TV tells the phone its size', validState({ t: 'state', zoom: 90 }), { t: 'state', zoom: 90 });
+eq('...and a size it does not offer is not passed on', validState({ t: 'state', zoom: 500 }), { t: 'state' });
+const { TV_ZOOMS } = await import('./src/tv/tvViewport.ts');
+const { SCREEN_ZOOMS } = await import('./src/services/linkCore.ts');
+eq('the remote offers exactly the sizes the TV app has', SCREEN_ZOOMS, [...TV_ZOOMS]);
+
 console.log('\nwatch together');
 eq('what the room watches', validRoomMessage({ t: 'now', type: 'movie', id: 27205, server: 'vidrock', title: 'Inception' }), { t: 'now', type: 'movie', id: 27205, server: 'vidrock', title: 'Inception' });
 eq('a server id that could be anything is refused', validRoomMessage({ t: 'now', type: 'movie', id: 1, server: 'https://evil', title: '' }), null);

@@ -34,7 +34,11 @@ export type RemoteCommand =
   | { t: 'key'; k: Key }
   | { t: 'search'; q: string }
   | { t: 'open'; type: 'movie' | 'tv'; id: number; s?: number; e?: number }
-  | { t: 'server'; idx: number };
+  | { t: 'server'; idx: number }
+  | { t: 'zoom'; z: number };
+
+/** The TV app's screen sizes, in percent (src/tv/tvViewport.ts TV_ZOOMS). */
+export const SCREEN_ZOOMS = [70, 80, 90, 100];
 
 /** TV to phone: what is on screen. */
 export type ScreenState = {
@@ -47,6 +51,8 @@ export type ScreenState = {
   servers?: string[];
   server?: number;
   view?: string;
+  /** The TV app's screen size in percent; absent on a screen that has none. */
+  zoom?: number;
 };
 
 const isInt = (n: unknown, lo: number, hi: number): n is number => typeof n === 'number' && Number.isInteger(n) && n >= lo && n <= hi;
@@ -62,6 +68,7 @@ export function validCommand(x: unknown): RemoteCommand | null {
       if (m.type === 'tv' && (m.s != null && !isInt(m.s, 0, 999) || m.e != null && !isInt(m.e, 1, 9999))) return null;
       return { t: 'open', type: m.type, id: m.id, ...(m.type === 'tv' ? { s: (m.s as number) ?? 1, e: (m.e as number) ?? 1 } : {}) };
     case 'server': return isInt(m.idx, 0, 20) ? { t: 'server', idx: m.idx } : null;
+    case 'zoom': return SCREEN_ZOOMS.includes(m.z as number) ? { t: 'zoom', z: m.z as number } : null;
     default: return null;
   }
 }
@@ -78,6 +85,7 @@ export function validState(x: unknown): ScreenState | null {
   if (Array.isArray(m.servers)) out.servers = m.servers.filter((s) => typeof s === 'string').slice(0, 12).map((s) => (s as string).slice(0, 60));
   if (isInt(m.server, 0, 20)) out.server = m.server;
   if (typeof m.view === 'string') out.view = m.view.slice(0, 30);
+  if (SCREEN_ZOOMS.includes(m.zoom as number)) out.zoom = m.zoom as number;
   return out;
 }
 
