@@ -3,16 +3,15 @@ import { MediaItem } from '../services/tmdb';
 import { useAuth } from './useAuth';
 
 /**
- * Firebase (app, auth and Firestore: ~540 kB, plus an anonymous sign-in and a
- * live connection) is loaded on demand, not at start-up. It used to initialise
- * when this module was imported, on every launch, before the first screen. The
- * on-device copy in localStorage is the source of truth either way.
+ * Continue watching: what was opened, on which server, and how far in.
+ *
+ * Kept on the device and carried between devices by the account sync
+ * (services/cloudSync.ts, keyed to the Sahrae account). It used to be mirrored
+ * to Firestore under an ANONYMOUS Firebase sign-in instead: a different identity
+ * on every install or cleared WebView, whose empty list then replaced the one
+ * on the device. That is how "my continue watching keeps emptying" happened
+ * (2026-10-28), and why it no longer exists.
  */
-const cloud = () => Promise.all([import('firebase/firestore'), import('../services/firebase-real')])
-  .then(([store, real]) => ({ ...store, ...real }));
-
-/** Cloud sync waits until the first screen has had time to settle. */
-const SYNC_DELAY_MS = 8000;
 
 export interface WatchProgress {
   mediaId: number;
@@ -21,6 +20,11 @@ export interface WatchProgress {
   episode?: number;
   timestamp: number; // Date.now()
   item: MediaItem;
+  /** The server it was playing on, so the title reopens there. */
+  server?: string;
+  /** Seconds in, and the length, where the player reports its clock. */
+  position?: number;
+  duration?: number;
 }
 
 /** Continue-watching history stored on-device, scoped per user + profile. */
@@ -29,101 +33,42 @@ function scopeKey(uid?: string, profileId?: string): string {
   if (uid) return uid;
   return 'local';
 }
-const storageKey = (scope: string) => `sahrae_watch_progress_${scope}`;
+export const WATCH_PROGRESS_PREFIX = 'sahrae_watch_progress_';
+const storageKey = (scope: string) => `${WATCH_PROGRESS_PREFIX}${scope}`;
+const MAX_ENTRIES = 30;
 
 /** Fired after progress is saved, so every holder of this hook re-reads it. */
 const PROGRESS_EVENT = 'sahrae:progress';
 const announce = () => { try { window.dispatchEvent(new Event(PROGRESS_EVENT)); } catch { /* no window */ } };
 
+function read(key: string): WatchProgress[] {
+  try {
+    const stored = localStorage.getItem(key);
+    return stored ? (JSON.parse(stored) as WatchProgress[]) : [];
+  } catch { return []; }
+}
+function write(key: string, list: WatchProgress[]) {
+  try { localStorage.setItem(key, JSON.stringify(list)); } catch (e) { console.error('Failed to save watch progress', e); }
+  setTimeout(announce, 0);
+}
+
+export { resumePoint } from '../services/resume';
+
 export function useWatchProgress() {
   const [progress, setProgress] = useState<WatchProgress[]>([]);
   const { user, activeProfile } = useAuth();
+  const key = storageKey(scopeKey(user?.uid, activeProfile?.id));
 
-  // Local fallback hydration on mount/user/profile change, and again whenever
-  // another part of the app saves progress: the player and the home screen
-  // each hold this hook, and the home screen's taste rows should follow what
-  // was just watched without waiting for a restart.
+  // Read on mount and on user/profile change, and again whenever another part
+  // of the app saves progress (the player and Home each hold this hook).
   useEffect(() => {
-    const key = storageKey(scopeKey(user?.uid, activeProfile?.id));
-    const load = () => {
-      try {
-        const stored = localStorage.getItem(key);
-        setProgress(stored ? (JSON.parse(stored) as WatchProgress[]) : []);
-      } catch {
-        setProgress([]);
-      }
-    };
+    const load = () => setProgress(read(key));
     load();
     window.addEventListener(PROGRESS_EVENT, load);
     return () => window.removeEventListener(PROGRESS_EVENT, load);
-  }, [user, activeProfile]);
+  }, [key]);
 
-  // Real-time Cloud Sync with Firestore
-  useEffect(() => {
-    let unsubscribe: (() => void) | null = null;
-    let isCancelled = false;
-
-    async function setupSync() {
-      await new Promise((r) => setTimeout(r, SYNC_DELAY_MS));
-      if (isCancelled) return;
-      const { collection, query, orderBy, limit, onSnapshot, db, syncFirebaseAuth, handleFirestoreError, OperationType } = await cloud();
-      if (isCancelled) return;
-      // Authenticate to real Firebase
-      const fbUid = await syncFirebaseAuth(user);
-      if (isCancelled || !fbUid) return;
-
-      const profileId = activeProfile?.id || 'default';
-      const path = `users/${fbUid}/profiles/${profileId}/watchProgress`;
-
-      const q = query(
-        collection(db, path),
-        orderBy('timestamp', 'desc'),
-        limit(20)
-      );
-
-      unsubscribe = onSnapshot(
-        q,
-        (snapshot) => {
-          const items: WatchProgress[] = [];
-          snapshot.forEach((docSnap) => {
-            const data = docSnap.data();
-            items.push({
-              mediaId: Number(data.mediaId),
-              mediaType: data.mediaType,
-              season: data.season || undefined,
-              episode: data.episode || undefined,
-              timestamp: Number(data.timestamp),
-              item: data.item as MediaItem,
-            });
-          });
-          setProgress(items);
-
-          // Update local fallback as well
-          const key = storageKey(scopeKey(user?.uid, activeProfile?.id));
-          try {
-            localStorage.setItem(key, JSON.stringify(items));
-          } catch (e) {
-            console.error('Failed to sync watch progress locally', e);
-          }
-        },
-        (error) => {
-          // If we cancel early or if it's permission denied, handle gracefully
-          if (!isCancelled) {
-            handleFirestoreError(error, OperationType.GET, path);
-          }
-        }
-      );
-    }
-
-    setupSync().catch(() => { /* offline or blocked: the local copy stands */ });
-
-    return () => {
-      isCancelled = true;
-      if (unsubscribe) unsubscribe();
-    };
-  }, [user, activeProfile]);
-
-  const saveProgress = async (
+  const saveProgress = (
     mediaId: number,
     mediaType: 'movie' | 'tv',
     item: MediaItem,
@@ -146,91 +91,47 @@ export function useWatchProgress() {
         || []).slice(0, 4),
     } as MediaItem;
 
-    const newProgress: WatchProgress = {
-      mediaId,
-      mediaType,
-      season,
-      episode,
-      timestamp: Date.now(),
-      item: minimalItem,
+    const list = read(key);
+    const before = list.find((p) => p.mediaId === mediaId);
+    const sameEpisode = before && (before.season || 1) === (season || 1) && (before.episode || 1) === (episode || 1);
+    const entry: WatchProgress = {
+      mediaId, mediaType, season, episode, timestamp: Date.now(), item: minimalItem,
+      // Opening the title again keeps its server; the minute only while it is the same episode.
+      server: before?.server,
+      ...(sameEpisode ? { position: before?.position, duration: before?.duration } : {}),
     };
-
-    // Update local state immediately for snappy user experience
-    const key = storageKey(scopeKey(user?.uid, activeProfile?.id));
-    setProgress((prev) => {
-      const filtered = prev.filter((p) => p.mediaId !== mediaId);
-      const updated = [newProgress, ...filtered].slice(0, 20);
-      try {
-        localStorage.setItem(key, JSON.stringify(updated));
-        setTimeout(announce, 0);
-      } catch (e) {
-        console.error('Failed to save watch progress locally', e);
-      }
-      return updated;
-    });
-
-    // Save to Firestore in background
-    let c: Awaited<ReturnType<typeof cloud>> | null = null;
-    try {
-      c = await cloud();
-      const { fbAuth, syncFirebaseAuth, setDoc, doc, db } = c;
-      const fbUid = fbAuth.currentUser?.uid || await syncFirebaseAuth(user);
-      if (fbUid) {
-        const profileId = activeProfile?.id || 'default';
-        const docPath = `users/${fbUid}/profiles/${profileId}/watchProgress/${mediaId}`;
-        const payload = {
-          mediaId,
-          mediaType,
-          season: season || null,
-          episode: episode || null,
-          timestamp: Date.now(),
-          item: minimalItem,
-          updatedAt: new Date().toISOString(),
-        };
-        await setDoc(doc(db, 'users', fbUid, 'profiles', profileId, 'watchProgress', String(mediaId)), payload);
-      }
-    } catch (e) {
-      if (!c) return; // Firebase did not load (offline): the local copy stands
-      const profileId = activeProfile?.id || 'default';
-      const docPath = `users/${c.fbAuth.currentUser?.uid || 'unknown'}/profiles/${profileId}/watchProgress/${mediaId}`;
-      c.handleFirestoreError(e, c.OperationType.WRITE, docPath);
-    }
+    const updated = [entry, ...list.filter((p) => p.mediaId !== mediaId)].slice(0, MAX_ENTRIES);
+    setProgress(updated);
+    write(key, updated);
   };
 
-  const removeProgress = async (mediaId: number) => {
-    // Update local state immediately
-    const key = storageKey(scopeKey(user?.uid, activeProfile?.id));
-    setProgress((prev) => {
-      const updated = prev.filter((p) => p.mediaId !== mediaId);
-      try {
-        localStorage.setItem(key, JSON.stringify(updated));
-        setTimeout(announce, 0);
-      } catch (e) {
-        console.error('Failed to remove watch progress locally', e);
-      }
-      return updated;
-    });
-
-    // Delete from Firestore in background
-    let c: Awaited<ReturnType<typeof cloud>> | null = null;
-    try {
-      c = await cloud();
-      const { fbAuth, syncFirebaseAuth, deleteDoc, doc, db } = c;
-      const fbUid = fbAuth.currentUser?.uid || await syncFirebaseAuth(user);
-      if (fbUid) {
-        const profileId = activeProfile?.id || 'default';
-        const docPath = `users/${fbUid}/profiles/${profileId}/watchProgress/${mediaId}`;
-        await deleteDoc(doc(db, 'users', fbUid, 'profiles', profileId, 'watchProgress', String(mediaId)));
-      }
-    } catch (e) {
-      if (!c) return; // Firebase did not load (offline): the local copy stands
-      const profileId = activeProfile?.id || 'default';
-      const docPath = `users/${c.fbAuth.currentUser?.uid || 'unknown'}/profiles/${profileId}/watchProgress/${mediaId}`;
-      c.handleFirestoreError(e, c.OperationType.DELETE, docPath);
-    }
+  /** Record the server and the clock for a title already in the list (the player calls this as it plays). */
+  const savePosition = (mediaId: number, at: { server?: string; position?: number; duration?: number; season?: number; episode?: number }) => {
+    const list = read(key);
+    const i = list.findIndex((p) => p.mediaId === mediaId);
+    if (i < 0) return;
+    const p = list[i];
+    const next: WatchProgress = {
+      ...p,
+      ...(at.season ? { season: at.season } : {}),
+      ...(at.episode ? { episode: at.episode } : {}),
+      ...(at.server ? { server: at.server } : {}),
+      ...(typeof at.position === 'number' && at.position > 0 ? { position: Math.floor(at.position) } : {}),
+      ...(typeof at.duration === 'number' && at.duration > 0 ? { duration: Math.floor(at.duration) } : {}),
+      timestamp: Date.now(),
+    };
+    const updated = [next, ...list.filter((_, j) => j !== i)];
+    setProgress(updated);
+    write(key, updated);
   };
 
-  const getProgress = (mediaId: number) => progress.find((p) => p.mediaId === mediaId);
+  const removeProgress = (mediaId: number) => {
+    const updated = read(key).filter((p) => p.mediaId !== mediaId);
+    setProgress(updated);
+    write(key, updated);
+  };
 
-  return { progress, saveProgress, removeProgress, getProgress };
+  const getProgress = (mediaId: number) => read(key).find((p) => p.mediaId === mediaId);
+
+  return { progress, saveProgress, savePosition, removeProgress, getProgress };
 }

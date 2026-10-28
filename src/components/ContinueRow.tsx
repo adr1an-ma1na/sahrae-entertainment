@@ -2,6 +2,7 @@ import { t } from '../i18n';
 import { Play, X } from 'lucide-react';
 import { MediaItem, getImageUrl } from '../services/tmdb';
 import { haptics } from '../services/haptics';
+import { timeLeft } from '../services/resume';
 import { RailHeader } from './ui/Lux';
 import { useRail } from '../hooks/useRail';
 
@@ -11,16 +12,19 @@ export interface ContinueEntry {
   season?: number;
   episode?: number;
   item: MediaItem;
+  position?: number;
+  duration?: number;
 }
 
 /**
  * "Jump back in" — the row that turns a browse page into somewhere you return
  * to. Home never had one, so a half-watched series was three taps away.
  *
- * NOTE ON PROGRESS BARS: there deliberately isn't one. The app records WHEN a
- * title was last opened, not how far through it you are — no playback position
- * is stored anywhere. A bar drawn from that would be decoration pretending to be
- * data. What IS known is which episode you were on, so that is what it shows.
+ * PROGRESS BARS: drawn only from a real position. Where the player reports its
+ * clock (Sahrae's own player in the Android app; VidLink, VidZee and others on
+ * the web), the second is saved (useWatchProgress.savePosition) and shown as a
+ * bar and "x min left". Where it does not, there is no bar: one drawn from
+ * nothing would be decoration pretending to be data.
  */
 export default function ContinueRow({
   entries,
@@ -77,9 +81,12 @@ export default function ContinueRow({
                     <X className="w-3.5 h-3.5" />
                   </button>
                 )}
+                {e.position && e.duration ? (
+                  <div className="absolute bottom-0 inset-x-0 h-1 bg-white/15"><div className="h-full bg-amber-400" style={{ width: `${Math.min(100, Math.max(2, (e.position / e.duration) * 100))}%` }} /></div>
+                ) : null}
                 <div className="absolute bottom-0 left-0 right-0 p-3">
                   <p className="text-sm font-bold text-[#fff] truncate drop-shadow">{title}</p>
-                  <p className="mt-1 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-amber-300"><span className="w-1 h-1 rounded-full bg-amber-400" />{where}</p>
+                  <p className="mt-1 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-amber-300"><span className="w-1 h-1 rounded-full bg-amber-400" />{where}{timeLeft(e.position, e.duration) ? <span className="normal-case tracking-normal text-zinc-300 font-semibold"> · {timeLeft(e.position, e.duration)}</span> : null}</p>
                 </div>
               </div>
             </div>

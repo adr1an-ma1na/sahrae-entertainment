@@ -32,22 +32,11 @@ import { supabase } from '../supabase';
 
 const TABLE = 'user_state';
 
-/** The keys worth carrying between devices. */
-export const SYNCED_KEYS = [
-  'sahrae.music.playlists.v1',
-  'sahrae.music.liked.v1',
-  'sahrae.music.recent.v1',
-  'sahrae.music.tasteSeeds.v1',
-  'sahrae.podcast.follows.v1',
-  'sahrae.podcast.progress.v2',
-  'sahrae.podcast.seen.v1',
-  'sahrae.livetv.fav.v1',
-  'sahrae.taste.genres.v1',
-  'sahrae.eq.v1',
-  'sahrae_watch_progress',
-  // The chosen theme, so phone, laptop and the TV app look the same (useTheme).
-  'sahrae.theme.v1',
-] as const;
+export { SYNCED_KEYS, SCOPED_PREFIXES } from './syncKeys';
+import { SYNCED_KEYS, syncedKey, mergeScoped, isScopedKey } from './syncKeys';
+
+/** The uid of the last signed-in account, for the setItem hook (which cannot wait for a lookup). */
+let knownUid: string | null = null;
 
 type Bundle = Record<string, unknown>;
 interface Envelope { data: Bundle; updatedAt: number }
@@ -61,9 +50,16 @@ let applying = false;
 /** The patch we installed, so a second start can decline rather than nest. */
 let patchedSetItem: ((k: string, v: string) => void) | null = null;
 
-function readLocal(): Bundle {
+function readLocal(uid: string): Bundle {
   const out: Bundle = {};
-  for (const k of SYNCED_KEYS) {
+  const keys: string[] = [...SYNCED_KEYS];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && !keys.includes(k) && syncedKey(k, uid)) keys.push(k);
+    }
+  } catch { /* storage unavailable: the fixed keys only */ }
+  for (const k of keys) {
     try {
       const raw = localStorage.getItem(k);
       if (raw !== null) out[k] = JSON.parse(raw);
@@ -72,12 +68,17 @@ function readLocal(): Bundle {
   return out;
 }
 
-function writeLocal(bundle: Bundle): void {
+function writeLocal(bundle: Bundle, uid: string): void {
   applying = true;
   try {
     for (const [k, v] of Object.entries(bundle)) {
-      if (!(SYNCED_KEYS as readonly string[]).includes(k)) continue; // never trust the server's key list
-      try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* quota */ }
+      if (!syncedKey(k, uid)) continue; // never trust the server's key list
+      // Continue watching and My List are merged with this device's copy, not replaced.
+      let value = v;
+      if (isScopedKey(k)) {
+        try { value = mergeScoped(k, JSON.parse(localStorage.getItem(k) || 'null'), v); } catch { /* corrupt local copy: take the server's */ }
+      }
+      try { localStorage.setItem(k, JSON.stringify(value)); } catch { /* quota */ }
     }
   } finally {
     applying = false;
@@ -95,7 +96,8 @@ async function currentUid(): Promise<string | null> {
   if (!supabase) return null;
   try {
     const { data } = await supabase.auth.getUser();
-    return data.user?.id || null;
+    knownUid = data.user?.id || null;
+    return knownUid;
   } catch { return null; }
 }
 
@@ -126,7 +128,7 @@ export async function pull(): Promise<boolean> {
     const remoteAt = remote.updatedAt || Date.parse(data.updated_at || '') || 0;
     if (remoteAt <= localStamp()) return false; // ours is newer or identical
 
-    writeLocal(remote.data || {});
+    writeLocal(remote.data || {}, uid);
     setLocalStamp(remoteAt);
     return true;
   } catch {
@@ -153,8 +155,23 @@ export async function push(): Promise<boolean> {
   const uid = await currentUid();
   if (!uid) return false;
 
+  // Before sending, fold in what other devices added to Continue watching and
+  // My List since this one last pulled, so sending never drops their titles.
+  try {
+    const { data } = await supabase.from(TABLE).select('state').eq('user_id', uid).maybeSingle();
+    const remote = (data?.state as Envelope | undefined)?.data || {};
+    const scoped: Bundle = {};
+    for (const [k, v] of Object.entries(remote)) if (isScopedKey(k)) scoped[k] = v;
+    if (Object.keys(scoped).length) {
+      writeLocal(scoped, uid);
+      // Screens holding these lists read them again.
+      window.dispatchEvent(new Event('sahrae:progress'));
+      window.dispatchEvent(new Event('sahrae:mylist'));
+    }
+  } catch { /* offline: send this device's copy as it is */ }
+
   const now = Date.now();
-  const envelope: Envelope = { data: readLocal(), updatedAt: now };
+  const envelope: Envelope = { data: readLocal(uid), updatedAt: now };
 
   try {
     const { error } = await supabase
@@ -193,7 +210,8 @@ export function startSync(onPulled?: () => void): () => void {
   const nativeSetItem = localStorage.setItem.bind(localStorage);
   const patched = (k: string, v: string) => {
     nativeSetItem(k, v);
-    if (!applying && (SYNCED_KEYS as readonly string[]).includes(k)) schedulePush();
+    // Watch progress ticks every 30 s while a film plays: send it once things settle.
+    if (!applying && syncedKey(k, knownUid)) schedulePush(k.startsWith('sahrae_watch_progress_') ? 60_000 : 2500);
   };
   localStorage.setItem = patched as typeof localStorage.setItem;
   patchedSetItem = patched;

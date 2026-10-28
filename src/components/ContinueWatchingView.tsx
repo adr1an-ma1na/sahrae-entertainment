@@ -2,6 +2,7 @@ import { Play, Trash2 } from 'lucide-react';
 import { MediaItem, getImageUrl } from '../services/tmdb';
 import { useWatchProgress } from '../hooks/useWatchProgress';
 import EmptyState from './EmptyState';
+import { timeLeft } from '../services/resume';
 
 interface ContinueWatchingViewProps {
   onPlay: (id: number, type: 'movie' | 'tv', startInInfo?: boolean, playTrailer?: boolean, season?: number, episode?: number) => void;
@@ -50,6 +51,9 @@ export default function ContinueWatchingView({ onPlay, onBrowse }: ContinueWatch
                       S{item.season} E{item.episode}
                     </p>
                   )}
+                  {timeLeft(item.position, item.duration) && (
+                    <p className="text-zinc-300 text-[11px] font-semibold mt-0.5">{timeLeft(item.position, item.duration)}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -66,10 +70,12 @@ export default function ContinueWatchingView({ onPlay, onBrowse }: ContinueWatch
               <Trash2 className="w-4 h-4" />
             </button>
             
-            {/* Progress Bar (Visual only, as we don't track exact seconds yet) */}
-            <div className="absolute bottom-0 left-0 w-full h-1 bg-zinc-800">
-              <div className="h-full bg-amber-500 w-1/2 rounded-r-full"></div>
-            </div>
+            {/* How far in, where the player reported its clock; nothing is drawn where it did not. */}
+            {item.position && item.duration ? (
+              <div className="absolute bottom-0 left-0 w-full h-1 bg-zinc-800">
+                <div className="h-full bg-amber-500 rounded-r-full" style={{ width: `${Math.min(100, Math.max(2, (item.position / item.duration) * 100))}%` }}></div>
+              </div>
+            ) : null}
           </div>
         ))}
       </div>

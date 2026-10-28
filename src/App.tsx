@@ -538,7 +538,7 @@ export default function App() {
               {/* Somewhere to return to, before anything to discover. */}
               <ContinueRow
                 entries={progress.slice(0, 12).map((p) => ({
-                  mediaId: p.mediaId, mediaType: p.mediaType, season: p.season, episode: p.episode, item: p.item,
+                  mediaId: p.mediaId, mediaType: p.mediaType, season: p.season, episode: p.episode, item: p.item, position: p.position, duration: p.duration,
                 }))}
                 onPlay={handlePlay}
               />

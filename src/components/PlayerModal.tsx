@@ -3,6 +3,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { fetchMediaDetails, MediaDetails, getImageUrl, fetchSimilar, MediaItem, SeasonDetails, fetchSeasonDetails } from '../services/tmdb';
 import { useWatchProgress } from '../hooks/useWatchProgress';
+import { resumePoint, withStartAt } from '../services/resume';
 import { useMyList } from '../hooks/useMyList';
 import { loadEq, saveEq, EQ_PRESETS, PRESET_EXTRAS } from '../services/eq';
 import { haptics } from '../services/haptics';
@@ -245,7 +246,13 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     setFailedServers([]);
   }, [mediaId, mediaType]);
   
-  const { saveProgress } = useWatchProgress();
+  const { saveProgress, savePosition, getProgress } = useWatchProgress();
+  // Where this title was left: its server, and the second to start from for
+  // the episode it was on (services/resume.ts). Set when the title opens.
+  const [resumeAt, setResumeAt] = useState<{ s: number; e: number; at: number }>({ s: 1, e: 1, at: 0 });
+  const resumeServerRef = useRef(false);
+  const lastPosRef = useRef<{ position: number; duration: number; server?: string; season: number; episode: number } | null>(null);
+  const lastSavedRef = useRef(0);
   const { toggleMyList, isInMyList } = useMyList();
   const wakeLockRef = useRef<any>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
@@ -676,7 +683,14 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
       document.body.style.overflow = 'hidden';
       setIsPlaying(!startInInfo && !playTrailer); 
       setPlayingTrailer(null);
-      setSelectedServer(startServer(SERVERS.map((sv) => sv.id)));
+      // Reopen on the server it was playing on, if it is still offered; else the usual pick.
+      const ids = SERVERS.map((sv) => sv.id);
+      const back = resumePoint(currentMediaId ? getProgress(currentMediaId) : undefined, initialSeason || 1, initialEpisode || 1);
+      const savedIdx = back.server ? ids.indexOf(back.server) : -1;
+      resumeServerRef.current = savedIdx >= 0;
+      setSelectedServer(savedIdx >= 0 ? savedIdx : startServer(ids));
+      setResumeAt({ s: initialSeason || 1, e: initialEpisode || 1, at: back.at });
+      lastPosRef.current = null;
       setSelectedSeason(initialSeason || 1);
       setSelectedEpisode(initialEpisode || 1);
       setRating(null);
@@ -732,7 +746,8 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
       const choice = crowdChoice(ids, rows);
       crowdRef.current = { choice, rows };
       setCrowd(choice);
-      if (manualPickRef.current || heardRef.current || Date.now() - startedAt > CROWD_FOLLOW_MS) return;
+      // The viewer's own server for this title (where they left it) is kept too.
+      if (manualPickRef.current || resumeServerRef.current || heardRef.current || Date.now() - startedAt > CROWD_FOLLOW_MS) return;
       setSelectedServer((cur) => {
         if (choice.best !== null && !failedServersRef.current.includes(ids[choice.best])) return choice.best;
         if (choice.bad.has(ids[cur])) return nextServerRanked(ids, cur, new Set(failedServersRef.current), choice, rows) ?? cur;
@@ -990,12 +1005,71 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   };
   const audioOn = eqPreset !== 'Off' && eqPreset !== 'Flat';
 
+  // ── Where you left it ───────────────────────────────────────────────────
+  // The second to start from: only for the episode the title was left on.
+  const startAtNow = resumeAt.at && (currentMediaType === 'movie' || (resumeAt.s === selectedSeason && resumeAt.e === selectedEpisode)) ? resumeAt.at : 0;
+
+  // The clock, as the player reports it: kept in memory as it ticks, written
+  // to Continue watching every 30 s and whenever it pauses or closes.
+  const notePosition = (position: number, duration: number, now = false) => {
+    if (!(position > 0)) return;
+    const at = { position, duration, server: SERVERS[selectedServer]?.id, season: selectedSeason, episode: selectedEpisode };
+    lastPosRef.current = at;
+    if (!now && Date.now() - lastSavedRef.current < 30_000) return;
+    lastSavedRef.current = Date.now();
+    if (currentMediaId) savePosition(currentMediaId, at);
+  };
+  const notePositionRef = useRef(notePosition);
+  notePositionRef.current = notePosition;
+
+  // Servers that report their clock (VidLink, VidZee and others post
+  // PLAYER_EVENT with currentTime), for films and episodes alike.
+  useEffect(() => {
+    if (!isOpen || !isPlaying || playingTrailer) return;
+    const onMsg = (e: MessageEvent) => {
+      if (!fromFrame(iframeRef.current?.contentWindow, e.source)) return;
+      let d: unknown = e.data;
+      if (typeof d === 'string') { try { d = JSON.parse(d); } catch { return; } }
+      const m = d as { type?: string; data?: { event?: string; currentTime?: number; duration?: number } } | null;
+      if (!m || m.type !== 'PLAYER_EVENT' || !m.data) return;
+      const { event, currentTime = 0, duration = 0 } = m.data;
+      if (event === 'timeupdate' || event === 'pause' || event === 'seeked') notePositionRef.current(currentTime, duration, event === 'pause');
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, [isOpen, isPlaying, playingTrailer, selectedServer, refreshKey]);
+
+  // The server is remembered as soon as it plays, even one that reports no clock.
+  useEffect(() => {
+    if (!isOpen || !isPlaying || playingTrailer || !currentMediaId) return;
+    const id = SERVERS[selectedServer]?.id;
+    if (id) savePosition(currentMediaId, { server: id, season: selectedSeason, episode: selectedEpisode });
+    // savePosition reads storage fresh; SERVERS ids are fixed while a title is open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, isPlaying, playingTrailer, currentMediaId, selectedServer]);
+
+  // Closing the player, or moving to another episode, writes the last second heard.
+  useEffect(() => {
+    if (!isOpen || !isPlaying || !currentMediaId) return;
+    const id = currentMediaId;
+    return () => {
+      // The position as it was heard, with its own episode and server: by the
+      // time this runs the next episode may already be selected.
+      const last = lastPosRef.current;
+      if (last) savePosition(id, last);
+      lastPosRef.current = null;
+    };
+    // savePosition reads storage fresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, isPlaying, currentMediaId, selectedSeason, selectedEpisode]);
+
   if (!isOpen || !currentMediaId || !currentMediaType || !details) return null;
 
   const dynamicServers = [...SERVERS];
 
   const currentServerObj = dynamicServers[selectedServer] || dynamicServers[0];
-  const src = currentServerObj.getUrl(currentMediaType, currentMediaId || 0, selectedSeason, selectedEpisode);
+  // Servers that take a start time open at the minute it was left (services/resume.ts).
+  const src = withStartAt(currentServerObj.getUrl(currentMediaType, currentMediaId || 0, selectedSeason, selectedEpisode), currentServerObj.id, startAtNow);
 
   
   const videos = details?.videos?.results || [];
@@ -1035,7 +1109,8 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                         src={clean.url}
                         picture={dataSaver ? 'saver' : picture}
                         onPlaying={() => { window.dispatchEvent(new Event('sahrae:embed-media')); setTimeout(enterFullscreen, 300); }}
-                        onProgress={() => { /* progress is saved per episode, as for every server */ }}
+                        startAt={startAtNow}
+                        onProgress={(t, d) => notePosition(t, d)}
                         onEnded={() => window.dispatchEvent(new Event(CLEAN_ENDED))}
                         onFail={(why) => { console.info('[sahrae-player]', JSON.stringify({ server: cleanServer?.id, playFailed: why })); setClean({ state: 'failed', why }); }}
                       />

@@ -20,12 +20,18 @@ export function useMyList() {
 
   useEffect(() => {
     const key = storageKey(scopeKey(user?.uid, activeProfile?.id));
-    try {
-      const stored = localStorage.getItem(key);
-      setMyList(stored ? JSON.parse(stored) : []);
-    } catch {
-      setMyList([]);
-    }
+    const load = () => {
+      try {
+        const stored = localStorage.getItem(key);
+        setMyList(stored ? JSON.parse(stored) : []);
+      } catch {
+        setMyList([]);
+      }
+    };
+    load();
+    // The account sync announces titles merged in from another device (services/cloudSync.ts).
+    window.addEventListener('sahrae:mylist', load);
+    return () => window.removeEventListener('sahrae:mylist', load);
   }, [user, activeProfile]);
 
   const toggleMyList = (item: MediaItem) => {
