@@ -582,7 +582,7 @@ export default function App() {
       case 'series':
         return <DiscoveryView type="tv" genres={tvGenres} onPlay={handlePlay} inList={(id) => myList.some((m) => m.id === id)} onToggleList={toggleMyList} />;
       case 'channels':
-        return <FlowChannelsView onPlay={handlePlay} />;
+        return <FlowChannelsView onPlay={handlePlay} paused={playerConfig.isOpen} />;
       case 'mylist':
         return myList.length === 0 ? (
           <EmptyState icon={Heart} illustration="list" title="Your list is empty"

@@ -19,7 +19,7 @@ const CHANNELS = [
   { id: '12', name: 'Romance Retreat', icon: Heart, genreId: 10749, color: 'from-pink-500 to-rose-600', tag: 'Romance' }
 ];
 
-export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type: 'movie' | 'tv') => void }) {
+export default function FlowChannelsView({ onPlay, paused = false }: { onPlay: (id: number, type: 'movie' | 'tv') => void; paused?: boolean }) {
   const [activeChannelId, setActiveChannelId] = useState(CHANNELS[0].id);
   const [playingMedia, setPlayingMedia] = useState<MediaDetails | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -167,29 +167,54 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
   };
   const toggleMute = () => { const n = !muted; setMuted(n); post(n ? 'mute' : 'unMute'); };
 
+  // While a film is open over the channel (Watch the film, or any title opened
+  // from elsewhere), the trailer is paused and silent: two soundtracks at once
+  // was the complaint. When the film closes, the trailer carries on with the
+  // viewer's own mute choice.
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
+  const mutedRef = useRef(muted);
+  mutedRef.current = muted;
+  const hush = () => { post('pauseVideo'); post('mute'); };
+  useEffect(() => {
+    if (!videoUrl) return;
+    if (paused) { hush(); return; }
+    post(mutedRef.current ? 'mute' : 'unMute');
+    post('playVideo');
+    // post reads the live iframe; hush is post twice.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paused, videoUrl]);
+  const watchFilm = (id: number) => { hush(); onPlay(id, 'movie'); };
+
   // Listen for the embed's state changes (handshake sent on iframe load).
   useEffect(() => {
     const onMsg = (e: MessageEvent) => {
+      // Only this channel's own player: the film's trailers post the same messages.
+      if (e.source !== ytFrameRef.current?.contentWindow) return;
       if (typeof e.data !== 'string') return;
       let d: any; try { d = JSON.parse(e.data); } catch { return; }
       const st = d?.event === 'onStateChange' ? d.info
         : d?.event === 'infoDelivery' && d.info && typeof d.info.playerState === 'number' ? d.info.playerState
         : undefined;
       if (st === undefined) return;
+      // A trailer that starts while a film is open (autoplay) is stopped again.
+      if (st === 1 && pausedRef.current) { hush(); return; }
       if (st === 1) setIsActuallyPlaying(true);
       else if (st === 2) setIsActuallyPlaying(false);
-      else if (st === 0) handleEndedRef.current(); // ended → next in channel
+      else if (st === 0 && !pausedRef.current) handleEndedRef.current(); // ended → next in channel
     };
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // If a trailer never starts within 15s, skip to the next so a channel never stalls.
+  // If a trailer never starts within 15s, skip to the next so a channel never
+  // stalls; not while a film is open, when it is paused on purpose.
   useEffect(() => {
-    if (!videoUrl || isActuallyPlaying) return;
+    if (!videoUrl || isActuallyPlaying || paused) return;
     const t = setTimeout(() => handleEndedRef.current(), 15000);
     return () => clearTimeout(t);
-  }, [videoUrl, isActuallyPlaying]);
+  }, [videoUrl, isActuallyPlaying, paused]);
 
   const activeChannel = CHANNELS.find(c => c.id === activeChannelId);
   const ytId = videoUrl ? (videoUrl.match(/[?&]v=([^&]+)/)?.[1] || '') : '';
@@ -231,7 +256,7 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
               title="Flow Channel"
               className="flow-cover-frame border-none bg-black"
               allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
-              onLoad={() => { try { ytFrameRef.current?.contentWindow?.postMessage(JSON.stringify({ event: 'listening' }), '*'); } catch { /* ignore */ } if (!muted) post('unMute'); }}
+              onLoad={() => { try { ytFrameRef.current?.contentWindow?.postMessage(JSON.stringify({ event: 'listening' }), '*'); } catch { /* ignore */ } if (pausedRef.current) hush(); else if (!muted) post('unMute'); }}
             />
           </div>
         )}
@@ -268,7 +293,7 @@ export default function FlowChannelsView({ onPlay }: { onPlay: (id: number, type
               </div>
               <p className="tv-hero-desc text-zinc-300 text-sm md:text-base leading-relaxed mb-6 line-clamp-2 max-w-xl">{playingMedia.overview}</p>
               <div className="flex flex-wrap items-center gap-3">
-                <button onClick={() => onPlay(playingMedia.id, 'movie')} data-tv-focusable data-tv-initial className="lux-btn px-6 md:px-8 py-3 text-sm md:text-base">
+                <button onClick={() => watchFilm(playingMedia.id)} data-tv-focusable data-tv-initial className="lux-btn px-6 md:px-8 py-3 text-sm md:text-base">
                   <Play className="w-4 h-4 fill-current" /> Watch the film
                 </button>
                 <button onClick={() => handleEnded()} data-tv-focusable className="btn-glass px-5 py-3 font-bold rounded-full text-sm md:text-base">
