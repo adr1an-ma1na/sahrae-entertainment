@@ -1,7 +1,6 @@
 import { Mic2 } from 'lucide-react';
 import { LuxHeader, LuxGlow } from './ui/Lux';
 import PodcastsHome from './PodcastsHome';
-import ListenTabs from './ListenTabs';
 
 /**
  * The Podcasts destination inside the Listen hub — page chrome + the shared
@@ -13,7 +12,6 @@ export default function PodcastsView({ onNav }: { onNav?: (tab: string) => void 
       <LuxGlow />
       <LuxHeader kicker={<><Mic2 className="w-3.5 h-3.5" /> Sahrae · Listen</>} title="Podcasts"
         meta={<span>Shows, episodes and charts. Listen or watch.</span>} />
-      <ListenTabs active="podcasts" onNav={onNav ?? (() => {})} />
       <PodcastsHome />
     </div>
   );

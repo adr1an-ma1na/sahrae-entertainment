@@ -1,6 +1,6 @@
 import { t as tr } from '../i18n';
 import { useState } from 'react';
-import { Home, Search, Headphones, Radio, Grid3x3, X, Film, Tv2, Clapperboard, Trophy, Heart, Clock, Download, Music2, Mic2, Youtube } from 'lucide-react';
+import { Home, Search, Headphones, Radio, RadioTower, Grid3x3, X, Film, Tv2, Clapperboard, Trophy, Heart, Clock, Download, Mic2, Youtube } from 'lucide-react';
 
 /**
  * Mobile bottom navigation (Spotify-style). Replaces the top scrolling strip on
@@ -13,16 +13,16 @@ const PRIMARY = [
   { id: 'search', label: 'Search', icon: Search },
   // Live sport is the reason many people come; one tap, not a trip into More.
   { id: 'sports', label: 'Sports', icon: Trophy },
-  { id: 'audio', label: 'Listen', icon: Headphones },
+  { id: 'music', label: 'Listen', icon: Headphones },
 ] as const;
-// The Listen hub's three destinations. The primary tab stays lit for any of
-// them, because from the phone bar they are all "Listen" — ListenTabs does the
-// switching once you are inside.
+// The Listen destinations. The primary tab (Music) stays lit for any of them,
+// because from the phone bar they are all "Listen"; the others are in More
+// (the in-page Music/Podcasts/Radio/Connect bar was removed, 2026-11-01).
 const AUDIO_TABS = ['audio', 'music', 'podcasts', 'connect'];
 
 const MORE = [
-  { id: 'music', label: 'Music', icon: Music2 },
   { id: 'podcasts', label: 'Podcasts', icon: Mic2 },
+  { id: 'audio', label: 'Radio', icon: RadioTower },
   { id: 'connect', label: 'Connect', icon: Youtube },
   { id: 'movies', label: 'Movies', icon: Film },
   { id: 'series', label: 'Series', icon: Tv2 },
@@ -71,7 +71,7 @@ export default function BottomTabBar({ activeTab, setActiveTab }: { activeTab: s
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-[90] glass border-t border-white/10 pb-[env(safe-area-inset-bottom)]">
         <div className="flex items-stretch">
           {PRIMARY.map((t) => {
-            const Icon = t.icon; const on = t.id === 'audio' ? AUDIO_TABS.includes(activeTab) : activeTab === t.id;
+            const Icon = t.icon; const on = t.id === 'music' ? AUDIO_TABS.includes(activeTab) : activeTab === t.id;
             return (
               <button key={t.id} onClick={() => go(t.id)} tabIndex={0} data-tv-focusable
                 className={`flex-1 min-w-0 flex flex-col items-center gap-1 py-2 transition-colors ${on ? 'text-zinc-100' : 'text-zinc-400 hover:text-zinc-200'}`}>

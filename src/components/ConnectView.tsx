@@ -1,5 +1,4 @@
 import { Youtube } from 'lucide-react';
-import ListenTabs from './ListenTabs';
 import { LuxHeader, LuxGlow } from './ui/Lux';
 import YouTubeConnect from './YouTubeConnect';
 
@@ -16,7 +15,6 @@ export default function ConnectView({ onNav }: { onNav?: (tab: string) => void }
       <LuxGlow />
       <LuxHeader kicker={<><Youtube className="w-3.5 h-3.5" /> Sahrae · Listen</>} title="Connect"
         meta={<span>Your YouTube library, inside Sahrae</span>} />
-      <ListenTabs active="connect" onNav={onNav ?? (() => {})} />
       <YouTubeConnect />
     </div>
   );

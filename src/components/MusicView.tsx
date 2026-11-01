@@ -20,7 +20,6 @@ import EmptyState from './EmptyState';
 // quietly became last year's music on 1 January.
 const YEAR = new Date().getFullYear();
 import SautiOnboarding from './SautiOnboarding';
-import ListenTabs from './ListenTabs';
 import { LuxHeader, LuxSeg } from './ui/Lux';
 import Coachmark from './Coachmark';
 
@@ -1112,7 +1111,6 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
           { id: 'home', label: 'Home', icon: Music2 },
           { id: 'library', label: 'Library', icon: Library },
         ]} />} />
-      <div className="relative"><ListenTabs active="music" onNav={onNav ?? (() => {})} /></div>
 
       {tab === 'home' ? (
         <>

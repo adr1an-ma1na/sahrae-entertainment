@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Play, Pause, Radio, Signal, Search } from 'lucide-react';
 import { useRadio } from '../hooks/useRadio';
-import ListenTabs from './ListenTabs';
 import { LuxHeader, LiveMeta } from './ui/Lux';
 import Illustration from './ui/Illustration';
 
@@ -151,7 +150,6 @@ export default function AudioHubView({ onNav }: { onNav?: (tab: string) => void 
 
       {/* Music and Podcasts render this same switcher, so all three Listen
           destinations sit under one control instead of Radio being a dead end. */}
-      <ListenTabs active="audio" onNav={onNav ?? (() => {})} />
 
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
         
