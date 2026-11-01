@@ -1,15 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <title>Sahrae Entertainment — Adaptive Foreground (foreground dunes)</title>
+  <title>Sahrae Entertainment, adaptive icon foreground (the Sahrae S)</title>
   <defs>
-    <linearGradient id="duneMid" x1="0.3" y1="0" x2="0.6" y2="1"><stop offset="0" stop-color="#e3aa62"/><stop offset="0.5" stop-color="#b47a3e"/><stop offset="1" stop-color="#6e4526"/></linearGradient>
-    <linearGradient id="duneNear" x1="0.35" y1="0" x2="0.55" y2="1"><stop offset="0" stop-color="#7a5230"/><stop offset="0.5" stop-color="#4a3018"/><stop offset="1" stop-color="#241608"/></linearGradient>
+    <linearGradient id="gold" gradientUnits="userSpaceOnUse" x1="660" y1="300" x2="370" y2="740">
+      <stop offset="0" stop-color="#fff5d6"/><stop offset="0.2" stop-color="#ffd36b"/>
+      <stop offset="0.43" stop-color="#d48f26"/><stop offset="0.5" stop-color="#8f5512"/><stop offset="0.57" stop-color="#d48f26"/>
+      <stop offset="0.8" stop-color="#ffcf63"/><stop offset="1" stop-color="#fff0c4"/>
+    </linearGradient>
+    <filter id="drop" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="22"/></filter>
   </defs>
-  <!-- The prominent foreground dunes (sky + sun live in the background layer) -->
-  <path d="M -30 604 C 200 556 430 566 566 574 C 770 584 900 566 1054 598 L 1054 1054 L -30 1054 Z" fill="url(#duneMid)"/>
-  <path d="M -30 604 C 200 556 430 566 566 574 C 770 584 900 566 1054 598" fill="none" stroke="#ffe6ad" stroke-width="4" opacity="0.7"/>
-  <path d="M -30 712 C 180 640 430 656 566 672 C 770 694 880 706 1054 694 L 1054 1054 L -30 1054 Z" fill="url(#duneNear)"/>
-  <path d="M -30 712 C 180 640 430 656 566 672 C 770 694 880 706 1054 694" fill="none" stroke="#c98c4e" stroke-width="3.5" opacity="0.55"/>
-  <g stroke="#3a2512" stroke-width="3" opacity="0.32" fill="none">
-    <path d="M 120 802 C 320 772 520 780 720 802"/><path d="M 80 884 C 340 856 560 864 800 888"/><path d="M 210 952 C 430 930 600 936 820 958"/>
+  <g transform="translate(512 512) scale(0.72) translate(-512 -512)">
+    <path d="M 650 350 A 138 128 0 1 0 512 520 A 138 128 0 1 1 374 690" fill="none" stroke="#000" stroke-opacity="0.6" stroke-width="122" transform="translate(0 22)" filter="url(#drop)"/>
+    <path d="M 650 350 A 138 128 0 1 0 512 520 A 138 128 0 1 1 374 690" fill="none" stroke="url(#gold)" stroke-width="122" stroke-linecap="butt"/>
   </g>
 </svg>

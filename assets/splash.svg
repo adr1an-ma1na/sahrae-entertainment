@@ -1,58 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2732 2732" width="2732" height="2732">
-  <title>Sahrae Entertainment — Splash Screen</title>
+  <title>Sahrae Entertainment, splash screen</title>
   <defs>
-    <radialGradient id="obsidian" cx="0.5" cy="0.44" r="0.8">
-      <stop offset="0%" stop-color="#292524"/>
-      <stop offset="45%" stop-color="#1c1917"/>
-      <stop offset="78%" stop-color="#0c0a09"/>
-      <stop offset="100%" stop-color="#000000"/>
+    <radialGradient id="ground" cx="0.5" cy="0.47" r="0.7">
+      <stop offset="0" stop-color="#1a1309"/><stop offset="0.45" stop-color="#080604"/><stop offset="1" stop-color="#000"/>
     </radialGradient>
-    <radialGradient id="warmGlow" cx="0.5" cy="0.43" r="0.45">
-      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.28"/>
-      <stop offset="60%" stop-color="#b45309" stop-opacity="0.10"/>
-      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="goldS" x1="0.15" y1="0" x2="0.85" y2="1">
-      <stop offset="0%" stop-color="#fff6d5"/>
-      <stop offset="28%" stop-color="#fcd34d"/>
-      <stop offset="58%" stop-color="#f59e0b"/>
-      <stop offset="100%" stop-color="#b45309"/>
+    <linearGradient id="gold" gradientUnits="userSpaceOnUse" x1="660" y1="300" x2="370" y2="740">
+      <stop offset="0" stop-color="#fff5d6"/><stop offset="0.2" stop-color="#ffd36b"/>
+      <stop offset="0.43" stop-color="#d48f26"/><stop offset="0.5" stop-color="#8f5512"/><stop offset="0.57" stop-color="#d48f26"/>
+      <stop offset="0.8" stop-color="#ffcf63"/><stop offset="1" stop-color="#fff0c4"/>
     </linearGradient>
-    <linearGradient id="goldText" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#fff6d5"/>
-      <stop offset="100%" stop-color="#f59e0b"/>
-    </linearGradient>
-    <filter id="sGlow" x="-45%" y="-45%" width="190%" height="190%">
-      <feDropShadow dx="0" dy="18" stdDeviation="26" flood-color="#000000" flood-opacity="0.5"/>
-      <feGaussianBlur stdDeviation="30" result="b"/>
-      <feMerge>
-        <feMergeNode in="b"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
+    <filter id="drop" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="22"/></filter>
   </defs>
-
-  <rect x="0" y="0" width="2732" height="2732" fill="url(#obsidian)"/>
-  <rect x="0" y="0" width="2732" height="2732" fill="url(#warmGlow)"/>
-  <path d="M -100 1700 C 760 1560 1972 1560 2832 1700" fill="none" stroke="#f59e0b" stroke-width="8" opacity="0.14"/>
-
-  <!-- Hero gold S -->
-  <g filter="url(#sGlow)">
-    <g transform="translate(1366 1150) scale(2.08) translate(-493 -504)">
-      <path d="M 600 432 C 600 393 562 370 510 370 L 465 370 C 420 370 386 393 386 432 C 386 466 414 482 454 493 L 510 504 C 562 515 590 538 590 577 C 590 616 552 639 500 639 L 410 639"
-        fill="none" stroke="url(#goldS)" stroke-width="56" stroke-linecap="round" stroke-linejoin="round"/>
-    </g>
+  <rect width="2732" height="2732" fill="url(#ground)"/>
+  <g transform="translate(1366 1366) scale(0.62) translate(-512 -512)">
+    <path d="M 650 350 A 138 128 0 1 0 512 520 A 138 128 0 1 1 374 690" fill="none" stroke="#000" stroke-opacity="0.6" stroke-width="122" transform="translate(0 22)" filter="url(#drop)"/>
+    <path d="M 650 350 A 138 128 0 1 0 512 520 A 138 128 0 1 1 374 690" fill="none" stroke="url(#gold)" stroke-width="122" stroke-linecap="butt"/>
   </g>
-  <g transform="translate(1366 1138) scale(2.08) translate(-493 -504)" opacity="0.45">
-    <path d="M 600 432 C 600 393 562 370 510 370 L 465 370 C 420 370 386 393 386 432 C 386 466 414 482 454 493 L 510 504 C 562 515 590 538 590 577 C 590 616 552 639 500 639 L 410 639"
-      fill="none" stroke="#fff7e0" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
-  </g>
-
-  <!-- Wordmark -->
-  <text x="1366" y="1815" text-anchor="middle"
-        font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
-        font-size="150" font-weight="900" letter-spacing="30" fill="url(#goldText)">SAHRAE</text>
-  <text x="1366" y="1925" text-anchor="middle"
-        font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
-        font-size="54" font-weight="300" letter-spacing="34" fill="#d6d3d1">ENTERTAINMENT</text>
 </svg>

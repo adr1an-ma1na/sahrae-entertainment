@@ -1,7 +1,8 @@
 import { useState, useEffect, FormEvent } from 'react';
-import { X, User, LogOut, Key, Check, Database, Trash2, ShieldAlert, Languages, Sun, Moon, Palette, Tv, ShieldCheck, Download, Scale } from 'lucide-react';
+import { X, User, LogOut, Key, Check, Database, Trash2, ShieldAlert, Languages, Sun, Moon, Palette, Tv, ShieldCheck, Download, Scale, Volume2, VolumeX } from 'lucide-react';
 import { loadConsent, saveConsent, openLegal, CONSENT_CHANGE } from '../services/consent';
 import { exportMyData, deleteAccount } from '../services/accountData';
+import { introSoundOn, setIntroSound } from '../services/sonicLogo';
 import { isTvBuild, tvZoom, setTvZoom, TV_ZOOMS, TV_ZOOM_EVENT } from '../tv/tvViewport';
 import { currentLang, setLang } from '../i18n';
 import { useTheme } from '../hooks/useTheme';
@@ -44,6 +45,8 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
   // Privacy & data: the optional server reports, a copy of my data, deleting the account.
   const [reports, setReports] = useState(() => !!loadConsent()?.serverReports);
   const [confirmDelete, setConfirmDelete] = useState('');
+  // The Sahrae sound at launch (services/sonicLogo.ts).
+  const [introSound, setIntroSoundState] = useState(() => introSoundOn());
   useEffect(() => {
     const sync = () => setReports(!!loadConsent()?.serverReports);
     window.addEventListener(CONSENT_CHANGE, sync);
@@ -164,6 +167,14 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
           >
             <Languages className="w-5 h-5" /> Language
             <span className="ml-auto text-xs font-bold text-zinc-300">{currentLang() === 'sw' ? 'Kiswahili' : 'English'}</span>
+          </button>
+          <button
+            onClick={() => { const next = !introSound; setIntroSound(next); setIntroSoundState(next); }}
+            role="switch" aria-checked={introSound} data-tv-focusable
+            className="flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-zinc-400 hover:bg-white/5 hover:text-white transition-colors"
+          >
+            {introSound ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />} Intro sound
+            <span className="ml-auto text-xs font-bold text-zinc-300">{introSound ? 'On' : 'Off'}</span>
           </button>
           <button
             onClick={() => setThemeOpen((v) => !v)}
