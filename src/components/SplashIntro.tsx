@@ -1,22 +1,31 @@
 import { useEffect, useState } from 'react';
 import { playSonicLogo } from '../services/sonicLogo';
+import { WORDMARK_H, WORDMARK_LETTERS, WORDMARK_W } from '../brand/wordmark';
 
 /**
- * The launch, in time with the Sahrae sound (services/sonicLogo.ts):
+ * The opening: stepping into Sahrae. In time with the Sahrae sound
+ * (services/sonicLogo.ts):
  *
- *   0.05  a thread of gold light draws the S out of black
- *   1.02  on the sound's arrival the ribbon lights, and the room fills with
- *         its glow
- *   1.25  SAHRAE settles, its letters drawing together; ENTERTAINMENT beneath
- *   1.90  a sheen crosses the S
- *   3.05  it dissolves into the app
+ *   0.35  out of black, a horizon of light opens across the screen
+ *   1.50  on the arrival, light breaks over the horizon and SAHRAE rises out of
+ *         it, from the middle outwards, its letters drawing together
+ *   2.20  ENTERTAINMENT beneath; a slow sheen passes over the name
+ *   3.40  stepping through: the view moves forward through the light into
+ *         the app
  *
- * The S is the app's icon (assets/icon.svg): one gold ribbon folding into an
- * S. Pure CSS keyframes (index.css .intro-*), transforms and opacity, simpler
- * on TVs and low-power devices; a quick fade for anyone who asked for less motion.
+ * The wordmark is the brand's outlines (brand/wordmark.ts), the same as the
+ * app icon. CSS keyframes (index.css .rl-*), transforms and opacity; no
+ * drifting dust or blur on TVs and weak graphics; a short fade for reduced motion.
  */
-const S_PATH = 'M 650 350 A 138 128 0 1 0 512 520 A 138 128 0 1 1 374 690';
-const WORD = 'SAHRAE';
+// Letters rise from the middle outwards: H R, then A A, then S E.
+const ORDER = [2, 1, 0, 0, 1, 2];
+const SPREAD = [-0.5, -0.3, -0.1, 0.1, 0.3, 0.5];
+const DUST = Array.from({ length: 16 }, (_, i) => ({
+  left: `${(i * 61) % 100}%`,
+  delay: `${0.4 + ((i * 37) % 23) / 10}s`,
+  size: 2 + ((i * 7) % 3),
+  drift: `${-40 - ((i * 13) % 60)}px`,
+}));
 
 export default function SplashIntro() {
   const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -24,41 +33,44 @@ export default function SplashIntro() {
 
   useEffect(() => {
     void playSonicLogo();
-    const t1 = setTimeout(() => setPhase('out'), reduce ? 600 : 3050);
-    const t2 = setTimeout(() => setPhase('done'), reduce ? 950 : 3600);
+    const t1 = setTimeout(() => setPhase('out'), reduce ? 700 : 3400);
+    const t2 = setTimeout(() => setPhase('done'), reduce ? 1050 : 4250);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [reduce]);
 
   if (phase === 'done') return null;
 
   return (
-    <div className={`intro fixed inset-0 z-[200] overflow-hidden ${phase === 'out' ? 'intro-out' : ''} ${reduce ? 'intro-still' : ''}`} aria-hidden>
-      <div className="intro-glow" />
-      <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
-        <svg className="intro-mark" viewBox="200 160 624 704">
-          <defs>
-            <linearGradient id="intro-gold" gradientUnits="userSpaceOnUse" x1="660" y1="300" x2="370" y2="740">
-              <stop offset="0" stopColor="#fff5d6" /><stop offset="0.2" stopColor="#ffd36b" />
-              <stop offset="0.43" stopColor="#d48f26" /><stop offset="0.5" stopColor="#8f5512" /><stop offset="0.57" stopColor="#d48f26" />
-              <stop offset="0.8" stopColor="#ffcf63" /><stop offset="1" stopColor="#fff0c4" />
-            </linearGradient>
-            <linearGradient id="intro-sheen" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0" stopColor="#fff" stopOpacity="0" /><stop offset="0.5" stopColor="#fff" stopOpacity="0.85" /><stop offset="1" stopColor="#fff" stopOpacity="0" />
-            </linearGradient>
-            <mask id="intro-ribbon" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
-              <path d={S_PATH} fill="none" stroke="#fff" strokeWidth="122" />
-            </mask>
-          </defs>
-          <path className="intro-trace" d={S_PATH} pathLength={1} fill="none" stroke="url(#intro-gold)" strokeWidth="10" strokeLinecap="round" />
-          <path className="intro-fill" d={S_PATH} fill="none" stroke="url(#intro-gold)" strokeWidth="122" />
-          <g mask="url(#intro-ribbon)">
-            <rect className="intro-sweep" x="200" y="160" width="220" height="704" fill="url(#intro-sheen)" />
-          </g>
-        </svg>
-        <h1 className="intro-word font-display font-black leading-none">
-          {WORD.split('').map((ch, i) => <span key={i} style={{ animationDelay: `${1.25 + i * 0.05}s` }}>{ch}</span>)}
-        </h1>
-        <span className="intro-sub font-light uppercase">Entertainment</span>
+    <div className={`rl fixed inset-0 z-[200] overflow-hidden ${phase === 'out' ? 'rl-through' : ''} ${reduce ? 'rl-still' : ''}`} aria-hidden>
+      <div className="rl-stage absolute inset-0">
+        <div className="rl-dawn" />
+        <div className="rl-dust">
+          {DUST.map((d, i) => <span key={i} style={{ left: d.left, width: d.size, height: d.size, animationDelay: d.delay, ['--drift' as string]: d.drift }} />)}
+        </div>
+        <div className="rl-horizon"><div className="rl-horizon-glow" /><div className="rl-horizon-line" /></div>
+        <div className="rl-title">
+          <svg className="rl-word" viewBox={`0 0 ${WORDMARK_W} ${WORDMARK_H}`}>
+            <defs>
+              <linearGradient id="rl-gold" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2={WORDMARK_H}>
+                <stop offset="0" stopColor="#fff7e2" /><stop offset="0.5" stopColor="#f3cd7c" /><stop offset="1" stopColor="#c58d34" />
+              </linearGradient>
+              <linearGradient id="rl-sheen" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0" stopColor="#fff" stopOpacity="0" /><stop offset="0.5" stopColor="#fff" stopOpacity="0.9" /><stop offset="1" stopColor="#fff" stopOpacity="0" />
+              </linearGradient>
+              <mask id="rl-letters" maskUnits="userSpaceOnUse" x="0" y="0" width={WORDMARK_W} height={WORDMARK_H}>
+                {WORDMARK_LETTERS.map((d, i) => <path key={i} d={d} fill="#fff" />)}
+              </mask>
+            </defs>
+            {WORDMARK_LETTERS.map((d, i) => (
+              <path key={i} className="rl-letter" d={d} fill="url(#rl-gold)"
+                style={{ animationDelay: `${1.5 + ORDER[i] * 0.11}s`, ['--spread' as string]: `${SPREAD[i] * 60}px` }} />
+            ))}
+            <g mask="url(#rl-letters)">
+              <rect className="rl-sheen" x="0" y="0" width={WORDMARK_W * 0.35} height={WORDMARK_H} fill="url(#rl-sheen)" />
+            </g>
+          </svg>
+          <span className="rl-sub">Entertainment</span>
+        </div>
       </div>
     </div>
   );

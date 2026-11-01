@@ -1,4 +1,5 @@
 import { t as tr } from '../i18n';
+import Wordmark from './ui/Wordmark';
 import { Home, Search, Headphones, Radio, Film, Tv2, Clapperboard, Trophy, Heart, Clock, Download, Library, PanelLeftClose, PanelLeftOpen, Music2, Mic2, Youtube } from 'lucide-react';
 
 /**
@@ -102,9 +103,7 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
       {/* Full labelled sidebar (lg+) */}
       <aside className={`tv-full hidden lg:flex flex-col fixed left-0 top-0 bottom-0 w-64 z-40 glass sidebar-glass border-r border-white/10 pt-[env(safe-area-inset-top)] transition-transform duration-300 ${collapsed ? '-translate-x-full' : 'translate-x-0'}`}>
         <div className="px-5 pt-5 pb-4 flex items-center justify-between">
-          <h1 className="text-2xl font-black tracking-tighter cursor-pointer whitespace-nowrap" onClick={() => setActiveTab('home')}>
-            <span className="text-gold">SAHRAE</span>
-          </h1>
+          <h1 className="cursor-pointer" onClick={() => setActiveTab('home')}><Wordmark className="h-5" /></h1>
           <button onClick={onToggle} tabIndex={0} data-tv-focusable aria-label="Hide sidebar"
             className="w-9 h-9 flex items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-white/10 transition-colors">
             <PanelLeftClose className="w-5 h-5" />

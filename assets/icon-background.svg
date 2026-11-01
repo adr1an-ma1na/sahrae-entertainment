@@ -1,13 +1,2 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <title>Sahrae Entertainment, adaptive icon background</title>
-  <defs>
-    <radialGradient id="bg" cx="0.5" cy="0.4" r="0.78">
-      <stop offset="0" stop-color="#241a0b"/><stop offset="0.5" stop-color="#0e0b06"/><stop offset="1" stop-color="#030303"/>
-    </radialGradient>
-    <radialGradient id="bloom" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#f7c75a" stop-opacity="0.30"/><stop offset="0.6" stop-color="#f7c75a" stop-opacity="0.05"/><stop offset="1" stop-color="#f7c75a" stop-opacity="0"/>
-    </radialGradient>
-  </defs>
-  <rect width="1024" height="1024" fill="url(#bg)"/>
-    <circle cx="512" cy="500" r="400" fill="url(#bloom)"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024"><title>Sahrae Entertainment, adaptive icon background</title><defs><linearGradient id="gold" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="73.05"><stop offset="0" stop-color="#fff7e2"/><stop offset="0.5" stop-color="#f3cd7c"/><stop offset="1" stop-color="#c58d34"/></linearGradient><linearGradient id="line" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#f3cd7c" stop-opacity="0"/><stop offset="0.5" stop-color="#fff2cf"/><stop offset="1" stop-color="#f3cd7c" stop-opacity="0"/></linearGradient><filter id="bloom" x="-50%" y="-200%" width="200%" height="500%"><feGaussianBlur stdDeviation="40"/></filter><filter id="lineglow" x="-50%" y="-200%" width="200%" height="500%"><feGaussianBlur stdDeviation="6"/></filter>
+  <radialGradient id="bg" cx="0.5" cy="0.55" r="0.8"><stop offset="0" stop-color="#17120b"/><stop offset="0.55" stop-color="#070605"/><stop offset="1" stop-color="#000"/></radialGradient></defs><rect width="1024" height="1024" fill="url(#bg)"/></svg>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, Bell, User, Sun, Moon, LogIn, Palette, MonitorSmartphone } from 'lucide-react';
 import { OPEN_REMOTE } from './RemotePanel';
+import Wordmark from './ui/Wordmark';
 import { FOCUS_SEARCH } from './SearchBox';
 import { currentLang, setLang } from '../i18n';
 import { isTelevision } from '../tv/spatialNavigation';
@@ -77,8 +78,8 @@ export default function Navbar({ activeTab, setActiveTab, onPlay }: NavbarProps)
             className={`nav-wordmark text-2xl md:text-3xl font-black tracking-tighter cursor-pointer whitespace-nowrap shrink-0 lg:hidden`}
             onClick={() => setActiveTab('home')}
           >
-            {/* SAHRAE alone: "ENTERTAINMENT" ran under the search and bell icons on tablets and small laptops (2026-11-01). */}
-            <span className="text-gold drop-shadow-[0_1px_8px_rgba(251,191,36,0.25)]">SAHRAE</span>
+            {/* The wordmark alone: "ENTERTAINMENT" ran under the search and bell icons on tablets and small laptops (2026-11-01). */}
+            <Wordmark className="h-5 md:h-6" />
           </h1>
           {/* Section nav now lives in the Sidebar (desktop) + BottomTabBar (mobile). */}
         </div>

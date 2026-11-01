@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import Wordmark from './ui/Wordmark';
 import { Play, Headphones, Download, Trophy, Check, ChevronRight, Sparkles } from 'lucide-react';
 
 export interface TasteGenre { id: number; name: string }
@@ -48,7 +49,7 @@ export default function Onboarding({ onDone }: { onDone: (genres: TasteGenre[]) 
         {step === 0 && (
           <div className="flex-1 flex flex-col items-center justify-center text-center max-w-md mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="overline mb-4">Welcome to</div>
-            <h1 className="text-6xl md:text-7xl font-display font-black tracking-tighter mb-4"><span className="text-gold">SAHRAE</span></h1>
+            <h1 className="mb-5 flex justify-center"><Wordmark className="h-12 md:h-14" /></h1>
             <p className="text-zinc-300 text-lg leading-relaxed">Everything you love to watch and listen to, including movies, series, live TV, sports, music and podcasts, all in one place.</p>
           </div>
         )}
