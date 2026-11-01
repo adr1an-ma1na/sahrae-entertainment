@@ -7,6 +7,7 @@ import { downloads } from '../services/downloads';
 import { attachEq, applyWebEq, resumeEq } from '../services/eqWeb';
 import { loadEq } from '../services/eq';
 import { cleanTrackText } from '../services/trackText.ts';
+import { resolveYt, prefetchMatches } from '../services/resolveYt';
 import { Capacitor } from '@capacitor/core';
 
 type Repeat = 'off' | 'one' | 'all';
@@ -532,6 +533,25 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const c = queue[index];
     if (!c || loadedIdRef.current === c.id) return;
+    // A catalogue song (Deezer) is matched to its YouTube audio as it comes up,
+    // then put in its place; the next few are matched quietly ahead of time.
+    if (c.id.startsWith('dz:')) {
+      loadedIdRef.current = c.id;
+      setBuffering(true);
+      const at = index;
+      void resolveYt(c, true).then((yt) => {
+        if (loadedIdRef.current !== c.id) return; // moved on meanwhile
+        if (yt) {
+          loadedIdRef.current = null;
+          setQueue((prev) => prev.map((t, k) => (k === at && t.id === c.id ? { ...t, id: yt } : t)));
+        } else {
+          // No real recording of it on YouTube: on to the next song rather than something else.
+          setQueue((prev) => prev.filter((t, k) => !(k === at && t.id === c.id)));
+        }
+      });
+      void prefetchMatches(queue.slice(index + 1, index + 4).filter((t) => t.id.startsWith('dz:')));
+      return;
+    }
     loadedIdRef.current = c.id;
     setPosition(0); setDuration(0);
     // Real-file lane: a downloaded file, OR a direct audio URL (podcast RSS /

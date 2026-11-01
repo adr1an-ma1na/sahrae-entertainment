@@ -33,6 +33,7 @@ export interface Track {
   chaptersUrl?: string; // <podcast:chapters> JSON url (fetched on demand)
   chapters?: { start: number; title: string }[]; // inline <psc:chapter> chapters
   isPodcast?: boolean;  // a podcast episode (audio file OR a YouTube video episode) — gets podcast transport
+  dz?: { id: number; artistId: number }; // a catalogue song (Deezer); its id is `dz:<id>` until matched to YouTube (resolveYt.ts)
 }
 
 // Deterministic, pleasant "dominant colour" per track for CoverArt /
@@ -297,6 +298,11 @@ const songsOnly = (list: Track[]): Track[] => list.filter(isMusicTrack);
 export const ytmusic = {
   search: (q: string, opts: { order?: 'relevance' | 'date' | 'viewCount'; region?: string; withinDays?: number } = {}): Promise<Track[]> =>
     official(() => ytDataApi.search(q, 'song', opts), () => searchRaw(q, 'music_songs').then(mapItems)).then(songsOnly),
+
+  // YouTube Music's song search through Piped only: free, so a catalogue song can
+  // be matched to its audio without spending the day's Data API allowance
+  // (resolveYt.ts). Empty when Piped cannot answer.
+  searchSongsFree: (q: string): Promise<Track[]> => searchRaw(q, 'music_songs').then(mapItems).catch(() => [] as Track[]),
 
   // Video search — used for Podcasts (which live as videos on YouTube). Returns
   // the same Track shape (id = videoId) so it plays through the music engine for

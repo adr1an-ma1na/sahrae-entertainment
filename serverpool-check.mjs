@@ -21,7 +21,12 @@ const pool = JSON.parse(fs.readFileSync('src/data/servers.json', 'utf8'));
 const ids = (list) => list.map((s) => s.id);
 const NOW = Date.parse('2026-10-22T12:00:00Z');
 const ago = (h) => new Date(NOW - h * 3600_000).toISOString();
-const ORDER = ['vidzee', 'vidfast', 'vidrock', 'vixsrc', 'vidnest', 'vidlove', 'vidlink', 'vidsrcto', 'autoembed', 'vidsrcsu', 'vidsrcsh', '2embed', 'vidsrcio', 'vidsrcpm'];
+const FILE = ['vidzee', 'vidfast', 'vidrock', 'vixsrc', 'vidnest', 'vidlove', 'vidlink', 'vidsrcto', 'autoembed', 'vidsrcsu', 'vidsrcsh', '2embed', 'vidsrcio', 'vidsrcpm'];
+// The daily check marks servers down and up again in the shipped file, so the
+// expected order follows their state: the working ones in file order, then the
+// ones marked down (still offered).
+const isDown = (id) => pool.servers.find((s) => s.id === id)?.status === 'down';
+const ORDER = [...FILE.filter((x) => !isDown(x)), ...FILE.filter(isDown)];
 
 console.log('\nthe shipped pool');
 eq('is well formed', validPool(pool), true);
@@ -30,7 +35,8 @@ eq('series: the same order', ids(pickServers(pool, 'tv')), ORDER);
 eq('the order does not change in a browser', ids(pickServers(pool, 'movie', [], Date.now(), undefined, false)), ORDER);
 eq('no server id appears twice', new Set(pool.servers.map((s) => s.id)).size, pool.servers.length);
 eq("fourteen servers: the six measured leads and the owner's eight", pool.servers.length, 14);
-eq("the owner's eight are all offered, in the owner's order", ids(pickServers(pool, 'tv')).slice(-8), ['vidlink', 'vidsrcto', 'autoembed', 'vidsrcsu', 'vidsrcsh', '2embed', 'vidsrcio', 'vidsrcpm']);
+eq('the file keeps the measured leads, then the owner\'s eight in order', ids(pool.servers), FILE);
+eq("the owner's eight are all offered, whatever the daily check says", ['vidlink', 'vidsrcto', 'autoembed', 'vidsrcsu', 'vidsrcsh', '2embed', 'vidsrcio', 'vidsrcpm'].every((id) => ids(pickServers(pool, 'tv')).includes(id)), true);
 eq('every server is listed at up to 1080p', pool.servers.every((s) => s.visual.maxHeight >= 1080), true);
 
 console.log('\nthe quality score (kept for reference; it no longer reorders)');
@@ -40,15 +46,17 @@ eq('1080p beats 720p however reliable the 720p is', score(v({ visual: { maxHeigh
 eq('with the same picture, 5.1 sound wins', score(v({ audio: { channels: 6 } })) > score(v({ audio: { channels: 2 } })), true);
 
 console.log('\nwhen a server fails');
-const down = { ...pool, servers: pool.servers.map((s) => (s.id === 'vidrock' ? { ...s, status: 'down' } : s)) };
-eq('a server marked down steps out, the rest keep their order', ids(pickServers(down, 'movie')), ORDER.filter((x) => x !== 'vidrock'));
+const fresh = { ...pool, servers: pool.servers.map((s) => ({ ...s, status: 'active' })) };
+const down = { ...fresh, servers: fresh.servers.map((s) => (s.id === 'vidrock' ? { ...s, status: 'down' } : s)) };
+eq('a server marked down moves to the back, still offered; the rest keep their order', ids(pickServers(down, 'movie')), [...FILE.filter((x) => x !== 'vidrock'), 'vidrock']);
 const failing = [{ server_id: 'vidzee', ok: 1, fail: 20, last_ok: ago(60), last_fail: ago(1) }];
-eq('a server viewers keep failing on steps out too, and the next leads', ids(pickServers(pool, 'movie', failing, NOW))[0], 'vidfast');
+eq('a server viewers keep failing on moves back too, and the next leads', ids(pickServers(fresh, 'movie', failing, NOW))[0], 'vidfast');
+eq('...still offered, at the back', ids(pickServers(fresh, 'movie', failing, NOW)).slice(-1)[0], 'vidzee');
 eq('...but a success in the last day keeps it', crowdFailing({ server_id: 'x', ok: 1, fail: 20, last_ok: ago(5), last_fail: ago(1) }, NOW), false);
 eq('...and a handful of failures is not enough', crowdFailing({ server_id: 'x', ok: 0, fail: 5, last_ok: null, last_fail: ago(1) }, NOW), false);
 eq('...nor mostly successes', crowdFailing({ server_id: 'x', ok: 30, fail: 20, last_ok: ago(30), last_fail: ago(1) }, NOW), false);
 const allDown = { ...pool, servers: pool.servers.map((s) => ({ ...s, status: 'down' })) };
-eq('if every server is marked down, the marks are doubted, not the viewer left with nothing', ids(pickServers(allDown, 'movie')), ORDER);
+eq('if every server is marked down, all are still offered in the file order', ids(pickServers(allDown, 'movie')), FILE);
 
 console.log('\na published pool is only trusted when it is sound');
 eq('a URL on someone else\'s host is refused', validPool({ ...pool, servers: [{ ...pool.servers[0], movie: 'https://evil.example/{id}' }] }), false);

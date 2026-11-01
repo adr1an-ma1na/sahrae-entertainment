@@ -87,10 +87,11 @@ export function crowdFailing(h: ServerHealth | undefined, now = Date.now()): boo
  */
 export function pickServers(pool: Pool, _type: 'movie' | 'tv', health: ServerHealth[] = [], now = Date.now(), count = ACTIVE_COUNT, _canHoldHd = true): PoolServer[] {
   const byId = new Map(health.map((h) => [h.server_id, h]));
-  const usable = pool.servers.filter((s) => s.status !== 'down' && !crowdFailing(byId.get(s.id), now));
-  // Never show nothing: if everything is marked down, the marks are more
-  // likely wrong than every server at once.
-  return (usable.length ? usable : pool.servers).slice(0, count);
+  // Every server stays on offer (the owner's rule: never take a server away).
+  // One marked down by the daily check, or failing for viewers, moves to the
+  // back, still there to pick; the rest keep the file's order.
+  const weak = (s: PoolServer) => s.status === 'down' || crowdFailing(byId.get(s.id), now);
+  return [...pool.servers.filter((s) => !weak(s)), ...pool.servers.filter(weak)].slice(0, count);
 }
 
 const HOST = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;

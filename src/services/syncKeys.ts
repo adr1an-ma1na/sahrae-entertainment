@@ -9,6 +9,8 @@ export const SYNCED_KEYS = [
   'sahrae.music.liked.v1',
   'sahrae.music.recent.v1',
   'sahrae.music.tasteSeeds.v1',
+  // The artists and genres picked at first run (sautiMixes.ts).
+  'sahrae.music.picks.v1',
   'sahrae.podcast.follows.v1',
   'sahrae.podcast.progress.v2',
   'sahrae.podcast.seen.v1',

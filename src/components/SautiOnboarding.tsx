@@ -1,19 +1,22 @@
-import { useMemo, useState } from 'react';
-import { Check, Loader2, Search, Sparkles, X } from 'lucide-react';
-import { ytmusic, type Artist } from '../services/ytmusic';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Check, Loader2, Search, Sparkles, X, ChevronLeft } from 'lucide-react';
+import { deezer } from '../services/deezer';
+import { artistNamed } from '../services/sautiMixes';
+import { GENRES, GENRE_GROUPS, searchGenres } from '../services/genres';
+import type { CArtist } from '../services/curate';
 
 /**
- * First-run Sauti taste onboarding (cold-start fix). A brand-new listener has no
- * history, so the recommender has nothing to work with. This picker captures
- * the artists they love up front; the parent turns them into taste seeds, so
- * Made for you, the Daily Mixes and Release Radar are built around them from
- * the first open and keep growing with what they play and like.
+ * Sauti's first run, the way Spotify's works.
  *
- * A wide catalogue (owner, 2026-10-28: "so many musicians that they can select
- * and search"), grouped by where the music comes from, filtered as you type,
- * and a YouTube search for anyone not listed. The YouTube search is only run
- * on a press: each one spends a share of the day's API allowance.
+ *   1. Artists. Real photos; search reaches the whole catalogue (Deezer), not
+ *      a fixed list; picking an artist brings their related artists in right
+ *      beside it, so one choice leads to the next.
+ *   2. Genres. Every genre Sauti has, searchable (services/genres.ts).
+ *
+ * The picks are the seeds of the Daily Mixes and genre mixes (sautiMixes.ts),
+ * which keep growing with what is played.
  */
+// Where suggestions start: well-known artists by region, looked up for photos.
 const GROUPS: { id: string; name: string; artists: string[] }[] = [
   { id: 'ke', name: 'Kenya', artists: ['Sauti Sol', 'Bien', 'Nyashinski', 'Otile Brown', 'Nviiri the Storyteller', 'Bensoul', 'Khaligraph Jones', 'Wakadinali', 'Nikita Kering', 'Mejja', 'Bahati', 'Willy Paul', 'Arrow Bwoy', 'Fena Gitu', 'Wanavokali', 'Ssaru', 'Iyanii', 'Okello Max', 'Charisma', 'Kaskazini'] },
   { id: 'eastafrica', name: 'Tanzania & Uganda', artists: ['Diamond Platnumz', 'Harmonize', 'Rayvanny', 'Zuchu', 'Ali Kiba', 'Marioo', 'Jux', 'Nandy', 'Mbosso', 'Eddy Kenzo', 'Azawi', 'Sheebah', 'Bebe Cool', 'Joshua Baraka'] },
@@ -27,147 +30,197 @@ const GROUPS: { id: string; name: string; artists: string[] }[] = [
   { id: 'latin', name: 'Latin', artists: ['Bad Bunny', 'Karol G', 'Peso Pluma', 'Shakira', 'Rosalía', 'J Balvin', 'Anitta'] },
   { id: 'reggae', name: 'Reggae & Dancehall', artists: ['Bob Marley & The Wailers', 'Damian Marley', 'Chronixx', 'Popcaan', 'Vybz Kartel', 'Shenseea'] },
   { id: 'rock', name: 'Rock & Alternative', artists: ['Imagine Dragons', 'Linkin Park', 'Arctic Monkeys', 'Twenty One Pilots', 'Queen'] },
-  { id: 'classics', name: 'Classics', artists: ['Michael Jackson', 'Whitney Houston', 'Lucky Dube', 'Brenda Fassie', 'Fela Kuti', 'Franco & TPOK Jazz'] },
+  { id: 'classics', name: 'Classics', artists: ['Michael Jackson', 'Whitney Houston', 'Lucky Dube', 'Brenda Fassie', 'Fela Kuti', 'Franco & le T.P OK Jazz'] },
 ];
-export const ONBOARDING_ARTIST_COUNT = GROUPS.reduce((n, g) => n + g.artists.length, 0);
 
-const GRADS = [
-  'from-rose-500 to-orange-600', 'from-emerald-500 to-teal-700', 'from-sky-500 to-indigo-700',
-  'from-violet-500 to-fuchsia-700', 'from-fuchsia-500 to-rose-700', 'from-cyan-500 to-blue-700',
-  'from-lime-500 to-emerald-700', 'from-indigo-500 to-purple-800', 'from-amber-400 to-orange-700',
-  'from-teal-400 to-cyan-700',
-];
-const hashStr = (s: string) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
-const gradFor = (n: string) => GRADS[hashStr(n) % GRADS.length];
-const monogram = (n: string) => n.replace(/[^A-Za-z0-9 ]/g, '').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+const ROWS = [{ id: 'charts', name: 'Global charts', artists: [] as string[] }, ...GROUPS];
 const fold = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+const monogram = (n: string) => n.replace(/[^A-Za-z0-9 ]/g, '').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 
-function ArtistTile({ name, sub, image, on, onToggle }: { name: string; sub?: string; image?: string; on: boolean; onToggle: () => void }) {
+function ArtistBubble({ a, on, from, onToggle }: { a: CArtist; on: boolean; from?: string; onToggle: () => void }) {
   return (
-    <button onClick={onToggle} tabIndex={0} data-tv-focusable aria-pressed={on} aria-label={name}
-      className={`group text-center focus:outline-none transition-transform ${on ? 'scale-[1.03]' : 'hover:scale-[1.03]'}`}>
-      <span className={`relative block aspect-square rounded-full overflow-hidden bg-gradient-to-br ${gradFor(name)} shadow-lg ${on ? 'ring-[3px] ring-amber-400 shadow-[0_10px_30px_-10px_rgb(var(--acc-rgb)/0.8)]' : 'ring-1 ring-white/10 group-focus-visible:ring-2 group-focus-visible:ring-amber-400'}`}>
-        {image
-          ? <img src={image} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
-          : <span className="absolute inset-0 flex items-center justify-center font-display font-black text-[#fff]/95 text-2xl md:text-3xl tracking-tight drop-shadow">{monogram(name)}</span>}
-        <span aria-hidden className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-black/25" />
-        <span className={`absolute inset-0 bg-black/45 flex items-center justify-center transition-opacity ${on ? 'opacity-100' : 'opacity-0'}`}>
+    <button onClick={onToggle} tabIndex={0} data-tv-focusable aria-pressed={on} aria-label={a.name}
+      className={`group text-center focus:outline-none transition-transform duration-300 ${on ? 'scale-[1.04]' : 'hover:scale-[1.04]'} ${from ? 'lux-enter' : ''}`}>
+      <span className={`relative block aspect-square rounded-full overflow-hidden bg-zinc-800 shadow-lg transition-shadow ${on ? 'ring-[3px] ring-amber-400 shadow-[0_12px_32px_-10px_rgb(var(--acc-rgb)/0.85)]' : 'ring-1 ring-white/10 group-focus-visible:ring-2 group-focus-visible:ring-amber-400'}`}>
+        {a.picture
+          ? <img src={a.picture} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
+          : <span className="absolute inset-0 flex items-center justify-center font-display font-black text-[#fff]/90 text-2xl bg-gradient-to-br from-zinc-700 to-zinc-900">{monogram(a.name)}</span>}
+        <span className={`absolute inset-0 bg-black/40 flex items-center justify-center transition-opacity ${on ? 'opacity-100' : 'opacity-0'}`}>
           <span className="w-9 h-9 rounded-full bg-sauti flex items-center justify-center shadow-lg"><Check className="w-5 h-5 text-amber-950" strokeWidth={3} /></span>
         </span>
       </span>
-      <span className={`block mt-2 text-xs font-semibold truncate ${on ? 'text-sauti' : 'text-white'}`}>{name}</span>
-      {sub && <span className="block text-[10px] text-zinc-500 truncate">{sub}</span>}
+      <span className={`block mt-2 text-xs font-semibold truncate ${on ? 'text-sauti' : 'text-white'}`}>{a.name}</span>
+      {from && <span className="block text-[10px] text-zinc-500 truncate">Like {from}</span>}
     </button>
   );
 }
 
-export default function SautiOnboarding({ onComplete, onSkip }: { onComplete: (names: string[]) => Promise<void> | void; onSkip: () => void }) {
-  const [sel, setSel] = useState<string[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [group, setGroup] = useState<string>('all');
+export interface OnboardingResult { artists: CArtist[]; genres: string[] }
+
+export default function SautiOnboarding({ onComplete, onSkip }: { onComplete: (r: OnboardingResult) => Promise<void> | void; onSkip: () => void }) {
+  const [step, setStep] = useState<'artists' | 'genres'>('artists');
+  const [picked, setPicked] = useState<CArtist[]>([]);
+  const [genres, setGenres] = useState<string[]>([]);
+  const [row, setRow] = useState<string>(GROUPS[0].id);
+  const [shown, setShown] = useState<CArtist[]>([]);
+  const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
-  const [found, setFound] = useState<Artist[] | null>(null);
-  const [finding, setFinding] = useState(false);
+  const [found, setFound] = useState<CArtist[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [gQuery, setGQuery] = useState('');
+  const [busy, setBusy] = useState(false);
+  // Related artists brought in beside a pick: artist id -> the pick's name.
+  const [suggested, setSuggested] = useState<Record<number, string>>({});
+  const tRef = useRef<number | undefined>(undefined);
 
-  const toggle = (n: string) => setSel((prev) => (prev.includes(n) ? prev.filter((x) => x !== n) : [...prev, n]));
-  const enough = sel.length >= 3;
+  // A row's artists, with their photos, as they come.
+  useEffect(() => {
+    let live = true;
+    setLoading(true); setShown([]); setSuggested({});
+    (async () => {
+      if (row === 'charts') {
+        const a = await deezer.chartArtists(48).catch(() => [] as CArtist[]);
+        if (live) setShown(a);
+      } else {
+        const names = GROUPS.find((x) => x.id === row)?.artists || [];
+        // Placeholders first, photos as each lookup lands.
+        if (live) setShown(names.map((n, i) => ({ id: -1 - i, name: n })));
+        await Promise.all(names.map(async (n, i) => {
+          const a = await artistNamed(n).catch(() => null);
+          if (live && a) setShown((cur) => cur.map((x) => (x.id === -1 - i ? a : x)));
+        }));
+      }
+      if (live) setLoading(false);
+    })();
+    return () => { live = false; };
+  }, [row]);
 
-  // The catalogue, narrowed by group and by what is typed.
-  const shown = useMemo(() => {
-    const q = fold(query.trim());
-    return GROUPS
-      .filter((g) => group === 'all' || g.id === group)
-      .map((g) => ({ ...g, artists: q ? g.artists.filter((a) => fold(a).includes(q)) : g.artists }))
-      .filter((g) => g.artists.length);
-  }, [group, query]);
-
-  const findOnYouTube = async () => {
+  // Search the whole catalogue as you type.
+  useEffect(() => {
+    window.clearTimeout(tRef.current);
     const q = query.trim();
-    if (q.length < 2 || finding) return;
-    setFinding(true);
-    try { setFound((await ytmusic.searchArtists(q)).slice(0, 12)); } catch { setFound([]); }
-    finally { setFinding(false); }
+    if (q.length < 2) { setFound(null); setSearching(false); return; }
+    setSearching(true);
+    tRef.current = window.setTimeout(async () => {
+      const r = await deezer.searchArtists(q, 30, true).catch(() => [] as CArtist[]);
+      setFound(r); setSearching(false);
+    }, 350);
+  }, [query]);
+
+  const isOn = (a: CArtist) => picked.some((p) => p.id === a.id || fold(p.name) === fold(a.name));
+  const toggle = async (a: CArtist) => {
+    if (a.id < 0) return; // still looking it up
+    if (isOn(a)) { setPicked((p) => p.filter((x) => x.id !== a.id)); return; }
+    setPicked((p) => [...p, a]);
+    // Spotify's way: the artists related to a pick appear right after it.
+    const rel = (await deezer.related(a.id, 6, true).catch(() => [] as CArtist[])).filter((r) => !isOn(r));
+    const put = (list: CArtist[]) => {
+      const have = new Set(list.map((x) => x.id));
+      const add = rel.filter((r) => !have.has(r.id));
+      if (!add.length) return list;
+      const at = list.findIndex((x) => x.id === a.id);
+      if (at < 0) return list;
+      return [...list.slice(0, at + 1), ...add, ...list.slice(at + 1)];
+    };
+    setSuggested((s) => ({ ...s, ...Object.fromEntries(rel.map((r) => [r.id, a.name])) }));
+    if (found) setFound((f) => (f ? put(f) : f)); else setShown(put);
   };
 
-  const start = async () => {
-    if (!enough || busy) return;
+  const genreList = useMemo(() => searchGenres(gQuery), [gQuery]);
+  const toggleGenre = (id: string) => setGenres((g) => (g.includes(id) ? g.filter((x) => x !== id) : [...g, id]));
+  const finish = async () => {
+    if (busy) return;
     setBusy(true);
-    try { await onComplete(sel); } catch { /* parent still completes */ }
+    try { await onComplete({ artists: picked, genres }); } catch { /* the parent still closes */ }
   };
+
+  const list = found ?? shown;
+  const enough = picked.length >= 3;
 
   return (
     <div role="dialog" aria-modal="true" aria-label="Set up Sauti" className="fixed inset-0 z-[120] bg-[#09090b] overflow-y-auto">
-      <div aria-hidden className="pointer-events-none fixed top-0 left-0 right-0 h-80 opacity-80"
-        style={{ background: 'radial-gradient(55% 70% at 15% 0%, rgba(251,191,36,0.24), transparent 70%), radial-gradient(50% 60% at 85% 6%, rgba(236,72,153,0.16), transparent 72%)', filter: 'blur(10px)' }} />
+      <div aria-hidden className="pointer-events-none fixed top-0 left-0 right-0 h-96 opacity-80"
+        style={{ background: 'radial-gradient(55% 70% at 15% 0%, rgb(var(--acc-rgb) / 0.26), transparent 70%), radial-gradient(50% 60% at 85% 6%, rgb(var(--acc2-rgb) / 0.22), transparent 72%)', filter: 'blur(10px)' }} />
 
-      <div className="relative max-w-5xl mx-auto px-5 pt-[calc(env(safe-area-inset-top)+2.5rem)] pb-48">
-        <p className="lux-kicker mb-3"><Sparkles className="w-3.5 h-3.5" />Welcome to Sauti</p>
-        <h1 className="lux-title text-4xl md:text-6xl pb-1 mb-3">Who do you love?</h1>
-        <p className="text-zinc-400 text-sm md:text-base mb-6 max-w-2xl">
-          Pick <span className="text-sauti font-semibold">3 or more</span> from {ONBOARDING_ARTIST_COUNT} artists, or search for anyone.
-          Your Daily Mixes, Release Radar and Made for you start from them and grow with every song you play and like.
-        </p>
-
-        {/* Search: the catalogue narrows as you type; anyone else is one press away on YouTube. */}
-        <div className="sticky top-0 z-10 -mx-5 px-5 py-3 bg-[#09090b]/90 backdrop-blur-xl">
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute z-10 left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-              <input value={query} onChange={(e) => { setQuery(e.target.value); setFound(null); }}
-                onKeyDown={(e) => { if (e.key === 'Enter') void findOnYouTube(); }}
-                placeholder="Search for an artist…" aria-label="Search for an artist" className="w-full lux-field pl-10 pr-10 py-3 text-sm" />
-              {query && (
-                <button onClick={() => { setQuery(''); setFound(null); }} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"><X className="w-4 h-4" /></button>
-              )}
-            </div>
-            {query.trim().length >= 2 && (
-              <button onClick={() => void findOnYouTube()} disabled={finding} data-tv-focusable className="lux-btn px-4 py-2.5 text-sm shrink-0">
-                {finding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />} <span className="hidden sm:inline">Find on YouTube</span>
-              </button>
-            )}
-          </div>
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide mt-3 pb-1">
-            <button onClick={() => setGroup('all')} aria-pressed={group === 'all'} data-tv-focusable className="lux-chip">All</button>
-            {GROUPS.map((g) => (
-              <button key={g.id} onClick={() => setGroup(g.id)} aria-pressed={group === g.id} data-tv-focusable className="lux-chip">{g.name}</button>
-            ))}
-          </div>
+      <div className="relative max-w-5xl mx-auto px-5 pt-[calc(env(safe-area-inset-top)+2.25rem)] pb-48">
+        <div className="flex items-center justify-between mb-4">
+          <p className="lux-kicker"><Sparkles className="w-3.5 h-3.5" />Welcome to Sauti · step {step === 'artists' ? 1 : 2} of 2</p>
+          {step === 'genres' && <button onClick={() => setStep('artists')} className="text-sm text-zinc-400 hover:text-white flex items-center gap-1"><ChevronLeft className="w-4 h-4" /> Artists</button>}
         </div>
 
-        {found && (
-          <section className="mt-6">
-            <h2 className="lux-h text-lg mb-4">On YouTube</h2>
-            {found.length === 0
-              ? <p className="text-sm text-zinc-400">No artist by that name. Check the spelling, or try their stage name.</p>
-              : (
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">
-                  {found.map((a) => <ArtistTile key={a.id} name={a.name} image={a.thumbnail} on={sel.includes(a.name)} onToggle={() => toggle(a.name)} />)}
+        {step === 'artists' ? (
+          <>
+            <h1 className="lux-title text-4xl md:text-6xl pb-1 mb-2">Choose artists you like.</h1>
+            <p className="text-zinc-400 text-sm md:text-base mb-6 max-w-2xl">Pick three or more. Search for anyone; each pick brings artists like them alongside. Your Daily Mixes are built from these and grow with every song you play.</p>
+
+            <div className="sticky top-0 z-10 -mx-5 px-5 py-3 bg-[#09090b]/90 backdrop-blur-xl">
+              <div className="relative">
+                <Search className="absolute z-10 left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search any artist" aria-label="Search any artist"
+                  className="w-full lux-field pl-12 pr-11 py-3.5 text-base" />
+                {searching ? <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 animate-spin" />
+                  : query && <button onClick={() => setQuery('')} aria-label="Clear search" className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"><X className="w-5 h-5" /></button>}
+              </div>
+              {!found && (
+                <div className="flex gap-2 overflow-x-auto scrollbar-hide mt-3 pb-1">
+                  {ROWS.map((r) => (
+                    <button key={r.id} onClick={() => setRow(r.id)} aria-pressed={row === r.id} data-tv-focusable className="lux-chip">{r.name}</button>
+                  ))}
                 </div>
               )}
-          </section>
-        )}
-
-        {shown.map((g) => (
-          <section key={g.id} className="mt-8">
-            <h2 className="lux-h text-lg mb-4">{g.name}</h2>
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">
-              {g.artists.map((a) => <ArtistTile key={a} name={a} on={sel.includes(a)} onToggle={() => toggle(a)} />)}
             </div>
-          </section>
-        ))}
-        {!shown.length && !found && (
-          <p className="mt-8 text-sm text-zinc-400">Not in the list. Press <span className="text-white font-semibold">Find on YouTube</span> to search for them.</p>
+
+            {found && found.length === 0 && <p className="mt-8 text-sm text-zinc-400">No artist by that name. Check the spelling, or try their stage name.</p>}
+            <div className="mt-6 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-x-4 gap-y-6">
+              {list.map((a) => <ArtistBubble key={a.id} a={a} on={isOn(a)} from={suggested[a.id]} onToggle={() => void toggle(a)} />)}
+            </div>
+            {loading && !list.length && <div className="mt-10 flex justify-center"><Loader2 className="w-6 h-6 text-zinc-500 animate-spin" /></div>}
+          </>
+        ) : (
+          <>
+            <h1 className="lux-title text-4xl md:text-6xl pb-1 mb-2">And the sounds you love?</h1>
+            <p className="text-zinc-400 text-sm md:text-base mb-6 max-w-2xl">Optional. Each genre you pick becomes a mix of its real artists, from Rumba and Bongo Flava to Amapiano, Gospel and Jazz.</p>
+            <div className="sticky top-0 z-10 -mx-5 px-5 py-3 bg-[#09090b]/90 backdrop-blur-xl">
+              <div className="relative">
+                <Search className="absolute z-10 left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+                <input value={gQuery} onChange={(e) => setGQuery(e.target.value)} placeholder="Search genres or artists" aria-label="Search genres"
+                  className="w-full lux-field pl-12 pr-4 py-3.5 text-base" />
+              </div>
+            </div>
+            {GENRE_GROUPS.map((group) => {
+              const items = genreList.filter((x) => x.group === group);
+              if (!items.length) return null;
+              return (
+                <section key={group} className="mt-7">
+                  <h2 className="lux-h text-lg mb-3">{group}</h2>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                    {items.map((x) => {
+                      const on = genres.includes(x.id);
+                      return (
+                        <button key={x.id} onClick={() => toggleGenre(x.id)} aria-pressed={on} data-tv-focusable
+                          className={`relative h-20 rounded-2xl overflow-hidden text-left p-3 transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${on ? 'scale-[1.02] ring-[3px] ring-amber-400' : 'hover:scale-[1.02]'}`}
+                          style={{ background: `linear-gradient(135deg, ${x.tint}, ${x.tint}99)` }}>
+                          <span className="relative font-display font-bold text-[15px] leading-tight text-[#fff]">{x.name}</span>
+                          {on && <span className="absolute top-2 right-2 w-6 h-6 rounded-full bg-[#fff] flex items-center justify-center"><Check className="w-4 h-4 text-black" strokeWidth={3} /></span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              );
+            })}
+            {!genreList.length && <p className="mt-8 text-sm text-zinc-400">No genre by that name yet.</p>}
+          </>
         )}
       </div>
 
-      {/* Your picks, and the way in. */}
       <div className="fixed bottom-0 left-0 right-0 z-[121] glass border-t border-white/10 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3">
         <div className="max-w-5xl mx-auto px-5">
-          {sel.length > 0 && (
-            <div className="flex gap-1.5 overflow-x-auto scrollbar-hide pb-2.5">
-              {sel.map((n) => (
-                <button key={n} onClick={() => toggle(n)} aria-label={`Remove ${n}`} className="lux-chip" aria-pressed>
-                  {n} <X className="w-3 h-3" />
+          {step === 'artists' && picked.length > 0 && (
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2.5">
+              {picked.map((a) => (
+                <button key={a.id} onClick={() => void toggle(a)} aria-label={`Remove ${a.name}`} className="shrink-0 flex items-center gap-2 pl-1 pr-3 py-1 rounded-full bg-white/10 text-xs font-semibold text-white">
+                  {a.picture ? <img src={a.picture} alt="" className="w-6 h-6 rounded-full object-cover" /> : null}{a.name}<X className="w-3 h-3 text-zinc-400" />
                 </button>
               ))}
             </div>
@@ -175,10 +228,16 @@ export default function SautiOnboarding({ onComplete, onSkip }: { onComplete: (n
           <div className="flex items-center justify-between gap-3">
             <button onClick={onSkip} disabled={busy} className="text-sm font-semibold text-zinc-400 hover:text-white px-3 py-2.5 disabled:opacity-40">Maybe later</button>
             <div className="flex items-center gap-3">
-              <span className="text-xs text-zinc-400 tabular hidden sm:block">{sel.length} picked{!enough ? ` · ${3 - sel.length} more` : ''}</span>
-              <button onClick={start} disabled={!enough || busy} data-tv-focusable className="lux-btn px-6 py-2.5 text-sm disabled:opacity-40 disabled:cursor-not-allowed">
-                {busy ? <><Loader2 className="w-4 h-4 animate-spin" /> Tuning Sauti…</> : <><Sparkles className="w-4 h-4" /> Start listening</>}
-              </button>
+              <span className="text-xs text-zinc-400 tabular hidden sm:block">
+                {step === 'artists' ? `${picked.length} picked${!enough ? ` · ${3 - picked.length} more` : ''}` : `${genres.length} genres`}
+              </span>
+              {step === 'artists' ? (
+                <button onClick={() => setStep('genres')} disabled={!enough} data-tv-focusable className="lux-btn px-7 py-2.5 text-sm disabled:opacity-40 disabled:cursor-not-allowed">Next</button>
+              ) : (
+                <button onClick={() => void finish()} disabled={busy} data-tv-focusable className="lux-btn px-7 py-2.5 text-sm">
+                  {busy ? <><Loader2 className="w-4 h-4 animate-spin" /> Building your mixes…</> : <><Sparkles className="w-4 h-4" /> {genres.length ? 'Done' : 'Skip and finish'}</>}
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, Fragment, ReactNode, type MouseEvent as RMouseEvent } from 'react';
 import { isSong } from '../services/musicCatalog';
 import { isMusicTrack } from '../services/musicFilter';
-import { dailyMixes, releaseRadar, artistsIn, genrePage, myGenres, catalogueSongsBy, GENRES as CATALOG_GENRES, genreById, type GenrePage } from '../services/musicLibrary';
+import { releaseRadar, artistsIn, genrePage, myGenres, catalogueSongsBy, GENRES as CATALOG_GENRES, genreById, type GenrePage } from '../services/musicLibrary';
 import { ytDataApi } from '../services/ytDataApi';
 import { Search, Play, Pause, Heart, Loader2, Music2, Plus, X, ListMusic, Shuffle, Trash2, ChevronLeft, Library, Sparkles, Disc3, User, Youtube, Link2 as LinkIcon, Radio as RadioIcon, Sunrise } from 'lucide-react';
 import AudioShowcase, { type ShowcaseSlide } from './ui/AudioShowcase';
@@ -19,7 +19,9 @@ import EmptyState from './EmptyState';
 // The current year, for search queries. Hardcoding it meant every shelf
 // quietly became last year's music on 1 January.
 const YEAR = new Date().getFullYear();
-import SautiOnboarding from './SautiOnboarding';
+import SautiOnboarding, { type OnboardingResult } from './SautiOnboarding';
+import { loadPicks, savePicks, dailyMixes as curatedDailyMixes, pickedGenreMixes } from '../services/sautiMixes';
+import { asTrack } from '../services/resolveYt';
 import { LuxHeader, LuxSeg } from './ui/Lux';
 import Coachmark from './Coachmark';
 
@@ -358,31 +360,20 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   const [redoTaste, setRedoTaste] = useState(false); // "Tune your taste" manually re-opens the picker
   const showOnboarding = redoTaste || (!onboarded && recentlyPlayed.length === 0 && likedTracks.length === 0 && tasteSeeds.length === 0);
   const closeOnboarding = () => { completeOnboarding(); setRedoTaste(false); };
-  const seedFromArtists = async (names: string[]) => {
-    try {
-      // One search per artist, for the first ten picked: each costs a share of
-      // the day's YouTube allowance. Four of their songs each seed the taste.
-      const lists = await Promise.all(names.slice(0, 10).map((n) => ytmusic.search(`${n} songs`).catch(() => [] as Track[])));
-      const seen = new Set<string>(); const seeds: Track[] = [];
-      for (const list of lists) {
-        let added = 0;
-        for (const t of list) {
-          if (added >= 4) break;
-          if (!isCleanSong(t) || seen.has(t.id)) continue;
-          seen.add(t.id); seeds.push(t); added++;
-        }
-      }
-      if (seeds.length) addTasteSeeds(seeds);
-    } finally {
-      closeOnboarding();
-    }
+  const finishOnboarding = async (r: OnboardingResult) => {
+    savePicks({ artists: r.artists, genres: r.genres });
+    setPicksAt(Date.now());
+    closeOnboarding();
   };
+
 
   const [tab, setTab] = useState<'home' | 'library'>('home');
   const [sections, setSections] = useState<{ title: string; tracks: Track[] }[]>([]);
   const [loadingHome, setLoadingHome] = useState(true);
   const [mix, setMix] = useState<Track[]>([]);
-  const [madeForYou, setMadeForYou] = useState<{ id: string; title: string; subtitle: string; tracks: Track[] }[]>([]);
+  const [madeForYou, setMadeForYou] = useState<{ id: string; title: string; subtitle: string; tracks: Track[]; cover?: string; tint?: string }[]>([]);
+  // Bumped when the first-run picks change, so the mixes rebuild from them.
+  const [picksAt, setPicksAt] = useState(() => loadPicks()?.at || 0);
   const [viewMix, setViewMix] = useState<{ id: string; title: string; subtitle: string; tracks: Track[] } | null>(null);
 
   // YouTube Music style Mood filter chips
@@ -745,11 +736,22 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
         const topSeeds = seeds.slice(0, 8);
         const known = new Set(seeds.map((t) => t.id));
 
-        // Daily Mixes first: one per genre this listener plays, a fresh set
-        // every day (no song back within 30 days), from the genre catalogue.
-        const daily = await dailyMixes(seeds).catch(() => []);
+        // Daily Mixes, built the way Spotify's are (services/sautiMixes.ts): the
+        // listener's artists (first-run picks, then the ones they play most),
+        // grouped by who is related to whom, each woven with related artists'
+        // real top songs; then a mix for each genre they picked. Real releases
+        // from the catalogue, matched to YouTube audio as they play: never a
+        // YouTube search for a genre's name, which filled a Rumba mix with AI uploads.
+        const picks = loadPicks();
+        const count = new Map<string, number>();
+        for (const t of [...likedTracks, ...recentlyPlayed]) if (t.artist && !t.isPodcast) count.set(t.artist, (count.get(t.artist) || 0) + 1);
+        const played = [...count.entries()].filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).map(([a]) => a.split(/,|&| feat\.? | ft\.? | x /i)[0].trim());
+        const [daily, byGenre] = await Promise.all([
+          curatedDailyMixes(picks?.artists || [], played).catch(() => []),
+          pickedGenreMixes(picks?.genres || []).catch(() => []),
+        ]);
         if (cancelled) return;
-        const dailyCards = daily.map((m) => ({ id: m.id, title: m.title, subtitle: m.subtitle, tracks: m.tracks }));
+        const dailyCards = [...daily, ...byGenre].map((m) => ({ id: m.id, title: m.title, subtitle: m.subtitle, tracks: m.tracks.map((t) => asTrack(t)), cover: m.cover, tint: m.tint }));
         setMadeForYou(dailyCards);
 
         // Release Radar: up to 100 new songs in their genres, new each Friday.
@@ -791,13 +793,13 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
         const discover = diverseSample(ranked.filter((t) => !known.has(t.id)), 30);
         if (discover.length >= 8) out.push({ id: 'discover', title: 'Discover Weekly', subtitle: "Fresh picks your taste agrees on", tracks: discover });
 
-        if (!cancelled) setMadeForYou((prev) => [...prev.filter((m) => m.id.startsWith('daily-') || m.id === 'radar'), ...out]);
+        if (!cancelled) setMadeForYou((prev) => [...prev.filter((m) => m.id.startsWith('daily-') || m.id.startsWith('genre-') || m.id === 'radar'), ...out]);
 
       })();
     }, 3000);
     return () => { cancelled = true; clearTimeout(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasteSig]);
+  }, [tasteSig, picksAt]);
 
   // Debounced search (songs + artists + albums)
   useEffect(() => {
@@ -1100,7 +1102,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
 
   return (
     <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
-      {showOnboarding && <SautiOnboarding onComplete={seedFromArtists} onSkip={closeOnboarding} />}
+      {showOnboarding && <SautiOnboarding onComplete={finishOnboarding} onSkip={closeOnboarding} />}
       {/* Living aurora glow — tinted by the most recently played track (spec §1.2.4) */}
       <div aria-hidden className="pointer-events-none absolute -top-10 left-0 right-0 h-64 -z-0 opacity-70"
         style={{ background: `radial-gradient(60% 70% at 12% 0%, ${recentlyPlayed[0]?.dominantColor || 'rgb(var(--acc-rgb) / 0.45)'}, transparent 70%), radial-gradient(50% 60% at 85% 8%, rgb(var(--acc2-rgb) / 0.22), transparent 72%)`, filter: 'blur(8px)', transition: 'background 700ms ease' }} />
@@ -1377,16 +1379,15 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                   <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">
                     {madeForYou.map((m) => (
                       <div key={m.id} role="button" onClick={() => setViewMix(m)} tabIndex={0} data-tv-focusable
-                        className="card-lift group flex-none w-[160px] text-left rounded-2xl overflow-hidden border border-white/10 bg-zinc-900 focus:outline-none cursor-pointer">
-                        <div className="aspect-square relative bg-zinc-800">
-                          <CoverArt imageUrl={m.tracks[0]?.artworkLarge || m.tracks[0]?.artwork} dominantColor={m.tracks[0]?.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
-                          {/* Colourful tint from the mix's dominant colour (YT Music mix-card look) */}
-                          <div className="absolute inset-0" style={{ background: `linear-gradient(150deg, ${m.tracks[0]?.dominantColor || 'rgba(251,191,36,0.6)'} 0%, transparent 60%)`, opacity: 0.55, mixBlendMode: 'soft-light' }} />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/25 to-transparent" />
-                          <div className="absolute bottom-2.5 left-2.5 right-2.5">
-                            <div className="overline text-[9px] mb-0.5">Made for you</div>
-                            <p className="text-white font-display font-bold text-base leading-tight line-clamp-2">{m.title}</p>
+                        className="lux-card group flex-none w-[176px] md:w-[196px] text-left focus:outline-none cursor-pointer">
+                        {/* A Daily Mix card the way Spotify draws one: the lead artist's
+                            photo, a band of the mix's colour along the foot with its name. */}
+                        <div className="aspect-square relative bg-zinc-800 overflow-hidden rounded-[inherit]">
+                          <CoverArt imageUrl={m.cover || m.tracks[0]?.artworkLarge || m.tracks[0]?.artwork} dominantColor={m.tracks[0]?.dominantColor} rounded="" className="absolute inset-0 w-full h-full transition-transform duration-700 group-hover:scale-105" />
+                          <div className="absolute inset-x-0 bottom-0 h-[30%] flex items-center px-3" style={{ background: m.tint || m.tracks[0]?.dominantColor || 'rgb(var(--acc-rgb))' }}>
+                            <p className="text-[#fff] font-display font-extrabold text-[15px] leading-tight line-clamp-2 drop-shadow">{m.title}</p>
                           </div>
+                          <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-black/45 backdrop-blur text-[9px] font-bold uppercase tracking-wider text-[#fff]">Made for you</span>
                           <button onClick={(e) => { e.stopPropagation(); playQueue(m.tracks, 0, m.title); }} className="absolute top-2 right-2 btn-sauti w-9 h-9 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" aria-label="Play"><Play className="w-4 h-4 fill-current ml-0.5" /></button>
                         </div>
                         <div className="p-2.5"><p className="text-xs text-zinc-400 line-clamp-2 leading-snug">{m.subtitle}</p></div>
