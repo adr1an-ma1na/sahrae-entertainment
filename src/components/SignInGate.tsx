@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Mail, Lock, User, Eye, EyeOff, AlertCircle, CheckCircle2, Film, Trophy, Radio, Headphones, Loader2 } from 'lucide-react';
 import { auth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, updatePassword, endRecovery } from '../firebase';
 import { t, currentLang, setLang } from '../i18n';
+import { openLegal } from '../services/consent';
 
 /**
  * The front door. Sahrae needs an account to watch or listen, so this is the
@@ -178,6 +179,14 @@ export default function SignInGate() {
                   className="w-full mt-2 bg-amber-500 hover:bg-amber-400 text-amber-950 font-bold py-3.5 rounded-xl text-[15px] transition-colors disabled:opacity-60 flex items-center justify-center gap-2">
                   {busy && <Loader2 className="w-4 h-4 animate-spin" />}{busy ? t('Please wait') : cta}
                 </button>
+                {mode === 'signup' && (
+                  <p className="text-xs text-zinc-500 text-center leading-relaxed">
+                    By creating an account you agree to the{' '}
+                    <button type="button" onClick={() => openLegal('terms')} className="text-zinc-300 underline hover:text-amber-400">Terms of Use</button>
+                    {' '}and confirm you have read the{' '}
+                    <button type="button" onClick={() => openLegal('privacy')} className="text-zinc-300 underline hover:text-amber-400">Privacy Policy</button>.
+                  </p>
+                )}
               </form>
 
               <div className="mt-6 pt-5 border-t border-white/10 text-sm text-zinc-400 text-center">
@@ -187,6 +196,12 @@ export default function SignInGate() {
                   <>{mode === 'signup' ? t('Already have an account?') : t('Remembered it?')} <button type="button" onClick={() => setMode('signin')} className="text-amber-400 font-semibold hover:underline">{t('Sign in')}</button></>
                 )}
               </div>
+              <nav aria-label="Legal" className="mt-4 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-zinc-500">
+                <button type="button" onClick={() => openLegal('terms')} className="hover:text-zinc-300">Terms</button>
+                <button type="button" onClick={() => openLegal('privacy')} className="hover:text-zinc-300">Privacy</button>
+                <button type="button" onClick={() => openLegal('cookies')} className="hover:text-zinc-300">Cookies</button>
+                <button type="button" onClick={() => openLegal('copyright')} className="hover:text-zinc-300">Copyright</button>
+              </nav>
             </div>
           </section>
         </div>

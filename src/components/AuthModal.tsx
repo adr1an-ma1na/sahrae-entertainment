@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react';
-import { X, Mail, Lock, User, AlertCircle, UserCircle2 } from 'lucide-react';
+import { X, Mail, Lock, User, AlertCircle } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { 
   auth, 

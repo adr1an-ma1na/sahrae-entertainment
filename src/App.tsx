@@ -33,6 +33,8 @@ import FlowChannelsView from './components/FlowChannelsView';
 import GlobalAudioPlayer from './components/GlobalAudioPlayer';
 import ProfileSelection from './components/ProfileSelection';
 import SignInGate, { NewPasswordSheet } from './components/SignInGate';
+import LegalCenter from './components/LegalCenter';
+import ConsentBanner from './components/ConsentBanner';
 import SearchBox from './components/SearchBox';
 import { onRecovery } from './firebase';
 import DiscoveryView from './components/DiscoveryView';
@@ -47,7 +49,7 @@ import AddToPlaylistSheet from './components/AddToPlaylistSheet';
 import { BrowseSkeleton, GridSkeleton, ListSkeleton } from './components/PageSkeleton';
 import SpotlightBand from './components/SpotlightBand';
 import ContinueRow from './components/ContinueRow';
-import { ChevronDown, AlertCircle, RefreshCw, Heart, Search, Film, Users } from 'lucide-react';
+import { RefreshCw, Heart, Search, Film, Users } from 'lucide-react';
 import { fetchTrending, fetchDiscover, searchMedia, fetchGenres, fetchRecommendations, MediaItem, Genre } from './services/tmdb';
 import { useMyList } from './hooks/useMyList';
 import { useWatchProgress } from './hooks/useWatchProgress';
@@ -817,6 +819,9 @@ export default function App() {
       <AnimatePresence>
       </AnimatePresence>
       {renderAppLayout()}
+      {/* Above everything, the sign-in screen included: the legal pages and the privacy choice. */}
+      <LegalCenter />
+      <ConsentBanner />
     </>
   );
 }

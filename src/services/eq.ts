@@ -5,7 +5,6 @@
  * `spatial` (virtualizer) are 0..1000. Settings persist in localStorage and are
  * pushed to the native layer via the /__eq intercept (no-op on web).
  */
-import { applyWebEq } from './eqWeb';
 
 export interface EqSettings {
   on: boolean;

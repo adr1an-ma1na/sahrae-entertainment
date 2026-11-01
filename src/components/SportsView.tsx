@@ -1,15 +1,15 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Trophy, Play, X, Maximize, Loader2, Radio, Tv, Clapperboard, CalendarClock, Search, ShieldCheck, AlertCircle, ExternalLink, AlertTriangle } from 'lucide-react';
+import { Trophy, Play, X, Maximize, Loader2, Radio, Tv, Clapperboard, Search, ShieldCheck, AlertCircle, ExternalLink, AlertTriangle } from 'lucide-react';
 import type HlsT from 'hls.js';
 import { useHls } from '../services/hlsLoader';
 import { Capacitor } from '@capacitor/core';
 import { haptics } from '../services/haptics';
-import { playerSandbox, isShieldOn, setShieldOn as persistShield, shieldAppliesHere, refusesSandbox } from '../services/adShield';
+import { playerSandbox, isShieldOn } from '../services/adShield';
 import {
   DEFAULT_CONFIG, markFailure, needsCheck, nextStream, rankFeeds,
   type FailureReason, type Stream,
 } from '../services/sportsStreams';
-import { buildStreams, validateStream, metrics, canValidateDeeply } from '../services/streamValidation';
+import { buildStreams, validateStream, metrics } from '../services/streamValidation';
 import { loadSportsFeed, sourcesById, fetchStreamsFor, type Feed, type FeedEvent } from '../services/sportsFeed';
 import { hostOf } from '../services/sportsStreams';
 import Coachmark from './Coachmark';

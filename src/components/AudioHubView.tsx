@@ -29,6 +29,10 @@ const COUNTRIES = [
  * blocked as mixed content on the hosted PWA) and ranked by listener votes; of
  * 75 candidates tested, 5 were dead and were dropped rather than shipped, and
  * duplicates that appeared under several genre queries were removed.
+ *
+ * Rechecked in a browser on 2026-11-01: NRG Radio, Dance Wave and SomaFM's
+ * direct streams no longer played (SomaFM refuses them from Kenya; its Groove
+ * Salad HLS stream plays), and were replaced with stations that did.
  */
 export const STATIONS = [
   // ── Kenya ──
@@ -40,7 +44,7 @@ export const STATIONS = [
   { name: 'Nation FM', country: 'Kenya', category: 'Kenyan', frequency: '96.3', url: 'https://stream.zeno.fm/vy0gmg7pb2zuv' },
   { name: 'Radio Maisha', country: 'Kenya', category: 'Kenyan', frequency: '94.0', url: 'https://radiomaisha-atunwadigital.streamguys1.com/radiomaisha' },
   { name: 'Hot 96', country: 'Kenya', category: 'Kenyan', frequency: '96.3', url: 'https://hot96-atunwadigital.streamguys1.com/hot96' },
-  { name: 'NRG Radio', country: 'Kenya', category: 'Kenyan', frequency: '89.5', url: 'https://streamingv2.shoutcast.com/nrg-radio-ke' },
+  { name: 'Ghetto Radio', country: 'Kenya', category: 'Kenyan', frequency: '89.5', url: 'https://stream.zeno.fm/kvudezx1h2zuv' },
   { name: 'Kameme FM', country: 'Kenya', category: 'Kenyan', frequency: '101.1', url: 'https://kamemefm-atunwadigital.streamguys1.com/kamemefm' },
   { name: 'East FM', country: 'Kenya', category: 'Asian', frequency: '106.3', url: 'https://eastfm-atunwadigital.streamguys1.com/eastfm' },
 
@@ -66,15 +70,15 @@ export const STATIONS = [
   { name: 'Radio Swiss Classic', country: 'Switzerland', category: 'Classical', frequency: 'Digital', url: 'https://stream.srg-ssr.ch/m/rsc_de/mp3_128' },
   { name: 'Venice Classic Radio', country: 'Italy', category: 'Classical', frequency: 'Digital', url: 'https://uk2.streamingpulse.com/ssl/vcr1' },
   { name: 'Radio Swiss Jazz', country: 'Switzerland', category: 'Jazz', frequency: 'Digital', url: 'https://stream.srg-ssr.ch/m/rsj/mp3_128' },
-  { name: 'SomaFM Sonic Universe', country: 'USA', category: 'Jazz', frequency: 'Digital', url: 'https://ice1.somafm.com/sonicuniverse-128-mp3' },
+  { name: 'Adroit Jazz Underground', country: 'USA', category: 'Jazz', frequency: 'Digital', url: 'https://icecast.walmradio.com:8443/jazz' },
   { name: 'KEXP', country: 'USA', category: 'Indie', frequency: '90.3', url: 'https://kexp-mp3-128.streamguys1.com/kexp128.mp3' },
   { name: 'NRJ', country: 'France', category: 'Pop', frequency: 'Digital', url: 'https://cdn.nrjaudio.fm/audio1/fr/30001/mp3_128.mp3' },
   { name: 'Radio Paradise', country: 'USA', category: 'Eclectic', frequency: 'Digital', url: 'https://stream.radioparadise.com/aac-128' },
-  { name: 'SomaFM Groove Salad', country: 'USA', category: 'Chillout', frequency: 'Digital', url: 'https://ice1.somafm.com/groovesalad-128-mp3' },
-  { name: 'SomaFM Secret Agent', country: 'USA', category: 'Lounge', frequency: 'Digital', url: 'https://ice1.somafm.com/secretagent-128-mp3' },
+  { name: 'SomaFM Groove Salad', country: 'USA', category: 'Chillout', frequency: 'Digital', url: 'https://hls.somafm.com/hls/groovesalad/320k/program.m3u8' },
+  { name: 'Café del Mar', country: 'Spain', category: 'Lounge', frequency: 'Digital', url: 'https://streams.radio.co/se1a320b47/listen' },
   { name: 'REYFM Lofi', country: 'Germany', category: 'Lofi', frequency: 'Digital', url: 'https://listen.reyfm.de/lofi_320kbps.mp3' },
   { name: 'Amsterdam Trance', country: 'Netherlands', category: 'Dance', frequency: 'Digital', url: 'https://strm112.1.fm/atr_mobile_mp3' },
-  { name: 'Dance Wave', country: 'Netherlands', category: 'Dance', frequency: 'Digital', url: 'https://dancewave.online/dance.mp3' },
+  { name: 'Intense Radio', country: 'Netherlands', category: 'Dance', frequency: 'Digital', url: 'https://secure.live-streams.nl/main' },
   { name: 'Ibiza Global Radio', country: 'Spain', category: 'Electronic', frequency: 'Digital', url: 'https://listenssl.ibizaglobalradio.com:8024/igr' },
   { name: 'Arrow Classic Rock', country: 'Netherlands', category: 'Rock', frequency: 'Digital', url: 'https://stream.player.arrow.nl/arrowcr' },
   { name: '0N Classic Rock', country: 'Germany', category: 'Rock', frequency: 'Digital', url: 'https://0n-classicrock.radionetz.de/0n-classicrock.mp3' },

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Search, User, Clapperboard, Film, Tv, ArrowLeft, Sparkles, TrendingUp, X, Calendar, MapPin, Award, Loader2, Play } from 'lucide-react';
-import { fetchPopularPeople, searchPeople, fetchPersonDetails, fetchDiscover, fetchMediaDetails, getImageUrl, MediaItem } from '../services/tmdb';
+import { Search, User, Clapperboard, ArrowLeft, Sparkles, TrendingUp, X, Calendar, MapPin, Award, Loader2, Play } from 'lucide-react';
+import { fetchPopularPeople, searchPeople, fetchPersonDetails, fetchDiscover, fetchMediaDetails, getImageUrl } from '../services/tmdb';
 import { haptics } from '../services/haptics';
 
 interface TalentExplorerProps {

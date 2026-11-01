@@ -1,4 +1,4 @@
-import { EyeOff, ChevronDown, X, ExternalLink, AlertCircle, Info, Star, Calendar, Clock, Play, RefreshCw, Plus, Check, Maximize, Minimize, ArrowLeft, SkipBack, SkipForward, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle, Gauge, Users } from 'lucide-react';
+import { ChevronDown, X, ExternalLink, AlertCircle, Play, RefreshCw, Plus, Check, Maximize, Minimize, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle, Gauge } from 'lucide-react';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { fetchMediaDetails, MediaDetails, getImageUrl, fetchSimilar, MediaItem, SeasonDetails, fetchSeasonDetails } from '../services/tmdb';
@@ -13,15 +13,16 @@ import { playerSandbox, isShieldOn, setShieldOn as persistShield, shieldAppliesH
 import { suppressPopups } from '../services/popupGuard';
 import { lockLandscape, unlockOrientation } from '../services/fullscreen';
 import CleanPlayer from './CleanPlayer';
+import { useRemoved, isRemoved } from '../services/removed';
+import { openLegal } from '../services/consent';
 import { canPlayClean, resolveFilmStream, relayUrl, cleanFirst, isCleanOn, setCleanOn } from '../services/cleanStream';
 import { isTelevision } from '../tv/spatialNavigation';
 import { NO_START_LIMIT_MS, COUNTDOWN_S, isPlaybackEvidence, markWorking, markDown, startServer } from '../services/serverHealth';
 import { reportScreen } from '../services/remote';
 import { t } from '../i18n';
 import { reportRoomNow } from '../services/room';
-import { OPEN_PARTY } from './WatchParty';
 import { useServerPool, fill as fillTemplate, label as poolLabel, type PoolServer } from '../services/serverPool';
-import { useDataSaver, usePicture, announcePlayerSource, canCapVideo, canMeasure, estimateText, formatBytes, readReceivedBytes } from '../services/dataSaver';
+import { useDataSaver, usePicture, announcePlayerSource, canCapVideo, estimateText } from '../services/dataSaver';
 import { NO_CROWD, crowdChoice, fetchProof, fetchSeasonPlayable, nextServerRanked, reportPlay, titleKey, warmUp, type CrowdChoice, type ProofRow } from '../services/playProof';
 
 /** How soon the crowd's answer must arrive to change the opening server; later it would interrupt a loading player. */
@@ -65,7 +66,6 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const [seasonDetails, setSeasonDetails] = useState<SeasonDetails | null>(null);
   const [similar, setSimilar] = useState<MediaItem[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [infoTab, setInfoTab] = useState<'details' | 'similar' | 'episodes'>('details');
   const [playingTrailer, setPlayingTrailer] = useState<string | null>(null);
   const [selectedServer, setSelectedServer] = useState(0);
   const [selectedSeason, setSelectedSeason] = useState(initialSeason || 1);
@@ -80,9 +80,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const upNextTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // An episode's end is acted on once, even though players repeat the news.
   const endHandledRef = useRef(false);
-  const [showControls, setShowControls] = useState(true);
   const [rating, setRating] = useState<'up' | 'down' | null>(null);
-  const [offlineBlobUrl, setOfflineBlobUrl] = useState<string | null>(null);
   const [showDownload, setShowDownload] = useState(false);
   // Ad Shield: sandboxes the embed on web (the only real popup block a page
   // has). Re-keys the iframe so toggling it takes effect immediately.
@@ -117,7 +115,6 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     return () => { alive = false; };
   }, [details?.poster_path, details?.backdrop_path]);
 
-  const [showXRay, setShowXRay] = useState(false);
   // Loading indicator + slow-load recovery for the video embed.
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [loadPct, setLoadPct] = useState(0);
@@ -129,7 +126,6 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const [failedServers, setFailedServers] = useState<string[]>([]);
   const [showServerDeadNotice, setShowServerDeadNotice] = useState(false);
 
-  const hideControlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const loadTimerRef = useRef<NodeJS.Timeout | null>(null);
   const slowTimerRef = useRef<NodeJS.Timeout | null>(null);
   const autoRetriedRef = useRef(false);
@@ -150,7 +146,6 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   // Films play at Best (the owner removed the choice, 2026-10-26); Data Saver still caps them.
   const [picture] = usePicture();
   // Data this viewing has used, measured by the Android app; null where it cannot be.
-  const [usedBytes, setUsedBytes] = useState<number | null>(null);
   // A server the viewer picked by hand is theirs; the crowd never overrides it.
   const manualPickRef = useRef(false);
   const pickServer = (idx: number) => { manualPickRef.current = true; setSelectedServer(idx); };
@@ -288,6 +283,9 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   // Tell the Android shell when the movie/series player is up, so it knows a
   // provider's full-screen request is to be taken over (trailers, Live TV and
   // Sports keep the WebView's own full screen).
+  // Removed at a rights holder's request (Copyright & takedown): the page shows, the title does not play.
+  const removedList = useRemoved();
+  const removedNow = !!currentMediaId && !!currentMediaType && isRemoved(removedList, currentMediaType, Number(currentMediaId));
   const playerUp = isOpen && isPlaying && !playingTrailer;
   // While the player is open, a TV does not paint the page behind it (index.css, html.player-open).
   useEffect(() => {
@@ -433,27 +431,6 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const barVisible = !barHidden && (!fsActive || peek || paused === true || showAudioMenu);
   const showBar = () => { setBarHidden(false); peekBar(5000); };
 
-  const reportCurrentMovieServerDead = () => {
-    haptics.tap();
-    const currentServerId = SERVERS[selectedServer]?.id;
-    if (!currentServerId) return;
-    markDown(currentServerId);
-    // A viewer saying so is the surest failure signal there is.
-    if (currentMediaType && currentMediaId) reportPlay(titleKey(currentMediaType, currentMediaId, selectedSeason, selectedEpisode), currentServerId, false);
-
-    const failed = new Set([...failedServers, currentServerId]);
-    setFailedServers([...failed]);
-
-    // Switch to the server most likely to have this title.
-    const ids = SERVERS.map((sv) => sv.id);
-    const nextIdx = nextServerRanked(ids, selectedServer, failed, crowdRef.current.choice, crowdRef.current.rows)
-      ?? (selectedServer + 1) % SERVERS.length;
-    manualPickRef.current = false;
-    setSelectedServer(nextIdx);
-    setShowServerDeadNotice(true);
-    setTimeout(() => setShowServerDeadNotice(false), 4000);
-  };
-
   // When a movie/show starts playing, silence music & radio (claim the speaker).
   useEffect(() => {
     if (isOpen && isPlaying) {
@@ -544,7 +521,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const cleanSrc = cleanServer && currentMediaType && currentMediaId
     ? cleanServer.getUrl(currentMediaType, currentMediaId, selectedSeason, selectedEpisode) : '';
   useEffect(() => {
-    if (!nativeShell || !canPlayClean() || !cleanOn || !isOpen || !isPlaying || playingTrailer || !cleanSrc) { setClean({ state: 'off' }); return; }
+    if (!nativeShell || !canPlayClean() || !cleanOn || !isOpen || !isPlaying || playingTrailer || !cleanSrc || removedNow) { setClean({ state: 'off' }); return; }
     let live = true;
     setClean({ state: 'resolving' });
     resolveFilmStream(cleanSrc).then((r) => {
@@ -554,7 +531,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
       setClean(r.m3u8 ? { state: 'ready', url: relayUrl(r.m3u8, r.referer) } : { state: 'failed', why: r.why });
     });
     return () => { live = false; };
-  }, [cleanSrc, cleanOn, isOpen, isPlaying, playingTrailer, refreshKey]);
+  }, [cleanSrc, cleanOn, isOpen, isPlaying, playingTrailer, refreshKey, removedNow]);
 
   // Move on from a server that never started, so the viewer does not have to
   // diagnose it. The failed one is skipped for this title and remembered, and
@@ -775,24 +752,6 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, currentMediaId, currentMediaType, selectedSeason, selectedEpisode]);
 
-  // What this viewing has cost so far, from the Android app's own byte count.
-  // Starts at zero for each title and episode.
-  useEffect(() => {
-    setUsedBytes(null);
-    if (!isOpen || !playerUp || !canMeasure()) return;
-    let base: number | null = null;
-    let live = true;
-    const tick = async () => {
-      const rx = await readReceivedBytes();
-      if (!live || rx === null) return;
-      if (base === null) base = rx;
-      setUsedBytes(Math.max(0, rx - base));
-    };
-    void tick();
-    const t = setInterval(tick, 10000);
-    return () => { live = false; clearInterval(t); };
-  }, [isOpen, playerUp, currentMediaId, selectedSeason, selectedEpisode]);
-
   // Tell a paired phone what is on screen, and let it switch the server.
   useEffect(() => {
     if (!isOpen || !details || !currentMediaId || !currentMediaType) { reportScreen({ view: 'browse' }); return; }
@@ -992,16 +951,6 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   // Reset the one-shot auto-retry when the content or server actually changes.
   useEffect(() => { autoRetriedRef.current = false; }, [isPlaying, selectedServer, selectedSeason, selectedEpisode]);
 
-  const handleMouseMove = () => {
-    setShowControls(true);
-    if (hideControlsTimeoutRef.current) {
-      clearTimeout(hideControlsTimeoutRef.current);
-    }
-    hideControlsTimeoutRef.current = setTimeout(() => {
-      setShowControls(false);
-    }, 3000);
-  };
-
   // Curated audio-enhancement presets for the player (map to the global native EQ).
   const AUDIO_PRESETS: { key: string; label: string }[] = [
     { key: 'Off', label: 'Off' },
@@ -1110,7 +1059,13 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
             // invisible yet still took the taps meant for the player.
             <div ref={playingTrailer ? undefined : playerContainerRef} className={`player-shell relative flex flex-col bg-black${maxed && !playingTrailer ? ' is-max' : ''}`}>
               <div className="player-frame relative w-full aspect-video bg-black">
-                {playingTrailer ? (
+                {removedNow && !playingTrailer ? (
+                  <div role="status" className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
+                    <p className="text-white font-bold text-lg">Not available on Sahrae</p>
+                    <p className="text-zinc-400 text-sm max-w-md">This title was removed at the request of its rights holder.</p>
+                    <button onClick={() => openLegal('copyright')} data-tv-focusable className="text-amber-400 text-sm font-semibold underline">About removals</button>
+                  </div>
+                ) : playingTrailer ? (
                   <iframe
                     src={`https://www.youtube-nocookie.com/embed/${playingTrailer}?autoplay=1&rel=0&showinfo=0&modestbranding=1&iv_load_policy=3`}
                     className="w-full h-full border-none bg-black"

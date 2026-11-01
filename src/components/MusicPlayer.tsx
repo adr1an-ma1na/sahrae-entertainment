@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, Fragment, type CSSProperties } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import { Play, Pause, SkipForward, SkipBack, ChevronDown, Heart, Shuffle, Repeat, Repeat1, Music2, Plus, X, ListMusic, Mic2, SlidersHorizontal, RotateCcw, RotateCw, Gauge, Moon, Radio, ArrowUp, ArrowDown, Disc3, Clapperboard } from 'lucide-react';
 import { useMusic } from '../hooks/useMusic';
 import { Track, ytmusic } from '../services/ytmusic';

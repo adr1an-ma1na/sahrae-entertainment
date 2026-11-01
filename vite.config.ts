@@ -22,6 +22,8 @@ export default defineConfig(() => {
         name: 'publish-server-pool',
         generateBundle() {
           this.emitFile({ type: 'asset', fileName: 'servers.json', source: fs.readFileSync(path.resolve(__dirname, 'src/data/servers.json'), 'utf8') });
+          // Titles removed at a rights holder's request, the same way (services/removed.ts).
+          this.emitFile({ type: 'asset', fileName: 'removed.json', source: fs.readFileSync(path.resolve(__dirname, 'src/data/removed.json'), 'utf8') });
         },
       },
       react(), 

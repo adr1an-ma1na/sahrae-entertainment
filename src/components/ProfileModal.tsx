@@ -1,5 +1,7 @@
 import { useState, useEffect, FormEvent } from 'react';
-import { X, User, LogOut, Key, Camera, Check, Database, Trash2, ShieldAlert, Languages, Sun, Moon, Palette, Tv } from 'lucide-react';
+import { X, User, LogOut, Key, Check, Database, Trash2, ShieldAlert, Languages, Sun, Moon, Palette, Tv, ShieldCheck, Download, Scale } from 'lucide-react';
+import { loadConsent, saveConsent, openLegal, CONSENT_CHANGE } from '../services/consent';
+import { exportMyData, deleteAccount } from '../services/accountData';
 import { isTvBuild, tvZoom, setTvZoom, TV_ZOOMS, TV_ZOOM_EVENT } from '../tv/tvViewport';
 import { currentLang, setLang } from '../i18n';
 import { useTheme } from '../hooks/useTheme';
@@ -38,7 +40,15 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
     window.addEventListener(TV_ZOOM_EVENT, sync);
     return () => window.removeEventListener(TV_ZOOM_EVENT, sync);
   }, []);
-  const [tab, setTab] = useState<'profile' | 'security' | 'cache'>('profile');
+  const [tab, setTab] = useState<'profile' | 'security' | 'cache' | 'privacy'>('profile');
+  // Privacy & data: the optional server reports, a copy of my data, deleting the account.
+  const [reports, setReports] = useState(() => !!loadConsent()?.serverReports);
+  const [confirmDelete, setConfirmDelete] = useState('');
+  useEffect(() => {
+    const sync = () => setReports(!!loadConsent()?.serverReports);
+    window.addEventListener(CONSENT_CHANGE, sync);
+    return () => window.removeEventListener(CONSENT_CHANGE, sync);
+  }, []);
   const [name, setName] = useState(activeProfile?.name || user?.displayName || '');
   const [selectedAvatar, setSelectedAvatar] = useState(activeProfile?.avatar || user?.photoURL || AVATARS[0]);
   const [newPassword, setNewPassword] = useState('');
@@ -141,6 +151,12 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
           >
             <Database className="w-5 h-5" /> App Cache
           </button>
+          <button
+            onClick={() => { setTab('privacy'); setMessage(''); setError(''); setConfirmDelete(''); }}
+            className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${tab === 'privacy' ? 'bg-amber-500/10 text-amber-500' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}
+          >
+            <ShieldCheck className="w-5 h-5" /> Privacy &amp; data
+          </button>
           {/* Also in the top bar on wider screens; on a phone they live here. */}
           <button
             onClick={() => setLang(currentLang() === 'sw' ? 'en' : 'sw')}
@@ -239,6 +255,58 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
                 {loading ? 'Saving...' : 'Save Changes'}
               </button>
             </form>
+          ) : tab === 'privacy' ? (
+            <div>
+              <h3 className="text-2xl font-bold text-white mb-2">Privacy &amp; data</h3>
+              <p className="text-sm text-zinc-400 mb-6">Sahrae uses no advertising or analytics cookies of its own and does not sell your information.</p>
+
+              <div className="rounded-xl bg-zinc-950 border border-white/10 p-4 mb-4">
+                <div className="flex items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-white">Share anonymous server reports</p>
+                    <p className="text-xs text-zinc-400 mt-1 leading-relaxed">Which server played a film or episode, without your name or account, so other viewers start on one that works.</p>
+                  </div>
+                  <button type="button" role="switch" aria-checked={reports} data-tv-focusable
+                    onClick={() => { const next = !reports; setReports(next); saveConsent(next); setMessage(next ? 'Server reports are on.' : 'Server reports are off.'); setError(''); }}
+                    className={`relative w-12 h-7 shrink-0 rounded-full transition-colors ${reports ? 'bg-amber-500' : 'bg-zinc-700'}`}>
+                    <span className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all ${reports ? 'left-6' : 'left-1'}`} />
+                  </button>
+                </div>
+              </div>
+
+              <button type="button" data-tv-focusable disabled={loading}
+                onClick={async () => { setLoading(true); setError(''); try { setMessage(await exportMyData()); } catch (e: any) { setError(e?.message || 'The copy could not be saved.'); } finally { setLoading(false); } }}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-zinc-950 border border-white/10 text-left text-white hover:bg-white/5 mb-3 disabled:opacity-60">
+                <Download className="w-5 h-5 text-amber-400" />
+                <span className="flex-1"><span className="block font-semibold">Download my data</span><span className="block text-xs text-zinc-400">A copy of your account details, lists, history and settings (JSON).</span></span>
+              </button>
+
+              <button type="button" data-tv-focusable onClick={() => openLegal('privacy')}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-zinc-950 border border-white/10 text-left text-white hover:bg-white/5 mb-6">
+                <Scale className="w-5 h-5 text-amber-400" />
+                <span className="flex-1"><span className="block font-semibold">Terms, Privacy, Cookies &amp; Copyright</span><span className="block text-xs text-zinc-400">Read Sahrae's legal pages.</span></span>
+              </button>
+
+              <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4">
+                <p className="font-semibold text-red-400">Delete my account</p>
+                <p className="text-xs text-zinc-400 mt-1 leading-relaxed">Removes your account, your lists, likes, history and settings, on every device. This cannot be undone. Type DELETE to confirm.</p>
+                <div className="flex gap-2 mt-3">
+                  <input value={confirmDelete} onChange={(e) => setConfirmDelete(e.target.value)} placeholder="DELETE" aria-label="Type DELETE to confirm"
+                    className="flex-1 min-w-0 bg-zinc-950 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500/60" />
+                  <button type="button" data-tv-focusable disabled={confirmDelete.trim() !== 'DELETE' || loading}
+                    onClick={async () => {
+                      setLoading(true); setError(''); setMessage('');
+                      const r = await deleteAccount().catch(() => ({ ok: false as const, partial: false, message: 'Something went wrong. Please try again.' }));
+                      setLoading(false);
+                      if (r.ok) { onClose(); return; }
+                      setError('message' in r ? r.message : '');
+                    }}
+                    className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-bold disabled:opacity-40">
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
           ) : tab === 'security' ? (
             <form onSubmit={handleUpdatePassword}>
               <h3 className="text-2xl font-bold text-white mb-6">Security</h3>

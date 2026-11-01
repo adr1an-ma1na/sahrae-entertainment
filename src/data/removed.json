@@ -1,0 +1,7 @@
+{
+  "about": "Titles removed from Sahrae at a rights holder's request (Copyright & takedown, src/legal/legalText.ts). TMDB ids: movie for films, tv for series. Published beside the website as removed.json, so installed apps stop playing a title without an update. Add the id, the date and the notice in a note.",
+  "updated": "2026-11-01",
+  "movie": [],
+  "tv": [],
+  "notes": []
+}

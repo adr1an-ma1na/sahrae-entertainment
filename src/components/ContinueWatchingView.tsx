@@ -1,5 +1,5 @@
 import { Play, Trash2 } from 'lucide-react';
-import { MediaItem, getImageUrl } from '../services/tmdb';
+import { getImageUrl } from '../services/tmdb';
 import { useWatchProgress } from '../hooks/useWatchProgress';
 import EmptyState from './EmptyState';
 import { timeLeft } from '../services/resume';

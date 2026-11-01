@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Download, Play, Pause, Trash2, Music2, Film, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Download, Play, Pause, Trash2, Music2, Film, CheckCircle2 } from 'lucide-react';
 import { useDownloads, downloads } from '../services/downloads';
 import { useMusic } from '../hooks/useMusic';
 import { CoverArt } from './ui/CoverArt';
@@ -45,7 +45,7 @@ export default function DownloadsView({ onPlay }: DownloadsViewProps) {
       </div>
 
       {/* Tabs */}
-      <LuxSeg className="mb-7" active={activeTab} onChange={setActiveTab} items={[
+      <LuxSeg className="lux-seg-fill mb-7" active={activeTab} onChange={setActiveTab} items={[
         { id: 'videos', label: `Movies & Series (${downloadedVideos.length})`, icon: Film },
         { id: 'audio', label: `Music & Podcasts (${tracks.length})`, icon: Music2 },
       ]} />

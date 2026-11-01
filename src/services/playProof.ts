@@ -1,4 +1,5 @@
 import { supabase } from '../supabase';
+import { mayShareReports } from './consent';
 
 /**
  * Which server played this exact film or episode for other viewers.
@@ -62,7 +63,8 @@ const sent = new Set<string>();
 /** Tell the next viewer. Fire and forget, once per title, server and outcome per session. */
 export function reportPlay(key: string, server: string, ok: boolean): void {
   const k = `${key}|${server}|${ok}`;
-  if (sent.has(k) || !supabase) return;
+  // Optional, anonymous, and only with the viewer's yes (consent.ts, Cookies & storage).
+  if (sent.has(k) || !supabase || !mayShareReports()) return;
   sent.add(k);
   cache.delete(key);
   void supabase.rpc('report_play', { p_title: key, p_server: server, p_ok: ok })

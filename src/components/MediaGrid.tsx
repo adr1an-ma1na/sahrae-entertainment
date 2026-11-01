@@ -1,6 +1,5 @@
 import EmptyState from './EmptyState';
 import { SearchX } from 'lucide-react';
-import { Fragment } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { MediaItem, Genre } from '../services/tmdb';
 import PosterCard from './PosterCard';

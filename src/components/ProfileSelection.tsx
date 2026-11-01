@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react';
-import { Plus, Edit2, Check } from 'lucide-react';
+import { Plus, Edit2 } from 'lucide-react';
 import { useAuth, Profile } from '../hooks/useAuth';
 import { Suspense, lazy } from 'react';
 import { isLiteDevice } from '../services/deviceTier';

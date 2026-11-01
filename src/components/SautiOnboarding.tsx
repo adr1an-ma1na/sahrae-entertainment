@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Loader2, Search, Sparkles, X, ChevronLeft } from 'lucide-react';
 import { deezer } from '../services/deezer';
 import { artistNamed } from '../services/sautiMixes';
-import { GENRES, GENRE_GROUPS, searchGenres } from '../services/genres';
+import { GENRE_GROUPS, searchGenres } from '../services/genres';
 import type { CArtist } from '../services/curate';
 
 /**
