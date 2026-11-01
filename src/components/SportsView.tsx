@@ -15,7 +15,7 @@ import { hostOf } from '../services/sportsStreams';
 import Coachmark from './Coachmark';
 import { suppressPopups } from '../services/popupGuard';
 import { lockLandscape, unlockOrientation } from '../services/fullscreen';
-import { tapCenterOf, canTap } from '../services/nativeTap';
+import { tapCenterOf, canTap, canFrameKick, tellFrame, isFramePlaying } from '../services/nativeTap';
 import TvPointer from './TvPointer';
 import { isTelevision } from '../tv/spatialNavigation';
 import { readAudioFormat, bestAudioTrack, upscaleDecision, bestHeight, type AudioFormat } from '../services/streamQuality.ts';
@@ -1226,12 +1226,29 @@ export default function SportsView() {
   useEffect(() => {
     setSportPointer(false);
     if (!activeUrl || !isEmbedUrl || !canTap()) return;
-    let streaming = false;
-    const onStream = () => { streaming = true; };
+    const frame = () => sportFrameRef.current?.querySelector('iframe');
+    const pointerOut = () => document.documentElement.classList.contains('tv-pointer');
+    let playing = false;
+    // The player helper inside the feed's page (nativeTap.canFrameKick) starts it
+    // itself and says when the picture really moves; Sahrae nudges it too. Only
+    // if nothing moves after 15 s does a tap try the play button, once.
+    if (canFrameKick()) {
+      const onMsg = (e: MessageEvent) => { if (isFramePlaying(e, frame())) playing = true; };
+      window.addEventListener('message', onMsg);
+      const timers = [
+        ...[1500, 5000, 9000].map((ms) => setTimeout(() => { if (!playing) tellFrame(frame(), 'play'); }, ms)),
+        setTimeout(() => { const el = sportFrameRef.current; if (!playing && el && !pointerOut()) tapCenterOf(el, isTelevision() ? el : null); }, 15000),
+      ];
+      return () => { window.removeEventListener('message', onMsg); timers.forEach(clearTimeout); };
+    }
+    // An older WebView, no helper: taps, while the app has seen no video.
+    // ('sahrae:embed-media' also fires for a player that only preloads, so
+    // this can miss; the helper above is the dependable path.)
+    const onStream = () => { playing = true; };
     window.addEventListener('sahrae:embed-media', onStream);
     const timers = [3500, 8000, 13000].map((ms) => setTimeout(() => {
       const el = sportFrameRef.current;
-      if (streaming || !el || document.documentElement.classList.contains('tv-pointer')) return;
+      if (playing || !el || pointerOut()) return;
       tapCenterOf(el, isTelevision() ? el : null);
     }, ms));
     return () => { window.removeEventListener('sahrae:embed-media', onStream); timers.forEach(clearTimeout); };
@@ -1292,7 +1309,8 @@ export default function SportsView() {
                 <div ref={sportFrameRef} className="absolute inset-0 w-full h-full"
                   {...(canTap() ? {
                     tabIndex: 0, 'data-tv-focusable': true, 'data-tv-autofocus': true, 'aria-label': 'Play the match',
-                    onClick: (e: React.MouseEvent<HTMLDivElement>) => { if (e.detail === 0) tapCenterOf(e.currentTarget, e.currentTarget); },
+                    // OK: play or pause through the player helper; a tap where there is none.
+                    onClick: (e: React.MouseEvent<HTMLDivElement>) => { if (e.detail !== 0) return; if (!tellFrame(e.currentTarget.querySelector('iframe'), 'toggle')) tapCenterOf(e.currentTarget, e.currentTarget); },
                   } : {})}>
                   <iframe
                     // Re-mount when the shield flips: sandbox only applies at

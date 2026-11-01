@@ -12,16 +12,32 @@ import { playSonicLogo } from '../services/sonicLogo';
  */
 const WORD = 'SAHRAE';
 
-export default function SplashIntro() {
+/**
+ * `onShown` is called once the dawn is really on screen. The app builds the
+ * home page under it only then: on a TV, building it first held the screen
+ * for longer than the whole intro, which was over before anything was drawn
+ * (owner, TCL, 2026-11-01). The clock starts from that first frame too.
+ */
+export default function SplashIntro({ onShown }: { onShown?: () => void } = {}) {
   const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const [phase, setPhase] = useState<'in' | 'out' | 'done'>('in');
 
   useEffect(() => {
-    // The Sahrae sound (services/sonicLogo.ts) opens with the dawn.
-    void playSonicLogo();
-    const t1 = setTimeout(() => setPhase('out'), reduce ? 500 : 2150);
-    const t2 = setTimeout(() => setPhase('done'), reduce ? 850 : 2900);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+    let t1 = 0, t2 = 0, started = false;
+    const start = () => {
+      if (started) return;
+      started = true;
+      onShown?.();
+      // The Sahrae sound (services/sonicLogo.ts) opens with the dawn.
+      void playSonicLogo();
+      t1 = window.setTimeout(() => setPhase('out'), reduce ? 500 : 2150);
+      t2 = window.setTimeout(() => setPhase('done'), reduce ? 850 : 2900);
+    };
+    // Two frames: the first is drawn by the time the second is asked for.
+    const raf = requestAnimationFrame(() => requestAnimationFrame(start));
+    const safety = window.setTimeout(start, 400); // a page in the background draws no frames
+    return () => { cancelAnimationFrame(raf); clearTimeout(safety); clearTimeout(t1); clearTimeout(t2); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reduce]);
 
   if (phase === 'done') return null;

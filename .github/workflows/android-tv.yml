@@ -125,6 +125,10 @@ jobs:
           # already wires in proguard-rules.pro (supplied by our overlay). Flip it on
           # so the release APK is shrunk + obfuscated. Debug builds are unaffected.
           sed -i 's/minifyEnabled false/minifyEnabled true/' android/app/build.gradle
+          # androidx.webkit ships inside the app through Capacitor, but only at run time;
+          # declare it so MainActivity can plant the player helper (installFrameHelper).
+          grep -q 'androidx.webkit:webkit' android/app/build.gradle || sed -i '0,/^dependencies {/s//dependencies {\n    implementation "androidx.webkit:webkit:1.9.0"/' android/app/build.gradle
+          grep -n 'androidx.webkit' android/app/build.gradle
           echo "--- release buildType ---"
           grep -n -A4 'release {' android/app/build.gradle || true
 

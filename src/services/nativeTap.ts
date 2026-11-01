@@ -31,3 +31,27 @@ export function tapCenterOf(el: Element, refocus?: HTMLElement | null): boolean 
   }
   return true;
 }
+
+/**
+ * The player helper (MainActivity.installFrameHelper): planted at document
+ * start in every frame Sahrae embeds, it starts the player itself, reports
+ * {sahrae:'frame-playing'} once the picture really moves, and takes
+ * {sahrae:'play'} and {sahrae:'toggle'} from Sahrae. Better than a tap: it
+ * knows a waiting player from a playing one. Android apps whose WebView has
+ * document-start scripts (caps.frameKick); elsewhere, the tap above.
+ */
+export function canFrameKick(): boolean {
+  try { return !!(window as unknown as { __sahraeCaps?: { frameKick?: boolean } }).__sahraeCaps?.frameKick; } catch { return false; }
+}
+
+/** Ask the player in `frame` to play, or to play/pause (the remote's OK). */
+export function tellFrame(frame: HTMLIFrameElement | null | undefined, what: 'play' | 'toggle'): boolean {
+  if (!frame?.contentWindow || !canFrameKick()) return false;
+  try { frame.contentWindow.postMessage({ sahrae: what }, '*'); return true; } catch { return false; }
+}
+
+/** True when `e` is the helper in `frame` saying its picture is moving. */
+export function isFramePlaying(e: MessageEvent, frame: HTMLIFrameElement | null | undefined): boolean {
+  const d = e.data as { sahrae?: unknown } | null;
+  return !!frame && e.source === frame.contentWindow && !!d && typeof d === 'object' && d.sahrae === 'frame-playing';
+}

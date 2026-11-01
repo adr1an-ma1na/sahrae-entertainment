@@ -88,6 +88,8 @@ export default function App() {
     return startSync(() => window.location.reload());
   }, [user, authLoading]);
   const [activeTab, setActiveTab] = useState('home');
+  // The page is built once the intro is on screen (SplashIntro onShown): on a TV, building it first held the screen past the intro.
+  const [introShown, setIntroShown] = useState(false);
   useEffect(() => { crumb(`tab:${activeTab}`); }, [activeTab]);
   const [searchQuery, setSearchQuery] = useState('');
   // Desktop/TV sidebar can be hidden to reclaim the full width; the CSS class
@@ -756,7 +758,7 @@ export default function App() {
 
     return (
       <div className="aurora-bg isolate min-h-screen text-zinc-50 font-sans selection:bg-amber-500/30 transition-colors duration-300">
-        <SplashIntro />
+        <SplashIntro onShown={() => setIntroShown(true)} />
         <RemotePanel />
         <WatchParty />
         {!appOnboarded && <Onboarding onDone={finishOnboarding} />}
@@ -789,7 +791,7 @@ export default function App() {
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
               >
-                {renderContent()}
+                {introShown ? renderContent() : null}
               </motion.div>
             </AnimatePresence>
           </main>

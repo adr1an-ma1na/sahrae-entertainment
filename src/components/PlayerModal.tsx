@@ -14,7 +14,7 @@ import { suppressPopups } from '../services/popupGuard';
 import { lockLandscape, unlockOrientation } from '../services/fullscreen';
 import CleanPlayer from './CleanPlayer';
 import { useRemoved, isRemoved } from '../services/removed';
-import { tapCenterOf, canTap } from '../services/nativeTap';
+import { tapCenterOf, canTap, tellFrame } from '../services/nativeTap';
 import TvPointer from './TvPointer';
 import { openLegal } from '../services/consent';
 import { canPlayClean, resolveFilmStream, relayUrl, cleanFirst, isCleanOn, setCleanOn } from '../services/cleanStream';
@@ -1098,7 +1098,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                     <div ref={serverFrameRef} className="absolute inset-0"
                       {...(canTap() ? {
                         tabIndex: 0, 'data-tv-focusable': true, 'aria-label': 'Play',
-                        onClick: (e: React.MouseEvent<HTMLDivElement>) => { if (e.detail === 0) tapCenterOf(e.currentTarget, e.currentTarget); },
+                        onClick: (e: React.MouseEvent<HTMLDivElement>) => { if (e.detail !== 0) return; if (!tellFrame(e.currentTarget.querySelector('iframe'), 'toggle')) tapCenterOf(e.currentTarget, e.currentTarget); },
                       } : {})}>
                     <iframe
                       key={`player-${refreshKey}-${shieldOn ? 'shield' : 'open'}-${currentServerObj.id}`}
