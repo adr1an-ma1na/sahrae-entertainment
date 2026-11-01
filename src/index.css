@@ -1750,3 +1750,14 @@ html.player-maxed .player-shell.is-max { touch-action: auto; }
    player has the remote's focus (services/nativeTap.ts). */
 .tv-ok-hint { display: none; }
 html.tv-mode .tv-focused > .tv-ok-hint { display: flex; }
+
+/* A match open on a TV or weak graphics: nothing behind the player is drawn
+   (SportsView sets html.sports-open), so the GPU has only the picture to show.
+   The page under the black player used to be composited on every frame. */
+html.tv-mode.sports-open .tv-rail,
+html.tv-mode.sports-open .tv-full,
+html.tv-mode.sports-open .tv-navbar,
+html.tv-mode.sports-open .aurora-glow,
+html.tv-mode.sports-open .sports-page > :not(.sports-dialog),
+html.low-gfx.sports-open .aurora-glow,
+html.low-gfx.sports-open .sports-page > :not(.sports-dialog) { visibility: hidden !important; }

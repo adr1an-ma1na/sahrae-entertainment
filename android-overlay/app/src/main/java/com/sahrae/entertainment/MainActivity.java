@@ -374,6 +374,38 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    /**
+     * A stream player's own traffic: what a known player site (EMBED_HOSTS, and
+     * the feed and server sites the page reports) fetches from its own site,
+     * or anything shaped like a piece of video. It passes the EasyList rules,
+     * as it does on the website; ad and tracker networks are still stopped by
+     * the hostname list (L1), and pop-ups by onCreateWindow. Those rules were
+     * judging every few seconds of a live match: StreamFree names its video
+     * pieces "1179.js", read here as scripts, and a match that played on the
+     * website stuttered on the TV (owner, 2026-11-02).
+     */
+    private static boolean isPlayerTraffic(String initiator, String host, Uri url) {
+        if (initiator == null || host == null || !isEmbedHost(initiator)) return false;
+        if (siteOf(host).equals(siteOf(initiator))) return true;
+        String p = url != null ? url.getPath() : null;
+        if (p == null) return false;
+        String lp = p.toLowerCase();
+        // Not an advert dressed as a piece of video.
+        if (lp.contains("/ad/") || lp.contains("/ads/") || lp.contains("banner")) return false;
+        return MEDIA_PIECE.matcher(lp).matches();
+    }
+
+    /** "a.b.example.com" → "example.com": near enough to tell a site's own servers. */
+    private static String siteOf(String h) {
+        String[] p = h.toLowerCase().split("[.]");
+        int n = p.length;
+        return n >= 2 ? p[n - 2] + "." + p[n - 1] : h.toLowerCase();
+    }
+
+    /** A numbered piece of a stream, under any disguise ("seg-12.ts", "1179.js", "4.png"). */
+    private static final java.util.regex.Pattern MEDIA_PIECE = java.util.regex.Pattern.compile(
+        ".*/[^/]*[0-9][^/]*[.](ts|m4s|mp4|aac|m3u8|key|js|png|jpe?g|gif|webp|css|html?|txt)$");
+
     /** Host of the document that made this request (Referer, else Origin), or null. */
     private static String initiatorHost(WebResourceRequest request) {
         Map<String, String> h = request.getRequestHeaders();
@@ -2168,7 +2200,7 @@ public class MainActivity extends BridgeActivity {
                     // requests (catalog, posters, sign-in, fonts) never are, and a
                     // request whose initiator is unknown is left alone.
                     String initiator = initiatorHost(request);
-                    if (initiator != null && !isLocalAppHost(initiator)) {
+                    if (initiator != null && !isLocalAppHost(initiator) && !isPlayerTraffic(initiator, host, request.getUrl())) {
                         if (isEasyListHost(host) && !isExceptedByRule(request, host)) return blockedResponse();
                         if (isAdByRule(request, host)) return blockedResponse();
                     }

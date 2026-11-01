@@ -1223,17 +1223,45 @@ export default function SportsView() {
   // for players whose first press only clears an advert layer.
   const sportFrameRef = useRef<HTMLDivElement>(null);
   const [sportPointer, setSportPointer] = useState(false);
+
+  // Once a feed starts it goes full screen, as a film does: once per feed, so
+  // leaving full screen is not undone. A real full screen where the browser
+  // allows it (right after the tap that chose the feed), else the player fills
+  // the window.
+  const autoFsFor = useRef<string | null>(null);
+  const goFull = () => {
+    if (!activeUrl || autoFsFor.current === activeUrl) return;
+    autoFsFor.current = activeUrl;
+    const doc = document as any;
+    if (doc.fullscreenElement || doc.webkitFullscreenElement) return;
+    const el = playerRef.current as any;
+    const req = el?.requestFullscreen || el?.webkitRequestFullscreen;
+    if (!req) { setMaxed(true); return; }
+    try {
+      const p = req.call(el);
+      if (p && p.then) p.then(lockLandscape, () => setMaxed(true));
+      else lockLandscape();
+    } catch { setMaxed(true); }
+    // A request left unanswered (a browser asking permission): fill the window instead.
+    window.setTimeout(() => { const d = document as any; if (!d.fullscreenElement && !d.webkitFullscreenElement) setMaxed(true); }, 1500);
+  };
+  const goFullRef = useRef(goFull);
+  goFullRef.current = goFull;
+
   useEffect(() => {
     setSportPointer(false);
-    if (!activeUrl || !isEmbedUrl || !canTap()) return;
+    if (!activeUrl || !isEmbedUrl) return;
     const frame = () => sportFrameRef.current?.querySelector('iframe');
+    // The website cannot see inside the feed's page: it goes full screen once
+    // the page has loaded (the iframe's onLoad, below), or after 6 s if that was missed.
+    if (!canTap()) { const t = window.setTimeout(() => goFullRef.current(), 6000); return () => clearTimeout(t); }
     const pointerOut = () => document.documentElement.classList.contains('tv-pointer');
     let playing = false;
     // The player helper inside the feed's page (nativeTap.canFrameKick) starts it
     // itself and says when the picture really moves; Sahrae nudges it too. Only
     // if nothing moves after 15 s does a tap try the play button, once.
     if (canFrameKick()) {
-      const onMsg = (e: MessageEvent) => { if (isFramePlaying(e, frame())) playing = true; };
+      const onMsg = (e: MessageEvent) => { if (isFramePlaying(e, frame()) && !playing) { playing = true; goFullRef.current(); } };
       window.addEventListener('message', onMsg);
       const timers = [
         ...[1500, 5000, 9000].map((ms) => setTimeout(() => { if (!playing) tellFrame(frame(), 'play'); }, ms)),
@@ -1251,17 +1279,23 @@ export default function SportsView() {
       if (playing || !el || pointerOut()) return;
       tapCenterOf(el, isTelevision() ? el : null);
     }, ms));
+    timers.push(setTimeout(() => goFullRef.current(), 4500));
     return () => { window.removeEventListener('sahrae:embed-media', onStream); timers.forEach(clearTimeout); };
   }, [activeUrl, isEmbedUrl]);
 
+  useEffect(() => {
+    document.documentElement.classList.toggle('sports-open', !!playing);
+    return () => document.documentElement.classList.remove('sports-open');
+  }, [!!playing]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
-    <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-12 relative">
+    <div className="sports-page pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-12 relative">
       {/* Aurora glow behind the header */}
       <div aria-hidden className="pointer-events-none absolute -top-10 left-0 right-0 h-64 -z-10 opacity-70"
         style={{ background: 'radial-gradient(60% 70% at 12% 0%, rgba(251,191,36,0.20), transparent 70%), radial-gradient(50% 60% at 85% 8%, rgba(244,63,94,0.16), transparent 72%)', filter: 'blur(8px)' }} />
       {/* Player */}
       {playing && (
-        <div role="dialog" data-tv-layer className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-start md:justify-center p-0 md:p-10 overflow-y-auto">
+        <div role="dialog" data-tv-layer className="sports-dialog fixed inset-0 z-[100] bg-black flex flex-col items-center justify-start md:justify-center p-0 md:p-10 overflow-y-auto">
           {/* Title and controls sit ABOVE the picture on a phone: laid over a
               375px-wide video they collided with each other and hid the
               match. Over the picture only on larger screens and full screen. */}
@@ -1317,6 +1351,9 @@ export default function SportsView() {
                     // frame creation, so toggling has to rebuild the iframe.
                     key={`sports-${shieldOn ? 'shield' : 'open'}`}
                     src={activeUrl}
+                    // The website: full screen once the feed's page has loaded. (A
+                    // listener added after rendering missed a page that loaded fast.)
+                    onLoad={() => { if (!canTap()) window.setTimeout(() => goFullRef.current(), 1200); }}
                     className="absolute inset-0 w-full h-full border-0 bg-black"
                     allow="autoplay; encrypted-media; fullscreen"
                     allowFullScreen
