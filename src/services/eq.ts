@@ -62,7 +62,12 @@ export function applyEq(s: EqSettings): void {
   fetch(`https://localhost/__eq?${q}`).catch(() => {});
 }
 
+export const EQ_CHANGE = 'sahrae:eqchange';
+
 export function saveEq(s: EqSettings): void {
+  const wasOn = loadEq().on;
   try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* ignore */ }
   applyEq(s);
+  // Switching it on or off changes which engine a song plays through (hifiAudio.ts).
+  if (wasOn !== s.on) { try { window.dispatchEvent(new Event(EQ_CHANGE)); } catch { /* no window */ } }
 }

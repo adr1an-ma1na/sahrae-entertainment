@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { X, SlidersHorizontal, Sparkles, Waves, Moon, Timer } from 'lucide-react';
 import { EqSettings, EQ_FREQS, EQ_PRESETS, PRESET_EXTRAS, loadEq, saveEq } from '../services/eq';
 import { useMusic } from '../hooks/useMusic';
+import { hifiAvailable } from '../services/hifiAudio';
 
 const fmtDb = (mb: number) => `${mb > 0 ? '+' : ''}${(mb / 100).toFixed(0)} dB`;
 
@@ -33,7 +34,7 @@ export default function EqualizerPanel({ open, onClose }: { open: boolean; onClo
   const inert = active && !eqReachable;
 
   return (
-    <div role="dialog" data-tv-layer className="dark fixed inset-0 z-[135] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200"
+    <div role="dialog" data-tv-layer className="lux-stage fixed inset-0 z-[135] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="absolute inset-0 bg-black/65 backdrop-blur-md" />
       <div className="relative w-full sm:max-w-lg glass rounded-t-3xl sm:rounded-3xl max-h-[88vh] overflow-y-auto custom-scrollbar animate-in slide-in-from-bottom-4 duration-300">
@@ -56,12 +57,25 @@ export default function EqualizerPanel({ open, onClose }: { open: boolean; onClo
           </div>
         </div>
 
-        {inert && (
+        {/* What the equaliser reaches, said plainly. In the Android app, switching
+            it on moves songs to Sahrae's own audio engine (hifiAudio.ts), where it
+            shapes them; on the web a song plays inside YouTube's player, out of reach. */}
+        {hifiAvailable() ? (
+          eq.on && !inert ? (
+            <div className="mx-4 mt-4 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3.5 py-3">
+              <p className="text-xs text-emerald-200 leading-relaxed">Shaping what is playing now. Songs play through Sahrae's own audio engine while the equaliser is on, and keep playing with the screen off.</p>
+            </div>
+          ) : (
+            <div className="mx-4 mt-4 rounded-xl border px-3.5 py-3" style={{ borderColor: 'rgb(var(--acc-rgb) / .35)', background: 'rgb(var(--acc-rgb) / .10)' }}>
+              <p className="text-xs text-zinc-200 leading-relaxed">{eq.on ? 'Moving this song to Sahrae\'s audio engine. If it cannot be fetched, it stays in YouTube\'s player for now and the next song tries again.' : 'Switch the equaliser on and songs play through Sahrae\'s own audio engine, so every band, bass and spatial setting shapes them.'}</p>
+            </div>
+          )
+        ) : inert && (
           <div className="mx-4 mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-3">
             <p className="text-xs text-amber-200 leading-relaxed">
-              These controls do not affect what is playing right now. YouTube plays inside its own
-              player, so its audio never passes through Sahrae. The equaliser works on podcasts,
-              downloads and radio. Your settings are saved and apply the moment one of those plays.
+              On the web, a song plays inside YouTube's own player, so its sound never passes through
+              Sahrae and the equaliser cannot reach it. Here it shapes podcasts, downloads and radio;
+              in the Sahrae app on Android it shapes songs too.
             </p>
           </div>
         )}

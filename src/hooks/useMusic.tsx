@@ -5,9 +5,10 @@ import { songRadio, diverseSample } from '../services/recommend';
 import { haptics } from '../services/haptics';
 import { downloads } from '../services/downloads';
 import { attachEq, applyWebEq, resumeEq } from '../services/eqWeb';
-import { loadEq } from '../services/eq';
+import { loadEq, EQ_CHANGE } from '../services/eq';
 import { cleanTrackText } from '../services/trackText.ts';
 import { resolveYt, prefetchMatches } from '../services/resolveYt';
+import { hifiWanted, hifiSrc, prefetchHifi } from '../services/hifiAudio';
 import { Capacitor } from '@capacitor/core';
 
 type Repeat = 'off' | 'one' | 'all';
@@ -185,13 +186,21 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   // in the DOM, so the player never moves; its fixed container is repositioned
   // to cover the slot instead. Same element, same playback position, no reload,
   // no second buffer, no audio drift.
+  const videoModeRef = useRef(false);
   const [videoMode, setVideoModeState] = useState<boolean>(() => {
     try { return localStorage.getItem('sahrae.music.videoMode.v1') === '1'; } catch { return false; }
   });
+  videoModeRef.current = videoMode;
   const setVideoMode = (v: boolean) => {
     setVideoModeState(v);
+    videoModeRef.current = v;
     try { localStorage.setItem('sahrae.music.videoMode.v1', v ? '1' : '0'); } catch { /* storage unavailable */ }
+    // The video lives only in YouTube's player: a song playing through Sahrae's
+    // own engine moves over to it (and back, for listening) at the same moment.
+    if (hifiWanted()) reloadCurrentRef.current();
   };
+  // Play the current song again through whichever engine now applies, from where it was.
+  const reloadCurrentRef = useRef<() => void>(() => {});
   const [videoSlot, setVideoSlot] = useState<HTMLElement | null>(null);
   const playerHostRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(false);
@@ -563,9 +572,20 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     // then re-check the track hasn't changed underneath — skipping quickly
     // between tracks must not start the previous one's file.
     void (async () => {
-      const local = (await downloads.localSrcAsync(c.id).catch(() => null)) || c.audioUrl || null;
+      let local = (await downloads.localSrcAsync(c.id).catch(() => null)) || c.audioUrl || null;
       if (loadedIdRef.current !== c.id) return; // superseded while we were reading
+      // Equaliser on, in the Android app, listening rather than watching: the
+      // song plays through Sahrae's own audio engine so the equaliser shapes it
+      // (services/hifiAudio.ts). Falls back to YouTube's player if the audio
+      // cannot be had in time.
+      if (!local && !c.isPodcast && hifiWanted() && !videoModeRef.current) {
+        setBuffering(true);
+        local = await hifiSrc(c.id);
+        if (loadedIdRef.current !== c.id) return;
+      }
       applyLocal(local, c);
+      const after = queue[index + 1];
+      if (after) prefetchHifi(after.id);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, queue]);
@@ -865,11 +885,29 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     setIndex(ni);
   };
 
+  reloadCurrentRef.current = () => {
+    const c = queue[index];
+    if (!c || c.audioUrl || c.isPodcast || c.id.startsWith('dz:') || downloads.has(c.id)) return;
+    const at = position;
+    loadedIdRef.current = null;
+    setQueue((q) => [...q]);
+    if (at > 3) setTimeout(() => seekRef.current(at), 2500);
+  };
+
+  // Switching the equaliser on or off moves the song to the engine it can shape.
+  useEffect(() => {
+    const on = () => reloadCurrentRef.current();
+    window.addEventListener(EQ_CHANGE, on);
+    return () => window.removeEventListener(EQ_CHANGE, on);
+  }, []);
+
   const seek = (sec: number) => {
     if (usingLocalRef.current) { const a = audioElRef.current; if (a) try { a.currentTime = sec; } catch { /* ignore */ } }
     else playerRef.current?.seekTo?.(sec, true);
     setPosition(sec);
   };
+  const seekRef = useRef(seek);
+  seekRef.current = seek;
   // Playback speed (podcasts). Applies to whichever engine is active.
   const setRate = (n: number) => {
     try { playerRef.current?.setPlaybackRate?.(n); } catch { /* ignore */ }

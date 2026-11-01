@@ -1589,6 +1589,9 @@ html.tv-mode .lux-spot::before { display: none; }
     .flow-cover-frame { inset: auto; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(1.15); width: max(100cqw, 177.78cqh); height: max(100cqh, 56.25cqw); }
   }
 
+  /* Lyrics: lines far from the one being sung soften, Apple Music style. */
+  .lyric-far { filter: blur(0.6px); }
+
   /* Round previous/next on a shelf header. */
   .lux-arrow {
     width: 2.25rem; height: 2.25rem; border-radius: 9999px; align-items: center; justify-content: center;
@@ -1616,4 +1619,5 @@ html.tv-mode .lux-spot::before { display: none; }
 }
 @keyframes lux-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 html.tv-mode .lux-rank, html.low-gfx .lux-rank { text-shadow: none; }
+html.tv-mode .lyric-far, html.low-gfx .lyric-far { filter: none; }
 html.tv-mode .lux-fade-foot, html.low-gfx .lux-fade-foot { -webkit-mask-image: none; mask-image: none; }

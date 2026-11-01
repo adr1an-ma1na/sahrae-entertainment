@@ -53,8 +53,8 @@ function LyricsPanel({
     activeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [activeIdx]);
 
-  if (state === 'loading') return <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">Finding lyrics…</div>;
-  if (state === 'none') return <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm px-8 text-center">No lyrics found for this track.</div>;
+  if (state === 'loading') return <div className="h-full min-h-[200px] flex items-center justify-center text-zinc-400 text-sm">Finding lyrics…</div>;
+  if (state === 'none') return <div className="h-full min-h-[200px] flex items-center justify-center text-zinc-400 text-sm px-8 text-center">No lyrics for this one yet. Many songs in Lingala, Swahili and other languages are not in the lyrics library.</div>;
   if (state === 'plain') return (
     <div className="flex-1 overflow-y-auto custom-scrollbar px-6 text-left py-10" style={{ background: `linear-gradient(180deg, ${track.dominantColor || '#3b3b44'} 0%, rgba(0,0,0,0.5) 100%)` }}>
       <p className="text-[11px] uppercase tracking-[0.2em] text-white/60 mb-6">Lyrics, not synced</p>
@@ -68,7 +68,10 @@ function LyricsPanel({
       <div className="relative h-full overflow-y-auto custom-scrollbar px-6 py-[40vh] text-left">
       {synced.map((l, i) => (
         <button key={i} ref={i === activeIdx ? activeRef : undefined} onClick={() => onSeek?.(l.t)}
-          className={`block w-full text-left leading-[1.15] py-2.5 font-sans tracking-tight transition-colors duration-200 text-2xl md:text-[32px] font-extrabold ${i === activeIdx ? 'text-white' : 'text-white/50 hover:text-white/75'}`}>
+          className={`lyric-line block w-full text-left leading-[1.18] py-2.5 font-display tracking-tight text-2xl md:text-[30px] font-extrabold origin-left transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+            i === activeIdx ? 'text-white scale-[1.04] drop-shadow-[0_0_24px_rgba(255,255,255,0.35)]'
+            : Math.abs(i - activeIdx) === 1 ? 'text-white/55 hover:text-white/80'
+            : i < activeIdx ? 'text-white/25 hover:text-white/60 lyric-far' : 'text-white/35 hover:text-white/70 lyric-far'}`}>
           {l.text || '♪'}
         </button>
       ))}
@@ -135,6 +138,8 @@ export default function MusicPlayer() {
   const showingVideo = videoMode && canShowVideo;
   const [showQueue, setShowQueue] = useState(false);
   const [qTab, setQTab] = useState<'next' | 'lyrics' | 'related'>('next');
+  // The wide-screen side panel's tab.
+  const [sideTab, setSideTab] = useState<'lyrics' | 'next'>('lyrics');
   const [showEq, setShowEq] = useState(false);
   // "Related" tab (YouTube-Music-style) — songs related to what's playing.
   const [related, setRelated] = useState<Track[]>([]);
@@ -274,8 +279,7 @@ export default function MusicPlayer() {
     <>
       {/* ── Full-screen now-playing (album-art dominant) ── */}
       {expanded && (
-        <div role="dialog" data-tv-layer className="dark sauti fixed inset-0 z-[120] overflow-y-auto custom-scrollbar animate-in fade-in duration-300"
-          style={{ '--white': '#ffffff', '--zinc-200': '#e4e4e7', '--zinc-300': '#d4d4d8', '--zinc-400': '#a1a1aa', '--zinc-500': '#71717a' } as unknown as CSSProperties}>
+        <div role="dialog" data-tv-layer className="lux-stage sauti fixed inset-0 z-[120] overflow-y-auto custom-scrollbar animate-in fade-in duration-300">
           <DynamicBackground color={current.dominantColor} />
 
           {/* Art-derived colour bleed — the immersive Apple-Music backdrop. */}
@@ -285,8 +289,10 @@ export default function MusicPlayer() {
               <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.30) 0%, rgba(0,0,0,0.55) 55%, #000 100%)' }} />
             </div>
           )}
+          {/* The theme's own light in the room, so Royal, Emerald and Rosé show here too. */}
+          <div aria-hidden className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(60% 45% at 15% 0%, rgb(var(--acc-rgb) / .28), transparent 70%), radial-gradient(55% 45% at 90% 100%, rgb(var(--acc2-rgb) / .30), transparent 70%)' }} />
 
-          <div className="relative z-10 min-h-full flex flex-col px-5 md:px-8 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1.5rem)] max-w-xl mx-auto justify-between">
+          <div className="relative z-10 min-h-full flex flex-col px-5 md:px-8 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1.5rem)] max-w-xl lg:max-w-6xl mx-auto justify-between">
             {/* Top bar */}
             <div className="flex items-center justify-between shrink-0">
               <button onClick={() => setExpanded(false)} data-tv-close tabIndex={0} data-tv-focusable className="w-11 h-11 rounded-full glass-liquid flex items-center justify-center text-white" aria-label="Minimize">
@@ -298,18 +304,19 @@ export default function MusicPlayer() {
               </button>
             </div>
 
+            <div className="flex-1 flex flex-col lg:grid lg:grid-cols-2 lg:gap-14 lg:items-center lg:py-6">
+            <div className="flex flex-col min-w-0">
             {/* Song / Video — the same switch YouTube Music puts above its art.
                 Only offered when there is a video; a podcast file has none, and a
                 toggle that does nothing is worse than no toggle. */}
             {canShowVideo && (
               <div className="flex justify-center mt-4 shrink-0">
-                <div role="tablist" aria-label="Song or video" className="glass inline-flex p-1 rounded-full">
+                <div role="tablist" aria-label="Song or video" className="lux-seg">
                   {([['song', isPodcast ? 'Listen' : 'Song', Disc3], ['video', isPodcast ? 'Watch' : 'Video', Clapperboard]] as const).map(([key, label, Icon]) => {
                     const on = (key === 'video') === showingVideo;
                     return (
-                      <button key={key} role="tab" aria-selected={on} tabIndex={0} data-tv-focusable
-                        onClick={() => setVideoMode(key === 'video')}
-                        className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${on ? 'bg-amber-700 text-amber-100' : 'text-zinc-300 hover:text-white'}`}>
+                      <button key={key} role="tab" aria-selected={on} aria-pressed={on} tabIndex={0} data-tv-focusable
+                        onClick={() => setVideoMode(key === 'video')}>
                         <Icon className="w-4 h-4" /> {label}
                       </button>
                     );
@@ -327,11 +334,11 @@ export default function MusicPlayer() {
                 <div ref={setVideoSlot} className="w-full max-w-[640px] aspect-video min-h-[200px] rounded-3xl bg-black/60"
                   aria-label="Music video" />
               ) : current.artworkLarge || current.artwork ? (
-                <div className="relative w-[min(80vw,42vh)] max-w-[380px]"
-                  style={{ transform: isPlaying ? 'scale(1)' : 'scale(0.94)', transition: 'transform 320ms cubic-bezier(0.22,1,0.36,1)' }}>
+                <div className="relative w-[min(80vw,42vh)] lg:w-[min(30vw,44vh)] max-w-[480px]"
+                  style={{ transform: isPlaying ? 'scale(1)' : 'scale(0.94)', transition: 'transform 420ms cubic-bezier(0.22,1,0.36,1)' }}>
+                  <div aria-hidden className="absolute -inset-8 rounded-[3rem] blur-3xl opacity-60 pointer-events-none" style={{ background: `radial-gradient(closest-side, ${current.dominantColor || 'rgb(var(--acc-rgb))'}, transparent)` }} />
                   <CoverArt imageUrl={hdArt || current.artworkLarge || current.artwork} fallbackUrl={current.artwork} dominantColor={current.dominantColor} rounded="rounded-3xl"
-                    className="np-art w-full aspect-square" />
-                  <img loading="lazy" decoding="async" aria-hidden alt="" src={hdArt || current.artworkLarge || current.artwork} className="np-reflect absolute left-0 right-0 top-full mt-3 w-full h-1/3 object-cover object-top rounded-3xl pointer-events-none" />
+                    className="np-art relative w-full aspect-square shadow-[0_40px_80px_-30px_rgba(0,0,0,0.9),0_0_0_1px_rgba(255,255,255,0.10)]" />
                 </div>
               ) : (
                 <div className="w-[78vw] max-w-[360px] aspect-square rounded-2xl bg-zinc-800 flex items-center justify-center"><Music2 className="w-20 h-20 text-zinc-600" /></div>
@@ -339,9 +346,9 @@ export default function MusicPlayer() {
             </div>
 
             {/* Title + quick actions */}
-            <div className="flex items-center gap-3 mb-5 px-1 shrink-0 mt-8">
+            <div className="flex items-center gap-3 mb-5 px-1 shrink-0 mt-4">
               <div className="min-w-0 flex-1">
-                <h2 className="np-title text-3xl font-display font-bold text-white truncate">{current.title}</h2>
+                <h2 className="np-title lux-title text-3xl md:text-4xl truncate pb-0.5">{current.title}</h2>
                 <p className="text-zinc-300 truncate font-medium">{current.artist}</p>
               </div>
               <button onClick={() => openAddSheet(current)} tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full flex items-center justify-center text-zinc-300 hover:text-white shrink-0" aria-label="Add to playlist"><Plus className="w-5 h-5" /></button>
@@ -364,8 +371,8 @@ export default function MusicPlayer() {
                   <button onClick={toggleShuffle} tabIndex={0} data-tv-focusable className={`w-11 h-11 flex items-center justify-center rounded-full ${shuffle ? 'text-sauti' : 'text-zinc-400 hover:text-white'}`} aria-label="Shuffle"><Shuffle className="w-5 h-5" /></button>
                 )}
                 <button onClick={prev} tabIndex={0} data-tv-focusable className="w-12 h-12 flex items-center justify-center text-white" aria-label="Previous"><SkipBack className="w-7 h-7 fill-current" /></button>
-                <button onClick={toggle} tabIndex={0} data-tv-focusable className="btn-sauti w-16 h-16 rounded-full flex items-center justify-center" aria-label={isPlaying ? 'Pause' : 'Play'}>
-                  {isPlaying ? <Pause className="w-7 h-7 fill-current" /> : <Play className="w-7 h-7 fill-current ml-1" />}
+                <button onClick={toggle} tabIndex={0} data-tv-focusable className="lux-btn w-[72px] h-[72px]" aria-label={isPlaying ? 'Pause' : 'Play'}>
+                  {isPlaying ? <Pause className="w-8 h-8 fill-current" /> : <Play className="w-8 h-8 fill-current ml-1" />}
                 </button>
                 <button onClick={next} tabIndex={0} data-tv-focusable className="w-12 h-12 flex items-center justify-center text-white" aria-label="Next"><SkipForward className="w-7 h-7 fill-current" /></button>
                 {isPodcast ? (
@@ -396,7 +403,7 @@ export default function MusicPlayer() {
             {lyricsState !== 'none' && (
               <div 
                 onClick={() => { setQTab('lyrics'); setShowQueue(true); }}
-                className="mt-6 p-5 rounded-2xl cursor-pointer hover:scale-[1.01] active:scale-[0.99] transition-transform text-left relative overflow-hidden shadow-lg group shrink-0"
+                className="lg:hidden mt-6 p-5 rounded-2xl cursor-pointer hover:scale-[1.01] active:scale-[0.99] transition-transform text-left relative overflow-hidden shadow-lg group shrink-0"
                 style={{ backgroundColor: `${current.dominantColor || '#34343a'}ee`, border: '1px solid rgba(255,255,255,0.08)' }}
               >
                 <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -439,13 +446,44 @@ export default function MusicPlayer() {
                 </div>
               </div>
             )}
+            </div>
+            {/* Wide screens: lyrics and Up next stay in view beside the player. */}
+            <aside className="hidden lg:flex flex-col min-h-0 h-[72vh] rounded-3xl overflow-hidden bg-black/25 backdrop-blur-xl shadow-[inset_0_0_0_1px_var(--lux-line-2)]">
+              <div className="flex items-center gap-2 p-3 border-b" style={{ borderColor: 'var(--lux-line)' }}>
+                <div className="lux-seg">
+                  {(['lyrics', 'next'] as const).map((t) => (
+                    <button key={t} aria-pressed={sideTab === t} onClick={() => setSideTab(t)} tabIndex={0} data-tv-focusable>
+                      {t === 'lyrics' ? <><Mic2 className="w-4 h-4" /> Lyrics</> : <><ListMusic className="w-4 h-4" /> Up next</>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex-1 min-h-0 relative">
+                {sideTab === 'lyrics' ? (
+                  isPodcast
+                    ? <p className="p-6 text-sm text-zinc-400">Lyrics are for songs. Up next shows what plays after this episode.</p>
+                    : <LyricsPanel track={current} state={lyricsState} synced={syncedLyrics} plain={plainLyrics} activeIdx={activeLyricIdx} onSeek={seek} />
+                ) : (
+                  <div className="h-full overflow-y-auto custom-scrollbar p-3 space-y-1">
+                    {upNext.length === 0
+                      ? <p className="text-sm text-zinc-400 p-3">Autoplay keeps it going with related songs.</p>
+                      : upNext.slice(0, 40).map((t, i) => (
+                        <Fragment key={`side-${t.id}-${i}`}>
+                          <QueueRow track={t} onPlay={() => jumpTo(index + 1 + i)} onRemove={() => removeFromQueue(index + 1 + i)} />
+                        </Fragment>
+                      ))}
+                  </div>
+                )}
+              </div>
+            </aside>
+            </div>
           </div>
         </div>
       )}
 
       {/* ── Up next / Lyrics / Related (YouTube-Music-style player tabs) ── */}
       {showQueue && (
-        <div role="dialog" data-tv-layer className="dark sauti fixed inset-0 z-[125] flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-300">
+        <div role="dialog" data-tv-layer className="lux-stage sauti fixed inset-0 z-[125] flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-300">
           <div className="flex items-center gap-3 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 border-b border-white/10 bg-black/40 backdrop-blur-md">
             <button onClick={() => setShowQueue(false)} data-tv-close tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full glass-liquid flex items-center justify-center text-white" aria-label="Back"><ChevronDown className="w-6 h-6" /></button>
             <div className="flex gap-5">
