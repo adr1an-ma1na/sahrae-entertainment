@@ -35,10 +35,12 @@ export type RemoteCommand =
   | { t: 'search'; q: string }
   | { t: 'open'; type: 'movie' | 'tv'; id: number; s?: number; e?: number }
   | { t: 'server'; idx: number }
-  | { t: 'zoom'; z: number };
+  | { t: 'zoom'; z: number }
+  /** One size larger (1) or smaller (-1): the remote's + and −, which work before the TV has said its size. */
+  | { t: 'zoomby'; d: 1 | -1 };
 
 /** The TV app's screen sizes, in percent (src/tv/tvViewport.ts TV_ZOOMS). */
-export const SCREEN_ZOOMS = [70, 80, 90, 100];
+export const SCREEN_ZOOMS = [75, 80, 90, 100, 110, 125, 150];
 
 /** TV to phone: what is on screen. */
 export type ScreenState = {
@@ -69,6 +71,7 @@ export function validCommand(x: unknown): RemoteCommand | null {
       return { t: 'open', type: m.type, id: m.id, ...(m.type === 'tv' ? { s: (m.s as number) ?? 1, e: (m.e as number) ?? 1 } : {}) };
     case 'server': return isInt(m.idx, 0, 20) ? { t: 'server', idx: m.idx } : null;
     case 'zoom': return SCREEN_ZOOMS.includes(m.z as number) ? { t: 'zoom', z: m.z as number } : null;
+    case 'zoomby': return m.d === 1 || m.d === -1 ? { t: 'zoomby', d: m.d } : null;
     default: return null;
   }
 }

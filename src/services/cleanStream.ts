@@ -94,7 +94,14 @@ export type PictureSetting = 'saver' | 'hd' | 'best';
  * Indexes refer to the stream's own list. Viewers saw 480p on "1080p" servers
  * because nothing held the quality up.
  */
-export function pictureRule(levels: Rendition[], picture: PictureSetting): { start: number; lock: boolean; cap: number; minBitrate: number } {
+export function pictureRule(levels: Rendition[], picture: PictureSetting, tv = false): { start: number; lock: boolean; cap: number; minBitrate: number } {
+  // On a TV, Best opens on the sharpest up to 1080p but is not locked there:
+  // the player may step down for a moment rather than stall. A locked 1080p
+  // through the app's relay on a TV's Wi-Fi stopped and started (2026-11-01).
+  if (tv && picture === 'best') {
+    const r = pictureRule(levels, 'best');
+    return r.start < 0 ? r : { start: r.start, lock: false, cap: r.start, minBitrate: 0 };
+  }
   // VidFast offers 2160p at 16 Mb/s: locking onto that stalls a home line that
   // carries 1080p easily. Best means the sharpest up to 1080p, on phones and TVs
   // alike (TVs used to climb to 4K and never drop below 1080p, and took ages to

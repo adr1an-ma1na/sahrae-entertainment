@@ -58,5 +58,11 @@ const vidfast = [{ height: 2160, bitrate: 16_000_000 }, { height: 1080, bitrate:
 eq('Best on a phone: locked on 1080p, not the 16 Mb/s 4K', pictureRule(vidfast, 'best'), { start: 1, lock: true, cap: -1, minBitrate: 0 });
 eq('Best with no 4K on offer: unchanged (top, locked)', pictureRule(vidrock, 'best'), { start: 1, lock: true, cap: -1, minBitrate: 0 });
 
+console.log('\non a TV: Best opens sharp, may step down, never climbs past 1080p');
+eq('VidFast on a TV: opens on 1080p, not locked, capped there', pictureRule(vidfast, 'best', true), { start: 1, lock: false, cap: 1, minBitrate: 0 });
+eq('VidRock on a TV: opens on its 1080p, not locked', pictureRule(vidrock, 'best', true), { start: 1, lock: false, cap: 1, minBitrate: 0 });
+eq('HD and Data Saver are the same on a TV', [pictureRule(vidlink, 'hd', true), pictureRule(vidlink, 'saver', true)], [pictureRule(vidlink, 'hd'), pictureRule(vidlink, 'saver')]);
+eq('no renditions on a TV: nothing to hold', pictureRule([], 'best', true).start, -1);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exitCode = fail ? 1 : 0;

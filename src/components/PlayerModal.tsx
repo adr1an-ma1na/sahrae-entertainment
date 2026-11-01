@@ -289,6 +289,11 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   // provider's full-screen request is to be taken over (trailers, Live TV and
   // Sports keep the WebView's own full screen).
   const playerUp = isOpen && isPlaying && !playingTrailer;
+  // While the player is open, a TV does not paint the page behind it (index.css, html.player-open).
+  useEffect(() => {
+    document.documentElement.classList.toggle('player-open', isOpen);
+    return () => document.documentElement.classList.remove('player-open');
+  }, [isOpen]);
   useEffect(() => {
     if (!nativeShell) return;
     fetch(`https://localhost/__player?open=${playerUp ? 1 : 0}`, { cache: 'no-store' }).catch(() => {});

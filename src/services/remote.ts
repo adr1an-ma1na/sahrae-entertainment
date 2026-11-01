@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { openLink, type Link, type Peer } from './link';
 import { makeCode, validCommand, validState, type Key, type RemoteCommand, type ScreenState } from './linkCore';
-import { isTvBuild, tvZoom, setTvZoom } from '../tv/tvViewport';
+import { isTvBuild, tvZoom, setTvZoom, stepZoom } from '../tv/tvViewport';
 
 // The TV app's screen size, told to phones so the remote shows it; none elsewhere.
 const zoomNow = (): { zoom?: number } => (isTvBuild() ? { zoom: tvZoom() } : {});
@@ -78,6 +78,12 @@ function act(cmd: RemoteCommand) {
       // Only the TV app has a screen size; anywhere else the request is ignored.
       if (!isTvBuild()) break;
       setTvZoom(cmd.z);
+      lastState = { ...lastState, ...zoomNow() };
+      host?.link.send('state', lastState);
+      break;
+    case 'zoomby':
+      if (!isTvBuild()) break;
+      setTvZoom(stepZoom(tvZoom(), cmd.d));
       lastState = { ...lastState, ...zoomNow() };
       host?.link.send('state', lastState);
       break;

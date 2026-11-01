@@ -34,7 +34,7 @@ must(m.includes('android.intent.category.LEANBACK_LAUNCHER'), 'TV launcher entry
 fs.writeFileSync(manifest, m);
 
 // 4. Fit a wider page to the screen. The page asks for a layout wider than the
-//    TV reports (90% by default, src/tv/tvViewport.ts); the WebView honours it only with
+//    TV reports (a 1920 px full-HD canvas at 100%, src/tv/tvViewport.ts); the WebView honours it only with
 //    useWideViewPort, and loadWithOverviewMode scales it to fit the screen.
 const activity = 'android/app/src/main/java/com/sahrae/entertainment/MainActivity.java';
 let j = fs.readFileSync(activity, 'utf8');

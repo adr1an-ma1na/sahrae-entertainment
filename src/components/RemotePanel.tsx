@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import qrcode from 'qrcode-generator';
-import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Home, MonitorSmartphone, Search, Smartphone, Tv, X } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Home, MonitorSmartphone, Search, Smartphone, Tv, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { useRemoteControl, useScreen } from '../services/remote';
-import { normalizeCode, SCREEN_ZOOMS, type Key } from '../services/linkCore';
+import { normalizeCode, type Key } from '../services/linkCore';
 import { linkAvailable } from '../services/link';
 import { isTelevision } from '../tv/spatialNavigation';
 import { haptics } from '../services/haptics';
@@ -113,21 +113,22 @@ function PhoneSide({ initialCode, onShowCode }: { initialCode: string; onShowCod
         </div>
       )}
 
-      {/* The TV app's screen size, from the sofa: a TV has no zoom of its own. */}
-      {typeof screen?.zoom === 'number' && (
-        <div className="rounded-xl bg-zinc-900 border border-white/10 p-3">
-          <p className="text-[11px] uppercase tracking-wider text-zinc-400 font-bold">Screen size on the TV</p>
-          <div className="grid grid-cols-4 gap-1.5 mt-2" role="group" aria-label="Screen size on the TV">
-            {SCREEN_ZOOMS.map((z) => (
-              <button key={z} onClick={() => { haptics.tap(); send({ t: 'zoom', z }); }} aria-pressed={screen.zoom === z}
-                className={`py-2 rounded-lg text-sm font-bold border ${screen.zoom === z ? 'bg-amber-400 text-amber-950 border-amber-300' : 'bg-zinc-800 text-zinc-200 border-zinc-700'}`}>
-                {z}%
-              </button>
-            ))}
-          </div>
-          <p className="text-[11px] text-zinc-500 mt-1.5">90% is the standard. Smaller fits more on the screen.</p>
+      {/* The TV app's screen size, from the sofa: a TV has no zoom of its own.
+          Always shown: + and − work even before the TV has said its size. */}
+      <div className="rounded-xl bg-zinc-900 border border-white/10 p-3">
+        <p className="text-[11px] uppercase tracking-wider text-zinc-400 font-bold">Zoom on the TV</p>
+        <div className="flex items-center gap-2 mt-2" role="group" aria-label="Zoom on the TV">
+          <button onClick={() => { haptics.tap(); send({ t: 'zoomby', d: -1 }); }} aria-label="Zoom out"
+            className="flex-1 py-3 rounded-lg bg-zinc-800 border border-zinc-700 text-white font-bold flex items-center justify-center gap-2"><ZoomOut className="w-5 h-5" /> Out</button>
+          <button onClick={() => { haptics.tap(); send({ t: 'zoom', z: 100 }); }} aria-label="Reset zoom to 100%"
+            className={`w-20 py-3 rounded-lg border font-extrabold tabular ${screen?.zoom === 100 ? 'bg-amber-400 text-amber-950 border-amber-300' : 'bg-zinc-800 text-zinc-200 border-zinc-700'}`}>
+            {typeof screen?.zoom === 'number' ? `${screen.zoom}%` : '100%'}
+          </button>
+          <button onClick={() => { haptics.tap(); send({ t: 'zoomby', d: 1 }); }} aria-label="Zoom in"
+            className="flex-1 py-3 rounded-lg bg-zinc-800 border border-zinc-700 text-white font-bold flex items-center justify-center gap-2"><ZoomIn className="w-5 h-5" /> In</button>
         </div>
-      )}
+        <p className="text-[11px] text-zinc-500 mt-1.5">100% is full HD, the standard. Tap the middle to go back to it.</p>
+      </div>
 
       <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (query.trim()) { send({ t: 'search', q: query.trim() }); haptics.tap(); setQuery(''); } }}>
         <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search on the TV" enterKeyHint="search"

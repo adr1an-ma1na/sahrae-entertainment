@@ -1676,3 +1676,24 @@ html.tv-mode .lux-spot::before { display: none; }
 html.tv-mode .lux-rank, html.low-gfx .lux-rank { text-shadow: none; }
 html.tv-mode .lyric-far, html.low-gfx .lyric-far { filter: none; }
 html.tv-mode .lux-fade-foot, html.low-gfx .lux-fade-foot { -webkit-mask-image: none; mask-image: none; }
+
+/* ─────────────────────────────────────────────────────────────
+   The film player on a TV: nothing behind it. The player opened over the
+   live page with a blur of it (backdrop-blur-sm on #player-modal-container),
+   which a TV's GPU re-blurs on every frame of the film, on top of decoding
+   it: films lagged on the TV only (owner, TCL C8L, 2026-11-01). On TV and
+   weak graphics the backdrop is plain black and the page behind it is not
+   painted at all while the player is open (html.player-open, PlayerModal).
+   ───────────────────────────────────────────────────────────── */
+html.tv-mode #player-modal-container,
+html.low-gfx #player-modal-container {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background-color: #000 !important;
+}
+html.tv-mode.player-open .tv-shell,
+html.tv-mode.player-open .tv-rail,
+html.tv-mode.player-open .tv-full,
+html.tv-mode.player-open .aurora-glow,
+html.low-gfx.player-open .tv-shell,
+html.low-gfx.player-open .aurora-glow { visibility: hidden !important; }

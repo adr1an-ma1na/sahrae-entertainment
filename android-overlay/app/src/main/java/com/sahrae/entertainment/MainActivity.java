@@ -564,6 +564,7 @@ public class MainActivity extends BridgeActivity {
      */
     private static WebResourceResponse hlsProxy(Uri uri) {
         HttpURLConnection conn = null;
+        boolean streaming = false;
         try {
             String target = uri.getQueryParameter("u");
             if (target == null || target.isEmpty()) return null;
@@ -587,29 +588,45 @@ public class MainActivity extends BridgeActivity {
 
             String contentType = conn.getContentType();
             String finalUrl = conn.getURL().toString();
-            byte[] body = readAll(conn.getInputStream());
+            // Peek at the start: some playlists come without .m3u8 or a playlist type (VixSrc's /playlist/).
+            java.io.BufferedInputStream in = new java.io.BufferedInputStream(conn.getInputStream(), 65536);
+            in.mark(16);
+            byte[] head = new byte[7];
+            int got = 0;
+            while (got < 7) { int n = in.read(head, got, 7 - got); if (n < 0) break; got += n; }
+            in.reset();
 
             boolean isPlaylist =
                 (contentType != null && contentType.toLowerCase().contains("mpegurl"))
                 || finalUrl.toLowerCase().contains(".m3u8")
-                || (body.length >= 7 && new String(body, 0, 7, StandardCharsets.UTF_8).startsWith("#EXTM3U"));
+                || (got == 7 && new String(head, 0, 7, StandardCharsets.UTF_8).startsWith("#EXTM3U"));
 
             Map<String, String> headers = new HashMap<>();
             headers.put("Access-Control-Allow-Origin", "*");
             headers.put("Cache-Control", "no-cache");
 
             if (isPlaylist) {
+                byte[] body = readAll(in);
+                in.close();
                 String rewritten = rewriteM3u8(new String(body, StandardCharsets.UTF_8), finalUrl, ref);
                 return new WebResourceResponse(
                     "application/vnd.apple.mpegurl", "utf-8", 200, "OK", headers,
                     new ByteArrayInputStream(rewritten.getBytes(StandardCharsets.UTF_8)));
             }
+            // A video segment is handed over as it arrives, not after all of it has.
+            // Reading each segment in full first (several MB at 1080p) held every one
+            // back until its last byte, and a TV's player waited on that each time.
+            // Closing the stream, not disconnecting, lets the connection be reused
+            // for the next segment from the same server.
             String mime = (contentType != null) ? contentType.split(";")[0].trim() : "application/octet-stream";
-            return new WebResourceResponse(mime, null, 200, "OK", headers, new ByteArrayInputStream(body));
+            String len = conn.getHeaderField("Content-Length");
+            if (len != null) headers.put("Content-Length", len);
+            streaming = true;
+            return new WebResourceResponse(mime, null, 200, "OK", headers, in);
         } catch (Exception e) {
             return null;
         } finally {
-            if (conn != null) try { conn.disconnect(); } catch (Exception ignore) {}
+            if (conn != null && !streaming) try { conn.disconnect(); } catch (Exception ignore) {}
         }
     }
 

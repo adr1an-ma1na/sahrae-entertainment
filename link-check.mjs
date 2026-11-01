@@ -43,6 +43,8 @@ eq('not a state, nothing', validState({ t: 'cmd' }), null);
 console.log('\nscreen size from the phone');
 eq('a screen size the TV offers', validCommand({ t: 'zoom', z: 80 }), { t: 'zoom', z: 80 });
 eq('any other size is dropped', [validCommand({ t: 'zoom', z: 85 }), validCommand({ t: 'zoom', z: 10 }), validCommand({ t: 'zoom', z: '90' }), validCommand({ t: 'zoom' })], [null, null, null, null]);
+eq('zoom in and zoom out, one size at a time', [validCommand({ t: 'zoomby', d: 1 }), validCommand({ t: 'zoomby', d: -1 })], [{ t: 'zoomby', d: 1 }, { t: 'zoomby', d: -1 }]);
+eq('any other step is dropped', [validCommand({ t: 'zoomby', d: 2 }), validCommand({ t: 'zoomby', d: '1' }), validCommand({ t: 'zoomby' })], [null, null, null]);
 eq('the TV tells the phone its size', validState({ t: 'state', zoom: 90 }), { t: 'state', zoom: 90 });
 eq('...and a size it does not offer is not passed on', validState({ t: 'state', zoom: 500 }), { t: 'state' });
 const { TV_ZOOMS } = await import('./src/tv/tvViewport.ts');

@@ -166,7 +166,7 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
                 {TV_ZOOMS.map((z) => (
                   <button key={z} type="button" data-tv-focusable aria-pressed={zoom === z} className="lux-chip"
                     onClick={() => { setZoom(z); setTvZoom(z); }}>
-                    {z}%{z === 90 ? ' (standard)' : ''}
+                    {z}%{z === 100 ? ' (standard)' : ''}
                   </button>
                 ))}
               </div>

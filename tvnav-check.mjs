@@ -103,19 +103,24 @@ check('r1c3', 'right', null);
 check('btn-b', 'down', null);
 
 // The TV screen size (src/tv/tvViewport.ts): a TV cannot zoom, so the app
-// lays the page out wider and the WebView fits it; 90% is the standard.
-const { tvLayoutWidth, tvZoom, TV_DEFAULT_ZOOM, TV_ZOOMS } = await import('./src/tv/tvViewport.ts');
+// lays the page out on a full-HD canvas and the WebView fits it to the screen.
+const { tvLayoutWidth, tvZoom, stepZoom, TV_DEFAULT_ZOOM, TV_ZOOMS } = await import('./src/tv/tvViewport.ts');
 const same = (name, got, want) => { if (got === want) { pass++; console.log('  ok   ' + name); } else { fail++; console.log(`  FAIL ${name}: got ${got}, want ${want}`); } };
 console.log('\nthe TV screen size');
-same('90% is the standard', TV_DEFAULT_ZOOM, 90);
-same('at 90%, a 960 px Google TV page is laid out at 1067 px', tvLayoutWidth(960, 90), 1067);
-same('at 80%, at 1200 px', tvLayoutWidth(960, 80), 1200);
-same('at 70%, at 1371 px', tvLayoutWidth(960, 70), 1371);
-same('100% leaves the page as the TV reports it', tvLayoutWidth(960, 100), null);
-same('a TV that reports 1920 px is still sized to 90%', tvLayoutWidth(1920, 90), 2133);
-same('an unknown width is left alone', tvLayoutWidth(0, 90), null);
-same('nothing chosen yet (no storage here) means the standard', tvZoom(), 90);
-same('the choices run from 70% to 100%', TV_ZOOMS.join(','), '70,80,90,100');
+same('100% is the standard', TV_DEFAULT_ZOOM, 100);
+same('100% is a full-HD page, 1920 px wide, whatever the TV reports', tvLayoutWidth(100), 1920);
+same('90% fits more: 2133 px', tvLayoutWidth(90), 2133);
+same('75% fits the most: 2560 px', tvLayoutWidth(75), 2560);
+same('125% is larger: 1536 px', tvLayoutWidth(125), 1536);
+same('150% is the largest: 1280 px', tvLayoutWidth(150), 1280);
+same('no size given means the standard', tvLayoutWidth(0), 1920);
+same('nothing chosen yet (no storage here) means the standard', tvZoom(), 100);
+same('the choices run from 75% to 150%', TV_ZOOMS.join(','), '75,80,90,100,110,125,150');
+same('zoom in from 100%: 110%', stepZoom(100, 1), 110);
+same('zoom out from 100%: 90%', stepZoom(100, -1), 90);
+same('zoom in stops at 150%', stepZoom(150, 1), 150);
+same('zoom out stops at 75%', stepZoom(75, -1), 75);
+same('an old size (70%) steps from the standard', stepZoom(70, 1), 110);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
