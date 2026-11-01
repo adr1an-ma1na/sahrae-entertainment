@@ -1,4 +1,4 @@
-import { ChevronDown, X, ExternalLink, AlertCircle, Play, RefreshCw, Plus, Check, Maximize, Minimize, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle, Gauge } from 'lucide-react';
+import { ChevronDown, X, ExternalLink, AlertCircle, Play, RefreshCw, Plus, Check, Maximize, Minimize, MousePointer2, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle, Gauge } from 'lucide-react';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { fetchMediaDetails, MediaDetails, getImageUrl, fetchSimilar, MediaItem, SeasonDetails, fetchSeasonDetails } from '../services/tmdb';
@@ -15,6 +15,7 @@ import { lockLandscape, unlockOrientation } from '../services/fullscreen';
 import CleanPlayer from './CleanPlayer';
 import { useRemoved, isRemoved } from '../services/removed';
 import { tapCenterOf, canTap } from '../services/nativeTap';
+import TvPointer from './TvPointer';
 import { openLegal } from '../services/consent';
 import { canPlayClean, resolveFilmStream, relayUrl, cleanFirst, isCleanOn, setCleanOn } from '../services/cleanStream';
 import { isTelevision } from '../tv/spatialNavigation';
@@ -288,6 +289,12 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const removedList = useRemoved();
   const removedNow = !!currentMediaId && !!currentMediaType && isRemoved(removedList, currentMediaType, Number(currentMediaId));
   const playerUp = isOpen && isPlaying && !playingTrailer;
+  // The remote pointer over a server's own player (TV app): its quality,
+  // volume and settings live in a frame the D-pad cannot enter.
+  const [pointerOn, setPointerOn] = useState(false);
+  const serverFrameRef = useRef<HTMLDivElement>(null);
+  const pointerOffered = canTap() && isTelevision();
+  useEffect(() => { if (!playerUp) setPointerOn(false); }, [playerUp]);
   // While the player is open, a TV does not paint the page behind it (index.css, html.player-open).
   useEffect(() => {
     document.documentElement.classList.toggle('player-open', isOpen);
@@ -1088,7 +1095,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       />
                     ) : clean.state === 'resolving' ? null : (
                     // On a TV, OK presses the server's own play button (services/nativeTap.ts).
-                    <div className="absolute inset-0"
+                    <div ref={serverFrameRef} className="absolute inset-0"
                       {...(canTap() ? {
                         tabIndex: 0, 'data-tv-focusable': true, 'aria-label': 'Play',
                         onClick: (e: React.MouseEvent<HTMLDivElement>) => { if (e.detail === 0) tapCenterOf(e.currentTarget, e.currentTarget); },
@@ -1293,12 +1300,19 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       <ChevronDown className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-white/70 pointer-events-none" />
                     </label>
                     <div className="flex-1" />
+                    {pointerOffered && !(clean.state === 'ready' && clean.url) && (
+                      <button onClick={() => setPointerOn(true)} data-tv-focusable title="Pointer: use the server's own controls (quality, volume, settings)" aria-label="Use the pointer on the player"
+                        className="h-10 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-sm font-semibold flex items-center gap-1.5 transition-colors active:scale-95">
+                        <MousePointer2 className="w-4 h-4" /> Pointer
+                      </button>
+                    )}
                     <button onClick={toggleFullScreen} data-tv-focusable title={fsActive ? 'Exit full screen' : 'Full screen'} aria-label={fsActive ? 'Exit full screen' : 'Full screen'}
                       className="w-10 h-10 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95">
                       {fsActive ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
                     </button>
                   </>
                 )}
+                {pointerOn && <TvPointer area={serverFrameRef.current} onExit={() => setPointerOn(false)} />}
                 <button onClick={() => { if (playingTrailer) { setPlayingTrailer(null); return; } onClose(); }} data-tv-focusable data-tv-close title="Close" aria-label="Close" className="w-10 h-10 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"><X className="w-4 h-4" /></button>
                 {!playingTrailer && showAudioMenu && (
                     <div className={`absolute ${fsActive ? 'top-full mt-1' : 'bottom-full mb-2'} right-2 z-50 w-56 bg-zinc-950/95 backdrop-blur rounded-xl border border-white/15 shadow-2xl p-2 animate-in fade-in slide-in-from-top-2 duration-200`}>

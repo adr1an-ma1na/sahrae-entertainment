@@ -124,7 +124,11 @@ function getFocusables(): HTMLElement[] {
 }
 
 /** Close the top-most open layer (modal/sheet/player) via its close control. */
+/** The remote pointer (TvPointer.tsx) has the keys while it is out. */
+const pointerOut = () => document.documentElement.classList.contains('tv-pointer');
+
 function closeTopLayer(): boolean {
+  if (pointerOut()) { window.dispatchEvent(new Event('sahrae:pointer-exit')); return true; }
   const layers = Array.from(document.querySelectorAll<HTMLElement>('[data-tv-layer]')).filter(isElementVisible);
   const top = layers[layers.length - 1];
   if (!top) return false;
@@ -155,7 +159,23 @@ function highlight(el: HTMLElement) {
   el.classList.add(FOCUS_CLASS);
 }
 
-function focusElement(el: HTMLElement) {
+/** The nearest ancestor that scrolls vertically (a dialog's body), or null for the page itself. */
+function scrollParent(el: HTMLElement): HTMLElement | null {
+  for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+    const oy = getComputedStyle(p).overflowY;
+    if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight + 2) return p;
+  }
+  return null;
+}
+
+/** Scroll the page (or the dialog the element is in) to its very top or bottom. */
+function scrollToEnd(el: HTMLElement, end: 'top' | 'bottom') {
+  const sp = scrollParent(el);
+  const top = end === 'top' ? 0 : (sp ? sp.scrollHeight : document.documentElement.scrollHeight);
+  if (sp) sp.scrollTo({ top }); else window.scrollTo({ top });
+}
+
+function focusElement(el: HTMLElement, vertical = false) {
   try {
     el.focus({ preventScroll: true });
   } catch {
@@ -167,7 +187,11 @@ function focusElement(el: HTMLElement) {
   haptics.select();
   // INSTANT — no smooth animation. CSS scroll-padding/scroll-margin (see
   // index.css .tv-mode rules) keeps it clear of the fixed navbar and screen edges.
-  el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  // Up and down settle the new row near the middle of the screen, the way a
+  // TV app scrolls a page; left and right only bring a tile into view. With
+  // 'nearest' alone the page moved the least it could, so the banner above the
+  // first row and everything below the last were never shown (owner, TV, 2026-11-01).
+  el.scrollIntoView({ block: vertical ? 'center' : 'nearest', inline: 'nearest' });
 }
 
 /**
@@ -342,6 +366,7 @@ export function initSpatialNavigation() {
   window.addEventListener(
     'keydown',
     (e: KeyboardEvent) => {
+      if (pointerOut()) return;
       const active = document.activeElement as HTMLElement | null;
 
       // Escape / Back — close the top-most open layer (player, sheet, modal).
@@ -401,15 +426,19 @@ export function initSpatialNavigation() {
         return;
       }
 
+      const vertical = dir === 'up' || dir === 'down';
       const next = pickInDirection(current, dir, focusables);
       if (next) {
         e.preventDefault();
-        focusElement(next);
+        focusElement(next, vertical);
+        // Up onto the first row: show the top of the page too (the banner, the title).
+        if (dir === 'up' && !pickInDirection(next, 'up', focusables)) scrollToEnd(next, 'top');
       } else {
-        // No candidate in that direction. Don't let the page jump-scroll the
-        // focus off-screen — keep the current item put (feels controlled).
+        // Nothing further that way: show the rest of the page in that direction
+        // (its top, or what sits below the last row), keeping the focus put.
         e.preventDefault();
-        current.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        if (vertical) scrollToEnd(current, dir === 'up' ? 'top' : 'bottom');
+        else current.scrollIntoView({ block: 'nearest', inline: 'nearest' });
       }
     },
     true,

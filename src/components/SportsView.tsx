@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Trophy, Play, X, Maximize, Loader2, Radio, Tv, Clapperboard, Search, ShieldCheck, AlertCircle, ExternalLink, AlertTriangle } from 'lucide-react';
+import { Trophy, Play, X, Maximize, Loader2, Radio, Tv, Clapperboard, Search, ShieldCheck, AlertCircle, ExternalLink, AlertTriangle, MousePointer2 } from 'lucide-react';
 import type HlsT from 'hls.js';
 import { useHls } from '../services/hlsLoader';
 import { Capacitor } from '@capacitor/core';
@@ -16,6 +16,8 @@ import Coachmark from './Coachmark';
 import { suppressPopups } from '../services/popupGuard';
 import { lockLandscape, unlockOrientation } from '../services/fullscreen';
 import { tapCenterOf, canTap } from '../services/nativeTap';
+import TvPointer from './TvPointer';
+import { isTelevision } from '../tv/spatialNavigation';
 import { readAudioFormat, bestAudioTrack, upscaleDecision, bestHeight, type AudioFormat } from '../services/streamQuality.ts';
 import { gpuReport } from '../services/gpu.ts';
 import { attachUpscaler } from '../services/upscaler.ts';
@@ -1213,6 +1215,28 @@ export default function SportsView() {
   const activeUrl = activeSrc?.url;
   const isEmbedUrl = activeUrl ? (!activeUrl.includes('.m3u8') && activeSrc?.kind === 'server') : false;
 
+  // A feed plays by itself once chosen, as films do. Its site's player waits
+  // for a press on its play button, inside a frame Sahrae cannot click into;
+  // the Android app presses it (services/nativeTap.ts). Only while no video
+  // has started ('sahrae:embed-media' is the app seeing the stream flow), so a
+  // feed that already plays is never paused; the second and third presses are
+  // for players whose first press only clears an advert layer.
+  const sportFrameRef = useRef<HTMLDivElement>(null);
+  const [sportPointer, setSportPointer] = useState(false);
+  useEffect(() => {
+    setSportPointer(false);
+    if (!activeUrl || !isEmbedUrl || !canTap()) return;
+    let streaming = false;
+    const onStream = () => { streaming = true; };
+    window.addEventListener('sahrae:embed-media', onStream);
+    const timers = [3500, 8000, 13000].map((ms) => setTimeout(() => {
+      const el = sportFrameRef.current;
+      if (streaming || !el || document.documentElement.classList.contains('tv-pointer')) return;
+      tapCenterOf(el, isTelevision() ? el : null);
+    }, ms));
+    return () => { window.removeEventListener('sahrae:embed-media', onStream); timers.forEach(clearTimeout); };
+  }, [activeUrl, isEmbedUrl]);
+
   return (
     <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-12 relative">
       {/* Aurora glow behind the header */}
@@ -1246,6 +1270,11 @@ export default function SportsView() {
                   <h3 className="text-white font-bold text-sm md:text-lg drop-shadow-md truncate">{playing.title}</h3>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
+                  {/* TV: a pointer for the feed's own controls (quality, volume), which a remote cannot reach. */}
+                  {isEmbedUrl && canTap() && isTelevision() && (
+                    <button onClick={() => setSportPointer(true)} tabIndex={0} data-tv-focusable aria-label="Use the pointer on the player"
+                      className="h-10 px-3 rounded-full bg-black/50 hover:bg-white/20 text-white text-sm font-semibold flex items-center gap-1.5 border border-white/10"><MousePointer2 className="w-4 h-4" /> Pointer</button>
+                  )}
                   <button onClick={toggleFullScreen} tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full bg-black/50 hover:bg-white/20 text-white flex items-center justify-center border border-white/10"><Maximize className="w-5 h-5" /></button>
                   <button onClick={() => setPlaying(null)} tabIndex={0} data-tv-focusable data-tv-close className="w-10 h-10 rounded-full bg-red-500/80 hover:bg-red-500 text-white flex items-center justify-center"><X className="w-5 h-5" /></button>
                 </div>
@@ -1260,7 +1289,7 @@ export default function SportsView() {
               ) : activeUrl && isEmbedUrl ? (
                 // On a TV, OK here presses the stream site's own play button
                 // (services/nativeTap.ts): its player is in a frame a remote cannot enter.
-                <div className="absolute inset-0 w-full h-full"
+                <div ref={sportFrameRef} className="absolute inset-0 w-full h-full"
                   {...(canTap() ? {
                     tabIndex: 0, 'data-tv-focusable': true, 'data-tv-autofocus': true, 'aria-label': 'Play the match',
                     onClick: (e: React.MouseEvent<HTMLDivElement>) => { if (e.detail === 0) tapCenterOf(e.currentTarget, e.currentTarget); },
@@ -1284,6 +1313,7 @@ export default function SportsView() {
                     sandbox={activeSrc?.kind === 'server' ? undefined : playerSandbox(shieldOn, activeUrl)}
                   />
                   <span aria-hidden className="tv-ok-hint pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 z-20 items-center gap-2 px-4 py-2 rounded-full bg-black/75 text-white text-sm font-bold">Press OK to play</span>
+                  {sportPointer && <TvPointer area={sportFrameRef.current} onExit={() => setSportPointer(false)} />}
                   {isSandboxed && (
                     <div className="absolute top-0 left-0 w-full z-40 bg-amber-500/95 text-amber-950 text-xs md:text-sm font-bold px-4 py-3 flex flex-col md:flex-row items-center justify-center gap-3 md:gap-4 text-center backdrop-blur shadow-2xl border-b border-amber-400/30 animate-in slide-in-from-top-2">
                       <AlertCircle className="w-5 h-5 shrink-0 animate-bounce" />
