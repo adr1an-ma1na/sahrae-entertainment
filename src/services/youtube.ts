@@ -424,7 +424,7 @@ class YoutubeService {
         id,
         // "- Topic" is YouTube's label for auto-generated artist channels, which
         // is most of what a music listener subscribes to.
-        title: String(s.title || 'Channel').replace(/s*-s*Topic$/i, '').trim(),
+        title: String(s.title || 'Channel').replace(/\s*-\s*Topic$/i, '').trim(),
         description: String(s.description || ''),
         thumbnail: th.high?.url || th.medium?.url || th.default?.url || '',
         uploadsId: 'UU' + id.slice(2),

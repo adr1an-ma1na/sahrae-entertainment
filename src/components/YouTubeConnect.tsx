@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Youtube, Loader2, Play, RefreshCw, LogOut, Music2, Video, ListMusic, Users, Sparkles, Search, X } from 'lucide-react';
+import { Youtube, Loader2, Play, RefreshCw, LogOut, Music2, Video, ListMusic, Users, Sparkles, Search, X, Home } from 'lucide-react';
+import YouTubeHome from './YouTubeHome';
 import { youtubeService, API_DISABLED_HELP, KEY_BLOCKED_HELP, CREDENTIALS_URL, type YoutubeChannel, type YoutubePlaylist, type YoutubeUserProfile } from '../services/youtube';
 import { getApiState, ENABLE_URL, ytDataApi, canSearch } from '../services/ytDataApi';
 import { Track } from '../services/ytmusic';
@@ -24,9 +25,10 @@ import Illustration from './ui/Illustration';
  * serves the media and the play still counts for the creator.
  */
 
-type Tab = 'foryou' | 'music' | 'videos' | 'artists' | 'playlists';
+type Tab = 'home' | 'foryou' | 'music' | 'videos' | 'artists' | 'playlists';
 
 const TABS: { id: Tab; label: string; icon: typeof Music2; blurb: string }[] = [
+  { id: 'home', label: 'Home', icon: Home, blurb: 'The newest from the channels you subscribe to' },
   { id: 'foryou', label: 'Made for you', icon: Sparkles, blurb: 'Mixes built from what you listen to' },
   { id: 'music', label: 'YouTube Music', icon: Music2, blurb: 'Songs you have liked' },
   { id: 'videos', label: 'YouTube', icon: Video, blurb: 'Everything you have liked' },
@@ -48,7 +50,7 @@ export default function YouTubeConnect() {
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [tab, setTab] = useState<Tab>('foryou');
+  const [tab, setTab] = useState<Tab>('home');
   const [music, setMusic] = useState<Track[] | null>(null);
   const [videos, setVideos] = useState<Track[] | null>(null);
   const [playlists, setPlaylists] = useState<YoutubePlaylist[] | null>(null);
@@ -137,6 +139,7 @@ export default function YouTubeConnect() {
 
   const load = useCallback(async (which: Tab, force = false) => {
     if (!youtubeService.isConnected()) return;
+    if (which === 'home') return; // YouTubeHome loads its own
     if (!force) {
       if (which === 'music' && music) return;
       if (which === 'videos' && videos) return;
@@ -212,27 +215,43 @@ export default function YouTubeConnect() {
   // ── Not connected ──
   if (!connected) {
     return (
-      <section className="rounded-3xl border border-white/10 bg-gradient-to-br from-red-600/10 via-red-500/5 to-transparent p-6 md:p-8">
-        <div className="flex items-start gap-4 mb-5">
-          <span className="w-12 h-12 rounded-2xl bg-red-600 flex items-center justify-center shrink-0 shadow-lg shadow-red-600/20">
-            <Youtube className="w-6 h-6 text-white fill-current" />
-          </span>
-          <div className="min-w-0">
-            <h3 className="text-xl font-display font-bold text-white">Connect YouTube</h3>
-            <p className="text-sm text-zinc-400 mt-1 max-w-xl leading-relaxed">
-              Bring your liked songs, liked videos and playlists into Sahrae. One sign-in covers both
-              YouTube Music and YouTube. They are the same account, so there is nothing separate to connect.
+      <section className="lux-spot p-6 md:p-10">
+        <div className="flex flex-col md:flex-row md:items-center gap-8">
+          <div className="min-w-0 flex-1">
+            <p className="lux-kicker mb-3"><Youtube className="w-3.5 h-3.5" />YouTube, connected</p>
+            <h3 className="lux-title text-3xl md:text-5xl pb-1">Your YouTube, inside Sahrae.</h3>
+            <p className="text-sm md:text-base text-zinc-400 mt-3 max-w-xl leading-relaxed">
+              Sign in with the Google account you use on YouTube. Your subscriptions arrive as a YouTube home,
+              with your liked songs, liked videos and playlists beside it. One sign-in covers YouTube and YouTube Music.
             </p>
+            {/* A blocked KEY does not stop sign-in: the OAuth path sends a Bearer
+                token and no key, so connecting still works and reads your library.
+                Only a disabled API stops everything. */}
+            <button onClick={onConnect} disabled={connecting || apiOff} data-tv-focusable
+              className="mt-6 inline-flex items-center gap-3 pl-3 pr-6 py-3 rounded-full bg-[#fff] text-[#1f1f1f] text-sm font-semibold shadow-[0_10px_30px_-10px_rgba(0,0,0,0.6)] hover:bg-[#f2f2f2] transition-colors disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400">
+              {connecting ? <Loader2 className="w-5 h-5 animate-spin" /> : (
+                <svg viewBox="0 0 48 48" className="w-5 h-5" aria-hidden>
+                  <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+                  <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+                  <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+                  <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+                </svg>
+              )}
+              {connecting ? 'Opening Google…' : 'Sign in with Google'}
+            </button>
+          </div>
+          <div className="grid grid-cols-3 md:grid-cols-1 gap-3 md:w-64 shrink-0">
+            {[[Home, 'Subscriptions', 'Their newest videos, YouTube style'], [Music2, 'Liked music', 'Your YouTube Music likes'], [ListMusic, 'Playlists', 'Everything you saved']].map(([Icon, t, d]) => {
+              const I = Icon as typeof Home;
+              return (
+                <div key={t as string} className="lux-card p-3 md:p-4 flex flex-col md:flex-row md:items-center gap-2 md:gap-3" style={{ transform: 'none' }}>
+                  <span className="w-9 h-9 rounded-xl bg-[#ff0033] flex items-center justify-center shrink-0"><I className="w-4 h-4 text-[#fff]" /></span>
+                  <span className="min-w-0"><span className="block text-sm font-bold text-white">{t as string}</span><span className="hidden md:block text-xs text-zinc-400">{d as string}</span></span>
+                </div>
+              );
+            })}
           </div>
         </div>
-
-        {/* A blocked KEY does not stop sign-in: the OAuth path sends a Bearer
-            token and no key, so connecting still works and reads your library.
-            Only a disabled API stops everything. */}
-        <button onClick={onConnect} disabled={connecting || apiOff}
-          className="btn-sauti px-6 py-3 rounded-full text-sm font-black inline-flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
-          {connecting ? <><Loader2 className="w-4 h-4 animate-spin" /> Opening Google…</> : 'Connect with Google'}
-        </button>
 
         <p className="text-[11px] text-zinc-500 mt-4 max-w-xl leading-relaxed">
           Sahrae reads your library. It cannot change anything; the permission requested is read-only.
@@ -335,14 +354,14 @@ export default function YouTubeConnect() {
         </div>
       </form>
 
-      <div className="flex gap-1 glass p-1 rounded-xl w-fit mb-6">
+      <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 mb-6">
         {TABS.map((t) => {
           const on = tab === t.id;
           const Icon = t.icon;
           return (
             <button key={t.id} onClick={() => { setTab(t.id); setOpenList(null); setOpenArtist(null); setOpenMix(null); }} tabIndex={0} data-tv-focusable
               aria-pressed={on}
-              className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2 ${on ? 'bg-sauti text-amber-950' : 'text-zinc-400 hover:text-white'}`}>
+              className="lux-chip !py-2 !px-4 !text-sm">
               <Icon className="w-4 h-4" /> {t.label}
             </button>
           );
@@ -399,6 +418,9 @@ export default function YouTubeConnect() {
             )}
           </>
         )
+      ) : /* Home: YouTube's own layout, from the subscriptions */
+      tab === 'home' && !openArtist ? (
+        <YouTubeHome onOpenChannel={openArtistPage} />
       ) : /* An opened mix */
       openMix ? (
         <div>
