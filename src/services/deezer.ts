@@ -20,14 +20,25 @@ const slots = window as unknown as Record<string, unknown>;
 let seq = 0;
 const memory = new Map<string, unknown>();
 
-// Deezer allows about 50 requests in 5 seconds from one address: never more than four at once.
+// Deezer allows about 50 requests in 5 seconds from one address: never more than
+// four at once, and no more than 40 started in any 5 seconds.
 let active = 0;
 const waiting: (() => void)[] = [];
+const started: number[] = [];
+async function paced(): Promise<void> {
+  for (;;) {
+    const now = Date.now();
+    while (started.length && now - started[0] > 5000) started.shift();
+    if (started.length < 40) { started.push(now); return; }
+    await new Promise((r) => setTimeout(r, 5000 - (now - started[0]) + 20));
+  }
+}
 // What the listener just asked for (a search, a pick's related artists) goes to the
 // front of the line, ahead of photos being looked up in the background.
 async function slot(urgent = false): Promise<() => void> {
   if (active >= 4) await new Promise<void>((r) => (urgent ? waiting.unshift(r) : waiting.push(r)));
   active++;
+  await paced();
   return () => { active--; waiting.shift()?.(); };
 }
 
@@ -108,6 +119,9 @@ const real = (a: any) => a && a.id && a.name && !/various artists/i.test(a.name)
 
 type List<T> = { data?: T[] };
 
+/** A release on the catalogue: album, EP or single. */
+export interface DzAlbum { id: number; title: string; cover?: string; coverXl?: string; date: string; type: string; artist: string; artistId: number }
+
 export const deezer = {
   searchArtists: async (q: string, limit = 24, urgent = false): Promise<CArtist[]> =>
     (await get<List<unknown>>(`/search/artist?q=${encodeURIComponent(q)}&limit=${limit}`, 7 * DAY, urgent)).data?.filter(real).map(artist) || [],
@@ -127,6 +141,17 @@ export const deezer = {
     return (j.data || []).map((p) => ({ id: p.id, title: p.title, tracks: p.nb_tracks, by: p.user?.name || '', cover: p.picture_xl || p.picture_big }))
       .sort((a, b) => Number(/deezer/i.test(b.by)) - Number(/deezer/i.test(a.by)) || b.tracks - a.tracks);
   },
+  /** An artist's releases, newest first. */
+  artistAlbums: async (a: CArtist, limit = 12): Promise<DzAlbum[]> => {
+    const j = await get<List<{ id: number; title: string; cover_medium?: string; cover_xl?: string; cover_big?: string; release_date?: string; record_type?: string }>>(`/artist/${a.id}/albums?limit=${limit}`, DAY);
+    return (j.data || []).map((x) => ({ id: x.id, title: x.title, cover: x.cover_medium, coverXl: x.cover_xl || x.cover_big, date: x.release_date || '', type: x.record_type || 'album', artist: a.name, artistId: a.id }))
+      .sort((x, y) => y.date.localeCompare(x.date));
+  },
+  /** A release's songs, with its cover (the tracklist leaves it out). */
+  albumTracks: async (id: number, cover?: { cover?: string; coverXl?: string }): Promise<CTrack[]> =>
+    (await get<List<unknown>>(`/album/${id}/tracks?limit=60`, 7 * DAY)).data?.map(track)
+      .map((t) => ({ ...t, cover: t.cover || cover?.cover, coverXl: t.coverXl || cover?.coverXl }))
+      .filter((t) => t.duration >= 60) || [],
   playlistTracks: async (id: number, limit = 100): Promise<CTrack[]> =>
     (await get<List<unknown>>(`/playlist/${id}/tracks?limit=${limit}`, DAY)).data?.map(track).filter((t) => t.duration >= 60) || [],
 };

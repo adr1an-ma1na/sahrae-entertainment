@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useRef, useEffect, ReactNode } from 'react';
 import { notePlayed } from '../services/musicLibrary';
+import { loadTaste, saveTaste, recordListen } from '../services/taste';
 import { Track, ytmusic } from '../services/ytmusic';
 import { songRadio, diverseSample } from '../services/recommend';
 import { haptics } from '../services/haptics';
@@ -164,6 +165,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   // are registered once but must always act on current state).
   const ctrlRef = useRef<{ next: () => void; prev: () => void; stop: () => void; seek: (s: number) => void }>({ next: () => {}, prev: () => {}, stop: () => {}, seek: () => {} });
   const liveRef = useRef({ position: 0, duration: 0 });
+  // The song playing and the furthest it got, for the taste profile.
+  const listenRef = useRef<{ t: Track | null; max: number }>({ t: null, max: 0 });
 
   const [queue, setQueue] = useState<Track[]>([]);
   const [index, setIndex] = useState(0);
@@ -255,6 +258,11 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   // Track recently played (most recent first, de-duped, capped).
   useEffect(() => {
     const c = queue[index];
+    // How far the song before got: played through, or skipped (taste.ts). A song
+    // that never started (a catalogue song becoming its YouTube match) counts as neither.
+    const before = listenRef.current;
+    if (before.t && !before.t.isPodcast) saveTaste(recordListen(loadTaste(), before.t.artist, before.max, before.t.duration || 0));
+    listenRef.current = { t: c || null, max: 0 };
     if (!c) return;
     // Every play teaches the catalogue which genres this listener is into.
     notePlayed(c);
@@ -689,6 +697,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   //    working transport buttons (phone & tablet; benign elsewhere). Also gives
   //    Android the strongest signal to keep audio alive when backgrounded. ──
   liveRef.current = { position, duration };
+  if (listenRef.current.t && listenRef.current.t.id === current?.id && position > listenRef.current.max) listenRef.current.max = position;
   useEffect(() => {
     const ms: any = (navigator as any).mediaSession;
     if (!ms || typeof (window as any).MediaMetadata === 'undefined') return;

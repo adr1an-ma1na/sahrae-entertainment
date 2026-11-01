@@ -1,14 +1,14 @@
-import { useState, useEffect, useRef, Fragment, ReactNode, type MouseEvent as RMouseEvent } from 'react';
+import { useState, useEffect, useRef, useMemo, Fragment, ReactNode, type MouseEvent as RMouseEvent } from 'react';
 import { isSong } from '../services/musicCatalog';
 import { isMusicTrack } from '../services/musicFilter';
-import { releaseRadar, artistsIn, genrePage, myGenres, catalogueSongsBy, GENRES as CATALOG_GENRES, genreById, type GenrePage } from '../services/musicLibrary';
+import { artistsIn, genrePage, myGenres, catalogueSongsBy, GENRES as CATALOG_GENRES, genreById, type GenrePage } from '../services/musicLibrary';
 import { ytDataApi } from '../services/ytDataApi';
 import { Search, Play, Pause, Heart, Loader2, Music2, Plus, X, ListMusic, Shuffle, Trash2, ChevronLeft, Library, Sparkles, Disc3, User, Youtube, Link2 as LinkIcon, Radio as RadioIcon, Sunrise } from 'lucide-react';
 import AudioShowcase, { type ShowcaseSlide } from './ui/AudioShowcase';
 import { momentFor } from '../services/discoverCore';
 import { ytmusic, Track, Artist, Album, GENRES, SECTIONS } from '../services/ytmusic';
 import { getApiState, ENABLE_URL, type ApiState } from '../services/ytDataApi';
-import { buildMix, diverseSample } from '../services/recommend';
+import { buildMix } from '../services/recommend';
 import { useMusic } from '../hooks/useMusic';
 import { youtubeService, YoutubePlaylist, YoutubeUserProfile } from '../services/youtube';
 import { CoverArt } from './ui/CoverArt';
@@ -22,6 +22,9 @@ const YEAR = new Date().getFullYear();
 import SautiOnboarding, { type OnboardingResult } from './SautiOnboarding';
 import { loadPicks, savePicks, dailyMixes as curatedDailyMixes, pickedGenreMixes } from '../services/sautiMixes';
 import { asTrack } from '../services/resolveYt';
+import { weigh, loadTaste, artistKey, TASTE_CHANGE } from '../services/taste';
+import { buildTasteHome, songKey, type TasteHome } from '../services/tasteHome';
+import { deezer } from '../services/deezer';
 import { LuxHeader, LuxSeg } from './ui/Lux';
 import Coachmark from './Coachmark';
 
@@ -333,6 +336,18 @@ const SectionHead = ({ children, icon }: { children: ReactNode; icon?: ReactNode
 
 type Detail = { kind: 'artist' | 'album'; id: string; name: string; thumbnail?: string; subtitle?: string };
 
+/** "Today", "3 days ago", "2 weeks ago", "12 Sep": how recent a release is. */
+function releasedAgo(date: string): string {
+  const t = Date.parse(date);
+  if (!t) return '';
+  const days = Math.floor((Date.now() - t) / 86_400_000);
+  if (days <= 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days} days ago`;
+  if (days < 28) return `${Math.floor(days / 7)} week${days < 14 ? '' : 's'} ago`;
+  return new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
 // Time-of-day greeting (spec §1.2.3 / §1.2.4).
 function greeting(): string {
   const h = new Date().getHours();
@@ -357,12 +372,36 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   // onboarding OR a later "Tune your taste"), but NOT while listening, so the
   // mixes rebuild on taste changes without thrashing on every play.
   const tasteSig = tasteSeeds.length;
+
+  // The taste profile (services/taste.ts): the listener's artists, weighted by
+  // picks, likes, plays and skips. Everything personal on this page starts from
+  // it; a listener with none sees the charts and regional shelves instead.
+  const [tasteRev, setTasteRev] = useState(0);
+  useEffect(() => {
+    const on = () => setTasteRev((n) => n + 1);
+    window.addEventListener(TASTE_CHANGE, on);
+    return () => window.removeEventListener(TASTE_CHANGE, on);
+  }, []);
+  const [picksRev, setPicksRev] = useState(0);
+  const tasteLog = useMemo(() => loadTaste(), [tasteRev, rawRecent[0]?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ranked = useMemo(() => weigh({
+    picks: (loadPicks()?.artists || []).map((a) => a.name),
+    liked: likedTracks.filter((t) => !t.isPodcast).map((t) => t.artist),
+    log: tasteLog,
+  }), [tasteLog, likedTracks, picksRev]); // eslint-disable-line react-hooks/exhaustive-deps
+  const hasTaste = ranked.length > 0;
+  const banned = useMemo(() => new Set(tasteLog.banned), [tasteLog]);
+  const allowed = (t: { artist: string }) => !banned.has(artistKey(t.artist));
+  // The strongest dozen and the bans: when these change, the personal shelves are rebuilt.
+  const topSig = ranked.slice(0, 12).map((w) => w.key).join(',') + '|' + tasteLog.banned.join(',');
+  const [tasteHome, setTasteHome] = useState<TasteHome | null>(null);
   const [redoTaste, setRedoTaste] = useState(false); // "Tune your taste" manually re-opens the picker
   const showOnboarding = redoTaste || (!onboarded && recentlyPlayed.length === 0 && likedTracks.length === 0 && tasteSeeds.length === 0);
   const closeOnboarding = () => { completeOnboarding(); setRedoTaste(false); };
   const finishOnboarding = async (r: OnboardingResult) => {
     savePicks({ artists: r.artists, genres: r.genres });
     setPicksAt(Date.now());
+    setPicksRev((n) => n + 1);
     closeOnboarding();
   };
 
@@ -428,13 +467,30 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
     return () => { cancelled = true; };
   }, [catGenre]);
   useEffect(() => {
+    // With a taste profile, "Artists you might like" comes from the listener's own
+    // artists (tasteHome.ts); this region-and-genre guess is for a listener with none.
+    if (hasTaste) return;
     let cancelled = false;
     // After the home shelves, so the first screen is never waiting on this.
     const t = setTimeout(() => {
       artistsIn(myGenres(4), 30).then((a) => { if (!cancelled) setArtistsForYou(a); }).catch(() => {});
     }, 2500);
     return () => { cancelled = true; clearTimeout(t); };
-  }, []);
+  }, [hasTaste]);
+
+  // The personal shelves: built from the listener's artists only, kept for the day.
+  useEffect(() => {
+    if (!hasTaste) { setTasteHome(null); return; }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      const heard = new Set([...rawRecent, ...likedTracks].map((x) => songKey(x.artist, x.title)));
+      buildTasteHome({ ranked, picks: loadPicks()?.artists || [], banned: tasteLog.banned, heard })
+        .then((h) => { if (!cancelled) setTasteHome(h); })
+        .catch(() => {});
+    }, 1200);
+    return () => { cancelled = true; clearTimeout(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topSig]);
 
 
   const [query, setQuery] = useState('');
@@ -602,6 +658,9 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   }, [chartRegion]);
 
   useEffect(() => {
+    // A listener with a taste profile gets mixes from their own artists instead
+    // of the hour's generic searches.
+    if (hasTaste) { setDaylist([]); return; }
     let cancelled = false;
     // Kept for the moment it belongs to (this part of this day): three searches
     // cost 300 of the day's YouTube allowance, which every listener shares.
@@ -630,7 +689,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
         if (out.length >= 6) { try { localStorage.setItem(DAYLIST_KEY, JSON.stringify({ stamp, tracks: out })); } catch { /* storage full */ } }
       });
     return () => { cancelled = true; };
-  }, [moment.queries]);
+  }, [moment.queries, hasTaste]);
 
   // Fetch in-place tracks for active mood filter chip
   useEffect(() => {
@@ -667,6 +726,9 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   // Home shelves (parallel, fast, simple)
   useEffect(() => {
     let cancelled = false;
+    // Regional shelves ("New in Kenya") are for a listener Sauti knows nothing
+    // about yet; with a taste profile they were the off-taste noise on the page.
+    if (hasTaste) { setSections([]); setLoadingHome(false); return; }
     setSections([]); setLoadingHome(true);
     (async () => {
       try {
@@ -700,25 +762,12 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
     return () => { cancelled = true; };
     // Re-runs when the listener switches chart region, so "New in Kenya"
     // becomes "New in Nigeria" rather than staying on the first region loaded.
-  }, [chartRegion]);
+  }, [chartRegion, hasTaste]);
 
-  // Your Mix from listening (built on entry)
-  useEffect(() => {
-    if (recentlyPlayed.length === 0 && tasteSeeds.length === 0) return;
-    let cancelled = false;
-    (async () => {
-      const seeds = (recentlyPlayed.length ? recentlyPlayed : tasteSeeds).slice(0, 4);
-      const lists = await Promise.all(seeds.map((s) => ytmusic.related(s.id)));
-      if (cancelled) return;
-      const seen = new Set([...recentlyPlayed, ...tasteSeeds].map((t) => t.id));
-      const agg: Track[] = [];
-      for (const list of lists) for (const t of list) if (!seen.has(t.id)) { seen.add(t.id); agg.push(t); }
-      for (let i = agg.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [agg[i], agg[j]] = [agg[j], agg[i]]; }
-      setMix(diverseSample(agg, 30)); // no clustered artists
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasteSig]);
+  // Quick picks: the listener's artists' best songs woven with their neighbours'
+  // (tasteHome.ts). It was YouTube's "related" list for the last few plays,
+  // which wandered off to artists the listener had never played.
+  useEffect(() => { setMix(tasteHome ? tasteHome.quick.map((t) => asTrack(t)) : []); }, [tasteHome]);
 
   // ── "Made For You" — Spotify-grade curated playlists from your listening
   //    (On Repeat, Daily Mixes, Discover Weekly, Release Radar). DEFERRED ~3s so
@@ -729,12 +778,6 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
     const hasHistory = recentlyPlayed.length > 0 || likedTracks.length > 0 || tasteSeeds.length > 0;
     const timer = setTimeout(() => {
       (async () => {
-        // Seeds: explicit taste (liked) first, then recent rotation. Unique.
-        const seedSeen = new Set<string>();
-        const seeds: Track[] = [];
-        for (const t of [...likedTracks, ...tasteSeeds, ...recentlyPlayed]) { if (!seedSeen.has(t.id)) { seedSeen.add(t.id); seeds.push(t); } }
-        const topSeeds = seeds.slice(0, 8);
-        const known = new Set(seeds.map((t) => t.id));
 
         // Daily Mixes, built the way Spotify's are (services/sautiMixes.ts): the
         // listener's artists (first-run picks, then the ones they play most),
@@ -743,63 +786,31 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
         // from the catalogue, matched to YouTube audio as they play: never a
         // YouTube search for a genre's name, which filled a Rumba mix with AI uploads.
         const picks = loadPicks();
-        const count = new Map<string, number>();
-        for (const t of [...likedTracks, ...recentlyPlayed]) if (t.artist && !t.isPodcast) count.set(t.artist, (count.get(t.artist) || 0) + 1);
-        const played = [...count.entries()].filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).map(([a]) => a.split(/,|&| feat\.? | ft\.? | x /i)[0].trim());
+        // The artists the listener plays and likes most (taste.ts), beyond the ones they picked.
+        const pickKeys = new Set((picks?.artists || []).map((a) => artistKey(a.name)));
+        const played = ranked.filter((w) => !pickKeys.has(w.key)).map((w) => w.name);
+        const pickedArtists = (picks?.artists || []).filter((a) => !banned.has(artistKey(a.name)));
         const [daily, byGenre] = await Promise.all([
-          curatedDailyMixes(picks?.artists || [], played).catch(() => []),
+          curatedDailyMixes(pickedArtists, played).catch(() => []),
           pickedGenreMixes(picks?.genres || []).catch(() => []),
         ]);
         if (cancelled) return;
         const dailyCards = [...daily, ...byGenre].map((m) => ({ id: m.id, title: m.title, subtitle: m.subtitle, tracks: m.tracks.map((t) => asTrack(t)), cover: m.cover, tint: m.tint }));
         setMadeForYou(dailyCards);
 
-        // Release Radar: up to 100 new songs in their genres, new each Friday.
-        releaseRadar(seeds).then(({ tracks, genres }) => {
-          if (cancelled || tracks.length < 6) return;
-          const names = genres.slice(0, 3).map((g) => genreById(g)?.name).filter(Boolean).join(', ');
-          setMadeForYou((prev) => [...prev.filter((m) => m.id !== 'radar'), { id: 'radar', title: 'Release Radar', subtitle: `New in ${names} · this week`, tracks }]);
-        }).catch(() => {});
-
-        if (!hasHistory) return; // the rest needs something they have played
-
-        // YouTube's own "related" is its recommendation engine. Pull it per seed.
-        const related = await Promise.all(topSeeds.map((s) => ytmusic.related(s.id).catch(() => [] as Track[])));
-        if (cancelled) return;
-
-        // Score each candidate by HOW MANY of your seeds recommend it — cross-seed
-        // agreement is a far stronger signal than any single related list (this is
-        // the collaborative-filtering idea YT Music leans on).
-        const score = new Map<string, number>();
-        const cand = new Map<string, Track>();
-        related.forEach((list) => {
-          const inList = new Set<string>();
-          list.forEach((t) => {
-            if (inList.has(t.id)) return; inList.add(t.id);
-            score.set(t.id, (score.get(t.id) || 0) + 1);
-            if (!cand.has(t.id)) cand.set(t.id, t);
-          });
-        });
-        const ranked = [...cand.values()].sort((a, b) => (score.get(b.id) || 0) - (score.get(a.id) || 0));
-
-        const out: { id: string; title: string; subtitle: string; tracks: Track[] }[] = [];
-
+        // Release Radar and Discover Weekly come from the listener's artists
+        // (tasteHome.ts), not YouTube's genre pools and related videos.
+        if (!hasHistory) return;
         // On Repeat — your recent rotation.
-        if (recentlyPlayed.length >= 4) {
-          out.push({ id: 'repeat', title: 'On Repeat', subtitle: 'The songs you keep coming back to', tracks: recentlyPlayed.slice(0, 30) });
+        if (recentlyPlayed.length >= 4 && !cancelled) {
+          setMadeForYou((prev) => [...prev.filter((m) => m.id !== 'repeat'), { id: 'repeat', title: 'On Repeat', subtitle: 'The songs you keep coming back to', tracks: recentlyPlayed.slice(0, 30) }]);
         }
-
-        // Discover Weekly — highest cross-seed-agreement songs you haven't heard.
-        const discover = diverseSample(ranked.filter((t) => !known.has(t.id)), 30);
-        if (discover.length >= 8) out.push({ id: 'discover', title: 'Discover Weekly', subtitle: "Fresh picks your taste agrees on", tracks: discover });
-
-        if (!cancelled) setMadeForYou((prev) => [...prev.filter((m) => m.id.startsWith('daily-') || m.id.startsWith('genre-') || m.id === 'radar'), ...out]);
 
       })();
     }, 3000);
     return () => { cancelled = true; clearTimeout(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasteSig, picksAt]);
+  }, [tasteSig, picksAt, topSig]);
 
   // Debounced search (songs + artists + albums)
   useEffect(() => {
@@ -836,6 +847,18 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   const openArtist = async (a: Artist) => {
     setDetail({ kind: 'artist', id: a.id, name: a.name, thumbnail: a.thumbnail, subtitle: 'Artist' });
     setDetailLoading(true); setDetailTracks([]); setDetailAlbums([]);
+    // A catalogue artist (dz:<id>): their real top songs and releases, matched to YouTube as they play.
+    if (a.id.startsWith('dz:')) {
+      const id = Number(a.id.slice(3));
+      const [songs, albums] = await Promise.all([
+        deezer.topTracks(id, 50).catch(() => []),
+        deezer.artistAlbums({ id, name: a.name }, 24).catch(() => []),
+      ]);
+      setDetailTracks(songs.map((t) => asTrack(t)));
+      setDetailAlbums(albums.map((r) => ({ id: `dz:${r.id}`, name: r.title, thumbnail: r.coverXl || r.cover, artist: r.artist })));
+      setDetailLoading(false);
+      return;
+    }
     const name = a.name.toLowerCase();
     const byArtist = (s?: string) => { const ar = (s || '').toLowerCase(); return !!ar && (ar.includes(name) || name.includes(ar)); };
     if (/^UC[\w-]{22}$/.test(a.id)) {
@@ -861,6 +884,11 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   const openAlbum = async (al: Album) => {
     setDetail({ kind: 'album', id: al.id, name: al.name, thumbnail: al.thumbnail, subtitle: al.artist || 'Album' });
     setDetailLoading(true); setDetailTracks([]); setDetailAlbums([]);
+    if (al.id.startsWith('dz:')) {
+      const songs = await deezer.albumTracks(Number(al.id.slice(3)), { cover: al.thumbnail, coverXl: al.thumbnail }).catch(() => []);
+      setDetailTracks(songs.map((t) => asTrack(t))); setDetailLoading(false);
+      return;
+    }
     let tracks = await ytmusic.playlistTracks(al.id);
     // YouTube-Music album IDs (OLAK5uy_…) can't be expanded by the proxies, so
     // fall back to finding the album's songs by name + artist.
@@ -868,10 +896,10 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
     setDetailTracks(tracks); setDetailLoading(false);
   };
 
-  const artistTile = (a: Artist) => (
+  const artistTile = (a: Artist, sub = 'Artist') => (
     <button key={a.id} onClick={() => openArtist(a)} tabIndex={0} data-tv-focusable className="card-lift flex-none w-[130px] text-center focus:outline-none">
       <div className="w-[130px] h-[130px] rounded-full overflow-hidden bg-zinc-800 border border-white/10 mb-2 mx-auto">{a.thumbnail ? <img src={a.thumbnail} alt="" className="w-full h-full object-cover" loading="lazy" /> : <User className="w-10 h-10 text-zinc-600 absolute inset-0 m-auto" />}</div>
-      <p className="text-sm font-semibold text-white truncate">{a.name}</p><p className="text-xs text-zinc-500">Artist</p>
+      <p className="text-sm font-semibold text-white truncate">{a.name}</p><p className="text-xs text-zinc-500 truncate">{sub}</p>
     </button>
   );
   const albumTile = (al: Album) => (
@@ -897,6 +925,20 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   }
 
   // Featured spotlight for the Home hero — the freshest thing we have.
+  // Every mix for this listener, in the order Spotify shows them: Daily Mixes,
+  // Discover Weekly, Release Radar, the picked genres, On Repeat. A "Not
+  // interested" artist drops out of all of them at once.
+  const tasteCard = (id: string, title: string, subtitle: string, list: TasteHome['radar']) =>
+    list.length >= 8 ? { id, title, subtitle, tracks: list.map((t) => asTrack(t)), cover: list[0].coverXl || list[0].cover, tint: undefined as string | undefined } : null;
+  const discoverMix = tasteHome ? tasteCard('discover', 'Discover Weekly', 'Artists new to you, reached through the ones you play. New every Monday.', tasteHome.discover) : null;
+  const radarMix = tasteHome ? tasteCard('radar', 'Release Radar', 'New songs from the artists you play', tasteHome.radar) : null;
+  const mixes = [
+    ...madeForYou.filter((m) => m.id.startsWith('daily-')),
+    ...(discoverMix ? [discoverMix] : []),
+    ...(radarMix ? [radarMix] : []),
+    ...madeForYou.filter((m) => !m.id.startsWith('daily-')),
+  ].map((m) => ({ ...m, tracks: m.tracks.filter(allowed) })).filter((m) => m.tracks.length > 0);
+
   // The showcase: the right-now mix, your top mix, the chart's number one, and
   // radio from the last song played. Each slide only when it has something in it.
   const slides: ShowcaseSlide[] = [];
@@ -907,8 +949,8 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
     primary: { label: 'Play', icon: <Play className="w-4 h-4 fill-current" />, onClick: () => playQueue(daylist, 0, moment.title) },
     secondary: { label: 'Shuffle', icon: <Shuffle className="w-4 h-4" />, onClick: () => playQueue(seededShuffle(daylist, Date.now()), 0, moment.title) },
   });
-  if (madeForYou[0]?.tracks.length) {
-    const m = madeForYou[0];
+  if (mixes[0]?.tracks.length) {
+    const m = mixes[0];
     slides.push({
       id: `mix-${m.id}`, kicker: 'Made for you', title: m.title, subtitle: m.subtitle,
       art: m.tracks[0].artworkLarge || m.tracks[0].artwork, tint: m.tracks[0].dominantColor,
@@ -916,7 +958,18 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
       secondary: { label: 'Open', icon: <ListMusic className="w-4 h-4" />, onClick: () => setViewMix(m) },
     });
   }
-  if (chartTracks[0]) {
+  if (discoverMix) {
+    const m = discoverMix;
+    slides.push({
+      id: 'discover', kicker: 'New to you · this week', title: m.title, subtitle: m.subtitle,
+      art: m.tracks[0].artworkLarge || m.tracks[0].artwork, tint: m.tracks[0].dominantColor,
+      note: `${m.tracks.length} songs from artists you have not played yet`,
+      primary: { label: 'Play', icon: <Play className="w-4 h-4 fill-current" />, onClick: () => playQueue(m.tracks, 0, m.title) },
+      secondary: { label: 'Open', icon: <ListMusic className="w-4 h-4" />, onClick: () => setViewMix(m) },
+    });
+  }
+  // The chart's number one is for a listener Sauti knows nothing about yet.
+  if (chartTracks[0] && !hasTaste) {
     const top = chartTracks[0];
     slides.push({
       id: `chart-${top.id}`, kicker: `No. 1 in ${regionMusic(chartRegion).name}`, title: top.title, subtitle: top.artist,
@@ -957,7 +1010,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   // "Quick picks" (YouTube-Music-style 4-row tap-to-play grid): personalised mix
   // if we have one, else the freshest catalog shelf, deduped.
   const quickSource = mix.length ? mix : (sections.find((s) => s.tracks.length)?.tracks ?? []);
-  const quickPicks = quickSource.slice(0, 20);
+  const quickPicks = quickSource.filter(allowed).slice(0, 20);
 
   // ── Detail page (artist / album) ──
   const sortTracks = (list: Track[]): Track[] => {
@@ -1172,7 +1225,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                   )}
                 </div>
                 {rArtists.length > 0 && (
-                  <section><SectionHead>Artists</SectionHead><div className="flex overflow-x-auto gap-5 pt-1 pb-3 scrollbar-hide">{rArtists.map(artistTile)}</div></section>
+                  <section><SectionHead>Artists</SectionHead><div className="flex overflow-x-auto gap-5 pt-1 pb-3 scrollbar-hide">{rArtists.map((a) => artistTile(a))}</div></section>
                 )}
                 {rAlbums.length > 0 && (
                   <section><SectionHead>Albums</SectionHead><div className="flex overflow-x-auto gap-4 pt-1 pb-3 scrollbar-hide">{rAlbums.map(albumTile)}</div></section>
@@ -1276,6 +1329,108 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                 </section>
               )}
 
+              {mixes.length > 0 && (
+                <section className="mb-9">
+                  <SectionHead icon={<Sparkles className="w-5 h-5 text-sauti" />}>Mixed for you</SectionHead>
+                  <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">
+                    {mixes.map((m) => (
+                      <div key={m.id} role="button" onClick={() => setViewMix(m)} tabIndex={0} data-tv-focusable
+                        className="lux-card group flex-none w-[176px] md:w-[196px] text-left focus:outline-none cursor-pointer">
+                        {/* A Daily Mix card the way Spotify draws one: the lead artist's
+                            photo, a band of the mix's colour along the foot with its name. */}
+                        <div className="aspect-square relative bg-zinc-800 overflow-hidden rounded-[inherit]">
+                          <CoverArt imageUrl={m.cover || m.tracks[0]?.artworkLarge || m.tracks[0]?.artwork} dominantColor={m.tracks[0]?.dominantColor} rounded="" className="absolute inset-0 w-full h-full transition-transform duration-700 group-hover:scale-105" />
+                          <div className="absolute inset-x-0 bottom-0 h-[30%] flex items-center px-3" style={{ background: m.tint || m.tracks[0]?.dominantColor || 'rgb(var(--acc-rgb))' }}>
+                            <p className="text-[#fff] font-display font-extrabold text-[15px] leading-tight line-clamp-2 drop-shadow">{m.title}</p>
+                          </div>
+                          <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-black/45 backdrop-blur text-[9px] font-bold uppercase tracking-wider text-[#fff]">Made for you</span>
+                          <button onClick={(e) => { e.stopPropagation(); playQueue(m.tracks, 0, m.title); }} className="absolute top-2 right-2 btn-sauti w-9 h-9 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" aria-label="Play"><Play className="w-4 h-4 fill-current ml-0.5" /></button>
+                        </div>
+                        <div className="p-2.5"><p className="text-xs text-zinc-400 line-clamp-2 leading-snug">{m.subtitle}</p></div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* ── More like <artist>: the listener's two strongest artists, as radio ── */}
+              {tasteHome?.moreLike.map(({ artist, tracks: raw }) => {
+                const list = raw.map((t) => asTrack(t)).filter(allowed);
+                if (list.length < 8) return null;
+                const title = `More like ${artist.name}`;
+                return (
+                  <section key={artist.id} className="mb-9">
+                    <div className="flex items-center gap-3 mb-3">
+                      <button onClick={() => openArtist({ id: `dz:${artist.id}`, name: artist.name, thumbnail: artist.picture })} data-tv-focusable aria-label={artist.name}
+                        className="w-11 h-11 rounded-full overflow-hidden bg-zinc-800 shrink-0 ring-1 ring-white/10">
+                        {artist.picture ? <img src={artist.picture} alt="" className="w-full h-full object-cover" loading="lazy" /> : <User className="w-5 h-5 text-zinc-500 m-auto" />}
+                      </button>
+                      <div className="min-w-0">
+                        <p className="lux-kicker">Because you play {artist.name}</p>
+                        <h3 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight truncate">{title}</h3>
+                      </div>
+                    </div>
+                    <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{list.map((t, i) => <Fragment key={t.id}><TrackCard track={t} onPlay={() => playQueue(list, i, title)} /></Fragment>)}</div>
+                  </section>
+                );
+              })}
+
+              {/* ── New releases from the listener's artists (the catalogue's dates, newest first) ── */}
+              {tasteHome && tasteHome.releases.filter(allowed).length > 0 && (
+                <section className="mb-9">
+                  <SectionHead icon={<Disc3 className="w-5 h-5 text-sauti" />}>New releases for you</SectionHead>
+                  <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">
+                    {tasteHome.releases.filter(allowed).map((r) => (
+                      <button key={r.id} onClick={() => openAlbum({ id: `dz:${r.id}`, name: r.title, thumbnail: r.coverXl || r.cover, artist: r.artist })} tabIndex={0} data-tv-focusable
+                        className="card-lift flex-none w-[150px] md:w-[170px] text-left focus:outline-none">
+                        <div className="aspect-square rounded-2xl overflow-hidden bg-zinc-800 relative ring-1 ring-white/10">
+                          {r.cover ? <img src={r.coverXl || r.cover} alt="" className="w-full h-full object-cover" loading="lazy" /> : <Disc3 className="w-8 h-8 text-zinc-600 absolute inset-0 m-auto" />}
+                          <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-black/55 backdrop-blur text-[9px] font-bold uppercase tracking-wider text-[#fff]">{r.type === 'single' ? 'Single' : r.type === 'ep' ? 'EP' : 'Album'}</span>
+                        </div>
+                        <p className="mt-2 text-sm font-semibold text-white truncate">{r.title}</p>
+                        <p className="text-xs text-zinc-500 truncate">{r.artist} · {releasedAgo(r.date)}</p>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {tasteHome && tasteHome.mightLike.length > 0 ? (
+                <section className="mb-9">
+                  <SectionHead icon={<User className="w-5 h-5 text-sauti" />}>Artists you might like</SectionHead>
+                  <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">
+                    {tasteHome.mightLike.slice(0, 16).map(({ artist, because }) => artistTile({ id: `dz:${artist.id}`, name: artist.name, thumbnail: artist.picture }, `Like ${because.slice(0, 2).join(' & ')}`))}
+                  </div>
+                </section>
+              ) : !hasTaste && artistsForYou.length > 0 && (
+                <section className="mb-9">
+                  <SectionHead icon={<User className="w-5 h-5 text-sauti" />}>Artists for you</SectionHead>
+                  <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{artistsForYou.map((a) => artistTile(a))}</div>
+                </section>
+              )}
+
+              <section className="mb-9">
+                <SectionHead icon={<Music2 className="w-5 h-5 text-sauti" />}>Browse all genres</SectionHead>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                  {CATALOG_GENRES.map((g) => (
+                    <button key={g.id} onClick={() => setCatGenre(g.id)} tabIndex={0} data-tv-focusable
+                      className="card-lift relative h-20 md:h-24 rounded-2xl overflow-hidden text-left p-3 focus:outline-none"
+                      style={{ background: `linear-gradient(135deg, ${g.tint} 0%, ${g.tint}B3 100%)` }}>
+                      <span className="relative font-display font-bold text-base md:text-lg leading-tight" style={{ color: '#fff' }}>{g.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              {/* ── Beyond your taste: what everyone else is playing. Charts are
+                  not recommendations, so they sit below everything picked for
+                  the listener, and say what they are. ── */}
+              {hasTaste && (
+                <div className="mt-4 mb-5 pt-6 border-t border-white/10">
+                  <p className="lux-kicker mb-1">Beyond your taste</p>
+                  <h3 className="text-xl md:text-2xl font-display font-bold text-white">What everyone in {regionMusic(chartRegion).name} is playing</h3>
+                </div>
+              )}
               {/* ── Music videos — the region's most-watched music on YouTube,
                   as videos. Built from the chart already fetched for Live
                   Trending Charts below, so it costs no extra quota at all.
@@ -1373,54 +1528,10 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                 )}
               </section>
 
-              {madeForYou.length > 0 && (
-                <section className="mb-9">
-                  <SectionHead icon={<Sparkles className="w-5 h-5 text-sauti" />}>Mixed for you</SectionHead>
-                  <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">
-                    {madeForYou.map((m) => (
-                      <div key={m.id} role="button" onClick={() => setViewMix(m)} tabIndex={0} data-tv-focusable
-                        className="lux-card group flex-none w-[176px] md:w-[196px] text-left focus:outline-none cursor-pointer">
-                        {/* A Daily Mix card the way Spotify draws one: the lead artist's
-                            photo, a band of the mix's colour along the foot with its name. */}
-                        <div className="aspect-square relative bg-zinc-800 overflow-hidden rounded-[inherit]">
-                          <CoverArt imageUrl={m.cover || m.tracks[0]?.artworkLarge || m.tracks[0]?.artwork} dominantColor={m.tracks[0]?.dominantColor} rounded="" className="absolute inset-0 w-full h-full transition-transform duration-700 group-hover:scale-105" />
-                          <div className="absolute inset-x-0 bottom-0 h-[30%] flex items-center px-3" style={{ background: m.tint || m.tracks[0]?.dominantColor || 'rgb(var(--acc-rgb))' }}>
-                            <p className="text-[#fff] font-display font-extrabold text-[15px] leading-tight line-clamp-2 drop-shadow">{m.title}</p>
-                          </div>
-                          <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-black/45 backdrop-blur text-[9px] font-bold uppercase tracking-wider text-[#fff]">Made for you</span>
-                          <button onClick={(e) => { e.stopPropagation(); playQueue(m.tracks, 0, m.title); }} className="absolute top-2 right-2 btn-sauti w-9 h-9 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" aria-label="Play"><Play className="w-4 h-4 fill-current ml-0.5" /></button>
-                        </div>
-                        <div className="p-2.5"><p className="text-xs text-zinc-400 line-clamp-2 leading-snug">{m.subtitle}</p></div>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {artistsForYou.length > 0 && (
-                <section className="mb-9">
-                  <SectionHead icon={<User className="w-5 h-5 text-sauti" />}>Artists for you</SectionHead>
-                  <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{artistsForYou.map((a) => artistTile(a))}</div>
-                </section>
-              )}
-
-              <section className="mb-9">
-                <SectionHead icon={<Music2 className="w-5 h-5 text-sauti" />}>Browse all genres</SectionHead>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                  {CATALOG_GENRES.map((g) => (
-                    <button key={g.id} onClick={() => setCatGenre(g.id)} tabIndex={0} data-tv-focusable
-                      className="card-lift relative h-20 md:h-24 rounded-2xl overflow-hidden text-left p-3 focus:outline-none"
-                      style={{ background: `linear-gradient(135deg, ${g.tint} 0%, ${g.tint}B3 100%)` }}>
-                      <span className="relative font-display font-bold text-base md:text-lg leading-tight" style={{ color: '#fff' }}>{g.name}</span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              {mix.length > 0 && (
+              {recentlyPlayed.length >= 6 && (
                 <section className="mb-10">
                   <SectionHead icon={<Sparkles className="w-5 h-5 text-sauti" />}>Listen again</SectionHead>
-                  <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{mix.map((t, i) => <Fragment key={t.id}><TrackCard track={t} onPlay={() => playQueue(mix, i, 'Your Mix')} /></Fragment>)}</div>
+                  <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{recentlyPlayed.slice(0, 20).map((t, i) => <Fragment key={t.id}><TrackCard track={t} onPlay={() => playQueue(recentlyPlayed.slice(0, 20), i, 'Listen again')} /></Fragment>)}</div>
                 </section>
               )}
 
