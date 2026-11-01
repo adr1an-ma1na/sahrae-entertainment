@@ -34,7 +34,6 @@ import GlobalAudioPlayer from './components/GlobalAudioPlayer';
 import ProfileSelection from './components/ProfileSelection';
 import SignInGate, { NewPasswordSheet } from './components/SignInGate';
 import LegalCenter from './components/LegalCenter';
-import Wordmark from './components/ui/Wordmark';
 import ConsentBanner from './components/ConsentBanner';
 import SearchBox from './components/SearchBox';
 import { onRecovery } from './firebase';
@@ -737,7 +736,9 @@ export default function App() {
       // is starting" where a bare spinner reads as "something is stuck".
       return (
         <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center gap-6">
-          <h1 className="animate-in fade-in zoom-in-95 duration-500"><Wordmark className="h-7" /></h1>
+          <h1 className="text-3xl font-display font-black tracking-tighter animate-in fade-in zoom-in-95 duration-500">
+            <span className="text-gold">SAHRAE</span>
+          </h1>
           <div className="w-40 h-0.5 rounded-full bg-white/10 overflow-hidden">
             <div className="h-full w-1/3 rounded-full bg-gradient-to-r from-amber-300 to-amber-600 animate-[sahrae-boot-sweep_1.3s_ease-in-out_infinite]" />
           </div>

@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import Wordmark from './ui/Wordmark';
 import { Play, Headphones, Download, Trophy, Check, ChevronRight, Sparkles } from 'lucide-react';
 
 export interface TasteGenre { id: number; name: string }
@@ -35,7 +34,7 @@ export default function Onboarding({ onDone }: { onDone: (genres: TasteGenre[]) 
 
   return (
     <div role="dialog" aria-modal="true" aria-label="Welcome to Sahrae" className="fixed inset-0 z-[150] bg-[#0a0806] flex flex-col overflow-hidden">
-      {/* A warm wash in the theme colours */}
+      {/* Desert-dawn wash — ties to the app icon */}
       <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[46%]"
         style={{ background: 'radial-gradient(90% 80% at 50% 8%, rgba(251,191,36,0.30), transparent 62%), radial-gradient(60% 50% at 78% 0%, rgba(236,72,153,0.16), transparent 68%)' }} />
       <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#241608] to-transparent" />
@@ -49,7 +48,7 @@ export default function Onboarding({ onDone }: { onDone: (genres: TasteGenre[]) 
         {step === 0 && (
           <div className="flex-1 flex flex-col items-center justify-center text-center max-w-md mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="overline mb-4">Welcome to</div>
-            <h1 className="mb-5 flex justify-center"><Wordmark className="h-12 md:h-14" /></h1>
+            <h1 className="text-6xl md:text-7xl font-display font-black tracking-tighter mb-4"><span className="text-gold">SAHRAE</span></h1>
             <p className="text-zinc-300 text-lg leading-relaxed">Everything you love to watch and listen to, including movies, series, live TV, sports, music and podcasts, all in one place.</p>
           </div>
         )}

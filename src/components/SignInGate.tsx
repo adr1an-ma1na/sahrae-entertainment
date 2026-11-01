@@ -3,7 +3,6 @@ import { Mail, Lock, User, Eye, EyeOff, AlertCircle, CheckCircle2, Film, Trophy,
 import { auth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, updatePassword, endRecovery } from '../firebase';
 import { t, currentLang, setLang } from '../i18n';
 import { openLegal } from '../services/consent';
-import Wordmark from './ui/Wordmark';
 
 /**
  * The front door. Sahrae needs an account to watch or listen, so this is the
@@ -85,7 +84,7 @@ export default function SignInGate() {
 
       <div className="relative min-h-screen max-w-6xl mx-auto px-5 md:px-10 pt-[calc(env(safe-area-inset-top)+1.25rem)] pb-[calc(env(safe-area-inset-bottom)+1.5rem)] flex flex-col">
         <header className="flex items-center justify-between">
-          <Wordmark className="h-6 md:h-7" />
+          <span className="text-2xl md:text-3xl font-display font-black tracking-tighter text-gold">SAHRAE</span>
           <button type="button" data-tv-focusable
             onClick={() => setLang(currentLang() === 'sw' ? 'en' : 'sw')}
             className="text-xs font-bold px-3 py-1.5 rounded-full border border-white/15 text-zinc-300 hover:text-white hover:border-white/30">

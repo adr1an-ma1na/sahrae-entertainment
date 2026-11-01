@@ -1,76 +1,65 @@
 import { useEffect, useState } from 'react';
 import { playSonicLogo } from '../services/sonicLogo';
-import { WORDMARK_H, WORDMARK_LETTERS, WORDMARK_W } from '../brand/wordmark';
 
 /**
- * The opening: stepping into Sahrae. In time with the Sahrae sound
- * (services/sonicLogo.ts):
- *
- *   0.35  out of black, a horizon of light opens across the screen
- *   1.50  on the arrival, light breaks over the horizon and SAHRAE rises out of
- *         it, from the middle outwards, its letters drawing together
- *   2.20  ENTERTAINMENT beneath; a slow sheen passes over the name
- *   3.40  stepping through: the view moves forward through the light into
- *         the app
- *
- * The wordmark is the brand's outlines (brand/wordmark.ts), the same as the
- * app icon. CSS keyframes (index.css .rl-*), transforms and opacity; no
- * drifting dust or blur on TVs and weak graphics; a short fade for reduced motion.
+ * The launch: a desert dawn, Sahrae's own image (the name is the Sahara; the
+ * icon is a sun rising over dunes). The sky warms, the sun rises behind two
+ * dune lines and lights the crest, SAHRAE arrives letter by letter out of a
+ * soft focus, ENTERTAINMENT settles beneath it, and the camera pushes gently
+ * in as the scene dissolves into the app. Pure CSS keyframes (index.css), in
+ * the theme's own colours; simpler on TVs and low-power devices, and a quick
+ * fade for anyone who has asked for less motion.
  */
-// Letters rise from the middle outwards: H R, then A A, then S E.
-const ORDER = [2, 1, 0, 0, 1, 2];
-const SPREAD = [-0.5, -0.3, -0.1, 0.1, 0.3, 0.5];
-const DUST = Array.from({ length: 16 }, (_, i) => ({
-  left: `${(i * 61) % 100}%`,
-  delay: `${0.4 + ((i * 37) % 23) / 10}s`,
-  size: 2 + ((i * 7) % 3),
-  drift: `${-40 - ((i * 13) % 60)}px`,
-}));
+const WORD = 'SAHRAE';
 
 export default function SplashIntro() {
   const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const [phase, setPhase] = useState<'in' | 'out' | 'done'>('in');
 
   useEffect(() => {
+    // The Sahrae sound (services/sonicLogo.ts) opens with the dawn.
     void playSonicLogo();
-    const t1 = setTimeout(() => setPhase('out'), reduce ? 700 : 3400);
-    const t2 = setTimeout(() => setPhase('done'), reduce ? 1050 : 4250);
+    const t1 = setTimeout(() => setPhase('out'), reduce ? 500 : 2150);
+    const t2 = setTimeout(() => setPhase('done'), reduce ? 850 : 2900);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [reduce]);
 
   if (phase === 'done') return null;
 
   return (
-    <div className={`rl fixed inset-0 z-[200] overflow-hidden ${phase === 'out' ? 'rl-through' : ''} ${reduce ? 'rl-still' : ''}`} aria-hidden>
-      <div className="rl-stage absolute inset-0">
-        <div className="rl-dawn" />
-        <div className="rl-dust">
-          {DUST.map((d, i) => <span key={i} style={{ left: d.left, width: d.size, height: d.size, animationDelay: d.delay, ['--drift' as string]: d.drift }} />)}
-        </div>
-        <div className="rl-horizon"><div className="rl-horizon-glow" /><div className="rl-horizon-line" /></div>
-        <div className="rl-title">
-          <svg className="rl-word" viewBox={`0 0 ${WORDMARK_W} ${WORDMARK_H}`}>
-            <defs>
-              <linearGradient id="rl-gold" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2={WORDMARK_H}>
-                <stop offset="0" stopColor="#fff7e2" /><stop offset="0.5" stopColor="#f3cd7c" /><stop offset="1" stopColor="#c58d34" />
-              </linearGradient>
-              <linearGradient id="rl-sheen" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0" stopColor="#fff" stopOpacity="0" /><stop offset="0.5" stopColor="#fff" stopOpacity="0.9" /><stop offset="1" stopColor="#fff" stopOpacity="0" />
-              </linearGradient>
-              <mask id="rl-letters" maskUnits="userSpaceOnUse" x="0" y="0" width={WORDMARK_W} height={WORDMARK_H}>
-                {WORDMARK_LETTERS.map((d, i) => <path key={i} d={d} fill="#fff" />)}
-              </mask>
-            </defs>
-            {WORDMARK_LETTERS.map((d, i) => (
-              <path key={i} className="rl-letter" d={d} fill="url(#rl-gold)"
-                style={{ animationDelay: `${1.5 + ORDER[i] * 0.11}s`, ['--spread' as string]: `${SPREAD[i] * 60}px` }} />
-            ))}
-            <g mask="url(#rl-letters)">
-              <rect className="rl-sheen" x="0" y="0" width={WORDMARK_W * 0.35} height={WORDMARK_H} fill="url(#rl-sheen)" />
-            </g>
-          </svg>
-          <span className="rl-sub">Entertainment</span>
-        </div>
+    <div className={`dawn fixed inset-0 z-[200] overflow-hidden ${phase === 'out' ? 'dawn-out' : ''} ${reduce ? 'dawn-still' : ''}`} aria-hidden>
+      <div className="dawn-sky" />
+      <svg className="dawn-scene" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMax slice">
+        <defs>
+          <radialGradient id="dawn-sun" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" style={{ stopColor: 'var(--logo-hi)' }} />
+            <stop offset="45%" style={{ stopColor: 'var(--logo-1)' }} />
+            <stop offset="75%" style={{ stopColor: 'var(--logo-3)', stopOpacity: 0.55 }} />
+            <stop offset="100%" style={{ stopColor: 'var(--logo-3)', stopOpacity: 0 }} />
+          </radialGradient>
+          <linearGradient id="dawn-dune-back" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#2a1c0c" />
+            <stop offset="100%" stopColor="#0d0905" />
+          </linearGradient>
+          <linearGradient id="dawn-dune-front" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#140d06" />
+            <stop offset="100%" stopColor="#050302" />
+          </linearGradient>
+        </defs>
+        <circle className="dawn-halo" cx="600" cy="590" r="300" fill="url(#dawn-sun)" />
+        <circle className="dawn-sun" cx="600" cy="590" r="92" fill="url(#dawn-sun)" />
+        <path className="dawn-dune dawn-dune-back" d="M0 610 C 180 560 360 600 560 588 C 780 574 960 532 1200 596 L1200 800 L0 800 Z" fill="url(#dawn-dune-back)" />
+        <path className="dawn-crest" d="M0 610 C 180 560 360 600 560 588 C 780 574 960 532 1200 596" fill="none" style={{ stroke: 'var(--logo-2)' }} strokeWidth="2.2" />
+        <path className="dawn-dune dawn-dune-front" d="M0 690 C 220 640 420 712 650 668 C 880 624 1010 700 1200 662 L1200 800 L0 800 Z" fill="url(#dawn-dune-front)" />
+      </svg>
+
+      <div className="absolute inset-0 flex flex-col items-center justify-center px-6 pb-[12vh]">
+        <h1 className="dawn-word font-display font-black tracking-tighter leading-none text-[17vw] md:text-[8.5rem]">
+          {WORD.split('').map((ch, i) => (
+            <span key={i} style={{ animationDelay: `${0.7 + i * 0.07}s`, backgroundPosition: `${(i / (WORD.length - 1)) * 100}% 50%` }}>{ch}</span>
+          ))}
+        </h1>
+        <span className="dawn-sub mt-3 md:mt-4 font-light uppercase text-[0.7rem] md:text-base">Entertainment</span>
       </div>
     </div>
   );

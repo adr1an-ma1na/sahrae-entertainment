@@ -1,15 +1,16 @@
 /**
- * The Sahrae sound: the opening of the app, scored like a film's cold open.
+ * The Sahrae sound: the opening of the app (over the desert dawn,
+ * SplashIntro.tsx), scored like a film's cold open.
  * Made here with Web Audio, no file to download.
  *
  *   0.00  tension: a low D drone opening up, a tone that keeps rising, a clock
  *         ticking faster, a reversed cymbal drawing breath
  *   1.50  the arrival: a wall of low brass on a dark D minor, a great drum,
- *         the floor dropping away (as SAHRAE rises out of the horizon)
+ *         the floor dropping away
  *   1.86  a talking drum answers, three bent notes, Sahrae's African voice
  *   1.55  voices: a held "ah" that turns the minor to major, strings above
  *   3.40  stepping through: a rush of air, the brass again in D major, the
- *         sub falling, bells, as the screen moves into the app
+ *         sub falling, bells
  *   ~5.6  it rings out in a large hall
  *
  * Original: the language of the modern film score, nobody's theme.
@@ -28,7 +29,7 @@ export function setIntroSound(on: boolean): void {
   try { localStorage.setItem(PREF, on ? '1' : '0'); } catch { /* applies this session */ }
 }
 
-/** The moment of the arrival and of stepping through, for the picture to meet (SplashIntro). */
+/** The moment of the arrival and of stepping through, in seconds from the start. */
 export const SONIC_HIT_S = 1.5;
 export const SONIC_THROUGH_S = 3.4;
 

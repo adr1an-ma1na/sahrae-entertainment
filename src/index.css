@@ -1081,73 +1081,59 @@ a:focus-visible {
 @keyframes splash-fade { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.06); visibility: hidden; } }
 
 /* ─────────────────────────────────────────────────────────────
-   The opening (SplashIntro.tsx): stepping into Sahrae, in time with the
-   Sahrae sound (services/sonicLogo.ts). A horizon of light opens; on the
-   arrival (1.5 s) light breaks over it and SAHRAE rises out of it from the
-   middle outwards; a sheen passes; at 3.4 s the view moves forward through
-   the light into the app. Brand gold in every theme. Transforms and opacity.
+   SAHRAE launch: a desert dawn (SplashIntro.tsx). Theme colours via
+   the --logo-* tokens; transforms and opacity only, so it stays smooth.
    ───────────────────────────────────────────────────────────── */
-.rl { background: #000; --hz: 58%; }
-.rl-stage { transform-origin: 50% var(--hz); }
-.rl-dawn {
-  position: absolute; left: 50%; top: var(--hz); width: 120vmax; height: 70vmin;
-  transform: translate(-50%, -100%) scaleY(.6); transform-origin: 50% 100%; opacity: 0;
-  background: radial-gradient(50% 100% at 50% 100%, rgba(255, 214, 140, .30) 0%, rgba(214, 150, 60, .10) 45%, transparent 75%);
-  animation: rl-dawn 2.6s cubic-bezier(.16,1,.3,1) 1.45s forwards;
+.dawn { background: #050302; transform-origin: 50% 60%; }
+.dawn-sky {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(70% 55% at 50% 78%, rgb(var(--acc-rgb) / .55), transparent 70%),
+    radial-gradient(90% 70% at 50% 100%, rgb(var(--acc2-rgb) / .45), transparent 75%),
+    linear-gradient(180deg, #050302 0%, #120b05 55%, #2b1a09 100%);
+  opacity: 0;
+  animation: dawn-sky 1.6s var(--ease-premium) .1s forwards;
 }
-.rl-horizon { position: absolute; left: 0; right: 0; top: var(--hz); height: 0; }
-.rl-horizon-line, .rl-horizon-glow { position: absolute; left: 0; right: 0; transform: scaleX(0); }
-.rl-horizon-line {
-  top: -1px; height: 2px;
-  background: linear-gradient(90deg, transparent 0%, rgba(243, 205, 124, .55) 22%, #fff6df 50%, rgba(243, 205, 124, .55) 78%, transparent 100%);
-  animation: rl-open 1.15s cubic-bezier(.65,0,.35,1) .35s forwards;
+.dawn-scene { position: absolute; inset: 0; width: 100%; height: 100%; }
+.dawn-sun { transform-box: fill-box; transform-origin: center; opacity: 0; transform: translateY(170px) scale(.88);
+  animation: dawn-sun 1.5s var(--ease-premium) .2s forwards; }
+.dawn-halo { transform-box: fill-box; transform-origin: center; opacity: 0; transform: translateY(150px) scale(.7);
+  animation: dawn-halo 1.9s var(--ease-premium) .25s forwards; }
+.dawn-dune { transform: translateY(40px); opacity: 0; animation: dawn-dune 1.2s var(--ease-premium) forwards; }
+.dawn-dune-front { animation-delay: .12s; }
+.dawn-crest { stroke-dasharray: 1400; stroke-dashoffset: 1400; opacity: .9;
+  filter: drop-shadow(0 0 6px rgb(var(--acc-rgb) / .9));
+  animation: dawn-crest 1.4s var(--ease-premium) .55s forwards; }
+.dawn-word { display: flex; filter: drop-shadow(0 8px 40px rgb(var(--acc-rgb) / .40)); }
+.dawn-word > span {
+  display: inline-block;
+  background-image: linear-gradient(105deg, var(--logo-deep) 0%, var(--logo-1) 30%, var(--logo-hi) 50%, var(--logo-2) 70%, var(--logo-deep) 100%);
+  background-size: 600% 100%;
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+  opacity: 0; transform: translateY(22px); filter: blur(10px);
+  animation: dawn-letter .8s var(--ease-premium) forwards;
 }
-.rl-horizon-glow {
-  top: -26px; height: 52px; opacity: .55;
-  background: radial-gradient(50% 50% at 50% 50%, rgba(255, 220, 150, .55), rgba(255, 220, 150, 0) 70%);
-  animation: rl-open 1.15s cubic-bezier(.65,0,.35,1) .35s forwards, rl-flare 1.4s ease-out 1.5s;
-}
-.rl-word {
-  position: absolute; left: 50%; bottom: calc(100% - var(--hz) + 3.4vmin);
-  width: min(74vw, 640px); height: auto; overflow: visible; transform: translateX(-50%);
-}
-.rl-letter {
-  opacity: 0; transform-box: fill-box; transform-origin: 50% 100%;
-  transform: translate(var(--spread, 0), 38%) scaleY(.92);
-  animation: rl-rise 1.25s cubic-bezier(.16,1,.3,1) forwards;
-}
-.rl-sheen { transform: translateX(-170px); animation: rl-sheen 1s cubic-bezier(.45,0,.2,1) 2.35s forwards; }
-.rl-sub {
-  position: absolute; left: 0; right: 0; top: calc(var(--hz) + 3.2vmin); text-align: center;
-  color: rgba(245, 240, 230, .72); font-weight: 300; text-transform: uppercase;
-  font-size: clamp(.68rem, 1.5vmin, .95rem); letter-spacing: 1.1em; padding-left: 1.1em; opacity: 0;
-  animation: rl-sub 1.3s cubic-bezier(.16,1,.3,1) 2.15s forwards;
-}
-.rl-dust span {
-  position: absolute; top: var(--hz); border-radius: 9999px; background: #ffe4a8; opacity: 0;
-  box-shadow: 0 0 6px rgba(255, 220, 150, .8);
-  animation: rl-dust 3s ease-out forwards;
-}
-.rl-through .rl-stage { animation: rl-forward .85s cubic-bezier(.55,0,.75,.15) forwards; }
-.rl-through { animation: rl-fade .8s ease-in .1s forwards; }
+.dawn-sub { color: rgba(255,255,255,.72); letter-spacing: .9em; opacity: 0;
+  animation: dawn-sub 1s var(--ease-premium) 1.25s forwards; }
+.dawn-out { animation: dawn-out .75s cubic-bezier(.7,0,.84,0) forwards; }
 
-@keyframes rl-open { to { transform: scaleX(1); } }
-@keyframes rl-flare { 0% { opacity: .55; } 12% { opacity: 1; transform: scaleX(1) scaleY(1.8); } 100% { opacity: .6; transform: scaleX(1) scaleY(1); } }
-@keyframes rl-dawn { 0% { opacity: 0; transform: translate(-50%, -100%) scaleY(.6); } 15% { opacity: 1; } 100% { opacity: .75; transform: translate(-50%, -100%) scaleY(1); } }
-@keyframes rl-rise { to { opacity: 1; transform: translate(0, 0) scaleY(1); } }
-@keyframes rl-sheen { to { transform: translateX(640px); } }
-@keyframes rl-sub { to { opacity: 1; letter-spacing: .62em; padding-left: .62em; } }
-@keyframes rl-dust { 15% { opacity: .85; } 100% { opacity: 0; transform: translateY(calc(var(--drift) * 3)); } }
-@keyframes rl-forward { to { transform: scale(2.6); opacity: 0; } }
-@keyframes rl-fade { to { opacity: 0; visibility: hidden; } }
+@keyframes dawn-sky { to { opacity: 1; } }
+@keyframes dawn-sun { to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes dawn-halo { 60% { opacity: .9; } to { opacity: .75; transform: translateY(0) scale(1.15); } }
+@keyframes dawn-dune { to { opacity: 1; transform: translateY(0); } }
+@keyframes dawn-crest { to { stroke-dashoffset: 0; } }
+@keyframes dawn-letter { to { opacity: 1; transform: translateY(0); filter: blur(0); } }
+@keyframes dawn-sub { to { opacity: 1; letter-spacing: .55em; } }
+@keyframes dawn-out { to { opacity: 0; transform: scale(1.08); filter: blur(6px); visibility: hidden; } }
 
-/* Less motion asked for: the finished title, then a quick fade. */
-.rl-still *, .rl-still { animation-duration: 1ms !important; animation-delay: 0s !important; }
-.rl-still.rl-through { animation: rl-fade .3s ease forwards !important; }
-.rl-still .rl-dust { display: none; }
-/* TVs and weak graphics: no drifting dust, a plain fade through. */
-html.tv-mode .rl-dust, html.low-gfx .rl-dust { display: none; }
-html.tv-mode .rl-dust span, html.low-gfx .rl-dust span { box-shadow: none; }
+/* Less motion asked for: the finished scene, then a quick fade. */
+.dawn-still *, .dawn-still { animation-duration: 1ms !important; animation-delay: 0s !important; }
+.dawn-still.dawn-out { animation: dawn-fade .3s ease forwards !important; }
+@keyframes dawn-fade { to { opacity: 0; visibility: hidden; } }
+html.tv-mode .dawn-word > span, html.low-gfx .dawn-word > span { filter: none; }
+html.tv-mode .dawn-crest, html.low-gfx .dawn-crest, html.tv-mode .dawn-word, html.low-gfx .dawn-word { filter: none; }
+html.tv-mode .dawn-out, html.low-gfx .dawn-out { animation-name: dawn-fade; }
 
 
 

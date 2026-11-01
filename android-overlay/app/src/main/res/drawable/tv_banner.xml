@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+
+    <!-- Sky gradient (Sahara sunset) -->
+    <path android:pathData="M0,0 L320,0 L320,180 L0,180 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="160" android:startY="0"
+                android:endX="160" android:endY="180">
+                <item android:offset="0.0" android:color="#FF1C1917" />
+                <item android:offset="0.55" android:color="#FF7C2D12" />
+                <item android:offset="1.0" android:color="#FFF59E0B" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Sun glow -->
+    <path android:pathData="M80,80 m-58,0 a58,58 0 1,0 116,0 a58,58 0 1,0 -116,0 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="80" android:centerY="80" android:gradientRadius="58">
+                <item android:offset="0.0" android:color="#66FDE68A" />
+                <item android:offset="1.0" android:color="#00FDE68A" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Sun disc -->
+    <path android:pathData="M80,80 m-38,0 a38,38 0 1,0 76,0 a38,38 0 1,0 -76,0 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="80" android:startY="42"
+                android:endX="80" android:endY="118">
+                <item android:offset="0.0" android:color="#FFFDE68A" />
+                <item android:offset="1.0" android:color="#FFF59E0B" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- S monogram over the sun -->
+    <path
+        android:pathData="M94,68 C94,60 86,56 80,56 C72,56 66,61 66,69 C66,77 74,80 82,82 C90,84 96,88 96,96 C96,104 88,108 80,108 C72,108 66,104 65,97"
+        android:strokeColor="#FF1C1917"
+        android:strokeWidth="9"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- Back dune -->
+    <path
+        android:pathData="M0,138 C70,118 130,150 200,134 C250,123 295,146 320,136 L320,180 L0,180 Z"
+        android:fillColor="#FF92400E" />
+
+    <!-- Front dune -->
+    <path
+        android:pathData="M0,156 C80,140 150,166 220,152 C270,142 300,160 320,154 L320,180 L0,180 Z"
+        android:fillColor="#FF7C2D12" />
+</vector>
