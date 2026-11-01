@@ -1697,3 +1697,42 @@ html.tv-mode.player-open .tv-full,
 html.tv-mode.player-open .aurora-glow,
 html.low-gfx.player-open .tv-shell,
 html.low-gfx.player-open .aurora-glow { visibility: hidden !important; }
+
+/* The film player in full screen: nothing behind it moves (PlayerModal sets
+   html.player-maxed), as with Live TV and Sports full screen. */
+html.player-maxed,
+html.player-maxed body { overflow: hidden !important; overscroll-behavior: none; }
+/* No blur on the backdrop in full screen: a backdrop-filter makes the element the
+   anchor of every position:fixed inside it, so the "full screen" player was
+   pinned to the scrolling details page, not the screen, and sat off-screen if
+   the page had been scrolled (2026-11-01). */
+html.player-maxed #player-modal-container {
+  overflow: hidden !important;
+  touch-action: none;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background-color: #000 !important;
+}
+html.player-maxed .player-shell.is-max { touch-action: auto; }
+
+/* Now Playing on wide screens (MusicPlayer.tsx): two equal halves. Each half
+   holds a column exactly the artwork's width, centred in it, so the cover, the
+   title, the scrubber, the buttons and the lyrics share one measure and one
+   height. The controls are unboxed there: the cover is the only object. */
+@media (min-width: 1024px) {
+  .np-grid { --np-w: max(240px, min(30vw, calc(100vh - 440px), 520px)); }
+  .np-left { width: var(--np-w); justify-self: center; }
+  /* contain: size: the lyrics or queue never sets the height; it fills the player column's. */
+  .np-side { width: var(--np-w); justify-self: center; contain: size; }
+  .np-grid .np-deck.control-deck {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+  .np-side-body {
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 7%, #000 88%, transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 7%, #000 88%, transparent 100%);
+  }
+}

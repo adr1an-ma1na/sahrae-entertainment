@@ -680,7 +680,8 @@ export default function SportsView() {
 
   // Badge host. The live API serves team badges from its own origin.
   const base = 'https://streamed.pk';
-  const badge = (b?: string) => (b ? `${base}/api/images/badge/${b}.webp` : '');
+  // A full address (StreamFree's crests) as it is; a bare id from the old API on its host.
+  const badge = (b?: string) => (b ? (/^https:\/\//.test(b) ? b : `${base}/api/images/badge/${b}.webp`) : '');
   const eventTime = (d: number) => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   
   const formatEventDateTime = (d: number) => {
@@ -777,6 +778,7 @@ export default function SportsView() {
       // No TV channels: an event plays its own match feeds or nothing. A sports
       // channel showing something else is not the game the person tapped.
       [],
+      m.feeds,
     );
 
     const idx = initialServerIdx !== undefined && initialServerIdx < sources.length ? initialServerIdx : 0;

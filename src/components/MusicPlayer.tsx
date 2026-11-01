@@ -304,13 +304,20 @@ export default function MusicPlayer() {
               </button>
             </div>
 
-            <div className="flex-1 flex flex-col lg:grid lg:grid-cols-2 lg:gap-14 lg:items-center lg:py-6">
-            <div className="flex flex-col min-w-0">
+            {/* Wide screens: two equal halves of the same height, centred as one.
+                The left half is exactly the artwork's width, so the title, the
+                scrubber and the buttons line up with its edges; the right half
+                is the lyrics or Up next, unboxed, from the artwork's top edge to
+                the controls' foot. It used to be a small cover over a frosted
+                box of controls beside a taller box of lyrics: two boxes at two
+                heights (owner, 2026-11-01: "not well balanced"). */}
+            <div className="np-grid flex-1 flex flex-col lg:flex-none lg:grid lg:grid-cols-2 lg:gap-16 lg:items-stretch lg:my-auto lg:py-4">
+            <div className="np-left flex flex-col min-w-0 lg:justify-center">
             {/* Song / Video — the same switch YouTube Music puts above its art.
                 Only offered when there is a video; a podcast file has none, and a
                 toggle that does nothing is worse than no toggle. */}
             {canShowVideo && (
-              <div className="flex justify-center mt-4 shrink-0">
+              <div className="flex justify-center mt-4 lg:mt-0 shrink-0">
                 <div role="tablist" aria-label="Song or video" className="lux-seg">
                   {([['song', isPodcast ? 'Listen' : 'Song', Disc3], ['video', isPodcast ? 'Watch' : 'Video', Clapperboard]] as const).map(([key, label, Icon]) => {
                     const on = (key === 'video') === showingVideo;
@@ -326,7 +333,7 @@ export default function MusicPlayer() {
             )}
 
             {/* Album art (lyrics live in the Up next / Lyrics / Related panel) */}
-            <div className="flex-1 flex items-center justify-center py-6 min-h-0 shrink-0">
+            <div className="flex-1 lg:flex-none flex items-center justify-center py-6 lg:pt-0 lg:pb-6 min-h-0 shrink-0">
               {showingVideo ? (
                 /* The slot the live YouTube player is laid over (see useMusic).
                    16:9, and never under 200px tall: YouTube requires an embedded
@@ -334,7 +341,7 @@ export default function MusicPlayer() {
                 <div ref={setVideoSlot} className="w-full max-w-[640px] aspect-video min-h-[200px] rounded-3xl bg-black/60"
                   aria-label="Music video" />
               ) : current.artworkLarge || current.artwork ? (
-                <div className="relative w-[min(80vw,42vh)] lg:w-[min(30vw,44vh)] max-w-[480px]"
+                <div className="relative w-[min(80vw,42vh)] lg:w-full max-w-[480px] lg:max-w-none"
                   style={{ transform: isPlaying ? 'scale(1)' : 'scale(0.94)', transition: 'transform 420ms cubic-bezier(0.22,1,0.36,1)' }}>
                   <div aria-hidden className="absolute -inset-8 rounded-[3rem] blur-3xl opacity-60 pointer-events-none" style={{ background: `radial-gradient(closest-side, ${current.dominantColor || 'rgb(var(--acc-rgb))'}, transparent)` }} />
                   <CoverArt imageUrl={hdArt || current.artworkLarge || current.artwork} fallbackUrl={current.artwork} dominantColor={current.dominantColor} rounded="rounded-3xl"
@@ -356,7 +363,7 @@ export default function MusicPlayer() {
             </div>
 
             {/* Control deck — scrubber + transport on frosted glass */}
-            <div className="control-deck p-4 md:p-5 mb-4 shrink-0">
+            <div className="control-deck np-deck p-4 md:p-5 lg:p-0 mb-4 shrink-0">
               <div className="mb-4">
                 <input type="range" min={0} max={duration || 0} value={position} step={1} onChange={(e) => seek(Number(e.target.value))} className="scrub w-full" aria-label="Seek" />
                 <div className="flex justify-between text-[11px] text-zinc-400 tabular mt-2"><span>{fmt(position)}</span><span>{fmt(duration)}</span></div>
@@ -393,10 +400,10 @@ export default function MusicPlayer() {
                   <button onClick={cycleSleep} tabIndex={0} data-tv-focusable className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-colors ${sleepMin > 0 ? 'bg-sauti text-amber-950' : 'glass-liquid text-white'}`}><Moon className="w-4 h-4" /> {sleepMin > 0 ? `${sleepMin}m` : 'Sleep'}</button>
                 </>
               ) : (
-                <button onClick={() => { setQTab('lyrics'); setShowQueue(true); }} tabIndex={0} data-tv-focusable className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold glass-liquid text-white"><Mic2 className="w-4 h-4" /> Lyrics</button>
+                <button onClick={() => { setQTab('lyrics'); setShowQueue(true); }} tabIndex={0} data-tv-focusable className="lg:hidden flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold glass-liquid text-white"><Mic2 className="w-4 h-4" /> Lyrics</button>
               )}
               <button onClick={() => setShowEq(true)} tabIndex={0} data-tv-focusable className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold glass-liquid text-white" aria-label="Equalizer"><SlidersHorizontal className="w-4 h-4" /> EQ</button>
-              <button onClick={() => { setQTab('next'); setShowQueue(true); }} tabIndex={0} data-tv-focusable className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold glass-liquid text-white"><ListMusic className="w-4 h-4" /> Up next</button>
+              <button onClick={() => { setQTab('next'); setShowQueue(true); }} tabIndex={0} data-tv-focusable className="lg:hidden flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold glass-liquid text-white"><ListMusic className="w-4 h-4" /> Up next</button>
             </div>
 
             {/* Spotify-style Live Scrolling Lyrics Card */}
@@ -448,8 +455,8 @@ export default function MusicPlayer() {
             )}
             </div>
             {/* Wide screens: lyrics and Up next stay in view beside the player. */}
-            <aside className="hidden lg:flex flex-col min-h-0 h-[72vh] rounded-3xl overflow-hidden bg-black/25 backdrop-blur-xl shadow-[inset_0_0_0_1px_var(--lux-line-2)]">
-              <div className="flex items-center gap-2 p-3 border-b" style={{ borderColor: 'var(--lux-line)' }}>
+            <aside className="np-side hidden lg:flex flex-col min-h-0 min-w-0">
+              <div className="flex items-center gap-2 pb-3">
                 <div className="lux-seg">
                   {(['lyrics', 'next'] as const).map((t) => (
                     <button key={t} aria-pressed={sideTab === t} onClick={() => setSideTab(t)} tabIndex={0} data-tv-focusable>
@@ -458,7 +465,7 @@ export default function MusicPlayer() {
                   ))}
                 </div>
               </div>
-              <div className="flex-1 min-h-0 relative">
+              <div className="np-side-body flex-1 min-h-0 relative">
                 {sideTab === 'lyrics' ? (
                   isPodcast
                     ? <p className="p-6 text-sm text-zinc-400">Lyrics are for songs. Up next shows what plays after this episode.</p>

@@ -279,9 +279,12 @@ export function buildStreams(
   eventId: string,
   embeds: string[],
   channels: { name: string; url: string }[],
+  /** What each embed is ("Full HD", "DAZN1 Italia"), when the schedule says (sportsMerge.ts). */
+  meta?: { url: string; label: string; hd?: boolean }[],
 ): Stream[] {
   const out: Stream[] = [];
   embeds.forEach((embed, i) => {
+    const about = meta?.find((m) => m.url === embed);
     out.push({
       id: `srv-${i}`,
       eventId,
@@ -289,7 +292,8 @@ export function buildStreams(
       embed,
       kind: 'server',
       type: 'hls',
-      label: `Feed ${i + 1}`,
+      label: about ? `${i + 1} · ${about.label}` : `Feed ${i + 1}`,
+      ...(about?.hd ? { quality: 'HD' } : {}),
       status: 'unknown',
       healthScore: 50,
       consecutiveFailures: 0,

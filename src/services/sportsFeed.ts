@@ -1,4 +1,5 @@
 import { recordSourceOutcome, rankSources } from './sportsSources.ts';
+import { mergeEvents, newYorkTime, type FeedLink } from './sportsMerge.ts';
 /**
  * Live sports fixtures.
  *
@@ -32,6 +33,8 @@ export interface FeedEvent {
   teams?: { home?: FeedTeam; away?: FeedTeam } | null;
   /** Ready-to-play embed URLs. */
   embeds?: string[];
+  /** Every feed for the match, best first, from every source that carries it (sportsMerge.ts). */
+  feeds?: FeedLink[];
   /** Per-stream detail from the API: real quality/language, never guessed. */
   streamMeta?: { embedUrl: string; hd: boolean; language?: string; source: string; streamNo: number; viewers?: number }[];
 }
@@ -44,7 +47,7 @@ const FALLBACK_URLS = [
   'https://raw.githubusercontent.com/adr1an-ma1na/sahrae-sports-feed/main/feed.json',
   'https://cdn.jsdelivr.net/gh/adr1an-ma1na/sahrae-sports-feed@main/feed.json',
 ];
-const CACHE_KEY = 'sahrae.sportsFeed.v3'; // v3: ppv.st, after Streamed closed
+const CACHE_KEY = 'sahrae.sportsFeed.v4'; // v4: ppv.st + StreamFree + Tim Streams, merged
 const CACHE_TTL_MS = 5 * 60_000;
 
 interface ApiSource { source: string; id: string }
@@ -172,10 +175,14 @@ export async function loadSportsFeed(): Promise<Feed> {
   // Streamed") and every API address now forwards to that notice, so the
   // schedule comes from ppv.st, the first site Streamed points to. Its feed is
   // public and CORS-open.
-  const ppv = await loadPpvFeed();
-  if (ppv && ppv.events.length) {
-    writeCache(ppv);
-    return ppv;
+  // Three schedules read together (Streamed's own list of successors): a match
+  // any two carry gets both their feeds. One that does not answer is skipped.
+  const [ppv, sf, tim] = await Promise.all([loadPpvFeed(), loadStreamFree(), loadTimStreams()]);
+  const merged = mergeEvents(mergeEvents(ppv?.events || [], sf || []), tim || []);
+  if (merged.length) {
+    const feed = { events: merged };
+    writeCache(feed);
+    return feed;
   }
 
   for (const url of FALLBACK_URLS) {
@@ -231,6 +238,13 @@ export function ppvTeams(name: string): FeedEvent['teams'] {
   return m ? { home: { name: m[1].trim() }, away: { name: m[2].trim() } } : null;
 }
 
+/** American listings read "Ravens at Bills": the Ravens away at the Bills. Only for the American leagues, where "at" is that. */
+const US_AT = new Set(['american-football', 'basketball', 'hockey', 'baseball']);
+export function atTeams(name: string): FeedEvent['teams'] {
+  const m = (name || '').match(/^(.+?)\s+at\s+(.+)$/i);
+  return m ? { home: { name: m[2].trim() }, away: { name: m[1].trim() } } : null;
+}
+
 export function ppvToEvent(s: PpvStream, category: string, nowSec: number): FeedEvent | null {
   if (!s.iframe || !/^https:\/\//.test(s.iframe)) return null;
   const always = !!s.always_live;
@@ -245,8 +259,9 @@ export function ppvToEvent(s: PpvStream, category: string, nowSec: number): Feed
     poster: s.poster && /^https:\/\//.test(s.poster) ? s.poster : undefined,
     league: s.tag || undefined,
     live,
-    teams: withColors(ppvTeams(s.name), s.colors),
+    teams: withColors(US_AT.has(category) ? atTeams(s.name) || ppvTeams(s.name) : ppvTeams(s.name), s.colors),
     embeds: [s.iframe],
+    feeds: [{ url: s.iframe, label: 'PPV', rank: 1 }],
   };
 }
 
@@ -268,6 +283,126 @@ async function loadPpvFeed(): Promise<Feed | null> {
   }
   shareEmbedHosts([...hosts]);
   return { events };
+}
+
+// ── StreamFree (strmfree.st) ─────────────────────────────────────────────
+// Public, CORS-open list of the day's matches; each has a 1080p and a 540p
+// player page that may be shown inside another site (X-Frame-Options ALLOWALL).
+interface SfStream {
+  stream_key: string; name: string; category: string; league?: string; match_timestamp: number;
+  team1?: { name?: string; logo?: string }; team2?: { name?: string; logo?: string }; viewers?: number;
+}
+const SF_BASE = 'https://strmfree.st';
+
+export function sfCategory(c: string): string | null {
+  switch ((c || '').toLowerCase()) {
+    case 'soccer': return 'football';
+    case 'football': return 'american-football';
+    case 'basketball': return 'basketball';
+    case 'hockey': return 'hockey';
+    case 'baseball': return 'baseball';
+    case 'combat': return 'fight';
+    case 'racing': return 'motor-sports';
+    case 'tennis': return 'tennis';
+    case 'cricket': return 'cricket';
+    default: return 'other';
+  }
+}
+
+const httpsLogo = (u?: string) => (u && /^https:\/\//.test(u) ? u : undefined);
+
+export function sfToEvent(s: SfStream, nowMs: number): FeedEvent | null {
+  const cat = sfCategory(s.category);
+  if (!s.stream_key || !s.name || !cat || !/^[a-z0-9-]+$/i.test(s.stream_key) || !/^[a-z0-9-]+$/i.test(s.category)) return null;
+  const start = s.match_timestamp > 0 ? s.match_timestamp * 1000 : 0;
+  const base = `${SF_BASE}/embed/${s.category}/${s.stream_key}`;
+  const teams = s.team1?.name && s.team2?.name
+    ? { home: { name: s.team1.name, badge: httpsLogo(s.team1.logo) }, away: { name: s.team2.name, badge: httpsLogo(s.team2.logo) } }
+    : null;
+  return {
+    id: `sf-${s.stream_key}`,
+    title: s.name,
+    category: cat,
+    date: start,
+    popular: Number(s.viewers || 0) >= 500,
+    league: s.league || undefined,
+    live: !!start && start <= nowMs && nowMs <= start + 3 * 3600_000,
+    teams,
+    embeds: [`${base}1080p`, `${base}540p`],
+    feeds: [
+      { url: `${base}1080p`, label: '1080p', hd: true, rank: 0 },
+      { url: `${base}540p`, label: '540p backup', rank: 3 },
+    ],
+  };
+}
+
+async function loadStreamFree(): Promise<FeedEvent[] | null> {
+  const j = await getJson<{ streams?: Record<string, SfStream[]> }>(`${SF_BASE}/streams`, 12000);
+  if (!j || !j.streams || typeof j.streams !== 'object') return null;
+  const now = Date.now();
+  const out = Object.values(j.streams).flat().map((s) => sfToEvent(s, now)).filter(Boolean) as FeedEvent[];
+  if (out.length) shareEmbedHosts(['strmfree.st']);
+  return out;
+}
+
+// ── Tim Streams (tim-streams.com) ────────────────────────────────────────
+// Public list of matches with the broadcasters' channels for each ("DAZN1
+// Italia", "beIN Sports Connect 4"). Times are New York wall-clock.
+interface TimEvent { url: string; name: string; genre: number; time: string; isevent?: boolean; streams?: { name: string; url: string; vip?: boolean }[] }
+const TIM_API = 'https://tim-streams.com/api/live-upcoming';
+
+export function timCategory(genre: number): string | null {
+  switch (genre) {
+    case 1: return 'football';
+    case 2: return 'motor-sports';
+    case 3: case 6: return 'fight';
+    case 7: return 'basketball';
+    case 8: return 'american-football';
+    case 9: return 'baseball';
+    case 10: return 'tennis';
+    case 11: return 'hockey';
+    case 12: return 'darts';
+    case 13: return 'cricket';
+    case 15: case 16: return 'rugby';
+    case 17: return null; // live shows, not sport
+    default: return 'other';
+  }
+}
+
+/** "Cagliari @ Lazio": Cagliari away at Lazio. "A vs B": A at home. */
+export function timTeams(name: string): FeedEvent['teams'] {
+  const at = (name || '').match(/^(.+?)\s+@\s+(.+)$/);
+  if (at) return { home: { name: at[2].trim() }, away: { name: at[1].trim() } };
+  return ppvTeams(name);
+}
+
+export function timToEvent(e: TimEvent, nowMs: number): FeedEvent | null {
+  const cat = timCategory(e.genre);
+  const feeds = (e.streams || []).filter((s) => !s.vip && /^https:\/\//.test(s.url || '')).slice(0, 4)
+    .map((s, i) => ({ url: s.url, label: (s.name || 'Channel').slice(0, 40), rank: 2 + i / 10 }));
+  if (!cat || !e.url || !feeds.length) return null;
+  const start = newYorkTime(e.time);
+  return {
+    id: `tim-${e.url}`,
+    title: e.name,
+    category: cat,
+    date: start,
+    live: !!start && start <= nowMs && nowMs <= start + 3 * 3600_000,
+    teams: timTeams(e.name),
+    embeds: feeds.map((f) => f.url),
+    feeds,
+  };
+}
+
+async function loadTimStreams(): Promise<FeedEvent[] | null> {
+  const j = await getJson<{ events?: TimEvent[] }>(TIM_API, 12000);
+  if (!j || !Array.isArray(j.events)) return null;
+  const now = Date.now();
+  const out = j.events.map((e) => timToEvent(e, now)).filter(Boolean) as FeedEvent[];
+  const hosts = new Set<string>();
+  for (const e of out) for (const u of e.embeds || []) { try { hosts.add(new URL(u).hostname); } catch { /* skip */ } }
+  shareEmbedHosts([...hosts]);
+  return out;
 }
 
 /** Tell the Android app the player's site, so it plays like the built-in hosts (it moves domains). */

@@ -1,4 +1,4 @@
-import { EyeOff, ChevronDown, X, ExternalLink, AlertCircle, Info, Star, Calendar, Clock, Play, RefreshCw, Plus, Check, Maximize, ArrowLeft, SkipBack, SkipForward, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle, Gauge, Users } from 'lucide-react';
+import { EyeOff, ChevronDown, X, ExternalLink, AlertCircle, Info, Star, Calendar, Clock, Play, RefreshCw, Plus, Check, Maximize, Minimize, ArrowLeft, SkipBack, SkipForward, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle, Gauge, Users } from 'lucide-react';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { fetchMediaDetails, MediaDetails, getImageUrl, fetchSimilar, MediaItem, SeasonDetails, fetchSeasonDetails } from '../services/tmdb';
@@ -383,6 +383,16 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     return () => document.removeEventListener('fullscreenchange', onFs);
   }, []);
   const fsActive = (maxed || docFs) && !playingTrailer;
+  // Full screen is the player and nothing else: the page behind it cannot be
+  // scrolled or dragged (index.css, html.player-maxed). In the Android app,
+  // where "full screen" is the player filling the window, the page used to
+  // scroll underneath it, unlike Live TV and Sports.
+  useEffect(() => {
+    document.documentElement.classList.toggle('player-maxed', fsActive);
+    // Back to the top of the details page, so nothing of it is scrolled under the player.
+    if (fsActive) { const c = document.getElementById('player-modal-container'); if (c) c.scrollTop = 0; }
+    return () => document.documentElement.classList.remove('player-maxed');
+  }, [fsActive]);
 
   /** true = paused, false = playing, null = this server does not say. */
   const [paused, setPaused] = useState<boolean | null>(null);
@@ -1296,16 +1306,17 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
               <div className={`flex flex-wrap items-center gap-1.5 px-2 py-2 ${fsActive
                 ? `dark absolute inset-x-0 top-0 z-30 pb-8 bg-gradient-to-b from-black/90 via-black/60 to-transparent transition-opacity duration-300 ${barVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`
                 : barHidden ? 'hidden' : 'relative bg-zinc-950 border-t border-white/10'}`}>
-                <button onClick={() => { if (playingTrailer) { setPlayingTrailer(null); return; } setIsPlaying(false); const d = document as any; if (d.fullscreenElement || d.webkitFullscreenElement) { try { (d.exitFullscreen || d.webkitExitFullscreen)?.call(document); } catch { /* noop */ } } }}
-                  data-tv-focusable tabIndex={0} title="Back to details" className="h-9 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed">
-                  <ArrowLeft className="w-4 h-4" /><span className="hidden sm:inline">{t('Back')}</span>
-                </button>
+                {/* Three controls, as the owner asked (2026-11-01): the server, full
+                    screen, and close. The rest (report, hide, together, audio,
+                    reload, data used) crowded the bar over the film. */}
                 {playingTrailer ? <div className="flex-1" /> : (
                   <>
-                    <div className="contents">
-                      {/* Switch server while watching: the fix for "content isn't available". */}
+                    {/* Switch server while watching: the fix for "content isn't available". */}
+                    <label className="relative h-10 shrink-0 min-w-0">
+                      <span className="sr-only">Server</span>
+                      <Server className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-white/70 pointer-events-none" />
                       <select value={selectedServer} onChange={e => pickServer(Number(e.target.value))} data-tv-focusable aria-label="Switch server" title="Switch server if it won't play"
-                        className="h-9 shrink-0 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold rounded-full px-3 border-none outline-none cursor-pointer appearance-none">
+                        className="h-10 max-w-[60vw] bg-white/10 hover:bg-white/20 text-white text-sm font-semibold rounded-full pl-9 pr-8 border-none outline-none cursor-pointer appearance-none truncate">
                         {dynamicServers.map((server, idx) => {
                           const isDown = failedServers.includes(server.id);
                           return (
@@ -1315,34 +1326,16 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                           );
                         })}
                       </select>
-                      {currentServerObj.type !== 'youtube' && (
-                        <button onClick={reportCurrentMovieServerDead} data-tv-focusable title="Report this server broken and switch to the next one" aria-label="Report this server broken and switch to the next one" className="h-9 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed">
-                          <AlertTriangle className="w-3.5 h-3.5" /><span className="hidden sm:inline">{t('Not working?')}</span>
-                        </button>
-                      )}
-                      <button onClick={() => { setShowAudioMenu(false); setPeek(false); setBarHidden(true); }} data-tv-focusable
-                        title="Hide these controls. Pause, Escape or Back brings them back."
-                        className="h-9 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors active:scale-95">
-                        <EyeOff className="w-3.5 h-3.5" /><span className="hidden sm:inline">{t('Hide')}</span>
-                      </button>
-                      <button onClick={() => window.dispatchEvent(new Event(OPEN_PARTY))} data-tv-focusable
-                        title="Watch together with friends"
-                        className="h-9 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors active:scale-95">
-                        <Users className="w-3.5 h-3.5" /><span className="hidden sm:inline">{t('Together')}</span>
-                      </button>
-                    </div>
-                    {usedBytes !== null && (
-                      <span className="ml-auto h-9 px-3 shrink-0 rounded-full bg-white/10 text-white text-xs font-semibold flex items-center gap-1.5 tabular-nums" title="Data this viewing has used so far">
-                        <Gauge className="w-3.5 h-3.5" />{formatBytes(usedBytes)}
-                      </span>
-                    )}
-                    <button onClick={() => setShowAudioMenu(v => !v)} data-tv-focusable title="Audio enhancement" aria-label="Audio enhancement"
-                      className={`ml-auto w-9 h-9 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed ${audioOn ? '!bg-amber-500 !text-amber-950' : ''}`}><Waves className="w-4 h-4" /></button>
-                    <button onClick={() => setRefreshKey(prev => prev + 1)} data-tv-focusable title="Reload video" aria-label="Reload video" className="w-9 h-9 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"><RefreshCw className="w-4 h-4" /></button>
-                    <button onClick={toggleFullScreen} data-tv-focusable title="Full screen" aria-label="Full screen" className="w-9 h-9 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"><Maximize className="w-4 h-4" /></button>
+                      <ChevronDown className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-white/70 pointer-events-none" />
+                    </label>
+                    <div className="flex-1" />
+                    <button onClick={toggleFullScreen} data-tv-focusable title={fsActive ? 'Exit full screen' : 'Full screen'} aria-label={fsActive ? 'Exit full screen' : 'Full screen'}
+                      className="w-10 h-10 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95">
+                      {fsActive ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+                    </button>
                   </>
                 )}
-                <button onClick={onClose} data-tv-focusable data-tv-close title="Close" aria-label="Close" className="w-9 h-9 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"><X className="w-4 h-4" /></button>
+                <button onClick={() => { if (playingTrailer) { setPlayingTrailer(null); return; } onClose(); }} data-tv-focusable data-tv-close title="Close" aria-label="Close" className="w-10 h-10 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"><X className="w-4 h-4" /></button>
                 {!playingTrailer && showAudioMenu && (
                     <div className={`absolute ${fsActive ? 'top-full mt-1' : 'bottom-full mb-2'} right-2 z-50 w-56 bg-zinc-950/95 backdrop-blur rounded-xl border border-white/15 shadow-2xl p-2 animate-in fade-in slide-in-from-top-2 duration-200`}>
                       <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 px-2 pt-1 pb-2 flex items-center gap-1.5"><Waves className="w-3.5 h-3.5" /> Audio Enhancement</p>

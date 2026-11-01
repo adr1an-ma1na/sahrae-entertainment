@@ -76,6 +76,7 @@ export function playerSandbox(shieldOn: boolean, url?: string): string | undefin
  */
 const SANDBOX_REFUSERS = [
   'embed.st', 'streamed.pk', 'streamed.su', // Live Sports
+  'strmfree.st', 'streamfree.top', // StreamFree: replaces its page with a "sandboxed" notice (2026-11-01)
   'vidsrc.wtf', 'viduki.net', // Viduki: "This player was sandboxed"
   'vidrock.to', 'vidrock.ru', // VidRock: "Sandbox Not Allowed"
   'vidlink.pro', // VidLink Pro: "Please Disable Sandbox"
