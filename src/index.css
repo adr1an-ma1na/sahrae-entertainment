@@ -1743,3 +1743,8 @@ html.player-maxed .player-shell.is-max { touch-action: auto; }
   .lux-seg.lux-seg-fill { display: flex; width: 100%; }
   .lux-seg.lux-seg-fill > button { flex: 1 1 0; min-width: 0; justify-content: center; padding: .5rem .5rem; font-size: .8125rem; gap: .35rem; overflow: hidden; text-overflow: ellipsis; }
 }
+
+/* "Press OK to play" on a stream site's player, shown only on a TV while the
+   player has the remote's focus (services/nativeTap.ts). */
+.tv-ok-hint { display: none; }
+html.tv-mode .tv-focused > .tv-ok-hint { display: flex; }

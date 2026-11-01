@@ -11,7 +11,7 @@ function pickInDirection(current, dir, candidates) {
   const c = current.rect;
   const horizontal = dir === 'left' || dir === 'right';
   let bestAligned = null, bestAlignedDist = Infinity, bestAlignedOverlap = -1;
-  let bestLoose = null, bestLooseScore = Infinity;
+  let bestLoose = null, bestLooseScore = Infinity, bestLooseReach = Infinity;
 
   for (const el of candidates) {
     if (el === current) continue;
@@ -31,14 +31,15 @@ function pickInDirection(current, dir, candidates) {
       const nearer = primary < bestAlignedDist - 1;
       const tied = primary <= bestAlignedDist + 1 && overlap > bestAlignedOverlap;
       if (nearer || tied) { bestAlignedDist = primary; bestAlignedOverlap = overlap; bestAligned = el; }
-    } else if (!bestAligned) {
+    } else {
       const cross = horizontal
         ? Math.abs((r.top + r.bottom) / 2 - (c.top + c.bottom) / 2)
         : Math.abs((r.left + r.right) / 2 - (c.left + c.right) / 2);
       const score = primary + cross * 2;
-      if (score < bestLooseScore) { bestLooseScore = score; bestLoose = el; }
+      if (score < bestLooseScore) { bestLooseScore = score; bestLooseReach = primary + cross; bestLoose = el; }
     }
   }
+  if (bestAligned && bestLoose && bestLooseReach < bestAlignedDist) return bestLoose;
   return bestAligned || bestLoose;
 }
 
@@ -101,6 +102,25 @@ console.log('\n[edges never crash]');
 check('nav-home', 'up', null);
 check('r1c3', 'right', null);
 check('btn-b', 'down', null);
+
+// The music player on a TV (1920 canvas, MusicPlayer.tsx): the minimise button at
+// the top left, the Song/Video switch centred under it, the artwork (not
+// focusable), then the progress bar across the column. Down from minimise
+// reached the progress bar and skipped the switch (owner, 2026-11-01).
+console.log('\n[the music player on a TV]');
+const np = [
+  box('minimise', 396, 40, 44, 44),
+  box('switch', 560, 110, 200, 44),
+  box('scrubber', 396, 760, 520, 20),
+  box('like', 872, 700, 40, 40),
+  box('stop', 1480, 40, 44, 44),
+];
+const npPick = (from, dir) => pickInDirection(np.find((e) => e.id === from), dir, np)?.id ?? null;
+const sameNp = (name, got, want) => { if (got === want) { pass++; console.log('  ok   ' + name); } else { fail++; console.log(`  FAIL ${name}: got ${got}, want ${want}`); } };
+sameNp('down from minimise: the Song/Video switch, not the progress bar', npPick('minimise', 'down'), 'switch');
+sameNp('down from the switch: the progress bar, the next control in the column', npPick('switch', 'down'), 'scrubber');
+sameNp('up from the progress bar: the like button, not stuck', npPick('scrubber', 'up'), 'like');
+sameNp('up from the switch: back to minimise', npPick('switch', 'up'), 'minimise');
 
 // The TV screen size (src/tv/tvViewport.ts): a TV cannot zoom, so the app
 // lays the page out on a full-HD canvas and the WebView fits it to the screen.

@@ -138,8 +138,13 @@ function closeTopLayer(): boolean {
 function isTypingTarget(el: Element | null): boolean {
   if (!el) return false;
   const tag = el.tagName.toLowerCase();
-  return tag === 'input' || tag === 'textarea' || (el as HTMLElement).isContentEditable === true;
+  // A slider, switch or button-like input is not typed into. Treating the
+  // music player's progress bar as a text box handed it every arrow key, so a
+  // remote that reached it could never leave it (owner, TV, 2026-11-01).
+  if (tag === 'input') return !NOT_TYPED.has((el as HTMLInputElement).type);
+  return tag === 'textarea' || (el as HTMLElement).isContentEditable === true;
 }
+const NOT_TYPED = new Set(['range', 'checkbox', 'radio', 'button', 'submit', 'reset', 'color', 'file', 'image']);
 
 function clearHighlight() {
   document.querySelectorAll('.' + FOCUS_CLASS).forEach((n) => n.classList.remove(FOCUS_CLASS));
@@ -192,6 +197,7 @@ function pickInDirection(current: HTMLElement, dir: Dir, candidates: HTMLElement
   let bestAlignedOverlap = -1;
   let bestLoose: HTMLElement | null = null;
   let bestLooseScore = Infinity;
+  let bestLooseReach = Infinity;
 
   for (const el of candidates) {
     if (el === current) continue;
@@ -236,17 +242,22 @@ function pickInDirection(current: HTMLElement, dir: Dir, candidates: HTMLElement
         bestAlignedOverlap = overlap;
         bestAligned = el;
       }
-    } else if (!bestAligned) {
+    } else {
       const cross = horizontal
         ? Math.abs((r.top + r.bottom) / 2 - (c.top + c.bottom) / 2)
         : Math.abs((r.left + r.right) / 2 - (c.left + c.right) / 2);
       const score = primary + cross * 2;
       if (score < bestLooseScore) {
         bestLooseScore = score;
+        bestLooseReach = primary + cross;
         bestLoose = el;
       }
     }
   }
+  // A control just off the column, nearer than anything in it, is the one
+  // meant: from the music player's top bar, Down reached the progress bar
+  // under the artwork and skipped the Song/Video switch right below.
+  if (bestAligned && bestLoose && bestLooseReach < bestAlignedDist) return bestLoose;
   return bestAligned || bestLoose;
 }
 
@@ -364,6 +375,10 @@ export function initSpatialNavigation() {
 
       // Let arrow keys move the caret while typing in a text field.
       if (isTypingTarget(active)) return;
+
+      // A slider (the music player's progress bar) takes left and right to
+      // seek; up and down leave it, like any other control.
+      if ((dir === 'left' || dir === 'right') && active instanceof HTMLInputElement && active.type === 'range') return;
 
       // Sahrae's own film player skips 10 s on left and right; up and down
       // still move between the buttons.

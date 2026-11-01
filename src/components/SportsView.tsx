@@ -15,6 +15,7 @@ import { hostOf } from '../services/sportsStreams';
 import Coachmark from './Coachmark';
 import { suppressPopups } from '../services/popupGuard';
 import { lockLandscape, unlockOrientation } from '../services/fullscreen';
+import { tapCenterOf, canTap } from '../services/nativeTap';
 import { readAudioFormat, bestAudioTrack, upscaleDecision, bestHeight, type AudioFormat } from '../services/streamQuality.ts';
 import { gpuReport } from '../services/gpu.ts';
 import { attachUpscaler } from '../services/upscaler.ts';
@@ -1257,7 +1258,13 @@ export default function SportsView() {
                 // through unchanged on the web.
                 <HLSPlayer src={activeSrc?.kind === 'server' && !activeUrl.startsWith('https://localhost/') ? proxied(activeUrl, activeSrc.referer || activeSrc.embed) : activeUrl} onUnplayable={onUnplayable} />
               ) : activeUrl && isEmbedUrl ? (
-                <div className="absolute inset-0 w-full h-full">
+                // On a TV, OK here presses the stream site's own play button
+                // (services/nativeTap.ts): its player is in a frame a remote cannot enter.
+                <div className="absolute inset-0 w-full h-full"
+                  {...(canTap() ? {
+                    tabIndex: 0, 'data-tv-focusable': true, 'data-tv-autofocus': true, 'aria-label': 'Play the match',
+                    onClick: (e: React.MouseEvent<HTMLDivElement>) => { if (e.detail === 0) tapCenterOf(e.currentTarget, e.currentTarget); },
+                  } : {})}>
                   <iframe
                     // Re-mount when the shield flips: sandbox only applies at
                     // frame creation, so toggling has to rebuild the iframe.
@@ -1276,6 +1283,7 @@ export default function SportsView() {
                     // already, without breaking any provider.
                     sandbox={activeSrc?.kind === 'server' ? undefined : playerSandbox(shieldOn, activeUrl)}
                   />
+                  <span aria-hidden className="tv-ok-hint pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 z-20 items-center gap-2 px-4 py-2 rounded-full bg-black/75 text-white text-sm font-bold">Press OK to play</span>
                   {isSandboxed && (
                     <div className="absolute top-0 left-0 w-full z-40 bg-amber-500/95 text-amber-950 text-xs md:text-sm font-bold px-4 py-3 flex flex-col md:flex-row items-center justify-center gap-3 md:gap-4 text-center backdrop-blur shadow-2xl border-b border-amber-400/30 animate-in slide-in-from-top-2">
                       <AlertCircle className="w-5 h-5 shrink-0 animate-bounce" />

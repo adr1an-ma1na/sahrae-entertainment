@@ -14,6 +14,7 @@ import { suppressPopups } from '../services/popupGuard';
 import { lockLandscape, unlockOrientation } from '../services/fullscreen';
 import CleanPlayer from './CleanPlayer';
 import { useRemoved, isRemoved } from '../services/removed';
+import { tapCenterOf, canTap } from '../services/nativeTap';
 import { openLegal } from '../services/consent';
 import { canPlayClean, resolveFilmStream, relayUrl, cleanFirst, isCleanOn, setCleanOn } from '../services/cleanStream';
 import { isTelevision } from '../tv/spatialNavigation';
@@ -1086,6 +1087,12 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                         onFail={(why) => { console.info('[sahrae-player]', JSON.stringify({ server: cleanServer?.id, playFailed: why })); setClean({ state: 'failed', why }); }}
                       />
                     ) : clean.state === 'resolving' ? null : (
+                    // On a TV, OK presses the server's own play button (services/nativeTap.ts).
+                    <div className="absolute inset-0"
+                      {...(canTap() ? {
+                        tabIndex: 0, 'data-tv-focusable': true, 'aria-label': 'Play',
+                        onClick: (e: React.MouseEvent<HTMLDivElement>) => { if (e.detail === 0) tapCenterOf(e.currentTarget, e.currentTarget); },
+                      } : {})}>
                     <iframe
                       key={`player-${refreshKey}-${shieldOn ? 'shield' : 'open'}-${currentServerObj.id}`}
                       ref={iframeRef}
@@ -1113,6 +1120,8 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       className="w-full h-full absolute inset-0 bg-black"
                       title="Video Player"
                     />
+                    <span aria-hidden className="tv-ok-hint pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 z-20 items-center gap-2 px-4 py-2 rounded-full bg-black/75 text-white text-sm font-bold">Press OK to play</span>
+                    </div>
                     )}
                     {/* Netflix-style loading ring + slow-load recovery (Reload / Next server) */}
                     {!videoLoaded && (

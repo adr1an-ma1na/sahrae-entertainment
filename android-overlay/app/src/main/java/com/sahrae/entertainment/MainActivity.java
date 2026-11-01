@@ -2054,6 +2054,16 @@ public class MainActivity extends BridgeActivity {
                         } else if (path.startsWith("/__dltitle")) {
                             DownloadStore.setPendingTitle(u.getQueryParameter("t"));
                             return DownloadStore.json("{\"ok\":true}");
+                        } else if (path.startsWith("/__tap")) {
+                            // A TV remote's OK on a stream site's player. The play button is
+                            // inside another site's frame, which a D-pad cannot reach, so the
+                            // page asks for a real tap at that point (fractions of the page).
+                            try {
+                                final float fx = Float.parseFloat(u.getQueryParameter("fx"));
+                                final float fy = Float.parseFloat(u.getQueryParameter("fy"));
+                                if (fx >= 0f && fx <= 1f && fy >= 0f && fy <= 1f) runOnUiThread(() -> tapAt(view, fx, fy));
+                            } catch (Throwable ignore) {}
+                            return DownloadStore.json("{\"ok\":true}");
                         } else if (path.startsWith("/__player")) {
                             sPlayerOpen = "1".equals(u.getQueryParameter("open"));
                             sMenuHandled = false;
@@ -2222,7 +2232,7 @@ public class MainActivity extends BridgeActivity {
                 // with disguised segment names would look silent and be switched
                 // away from while playing), measure data used, cap video quality.
                 view.evaluateJavascript(
-                    "window.__sahraeCaps=Object.assign(window.__sahraeCaps||{},{mediaSignal:true,traffic:true,dataSaver:true,embedHosts:true,reminders:true,quality:true,filmStream:true});"
+                    "window.__sahraeCaps=Object.assign(window.__sahraeCaps||{},{mediaSignal:true,traffic:true,dataSaver:true,embedHosts:true,reminders:true,quality:true,filmStream:true,tap:true});"
                     + "window.dispatchEvent(new Event('sahrae:caps'))", null);
 
                 // This phone has lost its screen engine before: flatten the heavy
@@ -2368,6 +2378,28 @@ public class MainActivity extends BridgeActivity {
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
             getWindow().setAttributes(lp);
         }
+    }
+
+    /** A finger tap at (fx, fy), as fractions of the WebView: down, then up 60 ms later. */
+    private static void tapAt(WebView v, float fx, float fy) {
+        try {
+            final float x = fx * v.getWidth();
+            final float y = fy * v.getHeight();
+            final long t = android.os.SystemClock.uptimeMillis();
+            android.view.MotionEvent down = android.view.MotionEvent.obtain(t, t, android.view.MotionEvent.ACTION_DOWN, x, y, 0);
+            down.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+            v.dispatchTouchEvent(down);
+            down.recycle();
+            v.postDelayed(() -> {
+                try {
+                    long t2 = android.os.SystemClock.uptimeMillis();
+                    android.view.MotionEvent up = android.view.MotionEvent.obtain(t, t2, android.view.MotionEvent.ACTION_UP, x, y, 0);
+                    up.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+                    v.dispatchTouchEvent(up);
+                    up.recycle();
+                } catch (Throwable ignore) {}
+            }, 60);
+        } catch (Throwable ignore) {}
     }
 
     /** Hide the status + navigation bars — true edge-to-edge (snappy, no relayout). */
