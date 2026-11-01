@@ -506,7 +506,8 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     // Some servers' own pages are not fit to show on the web; the app hides the page.
     .filter((p) => nativeShell || p.web !== false)
     .map((p, i) => ({ p, i }))
-    .sort((a, b) => Number(refuses(a.p)) - Number(refuses(b.p)) || a.i - b.i)
+    // The list's first (the owner's lead, VidFast) stays first even where it refuses the shield.
+    .sort((a, b) => (a.i === 0 ? -1 : b.i === 0 ? 1 : Number(refuses(a.p)) - Number(refuses(b.p)) || a.i - b.i))
     .map((x) => x.p);
   const SERVERS = (shielded.length ? shielded : poolSnap.current.list).map((p) => ({
     id: p.id,

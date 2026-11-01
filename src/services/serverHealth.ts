@@ -73,16 +73,15 @@ export function isRecentlyDown(id: string, now = Date.now(), h: Health = read())
   return !!down && now - down < DOWN_FOR_MS;
 }
 
-/** The server to open first: the one that most recently worked here, else the first not recently down. */
+/**
+ * The server to open first: the first in the list (the owner's order: VidFast)
+ * that has not just failed on this device. It used to open on whichever
+ * server last worked here, which overrode the owner's first choice for anyone
+ * who had ever used another; a title being resumed still opens on its own
+ * server (PlayerModal, resume.ts).
+ */
 export function startServer(ids: string[], now = Date.now()): number {
   const h = read();
-  let best = -1;
-  let bestOk = 0;
-  ids.forEach((id, i) => {
-    const ok = h[id]?.ok || 0;
-    if (ok > bestOk && !isRecentlyDown(id, now, h)) { best = i; bestOk = ok; }
-  });
-  if (best >= 0) return best;
   const firstUp = ids.findIndex((id) => !isRecentlyDown(id, now, h));
   return firstUp >= 0 ? firstUp : 0;
 }

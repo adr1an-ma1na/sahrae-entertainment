@@ -21,7 +21,7 @@ const pool = JSON.parse(fs.readFileSync('src/data/servers.json', 'utf8'));
 const ids = (list) => list.map((s) => s.id);
 const NOW = Date.parse('2026-10-22T12:00:00Z');
 const ago = (h) => new Date(NOW - h * 3600_000).toISOString();
-const FILE = ['vidzee', 'vidfast', 'vidrock', 'vixsrc', 'vidnest', 'vidlove', 'vidlink', 'vidsrcto', 'autoembed', 'vidsrcsu', 'vidsrcsh', '2embed', 'vidsrcio', 'vidsrcpm'];
+const FILE = ['vidfast', 'vidzee', 'vidrock', 'vixsrc', 'vidnest', 'vidlove', 'vidlink', 'vidsrcto', 'autoembed', 'vidsrcsu', 'vidsrcsh', '2embed', 'vidsrcio', 'vidsrcpm'];
 // The daily check marks servers down and up again in the shipped file, so the
 // expected order follows their state: the working ones in file order, then the
 // ones marked down (still offered).
@@ -72,7 +72,7 @@ eq('VidFast film (Dune: Part Two)', fill(by('vidfast').movie, 693134, 1, 1, 'x')
 eq('AutoEmbed episode', fill(by('autoembed').tv, 1396, 1, 1, 'x'), 'https://autoembed.co/tv/tmdb/1396-1-1');
 eq('VidSrc.pm episode', fill(by('vidsrcpm').tv, 1396, 1, 1, 'x'), 'https://vidsrc.pm/embed/tv?tmdb=1396&season=1&episode=1');
 eq('VidNest episode', fill(by('vidnest').tv, 1396, 1, 1, 'x'), 'https://vidnest.fun/tv/1396/1/1');
-eq('names', pool.servers.map(label), ['VidZee · 1080p · 5.1', 'VidFast · 4K', 'VidRock · 1080p · sharpest', 'VixSrc · 1080p · subtitles', 'VidNest · 1080p', 'VidLove · 1080p', 'VidLink Pro · 1080p', 'VidSrc.to', 'AutoEmbed', 'VidSrc.su', 'VidSrc.sh', '2Embed', 'VidSrc.io', 'VidSrc.pm']);
+eq('names', pool.servers.map(label), ['VidFast · 4K', 'VidZee · 1080p · 5.1', 'VidRock · 1080p · sharpest', 'VixSrc · 1080p · subtitles', 'VidNest · 1080p', 'VidLove · 1080p', 'VidLink Pro · 1080p', 'VidSrc.to', 'AutoEmbed', 'VidSrc.su', 'VidSrc.sh', '2Embed', 'VidSrc.io', 'VidSrc.pm']);
 eq('VidSrc.to film', fill(by('vidsrcto').movie, 693134, 1, 1, 'x'), 'https://vidsrc.to/embed/movie/693134');
 eq('2Embed episode', fill(by('2embed').tv, 1396, 1, 1, 'x'), 'https://www.2embed.cc/embedtv/1396&s=1&e=1');
 eq('VidNest is app only', pool.servers.filter((s) => s.web === false).map((s) => s.id), ['vidnest']);
