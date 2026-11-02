@@ -3,19 +3,6 @@ import { Mail, Lock, User, Eye, EyeOff, AlertCircle, CheckCircle2, Film, Trophy,
 import { auth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, updatePassword, endRecovery } from '../firebase';
 import { t, currentLang, setLang } from '../i18n';
 import { openLegal } from '../services/consent';
-import { supabase } from '../supabase';
-import { LEGAL_EMAIL } from '../legal/legalText';
-
-/**
- * Sahrae is invite-only (owner, 2026-11-02): public sign-ups are switched off
- * in Supabase (Authentication, "Allow new users to sign up"), which is what
- * actually keeps strangers out; this screen only stops offering them an
- * account and says how to ask for one. The owner invites people from the
- * Supabase dashboard (Authentication, Users, Invite user). Builds on the
- * device's own test accounts (VITE_AUTH_LOCAL, no Supabase) keep sign-up.
- */
-const INVITE_ONLY = !!supabase;
-const INVITE_MAIL = `mailto:${LEGAL_EMAIL}?subject=${encodeURIComponent('Sahrae invite request')}&body=${encodeURIComponent('Hi, I would like an invite to Sahrae. My email address is: ')}`;
 
 /**
  * The front door. Sahrae needs an account to watch or listen, so this is the
@@ -32,7 +19,6 @@ export function friendly(message: string): string {
   const m = message.toLowerCase();
   if (m.includes('invalid login credentials') || m.includes('incorrect email or password')) return t('That email and password do not match. Check them, or reset your password.');
   if (m.includes('already registered') || m.includes('already exists')) return t('There is already an account with this email. Sign in instead.');
-  if (m.includes('signups not allowed') || m.includes('signup is disabled') || m.includes('sign ups are disabled')) return t('Sahrae is invite-only. Ask for an invite, then sign in with the link we email you.');
   if (m.includes('email not confirmed')) return t('Confirm your email first: open the link we sent you, then sign in.');
   if (m.includes('rate limit') || m.includes('too many') || m.includes('security purposes')) return t('Too many tries. Wait a minute, then try again.');
   if (m.includes('password should be') || m.includes('at least 6')) return t('Use a password of at least 6 characters.');
@@ -205,9 +191,7 @@ export default function SignInGate() {
 
               <div className="mt-6 pt-5 border-t border-white/10 text-sm text-zinc-400 text-center">
                 {mode === 'signin' ? (
-                  INVITE_ONLY
-                    ? <>{t('Sahrae is invite-only.')} <a href={INVITE_MAIL} className="text-amber-400 font-semibold hover:underline">{t('Request an invite')}</a></>
-                    : <>{t('New to Sahrae?')} <button type="button" onClick={() => setMode('signup')} className="text-amber-400 font-semibold hover:underline">{t('Create an account')}</button></>
+                  <>{t('New to Sahrae?')} <button type="button" onClick={() => setMode('signup')} className="text-amber-400 font-semibold hover:underline">{t('Create an account')}</button></>
                 ) : (
                   <>{mode === 'signup' ? t('Already have an account?') : t('Remembered it?')} <button type="button" onClick={() => setMode('signin')} className="text-amber-400 font-semibold hover:underline">{t('Sign in')}</button></>
                 )}
