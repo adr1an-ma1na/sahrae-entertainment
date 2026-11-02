@@ -9,6 +9,9 @@ import Coachmark from './Coachmark';
 import Illustration from './ui/Illustration';
 import { LiveMeta, LuxChapter, RailHeader } from './ui/Lux';
 
+/** How long the player's buttons stay up after the last key, touch or move. */
+const CHROME_IDLE_MS = 3500;
+
 interface Channel { name: string; country: string; category: Category; url: string; kind?: 'hls' | 'yt' }
 type Category = 'News' | 'Regional' | 'Sports' | 'Documentary' | 'Science' | 'Wildlife' | 'Anime' | 'Music' | 'Kids' | 'Lifestyle';
 
@@ -410,6 +413,17 @@ export default function LiveTVView() {
   const [active, setActive] = useState<Channel | null>(null);
   const [offline, setOffline] = useState(false);
   const playerRef = useRef<HTMLDivElement>(null);
+  // The player's buttons fade out after a few quiet seconds, as a TV player's
+  // do, and come back on any key, touch or pointer movement over the player.
+  const [chrome, setChrome] = useState(true);
+  const chromeTimer = useRef(0);
+  const chromeUp = useRef(true);
+  chromeUp.current = chrome || offline;
+  const wake = () => {
+    setChrome(true);
+    clearTimeout(chromeTimer.current);
+    chromeTimer.current = window.setTimeout(() => setChrome(false), CHROME_IDLE_MS);
+  };
 
   const [favs, setFavs] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(FAV_KEY) || '[]'); } catch { return []; } });
   const [recent, setRecent] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch { return []; } });
@@ -449,6 +463,22 @@ export default function LiveTVView() {
     return () => window.removeEventListener('keydown', onKey);
   }, [active]);
 
+  useEffect(() => {
+    if (!active) return;
+    wake();
+    // While the buttons are hidden the first press of the remote only shows
+    // them (it does not move focus or press a button nobody can see); Back
+    // still closes the player.
+    const onKey = (e: KeyboardEvent) => {
+      const hidden = !chromeUp.current;
+      wake();
+      if (hidden && e.key !== 'Escape' && !e.isComposing) { e.preventDefault(); e.stopImmediatePropagation(); }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => { window.removeEventListener('keydown', onKey, true); clearTimeout(chromeTimer.current); };
+  }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
+  const showChrome = chrome || offline;
+
   const toggleFullScreen = () => {
     if (!document.fullscreenElement) playerRef.current?.requestFullscreen?.().catch(() => {});
     else document.exitFullscreen?.().catch(() => {});
@@ -478,7 +508,7 @@ export default function LiveTVView() {
     <div className="min-h-screen pb-16 relative">
       {/* Player */}
       {active && (
-        <div role="dialog" data-tv-layer className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center backdrop-blur-sm p-3 md:p-10">
+        <div role="dialog" data-tv-layer onPointerMove={wake} onPointerDown={wake} className={`fixed inset-0 z-[100] bg-black/95 flex items-center justify-center backdrop-blur-sm p-3 md:p-10 ${showChrome ? '' : 'cursor-none'}`}>
           <div className="w-full max-w-5xl">
             <div ref={playerRef} className="w-full aspect-video bg-black rounded-xl shadow-2xl overflow-hidden relative border border-white/10">
               {/* Our controls sit CENTRED, not flush right. The embedded player
@@ -486,7 +516,7 @@ export default function LiveTVView() {
                   corner, so edge-anchored buttons landed on top of them and you
                   could not reach CC without hitting close. Centring separates
                   the two clusters entirely. */}
-              <div className="absolute top-0 left-0 right-0 p-3 md:p-4 bg-gradient-to-b from-black/80 to-transparent z-10 flex items-center">
+              <div className={`absolute top-0 left-0 right-0 p-3 md:p-4 bg-gradient-to-b from-black/80 to-transparent z-10 flex items-center transition-opacity duration-500 ${showChrome ? '' : 'opacity-0 pointer-events-none'}`}>
                 <div className="flex items-center gap-3 min-w-0 pr-28">
                   <div className="flex items-center gap-1.5 bg-red-500 text-white px-2.5 py-1 rounded-sm shrink-0"><div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /><span className="text-xs font-bold uppercase tracking-wider">Live</span></div>
                   <h3 className="text-white font-bold text-sm md:text-lg truncate">{active.name}</h3>
@@ -496,6 +526,10 @@ export default function LiveTVView() {
                   <button onClick={() => setActive(null)} tabIndex={0} data-tv-focusable data-tv-close aria-label="Close player" className="w-10 h-10 rounded-full bg-red-500/85 hover:bg-red-500 text-white flex items-center justify-center backdrop-blur"><X className="w-5 h-5" /></button>
                 </div>
               </div>
+              {/* A channel's own page swallows touches and pointer moves, so
+                  while the buttons are hidden the strip where they live wakes
+                  them; the first tap there only shows them. */}
+              {!showChrome && <div aria-hidden onPointerMove={wake} onPointerDown={wake} className="absolute top-0 left-1/2 -translate-x-1/2 w-56 h-20 z-20" />}
               {offline ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center px-6">
                   <WifiOff className="w-10 h-10 text-zinc-600" />

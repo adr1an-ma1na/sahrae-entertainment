@@ -1084,26 +1084,28 @@ a:focus-visible {
    SAHRAE launch: a desert dawn (SplashIntro.tsx). Theme colours via
    the --logo-* tokens; transforms and opacity only, so it stays smooth.
    ───────────────────────────────────────────────────────────── */
-.dawn { background: #050302; transform-origin: 50% 60%; }
+.dawn { background: #050302; transform-origin: 50% 60%; will-change: opacity, transform; }
 .dawn-sky {
   position: absolute; inset: 0;
   background:
     radial-gradient(70% 55% at 50% 78%, rgb(var(--acc-rgb) / .55), transparent 70%),
     radial-gradient(90% 70% at 50% 100%, rgb(var(--acc2-rgb) / .45), transparent 75%),
     linear-gradient(180deg, #050302 0%, #120b05 55%, #2b1a09 100%);
-  opacity: 0;
+  opacity: 0; will-change: opacity;
   animation: dawn-sky 1.6s var(--ease-premium) .1s forwards;
 }
-.dawn-scene { position: absolute; inset: 0; width: 100%; height: 100%; }
-.dawn-sun { transform-box: fill-box; transform-origin: center; opacity: 0; transform: translateY(170px) scale(.88);
+/* Every moving part is its own layer, moved whole (see SplashIntro box()). */
+.dawn-layer { position: absolute; overflow: visible; will-change: transform, opacity; }
+.dawn-sun { opacity: 0; transform: translateY(calc(170 * var(--u))) scale(.88);
   animation: dawn-sun 1.5s var(--ease-premium) .2s forwards; }
-.dawn-halo { transform-box: fill-box; transform-origin: center; opacity: 0; transform: translateY(150px) scale(.7);
+.dawn-halo { opacity: 0; transform: translateY(calc(150 * var(--u))) scale(.7);
   animation: dawn-halo 1.9s var(--ease-premium) .25s forwards; }
-.dawn-dune { transform: translateY(40px); opacity: 0; animation: dawn-dune 1.2s var(--ease-premium) forwards; }
+.dawn-dune { transform: translateY(calc(40 * var(--u))); opacity: 0; animation: dawn-dune 1.2s var(--ease-premium) forwards; }
 .dawn-dune-front { animation-delay: .12s; }
-.dawn-crest { stroke-dasharray: 1400; stroke-dashoffset: 1400; opacity: .9;
-  filter: drop-shadow(0 0 6px rgb(var(--acc-rgb) / .9));
-  animation: dawn-crest 1.4s var(--ease-premium) .55s forwards; }
+.dawn-wipe { overflow: hidden; transform: translateX(-100%); animation: dawn-wipe 1.4s var(--ease-premium) .55s forwards; }
+.dawn-wipe-in { display: block; width: 100%; height: 100%; overflow: visible; transform: translateX(100%); will-change: transform;
+  animation: dawn-wipe 1.4s var(--ease-premium) .55s forwards; }
+.dawn-crest { opacity: .9; filter: drop-shadow(0 0 6px rgb(var(--acc-rgb) / .9)); }
 .dawn-word { display: flex; filter: drop-shadow(0 8px 40px rgb(var(--acc-rgb) / .40)); }
 .dawn-word > span {
   display: inline-block;
@@ -1111,7 +1113,7 @@ a:focus-visible {
   background-size: 600% 100%;
   -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent; color: transparent;
-  opacity: 0; transform: translateY(22px); filter: blur(10px);
+  opacity: 0; transform: translateY(22px); filter: blur(10px); will-change: transform, opacity;
   animation: dawn-letter .8s var(--ease-premium) forwards;
 }
 .dawn-sub { color: rgba(255,255,255,.72); letter-spacing: .9em; opacity: 0;
@@ -1122,7 +1124,7 @@ a:focus-visible {
 @keyframes dawn-sun { to { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes dawn-halo { 60% { opacity: .9; } to { opacity: .75; transform: translateY(0) scale(1.15); } }
 @keyframes dawn-dune { to { opacity: 1; transform: translateY(0); } }
-@keyframes dawn-crest { to { stroke-dashoffset: 0; } }
+@keyframes dawn-wipe { to { transform: translateX(0); } }
 @keyframes dawn-letter { to { opacity: 1; transform: translateY(0); filter: blur(0); } }
 @keyframes dawn-sub { to { opacity: 1; letter-spacing: .55em; } }
 @keyframes dawn-out { to { opacity: 0; transform: scale(1.08); filter: blur(6px); visibility: hidden; } }
@@ -1134,6 +1136,10 @@ a:focus-visible {
 html.tv-mode .dawn-word > span, html.low-gfx .dawn-word > span { filter: none; }
 html.tv-mode .dawn-crest, html.low-gfx .dawn-crest, html.tv-mode .dawn-word, html.low-gfx .dawn-word { filter: none; }
 html.tv-mode .dawn-out, html.low-gfx .dawn-out { animation-name: dawn-fade; }
+/* On a TV the subtitle settles by fading, not by re-spacing its letters
+   (spacing is laid out again every frame). */
+html.tv-mode .dawn-sub, html.low-gfx .dawn-sub { letter-spacing: .55em; animation-name: dawn-sub-still; }
+@keyframes dawn-sub-still { to { opacity: 1; } }
 
 
 

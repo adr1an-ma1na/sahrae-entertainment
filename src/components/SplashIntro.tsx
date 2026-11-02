@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { playSonicLogo } from '../services/sonicLogo';
+import { isTelevision } from '../tv/spatialNavigation';
 
 /**
  * The launch: a desert dawn, Sahrae's own image (the name is the Sahara; the
@@ -13,39 +14,74 @@ import { playSonicLogo } from '../services/sonicLogo';
 const WORD = 'SAHRAE';
 
 /**
+ * Each moving part of the scene is its own small picture, placed where it sits
+ * in the 1200×800 scene (anchored bottom centre, cover, as one SVG with
+ * xMidYMax slice would place it). Moving a whole picture is done by the
+ * graphics chip; moving a shape inside one SVG redraws the SVG every frame,
+ * which is what made the dawn stutter on a TV (owner, 2026-11-02). --u is one
+ * scene unit in CSS pixels.
+ */
+const box = (x: number, y: number, w: number, h: number): CSSProperties => ({
+  left: `calc(50% + ${x - 600} * var(--u))`,
+  top: `calc(100% - ${800 - y} * var(--u))`,
+  width: `calc(${w} * var(--u))`,
+  height: `calc(${h} * var(--u))`,
+});
+const sceneUnit = () => {
+  const el = document.documentElement; // the page's own box, without any scroll bar
+  return Math.max((el.clientWidth || window.innerWidth) / 1200, (el.clientHeight || window.innerHeight) / 800);
+};
+
+/**
  * `onShown` is called once the dawn is really on screen. The app builds the
  * home page under it only then: on a TV, building it first held the screen
  * for longer than the whole intro, which was over before anything was drawn
  * (owner, TCL, 2026-11-01). The clock starts from that first frame too.
+ * On a TV even building it during the dawn stalls the dawn, so there it is
+ * built once the dawn has finished moving, under its last still frame, and
+ * the dawn fades only after the home page has been drawn.
  */
 export default function SplashIntro({ onShown }: { onShown?: () => void } = {}) {
   const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const [phase, setPhase] = useState<'in' | 'out' | 'done'>('in');
 
+  const [unit] = useState(() => (typeof window === 'undefined' ? 1 : sceneUnit()));
+
   useEffect(() => {
-    let t1 = 0, t2 = 0, started = false;
+    let t1 = 0, t2 = 0, raf2 = 0, started = false;
+    const twoFrames = (fn: () => void) => { raf2 = requestAnimationFrame(() => { raf2 = requestAnimationFrame(fn); }); };
     const start = () => {
       if (started) return;
       started = true;
-      onShown?.();
       // The Sahrae sound (services/sonicLogo.ts) opens with the dawn.
       void playSonicLogo();
+      if (isTelevision() && !reduce) {
+        t1 = window.setTimeout(() => {
+          onShown?.();
+          twoFrames(() => {
+            setPhase('out');
+            t2 = window.setTimeout(() => setPhase('done'), 750);
+          });
+        }, 2300);
+        return;
+      }
+      onShown?.();
       t1 = window.setTimeout(() => setPhase('out'), reduce ? 500 : 2150);
       t2 = window.setTimeout(() => setPhase('done'), reduce ? 850 : 2900);
     };
     // Two frames: the first is drawn by the time the second is asked for.
     const raf = requestAnimationFrame(() => requestAnimationFrame(start));
     const safety = window.setTimeout(start, 400); // a page in the background draws no frames
-    return () => { cancelAnimationFrame(raf); clearTimeout(safety); clearTimeout(t1); clearTimeout(t2); };
+    return () => { cancelAnimationFrame(raf); cancelAnimationFrame(raf2); clearTimeout(safety); clearTimeout(t1); clearTimeout(t2); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reduce]);
 
   if (phase === 'done') return null;
 
   return (
-    <div className={`dawn fixed inset-0 z-[200] overflow-hidden ${phase === 'out' ? 'dawn-out' : ''} ${reduce ? 'dawn-still' : ''}`} aria-hidden>
+    <div className={`dawn fixed inset-0 z-[200] overflow-hidden ${phase === 'out' ? 'dawn-out' : ''} ${reduce ? 'dawn-still' : ''}`} style={{ '--u': `${unit}px` } as CSSProperties} aria-hidden>
       <div className="dawn-sky" />
-      <svg className="dawn-scene" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMax slice">
+      <svg width="0" height="0" className="absolute">
         <defs>
           <radialGradient id="dawn-sun" cx="50%" cy="50%" r="50%">
             <stop offset="0%" style={{ stopColor: 'var(--logo-hi)' }} />
@@ -62,11 +98,24 @@ export default function SplashIntro({ onShown }: { onShown?: () => void } = {}) 
             <stop offset="100%" stopColor="#050302" />
           </linearGradient>
         </defs>
-        <circle className="dawn-halo" cx="600" cy="590" r="300" fill="url(#dawn-sun)" />
-        <circle className="dawn-sun" cx="600" cy="590" r="92" fill="url(#dawn-sun)" />
-        <path className="dawn-dune dawn-dune-back" d="M0 610 C 180 560 360 600 560 588 C 780 574 960 532 1200 596 L1200 800 L0 800 Z" fill="url(#dawn-dune-back)" />
-        <path className="dawn-crest" d="M0 610 C 180 560 360 600 560 588 C 780 574 960 532 1200 596" fill="none" style={{ stroke: 'var(--logo-2)' }} strokeWidth="2.2" />
-        <path className="dawn-dune dawn-dune-front" d="M0 690 C 220 640 420 712 650 668 C 880 624 1010 700 1200 662 L1200 800 L0 800 Z" fill="url(#dawn-dune-front)" />
+      </svg>
+      <svg className="dawn-layer dawn-halo" style={box(300, 290, 600, 600)} viewBox="300 290 600 600">
+        <circle cx="600" cy="590" r="300" fill="url(#dawn-sun)" />
+      </svg>
+      <svg className="dawn-layer dawn-sun" style={box(508, 498, 184, 184)} viewBox="508 498 184 184">
+        <circle cx="600" cy="590" r="92" fill="url(#dawn-sun)" />
+      </svg>
+      <svg className="dawn-layer dawn-dune" style={box(0, 520, 1200, 280)} viewBox="0 520 1200 280">
+        <path d="M0 610 C 180 560 360 600 560 588 C 780 574 960 532 1200 596 L1200 800 L0 800 Z" fill="url(#dawn-dune-back)" />
+      </svg>
+      {/* The crest is drawn left to right by a sliding window. */}
+      <div className="dawn-layer dawn-wipe" style={box(0, 500, 1200, 140)}>
+        <svg className="dawn-wipe-in" viewBox="0 500 1200 140">
+          <path className="dawn-crest" d="M0 610 C 180 560 360 600 560 588 C 780 574 960 532 1200 596" fill="none" style={{ stroke: 'var(--logo-2)' }} strokeWidth="2.2" />
+        </svg>
+      </div>
+      <svg className="dawn-layer dawn-dune dawn-dune-front" style={box(0, 610, 1200, 190)} viewBox="0 610 1200 190">
+        <path d="M0 690 C 220 640 420 712 650 668 C 880 624 1010 700 1200 662 L1200 800 L0 800 Z" fill="url(#dawn-dune-front)" />
       </svg>
 
       <div className="absolute inset-0 flex flex-col items-center justify-center px-6 pb-[12vh]">

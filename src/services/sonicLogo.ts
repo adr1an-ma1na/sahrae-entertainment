@@ -46,9 +46,13 @@ function hall(ctx: Ctx, seconds: number, decay: number): AudioBuffer {
   const len = Math.ceil(ctx.sampleRate * seconds);
   const pre = Math.ceil(ctx.sampleRate * 0.03);
   const b = ctx.createBuffer(2, len, ctx.sampleRate);
-  for (let ch = 0; ch < 2; ch++) {
-    const d = b.getChannelData(ch);
-    for (let i = pre; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+  // Built while the dawn is starting, so the decay curve is worked out once
+  // for both ears rather than twice (a TV's processor is slow at this).
+  const l = b.getChannelData(0), r = b.getChannelData(1);
+  for (let i = pre; i < len; i++) {
+    const env = Math.pow(1 - i / len, decay);
+    l[i] = (Math.random() * 2 - 1) * env;
+    r[i] = (Math.random() * 2 - 1) * env;
   }
   return b;
 }
