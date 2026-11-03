@@ -743,41 +743,35 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     try { ms.setPositionState({ duration, position: Math.min(position, duration), playbackRate: 1 }); } catch { /* ignore */ }
   }, [position, duration]);
 
-  // ── Native background-playback service: start/refresh it while a track is
-  //    active (keeps audio alive off-screen + drives the lock-screen/headset
-  //    media controls), stop it when playback ends. No-ops on web. ──
+  // ── The app's media service (MediaPlaybackService.java): the mini player in
+  //    the notification shade and on the lock screen, and Bluetooth earbud
+  //    buttons, which call back into window.__sauti. It also keeps the app
+  //    running as a media app, so music and podcasts carry on in other apps.
+  //    Told what is playing on every change, with the position for the
+  //    progress bar, and again as the app goes to the background. ──
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
-    const on = active && !!current;
-    const q = on
-      ? `on=1&playing=${isPlaying ? 1 : 0}&title=${encodeURIComponent(current!.title)}&artist=${encodeURIComponent(current!.artist)}`
-      : 'on=0';
-    fetch(`https://localhost/__bgaudio?${q}`).catch(() => {});
-  }, [current, isPlaying, active]);
-
-  // ── Background audio: continuously push the current direct-URL track to native
-  //    (sendBeacon, reliable as the app backgrounds) so the native player can take
-  //    over BY ITSELF in MainActivity.onStop() — independent of any JS event that
-  //    might not fire in time. The in-page <audio> is suspended on background;
-  //    native keeps it going, and onStart() hands the position back via
-  //    window.__sauti.bgResume(). ──
-  //
-  // Native only: on the web there is nothing listening on https://localhost, so
-  // this was a beacon failing every 1.5 seconds for the whole session, whether
-  // or not anything was playing.
-  useEffect(() => {
-    if (!Capacitor.isNativePlatform()) return;
-    const sync = () => {
-      const url = (usingLocalRef.current && current?.audioUrl) ? current.audioUrl : '';
-      const pos = Math.floor((liveRef.current.position || 0) * 1000);
-      try { navigator.sendBeacon(`https://localhost/__bgsync?url=${encodeURIComponent(url)}&pos=${pos}&playing=${isPlaying ? 1 : 0}`); } catch { /* ignore */ }
+    const report = () => {
+      const on = active && !!current;
+      const art = current ? (current.artworkLarge || current.artwork || '') : '';
+      const q = on
+        ? `on=1&playing=${isPlaying ? 1 : 0}&title=${encodeURIComponent(current!.title)}&artist=${encodeURIComponent(current!.artist)}`
+          + `&art=${encodeURIComponent(art)}&pos=${Math.floor((liveRef.current.position || 0) * 1000)}&dur=${Math.floor((liveRef.current.duration || 0) * 1000)}`
+        : 'on=0';
+      fetch(`https://localhost/__bgaudio?${q}`).catch(() => {});
     };
-    sync();
-    const iv = setInterval(sync, 1500);
-    const onVis = () => sync(); // push the freshest position the moment we background
-    document.addEventListener('visibilitychange', onVis);
-    return () => { clearInterval(iv); document.removeEventListener('visibilitychange', onVis); };
-  }, [current, isPlaying]);
+    report();
+    document.addEventListener('visibilitychange', report);
+    return () => document.removeEventListener('visibilitychange', report);
+  }, [current, isPlaying, active]);
+  // The length arrives after the track starts: send it once it is known.
+  const reportedDur = useRef(0);
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform() || !active || !current || !duration || Math.abs(duration - reportedDur.current) < 1) return;
+    reportedDur.current = duration;
+    fetch(`https://localhost/__bgaudio?on=1&playing=${isPlaying ? 1 : 0}&title=${encodeURIComponent(current.title)}&artist=${encodeURIComponent(current.artist)}`
+      + `&art=${encodeURIComponent(current.artworkLarge || current.artwork || '')}&pos=${Math.floor(position * 1000)}&dur=${Math.floor(duration * 1000)}`).catch(() => {});
+  }, [duration]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const playQueue = (tracks: Track[], startIndex = 0, source = '') => {
     // A new selection is a fresh attempt; the previous failure is no longer news.
@@ -945,16 +939,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   (window as unknown as { __sauti?: unknown }).__sauti = {
     play: () => { try { if (usingLocalRef.current) audioElRef.current?.play(); else playerRef.current?.playVideo?.(); } catch { /* ignore */ } setIsPlaying(true); setActive(true); },
     pause: () => { try { if (usingLocalRef.current) audioElRef.current?.pause(); else playerRef.current?.pauseVideo?.(); } catch { /* ignore */ } setIsPlaying(false); },
-    // Called natively (onStart) after native background playback — resume the
-    // in-page <audio> from where native got to.
-    bgResume: (posMs: number) => {
-      const a = audioElRef.current;
-      if (a && usingLocalRef.current) {
-        try { const sec = (posMs || 0) / 1000; if (sec > 0) a.currentTime = sec; a.play().catch(() => {}); } catch { /* ignore */ }
-        setIsPlaying(true); setActive(true);
-      }
-    },
     toggle, next, prev, stop,
+    seek: (s: number) => { if (isFinite(s) && s >= 0) seek(s); },
   };
 
   // A podcast file or SoundCloud stream has no video; only YouTube-backed tracks do.

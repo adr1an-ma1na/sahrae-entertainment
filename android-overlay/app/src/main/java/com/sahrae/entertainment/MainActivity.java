@@ -1795,6 +1795,50 @@ public class MainActivity extends BridgeActivity {
 
     /** True between onResume and onPause: the person is looking at the app. */
     private static volatile boolean sOnScreen = false;
+
+    // ── Music and podcasts outside the app (MediaPlaybackService) ──
+    private static java.lang.ref.WeakReference<MainActivity> sSelf = new java.lang.ref.WeakReference<>(null);
+
+    /**
+     * A media button (earbuds, the notification, the lock screen, a car) for the
+     * page's player: play, pause, next, prev, stop, or seek:<ms>.
+     */
+    static void mediaCommand(String cmd) {
+        MainActivity a = sSelf.get();
+        if (a == null || a.bridge == null || cmd == null) return;
+        final WebView w = a.bridge.getWebView();
+        if (w == null) return;
+        String call;
+        if (cmd.startsWith("seek:")) {
+            long ms;
+            try { ms = Long.parseLong(cmd.substring(5)); } catch (Throwable t) { return; }
+            call = "seek(" + (ms / 1000.0) + ")";
+        } else if (cmd.equals("play") || cmd.equals("pause") || cmd.equals("next") || cmd.equals("prev") || cmd.equals("stop")) {
+            call = cmd + "()";
+        } else {
+            return;
+        }
+        final String js = "try{window.__sauti&&window.__sauti." + call + "}catch(e){}";
+        w.post(() -> { try { w.evaluateJavascript(js, null); } catch (Throwable ignore) {} });
+    }
+
+    /**
+     * While something plays, the page's renderer keeps its full priority when
+     * Sahrae is not on screen, so Android does not cut the sound to save memory.
+     */
+    private void keepPlayerAwake(WebView view, boolean playing) {
+        if (Build.VERSION.SDK_INT < 26 || view == null) return;
+        runOnUiThread(() -> {
+            try { view.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, !playing); } catch (Throwable ignore) {}
+        });
+    }
+
+    @Override
+    public void onDestroy() {
+        // The page is going with the app: nothing is left to play.
+        try { MediaPlaybackService.stop(getApplicationContext()); } catch (Throwable ignore) {}
+        super.onDestroy();
+    }
     /** The renderer went while the app was in the background: reload on return. */
     private boolean reloadOnReturn = false;
 
@@ -2054,6 +2098,7 @@ public class MainActivity extends BridgeActivity {
 
         final Bridge bridge = this.bridge;
         final WebView webView = bridge.getWebView();
+        sSelf = new java.lang.ref.WeakReference<>(this);
         // Never wait forever on a page that does not report its first paint.
         webView.postDelayed(() -> onFirstPaint(webView), 20000);
 
@@ -2120,6 +2165,22 @@ public class MainActivity extends BridgeActivity {
                                 final float fy = Float.parseFloat(u.getQueryParameter("fy"));
                                 if (fx >= 0f && fx <= 1f && fy >= 0f && fy <= 1f) runOnUiThread(() -> tapAt(view, fx, fy));
                             } catch (Throwable ignore) {}
+                            return DownloadStore.json("{\"ok\":true}");
+                        } else if (path.startsWith("/__bgaudio")) {
+                            // What Sauti is playing, for the notification, lock screen and earbuds.
+                            if ("1".equals(u.getQueryParameter("on"))) {
+                                boolean playing = "1".equals(u.getQueryParameter("playing"));
+                                long pos = 0, dur = 0;
+                                try { pos = Long.parseLong(u.getQueryParameter("pos")); } catch (Throwable ignore) {}
+                                try { dur = Long.parseLong(u.getQueryParameter("dur")); } catch (Throwable ignore) {}
+                                MediaPlaybackService.update(getApplicationContext(),
+                                    u.getQueryParameter("title"), u.getQueryParameter("artist"), u.getQueryParameter("art"),
+                                    playing, pos, dur);
+                                keepPlayerAwake(view, playing);
+                            } else {
+                                MediaPlaybackService.stop(getApplicationContext());
+                                keepPlayerAwake(view, false);
+                            }
                             return DownloadStore.json("{\"ok\":true}");
                         } else if (path.startsWith("/__player")) {
                             sPlayerOpen = "1".equals(u.getQueryParameter("open"));
@@ -2289,7 +2350,7 @@ public class MainActivity extends BridgeActivity {
                 // with disguised segment names would look silent and be switched
                 // away from while playing), measure data used, cap video quality.
                 view.evaluateJavascript(
-                    "window.__sahraeCaps=Object.assign(window.__sahraeCaps||{},{mediaSignal:true,traffic:true,dataSaver:true,embedHosts:true,reminders:true,quality:true,filmStream:true,tap:true" + (sFrameHelper ? ",frameKick:true" : "") + "});"
+                    "window.__sahraeCaps=Object.assign(window.__sahraeCaps||{},{mediaSignal:true,media:true,traffic:true,dataSaver:true,embedHosts:true,reminders:true,quality:true,filmStream:true,tap:true" + (sFrameHelper ? ",frameKick:true" : "") + "});"
                     + "window.dispatchEvent(new Event('sahrae:caps'))", null);
 
                 // This phone has lost its screen engine before: flatten the heavy

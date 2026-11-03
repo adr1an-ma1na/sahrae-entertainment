@@ -30,6 +30,13 @@
 
         </activity>
 
+        <!-- Music and podcasts outside the app: the notification mini player and
+             earbud / lock-screen buttons (MediaPlaybackService.java). -->
+        <service
+            android:name="com.sahrae.entertainment.MediaPlaybackService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+
         <!-- Kick-off reminders from the Matchday screen (KickoffReminder.java). -->
         <receiver
             android:name="com.sahrae.entertainment.KickoffReminder"
@@ -68,6 +75,10 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Android 13+: kick-off reminders. Asked for only when a viewer sets the first one. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Keeps music and podcasts playing when you switch apps or lock the phone. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- Run on phones, tablets, laptops (Chromebook) AND Android TV.
          Declaring these as NOT required keeps the app installable everywhere. -->
