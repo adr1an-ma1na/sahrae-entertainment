@@ -197,15 +197,17 @@ export async function push(): Promise<boolean> {
  * setItem, which is intrusive but is the one place that sees every mutation
  * without threading a callback through every hook that owns state.
  */
-export function startSync(onPulled?: () => void): () => void {
-  if (!supabase) return () => {};
+export function startSync(onPulled?: () => void, onSettled?: () => void): () => void {
+  if (!supabase) { onSettled?.(); return () => {}; }
   // React StrictMode runs effects twice in development. Patching setItem a
   // second time would wrap the first patch, and the teardown would then restore
   // the WRAPPER as if it were the original — leaving a permanent double-push on
   // every write. Refuse the second start instead.
   if (patchedSetItem) return () => {};
 
-  void pull().then((changed) => { if (changed) onPulled?.(); });
+  // onSettled: the first pull has finished and changed nothing, so what is on
+  // this device is what the app should start with.
+  void pull().then((changed) => { if (changed) onPulled?.(); else onSettled?.(); });
 
   const nativeSetItem = localStorage.setItem.bind(localStorage);
   const patched = (k: string, v: string) => {

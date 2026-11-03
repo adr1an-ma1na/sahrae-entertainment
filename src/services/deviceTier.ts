@@ -74,6 +74,14 @@ export function screenPixels(): number {
   }
 }
 
+/**
+ * A full-HD-or-wider screen (a TV, a desktop monitor). Artwork that is drawn
+ * large there is asked for larger, or it is visibly soft: a TV's 1920 px
+ * canvas showed w1280 backdrops stretched by half again (owner, TCL C8L,
+ * 2026-11-03: "not crystal clear").
+ */
+export const isBigScreen = (): boolean => screenPixels() >= 1600;
+
 /** Stamp the class so off-screen rows can be skipped on a small device. */
 export function applyDeviceTier(): boolean {
   if (typeof document === 'undefined') return false;

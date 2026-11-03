@@ -42,7 +42,7 @@ globalThis.document = {
 setNavigator({});
 setScreen(1512, 982, 2);
 
-const { isLiteDevice, markLiteDevice, applyDeviceTier, resetDeviceTier, screenPixels, LITE_KEY } =
+const { isLiteDevice, markLiteDevice, applyDeviceTier, resetDeviceTier, screenPixels, isBigScreen, LITE_KEY } =
   await import('./src/services/deviceTier.ts');
 const { getImageUrl } = await import('./src/services/tmdb.ts');
 
@@ -96,6 +96,14 @@ eq('a w780 request there is already right', getImageUrl('/a.jpg', 'w780'), 'http
 
 fresh(); setScreen(1000, 800, 1);
 eq('a 1000 px screen takes w1280 rather than original', getImageUrl('/a.jpg', 'original'), 'https://image.tmdb.org/t/p/w1280/a.jpg');
+
+fresh(); setScreen(960, 540, 2); globalThis.window.innerWidth = 1920;
+eq('a full-HD TV (960 px at 2x, 1920 canvas) keeps the full-resolution backdrop', getImageUrl('/a.jpg', 'original'), 'https://image.tmdb.org/t/p/original/a.jpg');
+eq('and counts as a big screen', isBigScreen(), true);
+fresh(); setScreen(1920, 1080, 1);
+eq('a 1920 px monitor keeps the full-resolution backdrop', getImageUrl('/a.jpg', 'original'), 'https://image.tmdb.org/t/p/original/a.jpg');
+fresh(); setScreen(412, 915, 2.6);
+eq('a phone is not a big screen', isBigScreen(), false);
 
 fresh(); setScreen(360, 640, 1);
 eq('posters are left exactly as asked', getImageUrl('/a.jpg', 'w500'), 'https://image.tmdb.org/t/p/w500/a.jpg');

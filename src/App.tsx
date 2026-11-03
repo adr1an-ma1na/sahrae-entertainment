@@ -57,6 +57,7 @@ import { useTheme } from './hooks/useTheme';
 import { useAuth } from './hooks/useAuth';
 import { haptics } from './services/haptics';
 import SplashIntro from './components/SplashIntro';
+import { SYNC_WAIT_MS, syncReloadedRecently, markSyncReload } from './services/syncGate';
 import Onboarding, { TasteGenre } from './components/Onboarding';
 import EmptyState from './components/EmptyState';
 import Coachmark from './components/Coachmark';
@@ -82,10 +83,23 @@ export default function App() {
    * read into state at startup by half a dozen hooks and there is no honest way
    * to refresh them all in place — a reload is blunt but correct, and it only
    * happens when the server genuinely had newer data.
+   *
+   * The intro waits for that first pull (up to SYNC_WAIT_MS) behind the dark
+   * it opens from. Before, the intro started at once and the reload that a
+   * newer library brings played it again: a TV opened after the phone had
+   * been used did that nearly every time (owner, 2026-11-03).
    */
+  const [synced, setSynced] = useState(false);
   useEffect(() => {
-    if (authLoading || !user) return;
-    return startSync(() => window.location.reload());
+    if (authLoading) return;
+    if (!user) { setSynced(true); return; }
+    const t = window.setTimeout(() => setSynced(true), SYNC_WAIT_MS);
+    // A second newer copy straight after a reload is not chased again (no reload loop).
+    const stop = startSync(
+      () => { if (syncReloadedRecently()) setSynced(true); else { markSyncReload(); window.location.reload(); } },
+      () => setSynced(true),
+    );
+    return () => { clearTimeout(t); stop(); };
   }, [user, authLoading]);
   const [activeTab, setActiveTab] = useState('home');
   // The page is built once the intro is on screen (SplashIntro onShown): on a TV, building it first held the screen past the intro.
@@ -758,7 +772,9 @@ export default function App() {
 
     return (
       <div className="aurora-bg isolate min-h-screen text-zinc-50 font-sans selection:bg-amber-500/30 transition-colors duration-300">
-        <SplashIntro onShown={() => setIntroShown(true)} />
+        {synced
+          ? <SplashIntro onShown={() => setIntroShown(true)} />
+          : <div className="fixed inset-0 z-[200]" style={{ background: '#050302' }} aria-hidden />}
         <RemotePanel />
         <WatchParty />
         {!appOnboarded && <Onboarding onDone={finishOnboarding} />}

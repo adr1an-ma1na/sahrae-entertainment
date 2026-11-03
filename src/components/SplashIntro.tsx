@@ -27,6 +27,14 @@ const box = (x: number, y: number, w: number, h: number): CSSProperties => ({
   width: `calc(${w} * var(--u))`,
   height: `calc(${h} * var(--u))`,
 });
+/**
+ * The intro plays once per visit. A reload (a newer library from the cloud, a
+ * language change, recovering from an error) does not play it again; opening
+ * the app afresh does.
+ */
+const PLAYED_KEY = 'sahrae.introPlayed';
+const playedThisVisit = () => { try { return sessionStorage.getItem(PLAYED_KEY) === '1'; } catch { return false; } };
+
 const sceneUnit = () => {
   const el = document.documentElement; // the page's own box, without any scroll bar
   return Math.max((el.clientWidth || window.innerWidth) / 1200, (el.clientHeight || window.innerHeight) / 800);
@@ -43,16 +51,18 @@ const sceneUnit = () => {
  */
 export default function SplashIntro({ onShown }: { onShown?: () => void } = {}) {
   const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-  const [phase, setPhase] = useState<'in' | 'out' | 'done'>('in');
+  const [phase, setPhase] = useState<'in' | 'out' | 'done'>(() => (playedThisVisit() ? 'done' : 'in'));
 
   const [unit] = useState(() => (typeof window === 'undefined' ? 1 : sceneUnit()));
 
   useEffect(() => {
+    if (playedThisVisit()) { onShown?.(); return; }
     let t1 = 0, t2 = 0, raf2 = 0, started = false;
     const twoFrames = (fn: () => void) => { raf2 = requestAnimationFrame(() => { raf2 = requestAnimationFrame(fn); }); };
     const start = () => {
       if (started) return;
       started = true;
+      try { sessionStorage.setItem(PLAYED_KEY, '1'); } catch { /* plays again next reload */ }
       // The Sahrae sound (services/sonicLogo.ts) opens with the dawn.
       void playSonicLogo();
       if (isTelevision() && !reduce) {

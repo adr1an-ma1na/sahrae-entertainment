@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Play, Info } from 'lucide-react';
 import { MediaItem, getImageUrl } from '../services/tmdb';
+import { isBigScreen } from '../services/deviceTier';
 import { posterColor, cachedPosterColor } from '../services/posterColor';
 import { haptics } from '../services/haptics';
 
@@ -43,7 +44,7 @@ export default function SpotlightBand({
         <div className="relative h-[280px] md:h-[380px]">
           {art && (
             <img
-              src={getImageUrl(art, 'w780')}
+              src={getImageUrl(art, isBigScreen() ? 'original' : 'w780')}
               alt=""
               loading="lazy"
               className="absolute inset-0 w-full h-full object-cover kenburns"

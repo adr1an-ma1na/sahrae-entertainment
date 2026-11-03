@@ -335,9 +335,10 @@ export const getImageUrl = (path: string | null, size: TmdbImageSize = 'w500') =
   if (SIZE_PX[size] >= 780) {
     const budget = screenPixels();
     // A 720 px phone at 2x wants ~1440 px across: w1280 fills it, and costs
-    // about 3.7 MB decoded where `original` costs 60. A laptop's 3000 px keeps
-    // the full file, because at that width the difference is visible.
-    const fits: TmdbImageSize = budget < 800 ? 'w780' : budget < 2000 ? 'w1280' : 'original';
+    // about 3.7 MB decoded where `original` costs 60. A full-HD TV or monitor
+    // (1920 px) and anything wider keep the full file: w1280 stretched to 1920
+    // is visibly soft.
+    const fits: TmdbImageSize = budget < 800 ? 'w780' : budget < 1600 ? 'w1280' : 'original';
     if (SIZE_PX[fits] < SIZE_PX[size]) asked = fits;
   }
   return `https://image.tmdb.org/t/p/${asked}${path}`;

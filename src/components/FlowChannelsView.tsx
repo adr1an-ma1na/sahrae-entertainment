@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Play, Flame, Ghost, Heart, Rocket, Compass, Volume2, VolumeX, AlertCircle, Sparkles, Swords, ShieldAlert, Film, Library, Drama } from 'lucide-react';
 import { fetchDiscover, fetchMediaDetails, getImageUrl, MediaDetails } from '../services/tmdb';
+import { isBigScreen } from '../services/deviceTier';
 import { LiveMeta, LuxChapter, RailHeader } from './ui/Lux';
 import { useRail } from '../hooks/useRail';
 
@@ -486,7 +487,7 @@ function UpNextRail({ items, channel, onJump }: { items: { m: MediaDetails; inde
             className="lux-card group flex-none w-[200px] md:w-[250px] snap-start text-left focus:outline-none"
           >
             <span className="relative block aspect-video overflow-hidden rounded-[inherit] bg-zinc-800">
-              <img src={getImageUrl(m.backdrop_path || m.poster_path, 'w300')} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+              <img src={getImageUrl(m.backdrop_path || m.poster_path, isBigScreen() ? 'w780' : 'w300')} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
               <span className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-transparent" />
               {n === 0 && <span className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-full bg-black/55 backdrop-blur text-[9px] font-bold uppercase tracking-wider text-amber-300">Next</span>}
               <span aria-hidden className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">

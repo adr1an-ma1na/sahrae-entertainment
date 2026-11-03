@@ -1,6 +1,7 @@
 import { t } from '../i18n';
 import { Play, X } from 'lucide-react';
 import { MediaItem, getImageUrl } from '../services/tmdb';
+import { isBigScreen } from '../services/deviceTier';
 import { haptics } from '../services/haptics';
 import { timeLeft } from '../services/resume';
 import { RailHeader } from './ui/Lux';
@@ -64,7 +65,7 @@ export default function ContinueRow({
             >
               <div className="relative aspect-video bg-zinc-800">
                 {art ? (
-                  <img src={getImageUrl(art, 'w300')} alt="" loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                  <img src={getImageUrl(art, isBigScreen() ? 'w780' : 'w300')} alt="" loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
                 ) : null}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
                 <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity">

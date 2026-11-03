@@ -197,6 +197,10 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
                   </button>
                 ))}
               </div>
+              {/* What the TV lets apps draw at; the app is as sharp as this allows. */}
+              <p className="mt-2 text-xs text-zinc-500">
+                Your TV gives apps a {Math.round(window.screen.width * (window.devicePixelRatio || 1))} × {Math.round(window.screen.height * (window.devicePixelRatio || 1))} picture.
+              </p>
             </div>
           )}
           <div className="mt-auto pt-6 flex flex-col gap-2">
