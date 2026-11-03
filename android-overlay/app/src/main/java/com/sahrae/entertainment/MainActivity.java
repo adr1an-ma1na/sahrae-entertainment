@@ -1835,13 +1835,26 @@ public class MainActivity extends BridgeActivity {
     }
 
     /**
-     * While something plays, the page's renderer keeps its full priority when
-     * Sahrae is not on screen, so Android does not cut the sound to save memory.
+     * While Sauti has a track loaded (playing or paused), the page carries on
+     * as if on screen when Sahrae is not: its renderer keeps full priority, so
+     * Android does not cut the sound for memory, and the WebView is not told
+     * its window is hidden (SahraeWebView), which would make the web engine
+     * pause the song. Held through pauses and track changes, so an earbud
+     * press or the next song in the queue can still start; released when the
+     * player is closed.
      */
-    private void keepPlayerAwake(WebView view, boolean playing) {
-        if (Build.VERSION.SDK_INT < 26 || view == null) return;
+    private void keepPlayerAwake(WebView view, boolean on) {
+        if (view == null) return;
+        boolean was = SahraeWebView.sKeepPlaying;
+        SahraeWebView.sKeepPlaying = on;
         runOnUiThread(() -> {
-            try { view.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, !playing); } catch (Throwable ignore) {}
+            if (Build.VERSION.SDK_INT >= 26) {
+                try { view.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, !on); } catch (Throwable ignore) {}
+            }
+            // Closed from the notification while away: now the page may be hidden.
+            if (was && !on && !sOnScreen) {
+                try { view.dispatchWindowVisibilityChanged(View.GONE); } catch (Throwable ignore) {}
+            }
         });
     }
 
@@ -2188,7 +2201,7 @@ public class MainActivity extends BridgeActivity {
                                 MediaPlaybackService.update(getApplicationContext(),
                                     u.getQueryParameter("title"), u.getQueryParameter("artist"), u.getQueryParameter("art"),
                                     playing, pos, dur);
-                                keepPlayerAwake(view, playing);
+                                keepPlayerAwake(view, true);
                             } else {
                                 MediaPlaybackService.stop(getApplicationContext());
                                 keepPlayerAwake(view, false);
