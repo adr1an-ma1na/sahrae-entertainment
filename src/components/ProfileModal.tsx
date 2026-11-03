@@ -1,5 +1,6 @@
 import { useState, useEffect, FormEvent } from 'react';
-import { X, User, LogOut, Key, Check, Database, Trash2, ShieldAlert, Languages, Sun, Moon, Palette, Tv, ShieldCheck, Download, Scale, Volume2, VolumeX } from 'lucide-react';
+import { X, User, LogOut, Key, Check, Database, Trash2, ShieldAlert, Languages, Sun, Moon, Palette, Tv, ShieldCheck, Download, Scale, Volume2, VolumeX, Music } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 import { loadConsent, saveConsent, openLegal, CONSENT_CHANGE } from '../services/consent';
 import { exportMyData, deleteAccount } from '../services/accountData';
 import { introSoundOn, setIntroSound } from '../services/sonicLogo';
@@ -185,6 +186,17 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
             <span className="ml-auto text-xs font-bold text-zinc-300">{THEME_NAMES[theme]}</span>
           </button>
           {themeOpen && <div className="px-2 pb-2"><ThemePicker theme={theme} onPick={pick} compact /></div>}
+          {/* Phone app: what happened to music while Sahrae was in the background,
+              to share if a song stops in another app. */}
+          {Capacitor.isNativePlatform() && !isTvBuild() && (
+            <button
+              onClick={() => { fetch('https://localhost/__bglog?share=1').catch(() => {}); }}
+              className="flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-zinc-400 hover:bg-white/5 hover:text-white transition-colors"
+            >
+              <Music className="w-5 h-5" /> Music report
+              <span className="ml-auto text-xs font-bold text-zinc-300">Share</span>
+            </button>
+          )}
           {/* TV only: a television has no zoom, so the app offers its own sizes. */}
           {isTvBuild() && (
             <div className="px-4 py-3">

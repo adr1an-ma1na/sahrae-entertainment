@@ -27,7 +27,10 @@ public class SahraeWebView extends CapacitorWebView {
 
     @Override
     protected void onWindowVisibilityChanged(int visibility) {
-        if (visibility != View.VISIBLE && sKeepPlaying) return;
+        if (visibility != View.VISIBLE && sKeepPlaying) {
+            MainActivity.bgLog("Android said the window is hidden: held back, the song carries on");
+            return;
+        }
         super.onWindowVisibilityChanged(visibility);
     }
 }

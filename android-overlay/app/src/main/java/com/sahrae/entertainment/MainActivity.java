@@ -1808,6 +1808,62 @@ public class MainActivity extends BridgeActivity {
     /** True between onResume and onPause: the person is looking at the app. */
     private static volatile boolean sOnScreen = false;
 
+    // ── Music in other apps: a short timeline of what happened to the player
+    //    while Sahrae was off screen. Profile → Music report shares it, so a song
+    //    that stops on a phone no test device reproduces says where it stopped.
+    private static final java.util.ArrayDeque<String> sBgLog = new java.util.ArrayDeque<>();
+
+    static void bgLog(String what) {
+        if (what == null) return;
+        String t = new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(new java.util.Date());
+        synchronized (sBgLog) {
+            sBgLog.addLast(t + "  " + (what.length() > 200 ? what.substring(0, 200) : what));
+            while (sBgLog.size() > 100) sBgLog.pollFirst();
+        }
+    }
+
+    private String bgReport() {
+        StringBuilder b = new StringBuilder("Sahrae music report\n");
+        b.append("Phone: ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL)
+         .append(", Android ").append(Build.VERSION.RELEASE).append('\n');
+        if (Build.VERSION.SDK_INT >= 26) {
+            try {
+                android.content.pm.PackageInfo p = WebView.getCurrentWebViewPackage();
+                if (p != null) b.append("Web engine: ").append(p.packageName).append(' ').append(p.versionName).append('\n');
+            } catch (Throwable ignore) {}
+        }
+        try {
+            android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
+            b.append("Battery saver: ").append(pm.isPowerSaveMode() ? "on" : "off");
+            if (Build.VERSION.SDK_INT >= 23) {
+                b.append(", battery optimisation for Sahrae: ")
+                 .append(pm.isIgnoringBatteryOptimizations(getPackageName()) ? "off" : "on");
+            }
+            b.append('\n');
+        } catch (Throwable ignore) {}
+        if (Build.VERSION.SDK_INT >= 28) {
+            try {
+                android.app.ActivityManager am = (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
+                b.append("Background use restricted: ").append(am.isBackgroundRestricted() ? "YES" : "no").append('\n');
+            } catch (Throwable ignore) {}
+        }
+        b.append("Media service running: ").append(MediaPlaybackService.isRunning() ? "yes" : "no").append("\n\n");
+        synchronized (sBgLog) {
+            if (sBgLog.isEmpty()) b.append("Nothing recorded yet. Play a song, switch to another app for a minute, come back, then share this.");
+            for (String l : sBgLog) b.append(l).append('\n');
+        }
+        return b.toString();
+    }
+
+    /** The page cannot see that Sahrae is off screen while it is kept awake: tell it. */
+    private void tellPageAway(boolean away) {
+        try {
+            final WebView w = bridge != null ? bridge.getWebView() : null;
+            if (w == null) return;
+            w.evaluateJavascript("try{window.__sahraeAway=" + away + ";window.dispatchEvent(new Event('sahrae:away'))}catch(e){}", null);
+        } catch (Throwable ignore) {}
+    }
+
     // ── Music and podcasts outside the app (MediaPlaybackService) ──
     private static java.lang.ref.WeakReference<MainActivity> sSelf = new java.lang.ref.WeakReference<>(null);
 
@@ -1847,6 +1903,7 @@ public class MainActivity extends BridgeActivity {
         if (view == null) return;
         boolean was = SahraeWebView.sKeepPlaying;
         SahraeWebView.sKeepPlaying = on;
+        if (was != on) bgLog(on ? "Song loaded: the page stays awake off screen" : "Player closed: the page may sleep off screen");
         runOnUiThread(() -> {
             if (Build.VERSION.SDK_INT >= 26) {
                 try { view.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, !on); } catch (Throwable ignore) {}
@@ -1871,6 +1928,8 @@ public class MainActivity extends BridgeActivity {
     public void onResume() {
         super.onResume();
         sOnScreen = true;
+        bgLog("Sahrae back on screen");
+        tellPageAway(false);
         if (reloadOnReturn) {
             reloadOnReturn = false;
             recreate();
@@ -1880,7 +1939,15 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onPause() {
         sOnScreen = false;
+        bgLog("Sahrae left the screen" + (SahraeWebView.sKeepPlaying ? " (song loaded)" : ""));
+        tellPageAway(true);
         super.onPause();
+    }
+
+    @Override
+    public void onStop() {
+        bgLog("Sahrae is in the background (another app, or the screen is locked)");
+        super.onStop();
     }
 
     private static String priorityName(int p) {
@@ -1944,6 +2011,7 @@ public class MainActivity extends BridgeActivity {
     private void onMainRendererGone(WebView view, android.webkit.RenderProcessGoneDetail detail) {
         final boolean onScreen = sOnScreen;
         final String report = lossReport(detail, onScreen);
+        bgLog(report.split("\n")[0]);
         recordRecovery(report.replace('\n', '|'));
         try {
             getSharedPreferences(DIAG_PREFS, MODE_PRIVATE).edit()
@@ -2207,6 +2275,17 @@ public class MainActivity extends BridgeActivity {
                                 keepPlayerAwake(view, false);
                             }
                             return DownloadStore.json("{\"ok\":true}");
+                        } else if (path.startsWith("/__bglog")) {
+                            // The music report: lines from the page, or the whole report to share.
+                            String add = u.getQueryParameter("add");
+                            if (add != null) { bgLog(add); return DownloadStore.json("{\"ok\":true}"); }
+                            final String report = bgReport();
+                            if ("1".equals(u.getQueryParameter("share"))) {
+                                runOnUiThread(() -> shareText("Sahrae music report", report));
+                                return DownloadStore.json("{\"ok\":true}");
+                            }
+                            return new WebResourceResponse("text/plain", "utf-8",
+                                new java.io.ByteArrayInputStream(report.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
                         } else if (path.startsWith("/__player")) {
                             sPlayerOpen = "1".equals(u.getQueryParameter("open"));
                             sMenuHandled = false;

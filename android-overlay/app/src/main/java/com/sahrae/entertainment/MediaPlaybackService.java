@@ -78,8 +78,9 @@ public class MediaPlaybackService extends Service {
             if (sRunning) ctx.startService(i);
             else if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i);
             else ctx.startService(i);
-        } catch (Throwable ignore) {
+        } catch (Throwable t) {
             // Android refused (the app was not on screen): the next report from the page tries again.
+            MainActivity.bgLog("Android refused the media service: " + t.getClass().getSimpleName());
         }
     }
 
@@ -108,6 +109,11 @@ public class MediaPlaybackService extends Service {
             .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         session.setSessionActivity(PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE));
         session.setActive(true);
+        try {
+            android.content.IntentFilter f = new android.content.IntentFilter(android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY);
+            if (Build.VERSION.SDK_INT >= 33) registerReceiver(noisy, f, Context.RECEIVER_NOT_EXPORTED);
+            else registerReceiver(noisy, f);
+        } catch (Throwable ignore) {}
         if (Build.VERSION.SDK_INT >= 26) {
             NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm != null && nm.getNotificationChannel(CHANNEL) == null) {
@@ -180,6 +186,7 @@ public class MediaPlaybackService extends Service {
             if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIFICATION_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
             else startForeground(NOTIFICATION_ID, n);
         } catch (Throwable t) {
+            MainActivity.bgLog("Android refused to run the media service in the foreground: " + t.getClass().getSimpleName());
             // Not allowed to run in the foreground now: show the controls anyway.
             try { ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(NOTIFICATION_ID, n); } catch (Throwable ignore) {}
         }
@@ -281,8 +288,20 @@ public class MediaPlaybackService extends Service {
         stopSelf();
     }
 
+    /** Earbuds or headphones disconnected: pause, rather than carry on out of the phone's speaker. */
+    private final android.content.BroadcastReceiver noisy = new android.content.BroadcastReceiver() {
+        @Override public void onReceive(Context c, Intent i) {
+            if (i == null || !android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY.equals(i.getAction()) || !now.playing) return;
+            MainActivity.bgLog("Earbuds or headphones disconnected: paused");
+            MainActivity.mediaCommand("pause");
+            now.playing = false;
+            publish();
+        }
+    };
+
     @Override
     public void onDestroy() {
+        try { unregisterReceiver(noisy); } catch (Throwable ignore) {}
         sRunning = false;
         holdLocks(false);
         try { session.setActive(false); session.release(); } catch (Throwable ignore) {}

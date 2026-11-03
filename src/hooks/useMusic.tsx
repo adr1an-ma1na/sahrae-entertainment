@@ -127,6 +127,16 @@ const noCorsHosts = (() => {
   return set;
 })();
 
+// Music in other apps (Android): MainActivity sets window.__sahraeAway while
+// Sahrae is off screen, since the page is kept believing it is visible. Lines
+// for the music report (Profile → Music report) go to /__bglog.
+const isAway = () => !!(window as unknown as { __sahraeAway?: boolean }).__sahraeAway;
+const bgLog = (s: string) => {
+  if (Capacitor.isNativePlatform()) fetch(`https://localhost/__bglog?add=${encodeURIComponent(s)}`).catch(() => {});
+};
+const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const YT_STATE: Record<number, string> = { [-1]: 'not started', 0: 'ended', 1: 'playing', 2: 'paused', 3: 'loading', 5: 'ready' };
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 let apiLoading = false;
 function loadYT(): Promise<any> {
@@ -339,6 +349,19 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const endedRef = useRef(handleEnded); endedRef.current = handleEnded;
   const skipRef = useRef(next); skipRef.current = next;
 
+  // ── Songs in other apps. Android can still stop a song's video while Sahrae
+  //    is off screen. wantPlayRef is what the listener last asked for (every
+  //    play, pause and track change goes through the player shim below), so a
+  //    pause nobody asked for is undone, and a song that sits unstarted or
+  //    stuck is nudged and then reloaded where it was. Only while away. ──
+  const wantPlayRef = useRef(false);
+  const ytIdRef = useRef('');
+  const ytStateRef = useRef(-1);
+  const ytStateAtRef = useRef(0);
+  const undoneRef = useRef(0);
+  const titleRef = useRef('');
+  titleRef.current = queue[index]?.title || '';
+
   // ── Hidden YouTube player via a PLAIN EMBED + postMessage ──
   // The IFrame API (YT.Player) loads but refuses to play on the Capacitor
   // https://localhost origin (0:00). A plain /embed/ iframe plays reliably (it's
@@ -353,15 +376,21 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     const cmd = (func: string, args: unknown[] = []) => post({ event: 'command', func, args });
 
     playerRef.current = {
-      loadVideoById: (id: string) => {
+      loadVideoById: (id: string, start?: number) => {
         // Set the embed src per track — the proven-reliable path. (The
         // postMessage loadVideoById switch was faster but didn't actually play
         // on this WebView, so we keep the reliable reload.)
-        f.src = `https://www.youtube.com/embed/${id}?enablejsapi=1&autoplay=1&playsinline=1&controls=0&rel=0&modestbranding=1&iv_load_policy=3`;
+        wantPlayRef.current = true;
+        if (id !== ytIdRef.current) undoneRef.current = 0;
+        ytIdRef.current = id;
+        ytStateRef.current = -1; ytStateAtRef.current = Date.now();
+        if (isAway()) bgLog(`Loading "${titleRef.current}"`);
+        f.src = `https://www.youtube.com/embed/${id}?enablejsapi=1&autoplay=1&playsinline=1&controls=0&rel=0&modestbranding=1&iv_load_policy=3`
+          + (start && start > 1 ? `&start=${Math.floor(start)}` : '');
       },
-      playVideo: () => cmd('playVideo'),
-      pauseVideo: () => cmd('pauseVideo'),
-      stopVideo: () => cmd('stopVideo'),
+      playVideo: () => { wantPlayRef.current = true; cmd('playVideo'); },
+      pauseVideo: () => { wantPlayRef.current = false; cmd('pauseVideo'); },
+      stopVideo: () => { wantPlayRef.current = false; cmd('stopVideo'); },
       seekTo: (s: number) => cmd('seekTo', [s, true]),
       setPlaybackRate: (r: number) => cmd('setPlaybackRate', [r]),
       getCurrentTime: () => liveRef.current.position,
@@ -370,7 +399,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     readyRef.current = true;
 
     // The embed starts posting state once it receives a 'listening' message.
-    const onFrameLoad = () => post({ event: 'listening', id: 1, channel: 'widget' });
+    const onFrameLoad = () => {
+      post({ event: 'listening', id: 1, channel: 'widget' });
+      if (isAway()) bgLog('Song page loaded');
+    };
     f.addEventListener('load', onFrameLoad);
 
     const onMsg = (e: MessageEvent) => {
@@ -400,6 +432,19 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         if (typeof info.duration === 'number' && info.duration > 0) { liveRef.current.duration = info.duration; setDuration(info.duration); }
         if (typeof info.playerState === 'number') {
           const s = info.playerState; // -1 unstarted · 0 ended · 1 playing · 2 paused · 3 buffering · 5 cued
+          if (s !== ytStateRef.current) {
+            ytStateRef.current = s; ytStateAtRef.current = Date.now();
+            if (isAway()) bgLog(`Song ${YT_STATE[s] ?? s} at ${mmss(liveRef.current.position)}`);
+            // Paused, but not by the listener: Android or YouTube did it because
+            // Sahrae is off screen. Play on (a few times per song at most).
+            if (s === 2 && isAway() && wantPlayRef.current && !usingLocalRef.current) {
+              if (undoneRef.current < 8) {
+                undoneRef.current++;
+                bgLog('Paused by the phone, not by you: playing on');
+                setTimeout(() => { if (isAway() && wantPlayRef.current && !usingLocalRef.current) cmd('playVideo'); }, 400);
+              } else if (undoneRef.current++ === 8) bgLog('Stopped undoing pauses on this song');
+            }
+          }
           if (s === 1) { setIsPlaying(true); setBuffering(false); setActive(true); window.dispatchEvent(new CustomEvent('sahrae:audioclaim', { detail: 'music' })); }
           else if (s === 2) { setIsPlaying(false); }
           else if (s === 3) { setBuffering(true); }
@@ -412,6 +457,33 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     if (pendingRef.current) { playerRef.current.loadVideoById(pendingRef.current); pendingRef.current = null; }
 
     return () => { window.removeEventListener('message', onMsg); f.removeEventListener('load', onFrameLoad); };
+  }, []);
+
+  // A song that sits unstarted, loading or paused while Sahrae is away (and the
+  // listener wants it playing): nudge it after 8 s, reload it where it was after
+  // 30 s, twice at most per song. A song reported as playing is left alone.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    let reloads = 0, reloadsFor = '', nudged = 0;
+    const onAway = () => bgLog(`${isAway() ? 'Left' : 'Back'}: "${titleRef.current || 'nothing'}" ${
+      usingLocalRef.current ? 'direct audio' : (YT_STATE[ytStateRef.current] ?? ytStateRef.current)} at ${mmss(liveRef.current.position)}`);
+    window.addEventListener('sahrae:away', onAway);
+    const iv = setInterval(() => {
+      const s = ytStateRef.current;
+      if (!isAway() || !wantPlayRef.current || usingLocalRef.current || !ytIdRef.current || s === 1 || s === 0) return;
+      if (reloadsFor !== ytIdRef.current) { reloadsFor = ytIdRef.current; reloads = 0; }
+      const stuck = (Date.now() - ytStateAtRef.current) / 1000;
+      if (stuck >= 30 && reloads < 2) {
+        reloads++;
+        bgLog(`Song stuck (${YT_STATE[s] ?? s}) at ${mmss(liveRef.current.position)}: reloading it`);
+        playerRef.current?.loadVideoById?.(ytIdRef.current, liveRef.current.position);
+      } else if (stuck >= 8 && nudged !== ytStateAtRef.current) {
+        nudged = ytStateAtRef.current;
+        bgLog(`Song ${YT_STATE[s] ?? s} for ${Math.round(stuck)} s: asking it to play`);
+        playerRef.current?.playVideo?.();
+      }
+    }, 4000);
+    return () => { clearInterval(iv); window.removeEventListener('sahrae:away', onAway); };
   }, []);
 
   // ── the offline <audio> element (downloaded tracks play here) ──
