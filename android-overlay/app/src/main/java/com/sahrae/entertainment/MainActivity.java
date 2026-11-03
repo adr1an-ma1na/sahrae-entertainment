@@ -1412,9 +1412,21 @@ public class MainActivity extends BridgeActivity {
                 anyOrigin.add("*");
                 androidx.webkit.WebViewCompat.addDocumentStartJavaScript(wv, FRAME_HELPER, anyOrigin);
                 sFrameHelper = true;
+                java.util.Set<String> youtube = new java.util.HashSet<>(Arrays.asList(
+                    "https://www.youtube.com", "https://youtube.com", "https://www.youtube-nocookie.com"));
+                androidx.webkit.WebViewCompat.addDocumentStartJavaScript(wv, YT_BACKGROUND, youtube);
             }
         } catch (Throwable ignore) {}
     }
+
+    /**
+     * Songs keep playing when you leave the app (owner, 2026-11-03), as in a
+     * browser with background play (Brave, Samsung Internet). YouTube's player
+     * pauses itself when its page reports it is hidden; inside Sahrae's own
+     * song player (an /embed frame whose top window is Sahrae's page) it is
+     * always told the page is visible, and the hide events never reach it.
+     */
+    private static final String YT_BACKGROUND = "(function(){try{if(window===window.top)return;if(location.pathname.indexOf('/embed')!==0)return;var ao=location.ancestorOrigins;if(!ao||!ao.length||ao[ao.length-1]!=='https://localhost')return;var p=function(n,v){try{Object.defineProperty(document,n,{get:function(){return v},configurable:true});}catch(e){}};p('hidden',false);p('webkitHidden',false);p('visibilityState','visible');p('webkitVisibilityState','visible');try{document.hasFocus=function(){return true};}catch(e){}var stop=function(e){if(e.type!=='blur'||e.target===window)e.stopImmediatePropagation();};['visibilitychange','webkitvisibilitychange','blur'].forEach(function(t){window.addEventListener(t,stop,true);});}catch(e){}})();";
     /** Data Saver: the page's switch (/__datasaver). Caps films and episodes at 480p. */
     private static volatile boolean sDataSaver = false;
     /** Data Saver's ceiling, in pixel rows. */
