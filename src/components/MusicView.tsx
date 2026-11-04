@@ -22,7 +22,7 @@ import SautiOnboarding, { type OnboardingResult } from './SautiOnboarding';
 import { loadPicks, savePicks, dailyMixes as curatedDailyMixes, pickedGenreMixes } from '../services/sautiMixes';
 import { asTrack } from '../services/resolveYt';
 import { weigh, loadTaste, artistKey, TASTE_CHANGE } from '../services/taste';
-import { buildTasteHome, songKey, type TasteHome } from '../services/tasteHome';
+import { buildTasteHome, songKey, uniqueSongs, type TasteHome } from '../services/tasteHome';
 import { deezer } from '../services/deezer';
 import { LuxHeader, LuxSeg } from './ui/Lux';
 import Coachmark from './Coachmark';
@@ -282,7 +282,7 @@ function TrackCard({ track, onPlay }: { track: Track; onPlay: () => void }) {
         onPlay={() => { if (active) toggle(); else onPlay(); }}
       />
       <button onClick={(e) => { e.stopPropagation(); openAddSheet(track); }}
-        className="absolute top-5 left-5 z-10 w-8 h-8 rounded-full bg-black/55 backdrop-blur-sm text-white flex items-center justify-center opacity-0 group-hover/card:opacity-100 focus:opacity-100 transition-opacity"
+        className="absolute top-2 left-2 md:top-5 md:left-5 z-10 w-8 h-8 rounded-full bg-black/55 backdrop-blur-sm text-white flex items-center justify-center opacity-0 group-hover/card:opacity-100 focus:opacity-100 transition-opacity"
         aria-label={`Add ${track.title} to a playlist`}>
         <Plus className="w-4 h-4" />
       </button>
@@ -357,7 +357,7 @@ function greeting(): string {
 }
 
 export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) {
-  const { playQueue, startRadio, likedTracks, playlists, recentlyPlayed: rawRecent, tasteSeeds, onboarded, addTasteSeeds, completeOnboarding, createPlaylist, importPlaylist, deletePlaylist, removeFromPlaylist, openAddSheet, setVideoMode, setExpanded } = useMusic();
+  const { current, isPlaying, playQueue, startRadio, likedTracks, playlists, recentlyPlayed: rawRecent, tasteSeeds, onboarded, addTasteSeeds, completeOnboarding, createPlaylist, importPlaylist, deletePlaylist, removeFromPlaylist, openAddSheet, setVideoMode, setExpanded } = useMusic();
   // One hover preview at a time across the Music videos shelf.
   const [videoPreviewId, setVideoPreviewId] = useState<string | null>(null);
   // Sauti is music only — podcasts play through the shared engine, so strip them
@@ -455,6 +455,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   // Catalogue genres (Afrobeats, Amapiano, ...): their own pages, built from
   // the genre's playlists rather than searches.
   const [catGenre, setCatGenre] = useState<string | null>(null);
+  const [allGenres, setAllGenres] = useState(false);
   const [catPage, setCatPage] = useState<GenrePage | null>(null);
   const [catTab, setCatTab] = useState<'popular' | 'new' | 'artists'>('popular');
   const [artistsForYou, setArtistsForYou] = useState<Artist[]>([]);
@@ -1035,7 +1036,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
     const list = catPage ? (catTab === 'new' ? catPage.fresh : catPage.popular) : [];
     const title = g?.name || 'Genre';
     return (
-      <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
+      <div className="sauti pt-[calc(env(safe-area-inset-top)+6.25rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
         <div aria-hidden className="absolute inset-x-0 top-0 h-80 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${g?.tint || '#555'} 0%, transparent 100%)`, opacity: 0.45 }} />
         <button onClick={() => setCatGenre(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-5 text-sm px-3.5 py-2 rounded-full bg-zinc-900/85 backdrop-blur-xl border border-white/10 shadow-lg"><ChevronLeft className="w-4 h-4" /> Back</button>
         <div className="overline mb-1">Genre</div>
@@ -1072,7 +1073,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
     const shown = sortTracks(genreTracks);
     const hc = genreTint || genreTracks[0]?.dominantColor || 'rgba(251,191,36,0.4)';
     return (
-      <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
+      <div className="sauti pt-[calc(env(safe-area-inset-top)+6.25rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
         <div aria-hidden className="absolute inset-x-0 top-0 h-80 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${hc} 0%, transparent 100%)`, opacity: 0.5 }} />
         <button onClick={() => setGenre(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-5 text-sm px-3.5 py-2 rounded-full bg-zinc-900/85 backdrop-blur-xl border border-white/10 shadow-lg"><ChevronLeft className="w-4 h-4" /> Back</button>
         <div className="overline mb-1">Mood &amp; genre</div>
@@ -1099,7 +1100,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
     const shown = sortTracks(viewMix.tracks);
     const hc = viewMix.tracks[0]?.dominantColor || 'rgba(251,191,36,0.4)';
     return (
-      <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
+      <div className="sauti pt-[calc(env(safe-area-inset-top)+6.25rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
         <div aria-hidden className="absolute inset-x-0 top-0 h-80 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${hc} 0%, transparent 100%)`, opacity: 0.5 }} />
         <button onClick={() => setViewMix(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-5 text-sm px-3.5 py-2 rounded-full bg-zinc-900/85 backdrop-blur-xl border border-white/10 shadow-lg"><ChevronLeft className="w-4 h-4" /> Back</button>
         <CollectionHero kicker={`Made for you · ${viewMix.subtitle}`} title={viewMix.title} tracks={viewMix.tracks}>
@@ -1116,7 +1117,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
     const shownTracks = sortTracks(detailTracks);
     const heroColor = detailTracks[0]?.dominantColor || 'rgba(251,191,36,0.4)';
     return (
-      <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
+      <div className="sauti pt-[calc(env(safe-area-inset-top)+6.25rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
         <div aria-hidden className="absolute inset-x-0 top-0 h-80 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${heroColor} 0%, transparent 100%)`, opacity: 0.5 }} />
         <button onClick={() => setDetail(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-5 text-sm px-3.5 py-2 rounded-full bg-zinc-900/85 backdrop-blur-xl border border-white/10 shadow-lg"><ChevronLeft className="w-4 h-4" /> Back</button>
         <CollectionHero kicker={detail.subtitle} title={detail.name} tracks={detailTracks} image={detail.thumbnail} round={detail.kind === 'artist'}
@@ -1143,7 +1144,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
               </section>
             )}
             {detail.kind === 'artist' && detailAlbums.length > 0 && (
-              <section><SectionHead icon={<Disc3 className="w-5 h-5 text-sauti" />}>Albums & Singles</SectionHead><div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{detailAlbums.map(albumTile)}</div></section>
+              <section><SectionHead>Albums & Singles</SectionHead><div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{detailAlbums.map(albumTile)}</div></section>
             )}
             {detailTracks.length === 0 && <EmptyState compact illustration="playlist" title="Nothing here yet" message="This list has no playable songs at the moment." />}
           </>
@@ -1153,14 +1154,15 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   }
 
   return (
-    <div className="sauti pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
+    <div className="sauti pt-[calc(env(safe-area-inset-top)+6.25rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
       {showOnboarding && <SautiOnboarding onComplete={finishOnboarding} onSkip={closeOnboarding} />}
       {/* Living aurora glow — tinted by the most recently played track (spec §1.2.4) */}
       <div aria-hidden className="pointer-events-none absolute -top-10 left-0 right-0 h-64 -z-0 opacity-70"
         style={{ background: `radial-gradient(60% 70% at 12% 0%, ${recentlyPlayed[0]?.dominantColor || 'rgb(var(--acc-rgb) / 0.45)'}, transparent 70%), radial-gradient(50% 60% at 85% 8%, rgb(var(--acc2-rgb) / 0.22), transparent 72%)`, filter: 'blur(8px)', transition: 'background 700ms ease' }} />
-      <LuxHeader className="relative" kicker={<><Music2 className="w-3.5 h-3.5" /> Sauti · sound on Sahrae</>}
+      {/* Kept short: on a phone the old header (kicker, title, a line of
+          description, then the switch) pushed the first song below the fold. */}
+      <LuxHeader className="relative !mb-5 md:!mb-8 !gap-4" kicker={<><Music2 className="w-3.5 h-3.5" /> Sauti</>}
         title={tab === 'home' ? greeting() : 'Your Library'}
-        meta={<span>Songs, artists, albums and playlists</span>}
         right={<LuxSeg active={tab} onChange={(t) => { setTab(t); setOpenId(null); }} items={[
           { id: 'home', label: 'Home', icon: Music2 },
           { id: 'library', label: 'Library', icon: Library },
@@ -1263,27 +1265,40 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
             </div>
           ) : (
             <>
-              <AudioShowcase slides={slides} label="Featured in Sauti" />
-
               {/* ── Quick access ───────────────────────────────────────────
-                  Spotify's home opens with a grid of short wide tiles: the
-                  shortest path back to what you were already playing. Liked
-                  Songs is pinned first because it is the one destination
-                  everybody uses; recent plays fill the rest. (The greeting
-                  itself is already in the page header above.) */}
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 mb-8">
-                <QuickTile
-                  title="Liked Songs"
-                  artwork={likedTracks[0]?.artwork}
-                  dominantColor={likedTracks[0]?.dominantColor}
-                  icon={<Heart className="w-6 h-6 text-white fill-current" />}
-                  onClick={() => setOpenId('liked')}
-                />
-                {recentlyPlayed.slice(0, 5).map((t, i) => (
-                  <QuickTile key={t.id} title={t.title} artwork={t.artwork} dominantColor={t.dominantColor}
-                    onClick={() => playQueue(recentlyPlayed, i, 'Recently played')} />
-                ))}
-              </div>
+                  Spotify's home opens with a two-column grid of short tiles: the
+                  shortest path back to what you were already playing, above
+                  everything else. Liked Songs first, then recent songs and your
+                  mixes woven together, eight in all, each song once. */}
+              {(() => {
+                const recent = uniqueSongs(recentlyPlayed).slice(0, 6);
+                const tiles: ReactNode[] = [];
+                let r = 0, m = 0;
+                while (tiles.length < 7 && (r < recent.length || m < Math.min(mixes.length, 3))) {
+                  if (r < recent.length) {
+                    const t = recent[r++];
+                    tiles.push(<QuickTile key={t.id} title={t.title} artwork={t.artwork} dominantColor={t.dominantColor}
+                      onClick={() => playQueue(recent, recent.indexOf(t), 'Recently played')} />);
+                  }
+                  if (tiles.length < 7 && m < Math.min(mixes.length, 3) && (tiles.length % 3 === 2 || r >= recent.length)) {
+                    const mx = mixes[m++];
+                    tiles.push(<QuickTile key={mx.id} title={mx.title} artwork={mx.cover || mx.tracks[0]?.artwork} dominantColor={mx.tracks[0]?.dominantColor}
+                      onClick={() => setViewMix(mx)} />);
+                  }
+                }
+                return (
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-8">
+                    <QuickTile
+                      title="Liked Songs"
+                      icon={<span className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-amber-300 via-amber-500 to-orange-700"><Heart className="w-6 h-6 text-[#fff] fill-current drop-shadow" /></span>}
+                      onClick={() => setOpenId('liked')}
+                    />
+                    {tiles}
+                  </div>
+                );
+              })()}
+
+              <AudioShowcase slides={slides} label="Featured in Sauti" />
 
               {/* ── Your sound lately ─────────────────────────────────────────
                   A small, always-current "wrapped": the artists this listener
@@ -1319,7 +1334,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
               {/* ── Quick picks — YouTube-Music's signature 4-row tap-to-play grid ── */}
               {quickPicks.length > 0 && (
                 <section className="mb-9">
-                  <SectionHead icon={<Sparkles className="w-5 h-5 text-sauti" />}>Quick picks</SectionHead>
+                  <SectionHead>Quick picks</SectionHead>
                   <div className="overflow-x-auto scrollbar-hide pb-3 -mx-1 px-1">
                     <div className="grid grid-rows-4 grid-flow-col auto-cols-[86%] sm:auto-cols-[minmax(320px,360px)] gap-x-5 gap-y-0.5">
                       {quickPicks.map((t, i) => <Fragment key={t.id}><QuickRow track={t} onPlay={() => playQueue(quickPicks, i, 'Quick picks')} /></Fragment>)}
@@ -1330,14 +1345,14 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
 
               {mixes.length > 0 && (
                 <section className="mb-9">
-                  <SectionHead icon={<Sparkles className="w-5 h-5 text-sauti" />}>Mixed for you</SectionHead>
+                  <SectionHead>Mixed for you</SectionHead>
                   <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">
                     {mixes.map((m) => (
                       <div key={m.id} role="button" onClick={() => setViewMix(m)} tabIndex={0} data-tv-focusable
-                        className="lux-card group flex-none w-[176px] md:w-[196px] text-left focus:outline-none cursor-pointer">
+                        className="group flex-none w-[156px] md:w-[196px] text-left rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 cursor-pointer">
                         {/* A Daily Mix card the way Spotify draws one: the lead artist's
                             photo, a band of the mix's colour along the foot with its name. */}
-                        <div className="aspect-square relative bg-zinc-800 overflow-hidden rounded-[inherit]">
+                        <div className="aspect-square relative bg-zinc-800 overflow-hidden rounded-lg shadow-[0_8px_24px_rgba(0,0,0,0.5)]">
                           <CoverArt imageUrl={m.cover || m.tracks[0]?.artworkLarge || m.tracks[0]?.artwork} dominantColor={m.tracks[0]?.dominantColor} rounded="" className="absolute inset-0 w-full h-full transition-transform duration-700 group-hover:scale-105" />
                           <div className="absolute inset-x-0 bottom-0 h-[30%] flex items-center px-3" style={{ background: m.tint || m.tracks[0]?.dominantColor || 'rgb(var(--acc-rgb))' }}>
                             <p className="text-[#fff] font-display font-extrabold text-[15px] leading-tight line-clamp-2 drop-shadow">{m.title}</p>
@@ -1345,7 +1360,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                           <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-black/45 backdrop-blur text-[9px] font-bold uppercase tracking-wider text-[#fff]">Made for you</span>
                           <button onClick={(e) => { e.stopPropagation(); playQueue(m.tracks, 0, m.title); }} className="absolute top-2 right-2 btn-sauti w-9 h-9 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" aria-label="Play"><Play className="w-4 h-4 fill-current ml-0.5" /></button>
                         </div>
-                        <div className="p-2.5"><p className="text-xs text-zinc-400 line-clamp-2 leading-snug">{m.subtitle}</p></div>
+                        <p className="mt-2.5 text-xs text-zinc-400 line-clamp-2 leading-snug">{m.subtitle}</p>
                       </div>
                     ))}
                   </div>
@@ -1377,7 +1392,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
               {/* ── New releases from the listener's artists (the catalogue's dates, newest first) ── */}
               {tasteHome && tasteHome.releases.filter(allowed).length > 0 && (
                 <section className="mb-9">
-                  <SectionHead icon={<Disc3 className="w-5 h-5 text-sauti" />}>New releases for you</SectionHead>
+                  <SectionHead>New releases for you</SectionHead>
                   <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">
                     {tasteHome.releases.filter(allowed).map((r) => (
                       <button key={r.id} onClick={() => openAlbum({ id: `dz:${r.id}`, name: r.title, thumbnail: r.coverXl || r.cover, artist: r.artist })} tabIndex={0} data-tv-focusable
@@ -1396,29 +1411,40 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
 
               {tasteHome && tasteHome.mightLike.length > 0 ? (
                 <section className="mb-9">
-                  <SectionHead icon={<User className="w-5 h-5 text-sauti" />}>Artists you might like</SectionHead>
+                  <SectionHead>Artists you might like</SectionHead>
                   <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">
                     {tasteHome.mightLike.slice(0, 16).map(({ artist, because }) => artistTile({ id: `dz:${artist.id}`, name: artist.name, thumbnail: artist.picture }, `Like ${because.slice(0, 2).join(' & ')}`))}
                   </div>
                 </section>
               ) : !hasTaste && artistsForYou.length > 0 && (
                 <section className="mb-9">
-                  <SectionHead icon={<User className="w-5 h-5 text-sauti" />}>Artists for you</SectionHead>
+                  <SectionHead>Artists for you</SectionHead>
                   <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{artistsForYou.map((a) => artistTile(a))}</div>
                 </section>
               )}
 
+              {/* Eight genres, the rest a tap away: all of them made the home page
+                  a long wall of coloured blocks. Each tile carries a record tilted
+                  out of its corner (Sauti's vinyl motif), the way Spotify tilts a
+                  cover out of its browse tiles. */}
               <section className="mb-9">
-                <SectionHead icon={<Music2 className="w-5 h-5 text-sauti" />}>Browse all genres</SectionHead>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                  {CATALOG_GENRES.map((g) => (
+                <SectionHead>Browse genres</SectionHead>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 md:gap-3">
+                  {(allGenres ? CATALOG_GENRES : CATALOG_GENRES.slice(0, 8)).map((g) => (
                     <button key={g.id} onClick={() => setCatGenre(g.id)} tabIndex={0} data-tv-focusable
-                      className="card-lift relative h-20 md:h-24 rounded-2xl overflow-hidden text-left p-3 focus:outline-none"
+                      className="card-lift relative h-[92px] md:h-28 rounded-lg overflow-hidden text-left p-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
                       style={{ background: `linear-gradient(135deg, ${g.tint} 0%, ${g.tint}B3 100%)` }}>
-                      <span className="relative font-display font-bold text-base md:text-lg leading-tight" style={{ color: '#fff' }}>{g.name}</span>
+                      <span aria-hidden className="absolute -right-5 -bottom-6 w-[78px] h-[78px] md:w-24 md:h-24 rounded-full rotate-[25deg] shadow-[0_6px_18px_rgba(0,0,0,0.45)]"
+                        style={{ background: `radial-gradient(circle, ${g.tint} 0 17%, #111 18% 21%, transparent 22%), repeating-radial-gradient(circle, #161616 0 2px, #222 2px 4px)` }} />
+                      <span className="relative block max-w-[78%] font-display font-bold text-[15px] md:text-lg leading-tight" style={{ color: '#fff' }}>{g.name}</span>
                     </button>
                   ))}
                 </div>
+                {CATALOG_GENRES.length > 8 && (
+                  <button onClick={() => setAllGenres((v) => !v)} data-tv-focusable className="lux-chip mt-4">
+                    {allGenres ? 'Show fewer' : `All ${CATALOG_GENRES.length} genres`}
+                  </button>
+                )}
               </section>
 
               {/* ── Beyond your taste: what everyone else is playing. Charts are
@@ -1440,7 +1466,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                 const source = `Music videos · ${regionMusic(chartRegion).name}`;
                 return (
                   <section className="mb-9">
-                    <SectionHead icon={<Sparkles className="w-5 h-5 text-sauti" />}>
+                    <SectionHead>
                       Music videos
                       <span className="ml-2 text-sm font-normal text-zinc-400">Trending in {regionMusic(chartRegion).name}</span>
                     </SectionHead>
@@ -1504,35 +1530,42 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                   <p className="text-zinc-500 py-10 text-center">Charts are updating. Try again shortly.</p>
                 ) : (
                   <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                    {chartTracks.slice(0, 9).map((t, i) => (
-                      <div key={t.id} className="relative group/chart flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 transition-all">
-                        <span className="w-5 text-center font-display font-black text-sm text-zinc-500 group-hover/chart:text-sauti tabular">
-                          {i + 1}
-                        </span>
-                        <CoverArt imageUrl={t.artwork} dominantColor={t.dominantColor} className="w-12 h-12 rounded-lg shrink-0" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-bold text-white truncate">{t.title}</p>
-                          <p className="text-xs text-zinc-400 truncate">{t.artist}</p>
-                        </div>
-                        <button
+                    {chartTracks.slice(0, 9).map((t, i) => {
+                      const playing = current?.id === t.id && isPlaying;
+                      // The whole row plays: the round button only shows on hover,
+                      // so on a phone a chart row used to do nothing when tapped.
+                      return (
+                        <div key={t.id} role="button" tabIndex={0} data-tv-focusable aria-label={`Play ${t.title}`}
                           onClick={() => playQueue(chartTracks, i, `${chartRegion} Charts`)}
-                          className="btn-sauti w-8 h-8 rounded-full flex items-center justify-center opacity-0 group-hover/chart:opacity-100 transition-opacity shrink-0"
-                          aria-label="Play song"
-                        >
-                          <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
-                        </button>
-                      </div>
-                    ))}
+                          onKeyDown={(e) => { if (e.key === 'Enter') playQueue(chartTracks, i, `${chartRegion} Charts`); }}
+                          className="relative group/chart flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 transition-all cursor-pointer">
+                          <span className="w-5 text-center font-display font-black text-sm text-zinc-500 group-hover/chart:text-sauti tabular">
+                            {playing ? <Equalizer /> : i + 1}
+                          </span>
+                          <CoverArt imageUrl={t.artwork} dominantColor={t.dominantColor} className="w-12 h-12 rounded-lg shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className={`text-sm font-bold truncate ${current?.id === t.id ? 'text-sauti' : 'text-white'}`}>{t.title}</p>
+                            <p className="text-xs text-zinc-400 truncate">{t.artist}</p>
+                          </div>
+                          <span aria-hidden className="btn-sauti w-8 h-8 rounded-full hidden sm:flex items-center justify-center opacity-0 group-hover/chart:opacity-100 transition-opacity shrink-0">
+                            <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </section>
 
-              {recentlyPlayed.length >= 6 && (
-                <section className="mb-10">
-                  <SectionHead icon={<Sparkles className="w-5 h-5 text-sauti" />}>Listen again</SectionHead>
-                  <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{recentlyPlayed.slice(0, 20).map((t, i) => <Fragment key={t.id}><TrackCard track={t} onPlay={() => playQueue(recentlyPlayed.slice(0, 20), i, 'Listen again')} /></Fragment>)}</div>
-                </section>
-              )}
+              {(() => {
+                const again = uniqueSongs(recentlyPlayed).slice(0, 20);
+                return again.length >= 6 && (
+                  <section className="mb-10">
+                    <SectionHead>Listen again</SectionHead>
+                    <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{again.map((t, i) => <Fragment key={t.id}><TrackCard track={t} onPlay={() => playQueue(again, i, 'Listen again')} /></Fragment>)}</div>
+                  </section>
+                );
+              })()}
 
               {sections.map((sec) => (
                 <section key={sec.title} className="mb-10">
@@ -1541,7 +1574,11 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                 </section>
               ))}
               {loadingHome && sections.length === 0 && <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3 text-zinc-400"><Loader2 className="w-9 h-9 animate-spin text-amber-500" /><span>Loading Sauti…</span></div>}
-              {!loadingHome && sections.length === 0 && <p className="text-zinc-500 py-10 text-center">Couldn't reach the music service right now. Try a search, or again shortly.</p>}
+              {/* Only when the page has nothing else to offer: under a full home page
+                  this read as a fault with the whole of Sauti. */}
+              {!loadingHome && sections.length === 0 && mixes.length === 0 && quickPicks.length === 0 && chartTracks.length === 0 && !tasteHome && (
+                <p className="text-zinc-500 py-10 text-center">Couldn't reach the music service right now. Try a search, or again shortly.</p>
+              )}
             </>
           )}
         </>

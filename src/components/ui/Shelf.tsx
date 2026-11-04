@@ -62,15 +62,16 @@ export function QuickTile({ title, artwork, dominantColor, onClick, active, icon
 }) {
   return (
     <button onClick={onClick} tabIndex={0} data-tv-focusable aria-label={title}
-      className={`group flex items-center gap-3 rounded-md overflow-hidden h-16 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${
+      className={`group flex items-center gap-2.5 sm:gap-3 rounded-md overflow-hidden h-14 sm:h-16 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${
         active ? 'bg-white/20' : 'bg-white/10 hover:bg-white/20'
       }`}>
-      <span className="w-16 h-16 shrink-0 relative bg-zinc-800 flex items-center justify-center">
+      <span className="w-14 h-14 sm:w-16 sm:h-16 shrink-0 relative bg-zinc-800 flex items-center justify-center">
         {artwork || dominantColor
           ? <CoverArt imageUrl={artwork} dominantColor={dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
           : icon}
       </span>
-      <span className="font-bold text-sm text-white truncate pr-3 flex-1">{title}</span>
+      {/* Two lines on a phone, as Spotify's tiles do: half-width tiles cut most titles at one. */}
+      <span className="font-bold text-[13px] sm:text-sm leading-tight text-white line-clamp-2 pr-2 sm:pr-3 flex-1 min-w-0">{title}</span>
       {/* Appears on hover, the way Spotify's does — a quiet affordance, not a
           permanent button competing with the title. */}
       <span className="mr-3 w-9 h-9 rounded-full btn-sauti hidden sm:flex items-center justify-center shrink-0 opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 group-focus-visible:opacity-100 transition-all duration-200 shadow-lg">
@@ -84,7 +85,7 @@ export function QuickTile({ title, artwork, dominantColor, onClick, active, icon
  * Square artwork, title and subtitle below it. `round` gives the circular
  * artwork Spotify uses for artists.
  */
-export function ArtCard({ title, subtitle, artwork, dominantColor, onClick, onPlay, playing, round, width = 'w-[160px] md:w-[176px]' }: {
+export function ArtCard({ title, subtitle, artwork, dominantColor, onClick, onPlay, playing, round, width = 'w-[144px] md:w-[176px]' }: {
   title: string;
   subtitle?: string;
   artwork?: string;
@@ -98,8 +99,11 @@ export function ArtCard({ title, subtitle, artwork, dominantColor, onClick, onPl
   return (
     <div onClick={onClick} tabIndex={0} data-tv-focusable role="button" aria-label={title}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
-      className={`group relative shrink-0 snap-start ${width} p-3 rounded-lg bg-white/[0.03] hover:bg-white/[0.08] transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400`}>
-      <div className={`relative w-full aspect-square mb-3 overflow-hidden bg-zinc-800 shadow-[0_8px_24px_rgba(0,0,0,0.5)] ${round ? 'rounded-full' : 'rounded-md'}`}>
+      className={`group relative shrink-0 snap-start ${width} md:p-3 rounded-lg md:hover:bg-white/[0.07] transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400`}>
+      {/* Bare artwork on a phone, as Spotify and Apple Music draw a shelf: a
+          panel behind every card made the page read as a grid of boxes. The
+          panel appears on hover where there is a pointer. */}
+      <div className={`relative w-full aspect-square mb-2.5 overflow-hidden bg-zinc-800 shadow-[0_8px_24px_rgba(0,0,0,0.5)] ${round ? 'rounded-full' : 'rounded-lg'}`}>
         <CoverArt imageUrl={artwork} dominantColor={dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
         {onPlay && (
           <button onClick={(e) => { e.stopPropagation(); onPlay(); }} tabIndex={-1}
@@ -109,7 +113,7 @@ export function ArtCard({ title, subtitle, artwork, dominantColor, onClick, onPl
           </button>
         )}
       </div>
-      <p className="text-sm font-bold text-white truncate">{title}</p>
+      <p className="text-[13px] md:text-sm font-semibold text-white truncate">{title}</p>
       {subtitle && <p className="text-xs text-zinc-400 truncate mt-0.5 leading-snug">{subtitle}</p>}
     </div>
   );
@@ -162,11 +166,11 @@ export function WideRow({ title, subtitle, artwork, dominantColor, meta, progres
 }
 
 /** Skeleton matching ArtCard's shape, so loading doesn't shift the layout. */
-export function CardSkeleton({ count = 6, width = 'w-[160px] md:w-[176px]' }: { count?: number; width?: string }) {
+export function CardSkeleton({ count = 6, width = 'w-[144px] md:w-[176px]' }: { count?: number; width?: string }) {
   return (
     <>
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className={`shrink-0 ${width} p-3 animate-pulse`}>
+        <div key={i} className={`shrink-0 ${width} md:p-3 animate-pulse`}>
           <div className="w-full aspect-square rounded-md bg-white/5 mb-3" />
           <div className="h-3 rounded bg-white/5 w-4/5 mb-1.5" />
           <div className="h-2.5 rounded bg-white/5 w-2/5" />

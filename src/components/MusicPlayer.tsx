@@ -5,6 +5,7 @@ import { Track, ytmusic } from '../services/ytmusic';
 import { hdArtwork } from '../services/albumArt';
 import { CoverArt } from './ui/CoverArt';
 import { DynamicBackground } from './ui/DynamicBackground';
+import { posterColor, cachedPosterColor } from '../services/posterColor';
 import EqualizerPanel from './EqualizerPanel';
 
 const fmt = (s: number) => {
@@ -270,6 +271,19 @@ export default function MusicPlayer() {
       next();
     }
   };
+
+  // The mini player takes its colour from the cover, as Spotify's does.
+  // track.dominantColor is a hash of the id, not the artwork's colour, so the
+  // pixels are sampled (Deezer and YouTube art both allow it); until they are,
+  // or if they cannot be read, the bar keeps its glass.
+  const art = current?.artwork;
+  const [artTint, setArtTint] = useState<string | null>(() => cachedPosterColor(art));
+  useEffect(() => {
+    setArtTint(cachedPosterColor(art));
+    let live = true;
+    posterColor(art).then((c) => { if (live) setArtTint(c); });
+    return () => { live = false; };
+  }, [art]);
 
   if (!current || !active) return null;
   const pct = duration ? Math.min(100, (position / duration) * 100) : 0;
@@ -616,7 +630,8 @@ export default function MusicPlayer() {
       {/* ── Persistent mini-bar ── */}
       {!expanded && (
         <div className="fixed left-0 right-0 md:left-16 lg:left-64 z-[60] px-2 pointer-events-none bottom-[calc(4rem+env(safe-area-inset-bottom))] md:bottom-3">
-          <div className="pointer-events-auto max-w-3xl mx-auto dark glass rounded-2xl border border-white/10 shadow-[0_8px_30px_rgba(0,0,0,0.45)] overflow-hidden">
+          <div className="pointer-events-auto max-w-3xl mx-auto dark glass rounded-2xl border border-white/10 shadow-[0_8px_30px_rgba(0,0,0,0.45)] overflow-hidden transition-[background] duration-700"
+            style={artTint ? { background: `linear-gradient(100deg, ${artTint} 0%, ${artTint} 45%, rgba(12,12,12,0.94) 120%)` } : undefined}>
             {/* progress hairline */}
             <div className="h-0.5 bg-white/10"><div className="h-full bg-gradient-to-r from-amber-400 to-amber-500 transition-[width] duration-200" style={{ width: `${pct}%` }} /></div>
             <div className="flex items-center gap-3 p-2 pr-3">
@@ -649,7 +664,9 @@ export default function MusicPlayer() {
                 {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
               </button>
               <button onClick={next} tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full flex items-center justify-center text-zinc-300 hover:text-white shrink-0" aria-label="Next"><SkipForward className="w-5 h-5 fill-current" /></button>
-              <button onClick={stop} tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full flex items-center justify-center text-zinc-400 hover:text-red-400 shrink-0" aria-label="Stop music"><X className="w-5 h-5" /></button>
+              {/* Not on a phone: four buttons left the title three letters wide.
+                  Closing stays in the full player (top right), as in Spotify. */}
+              <button onClick={stop} tabIndex={0} data-tv-focusable className="w-10 h-10 rounded-full hidden sm:flex items-center justify-center text-zinc-400 hover:text-red-400 shrink-0" aria-label="Stop music"><X className="w-5 h-5" /></button>
             </div>
           </div>
         </div>

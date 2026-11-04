@@ -38,6 +38,21 @@ const fold = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[Ì
 /** A song's key for "already heard": lead artist and title, spelling aside. */
 export const songKey = (artist: string, title: string) => `${artistKey(artist)}|${fold(title)}`;
 
+/**
+ * The list with later copies of the same song left out. A catalogue song and
+ * the YouTube upload it plays from carry different ids, so lists keyed on id
+ * showed "Romeo" twice.
+ */
+export function uniqueSongs<T extends { title: string; artist: string }>(list: T[]): T[] {
+  const seen = new Set<string>();
+  return list.filter((t) => {
+    const k = songKey(t.artist, t.title);
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
 const hash = (s: string) => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return h >>> 0; };
 /** Monday-to-Sunday week number, so Discover Weekly turns over on Mondays. */
 const weekOf = (now: number) => Math.floor((now / DAY + 3) / 7);

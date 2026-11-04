@@ -8,6 +8,7 @@ import { downloads } from '../services/downloads';
 import { attachEq, applyWebEq, resumeEq } from '../services/eqWeb';
 import { loadEq, EQ_CHANGE } from '../services/eq';
 import { cleanTrackText } from '../services/trackText.ts';
+import { songKey } from '../services/tasteHome';
 import { resolveYt, prefetchMatches } from '../services/resolveYt';
 import { hifiWanted, hifiSrc, prefetchHifi } from '../services/hifiAudio';
 import { Capacitor } from '@capacitor/core';
@@ -277,7 +278,9 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     // Every play teaches the catalogue which genres this listener is into.
     notePlayed(c);
     setRecentlyPlayed((prev) => {
-      const nextList = [c, ...prev.filter((t) => t.id !== c.id)].slice(0, 40);
+      // The same song under another id (its catalogue copy) is the same play.
+      const key = songKey(c.artist, c.title);
+      const nextList = [c, ...prev.filter((t) => t.id !== c.id && songKey(t.artist, t.title) !== key)].slice(0, 40);
       saveLS(RECENT_KEY, nextList);
       return nextList;
     });
