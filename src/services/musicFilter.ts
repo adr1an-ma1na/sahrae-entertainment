@@ -25,7 +25,7 @@ const NOT_A_SONG = [
   /\b(best|greatest)\s+(songs|hits)\b/i,
   /\b(playlist|compilation|megamix|mega\s?mix|mashup|non-?stop|full\s+album|mixtape|dj\s+mix|mix\s+20\d\d|\d+\s*hours?|1\s*hour)\b/i,
   // Talk and video, not a song.
-  /\b(reaction|reacts?\s+to|interview|podcast|episode|ep\.?\s*\d+|documentary|vlog|prank|challenge|tutorial|how\s+to|unboxing|review|highlights|full\s+movie|trailer|teaser|behind\s+the\s+scenes|gameplay|live\s*stream|press\s+conference|sermon|preaching|comedy\s+skit)\b/i,
+  /\b(reaction|reacts?\s+to|interview|podcast|episode|ep\.?\s*\d+|documentary|vlog|prank|challenge|tutorial|how\s+to|unboxing|review|highlights|full\s+movie|trailer|teaser|advert|advertisement|behind\s+the\s+scenes|gameplay|live\s*stream|press\s+conference|sermon|preaching|comedy\s+skit)\b/i,
   // Edits of a song rather than the song.
   /\b(8d\s*audio|slowed|sped\s*up|nightcore|bass\s*boosted|reverb)\b/i,
   /#shorts?\b/i,

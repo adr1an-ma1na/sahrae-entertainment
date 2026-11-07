@@ -32,6 +32,8 @@ eq('an interview', isMusicTrack(s('Bien on his new album | Interview', 'Kiss FM'
 eq('a podcast episode', isMusicTrack(s('The Joe Budden Podcast Episode 750', 'Joe Budden', 590)), false);
 eq('news', isMusicTrack(s('Artist arrested at airport', 'Citizen TV News')), false);
 eq('a trailer', isMusicTrack(s('Black Panther Official Trailer', 'Marvel')), false);
+eq('a TV advert', isMusicTrack(s('Christmas Advert 2026 | The Present', 'Sam Clegg')), false);
+eq('a song called Commercial stays', isMusicTrack(s('Commercial (feat. Lil Uzi Vert)', 'Lil Baby')), true);
 eq('a slowed and reverb edit', isMusicTrack(s('Calm Down (slowed + reverb)')), false);
 eq('a Short', isMusicTrack(s('New song soon #shorts', 'Artist', 45)), false);
 eq('anything under a minute', isMusicTrack(s('Intro', 'Artist', 40)), false);

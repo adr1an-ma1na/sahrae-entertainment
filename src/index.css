@@ -544,8 +544,8 @@
   /* Material 3 filled button — the second primary-button class in the app
      (Hero's Play uses this one; .btn-sauti is the other). Kept identical to
      .btn-sauti so there is one filled button, not two that drift apart. */
+  :where(.btn-gold) { position: relative; }
   .btn-gold {
-    position: relative;
     background-color: var(--gold-500);
     color: var(--on-gold);
     border-radius: 9999px;
@@ -769,8 +769,11 @@
    * the label colour at a low opacity, laid over the container, with the shape
    * and position unchanged. Full-round is the M3 button shape.
    */
+  /* Positioned for the ::after sheen, but at no specificity: as a plain
+     .btn-sauti rule it beat Tailwind's .absolute (same layer, later), so every
+     round play button meant to sit in an artwork's corner sat in the flow. */
+  :where(.btn-sauti) { position: relative; }
   .btn-sauti {
-    position: relative;
     background-color: var(--gold-500);
     color: var(--on-gold);
     border-radius: 9999px;

@@ -19,11 +19,12 @@ import EmptyState from './EmptyState';
 // quietly became last year's music on 1 January.
 const YEAR = new Date().getFullYear();
 import SautiOnboarding, { type OnboardingResult } from './SautiOnboarding';
-import { loadPicks, savePicks, dailyMixes as curatedDailyMixes, pickedGenreMixes } from '../services/sautiMixes';
+import { loadPicks, savePicks, dailyMixes as curatedDailyMixes, pickedGenreMixes, artistNamed } from '../services/sautiMixes';
 import { asTrack } from '../services/resolveYt';
 import { weigh, loadTaste, artistKey, TASTE_CHANGE } from '../services/taste';
 import { buildTasteHome, songKey, uniqueSongs, type TasteHome } from '../services/tasteHome';
 import { deezer } from '../services/deezer';
+import { searchCatalogue } from '../services/musicSearch';
 import { LuxHeader, LuxSeg } from './ui/Lux';
 import Coachmark from './Coachmark';
 
@@ -198,6 +199,34 @@ function TrackRow({ track, onPlay, onRemove, index, list = false }: { track: Tra
   );
 }
 
+/** A Library row, the way Spotify lists one: artwork, the name, what it is. */
+function LibRow({ title, subtitle, art, round = false, onClick }: { title: string; subtitle: string; art: ReactNode; round?: boolean; onClick: () => void }) {
+  return (
+    <button onClick={onClick} tabIndex={0} data-tv-focusable
+      className="w-full flex items-center gap-3 p-1.5 rounded-lg text-left hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 transition-colors">
+      <span className={`relative w-16 h-16 shrink-0 overflow-hidden bg-zinc-800 shadow-[0_6px_16px_rgba(0,0,0,0.4)] ${round ? 'rounded-full' : 'rounded-md'}`}>{art}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[15px] font-semibold text-white truncate">{title}</span>
+        <span className="block text-xs text-zinc-400 truncate mt-0.5">{subtitle}</span>
+      </span>
+    </button>
+  );
+}
+
+/** A playlist's cover: four covers as a collage, else its first, else its colour and initials. */
+function ListArt({ name, tracks }: { name: string; tracks: Track[] }) {
+  const covers = [...new Set(tracks.map((t) => t.artwork).filter(Boolean) as string[])].slice(0, 4);
+  if (covers.length >= 4) {
+    return <span className="absolute inset-0 grid grid-cols-2 grid-rows-2">{covers.map((c) => <img key={c} src={c} alt="" loading="lazy" className="w-full h-full object-cover" />)}</span>;
+  }
+  if (covers[0]) return <img src={covers[0]} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover" />;
+  return (
+    <span className={`absolute inset-0 bg-gradient-to-br ${gradFor(name)} flex items-center justify-center`}>
+      <span className="font-display font-black text-[#fff] text-lg drop-shadow">{monogram(name)}</span>
+    </span>
+  );
+}
+
 /** "1 h 22 min", "38 min": a collection's running time. */
 function runtime(tracks: Track[]): string {
   const s = tracks.reduce((n, t) => n + (t.duration || 0), 0);
@@ -212,13 +241,16 @@ function runtime(tracks: Track[]): string {
  * playlist, the way Spotify and Apple Music show one), a kicker, a metal title,
  * the count and running time, and the actions.
  */
-function CollectionHero({ kicker, title, tracks, image, icon, round = false, tint, children }: {
-  kicker: ReactNode; title: string; tracks: Track[]; image?: string; icon?: ReactNode; round?: boolean; tint?: string; children?: ReactNode;
+function CollectionHero({ kicker, title, tracks, image, icon, round = false, tint, meta: metaText, children }: {
+  kicker: ReactNode; title: string; tracks: Track[]; image?: string; icon?: ReactNode; round?: boolean; tint?: string;
+  /** Replaces the song count and running time; '' shows none (an artist is not a playlist). */
+  meta?: string;
+  children?: ReactNode;
 }) {
   const covers = [...new Set(tracks.map((t) => t.artworkLarge || t.artwork).filter(Boolean) as string[])].slice(0, 4);
   const lead = image || covers[0];
   const glow = tint || tracks[0]?.dominantColor || 'rgb(var(--acc-rgb) / .45)';
-  const meta = [tracks.length ? `${tracks.length} songs` : '', runtime(tracks)].filter(Boolean).join(' · ');
+  const meta = metaText ?? [tracks.length ? `${tracks.length} songs` : '', runtime(tracks)].filter(Boolean).join(' · ');
   return (
     <section className="lux-stage relative overflow-hidden rounded-[2rem] mb-8 shadow-[inset_0_0_0_1px_var(--lux-line-2),0_30px_70px_-28px_rgba(0,0,0,0.75)]">
       {lead && <img src={lead} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover scale-125 blur-3xl opacity-60" />}
@@ -364,6 +396,21 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   // from every recently-played-derived shelf, pill, mix, and the header gradient.
   // isPodcast covers video episodes, which are ordinary YouTube ids with no feed.
   const recentlyPlayed = rawRecent.filter((t) => !t.id.startsWith('pod:') && !t.feedUrl && !t.isPodcast);
+  // The artists in this listener's Library: whoever they like and play most,
+  // each with their songs (the first one's art stands in for a photo).
+  const libArtists = useMemo(() => {
+    const by = new Map<string, { key: string; name: string; tracks: Track[] }>();
+    const music = rawRecent.filter((t) => !t.id.startsWith('pod:') && !t.feedUrl && !t.isPodcast);
+    for (const t of uniqueSongs([...likedTracks, ...music])) {
+      const name = (t.artist || '').split(/,|&|\s+(?:feat\.?|ft\.?|featuring|x)\s+/i)[0].trim();
+      if (!name || name === 'Unknown Artist') continue;
+      const key = artistKey(name);
+      const e = by.get(key) || { key, name, tracks: [] };
+      e.tracks.push(t);
+      by.set(key, e);
+    }
+    return [...by.values()].sort((a, b) => b.tracks.length - a.tracks.length).slice(0, 12);
+  }, [likedTracks, rawRecent]);
 
   // Cold-start onboarding: show the taste picker only to a genuinely fresh
   // listener (no plays, likes, or seeds yet). `tasteSig` is a stable dep for the
@@ -496,6 +543,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [rSongs, setRSongs] = useState<Track[]>([]);
+  const [rTopArtist, setRTopArtist] = useState<Artist | null>(null);
   const [rArtists, setRArtists] = useState<Artist[]>([]);
   const [rAlbums, setRAlbums] = useState<Album[]>([]);
   const tRef = useRef<number | undefined>(undefined);
@@ -510,6 +558,8 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   // Library local state
   const [openId, setOpenId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [libFilter, setLibFilter] = useState<'all' | 'playlists' | 'artists'>('all');
+  const [popularAll, setPopularAll] = useState(false);
   const [newName, setNewName] = useState('');
 
   // YouTube Sync States
@@ -518,6 +568,8 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   const [youtubePlaylists, setYoutubePlaylists] = useState<YoutubePlaylist[]>([]);
   const [youtubeLoading, setYoutubeLoading] = useState(false);
   const [youtubeError, setYoutubeError] = useState<string | null>(null);
+  // Connected, loaded, no error: YouTube's liked list and playlists can sit in the Library list.
+  const ytReady = isYoutubeConnected && !youtubeLoading && !youtubeError;
 
   const [ytTracks, setYtTracks] = useState<Track[]>([]);
   const [ytTracksLoading, setYtTracksLoading] = useState(false);
@@ -812,17 +864,32 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasteSig, picksAt, topSig]);
 
-  // Debounced search (songs + artists + albums)
+  // Debounced search (songs + artists + albums): the catalogue first
+  // (musicSearch.ts), YouTube only when the catalogue has nothing to say.
   useEffect(() => {
     const q = query.trim();
     window.clearTimeout(tRef.current);
-    if (!q) { setSearching(false); setRSongs([]); setRArtists([]); setRAlbums([]); return; }
+    if (!q) { setSearching(false); setRSongs([]); setRArtists([]); setRAlbums([]); setRTopArtist(null); return; }
     setSearching(true);
+    let stale = false;
     tRef.current = window.setTimeout(async () => {
-      const [s, a, al] = await Promise.all([ytmusic.search(q), ytmusic.searchArtists(q), ytmusic.searchAlbums(q)]);
-      setRSongs(s); setRArtists(a); setRAlbums(al); setSearching(false);
+      const own = new Set([...libArtists.map((a) => a.key), ...tasteSeeds.map((t) => artistKey(t.artist))]);
+      const r = await searchCatalogue(q, own, artistKey).catch(() => null);
+      if (stale) return;
+      if (r && (r.songs.length || r.artists.length)) {
+        setRSongs(r.songs.map((t) => asTrack(t)));
+        setRArtists(r.artists.map((a) => ({ id: `dz:${a.id}`, name: a.name, thumbnail: a.picture })));
+        setRAlbums(r.albums.map((al) => ({ id: `dz:${al.id}`, name: al.title, thumbnail: al.coverXl || al.cover, artist: al.artist })));
+        setRTopArtist(r.topArtist ? { id: `dz:${r.topArtist.id}`, name: r.topArtist.name, thumbnail: r.topArtist.picture } : null);
+      } else {
+        const [s, a, al] = await Promise.all([ytmusic.search(q), ytmusic.searchArtists(q), ytmusic.searchAlbums(q)]);
+        if (stale) return;
+        setRSongs(s); setRArtists(a); setRAlbums(al); setRTopArtist(null);
+      }
+      setSearching(false);
     }, 400);
-    return () => window.clearTimeout(tRef.current);
+    return () => { stale = true; window.clearTimeout(tRef.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
   // Load a mood/genre page's tracks on open — build a deep pool (≥50) from
@@ -846,6 +913,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
 
   const openArtist = async (a: Artist) => {
     setDetail({ kind: 'artist', id: a.id, name: a.name, thumbnail: a.thumbnail, subtitle: 'Artist' });
+    setPopularAll(false);
     setDetailLoading(true); setDetailTracks([]); setDetailAlbums([]);
     // A catalogue artist (dz:<id>): their real top songs and releases, matched to YouTube as they play.
     if (a.id.startsWith('dz:')) {
@@ -881,6 +949,14 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
     setDetailAlbums(mineAlbums.length ? mineAlbums : albums);
     setDetailLoading(false);
   };
+  // A Library artist is known only by name (from the songs played and liked):
+  // find them in the catalogue to open their page; failing that, play their songs.
+  const openArtistNamed = async (name: string, tracks: Track[]) => {
+    const a = await artistNamed(name).catch(() => null);
+    if (a) openArtist({ id: `dz:${a.id}`, name: a.name, thumbnail: a.picture });
+    else playQueue(tracks, 0, name);
+  };
+
   const openAlbum = async (al: Album) => {
     setDetail({ kind: 'album', id: al.id, name: al.name, thumbnail: al.thumbnail, subtitle: al.artist || 'Album' });
     setDetailLoading(true); setDetailTracks([]); setDetailAlbums([]);
@@ -1121,6 +1197,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
         <div aria-hidden className="absolute inset-x-0 top-0 h-80 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${heroColor} 0%, transparent 100%)`, opacity: 0.5 }} />
         <button onClick={() => setDetail(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-5 text-sm px-3.5 py-2 rounded-full bg-zinc-900/85 backdrop-blur-xl border border-white/10 shadow-lg"><ChevronLeft className="w-4 h-4" /> Back</button>
         <CollectionHero kicker={detail.subtitle} title={detail.name} tracks={detailTracks} image={detail.thumbnail} round={detail.kind === 'artist'}
+          meta={detail.kind === 'artist' ? '' : undefined}
           icon={detail.thumbnail ? undefined : <div className="absolute inset-0 bg-zinc-800 flex items-center justify-center">{detail.kind === 'artist' ? <User className="w-16 h-16 text-zinc-500" /> : <Disc3 className="w-16 h-16 text-zinc-500" />}</div>}>
           {detailTracks.length > 0 && (
             <>
@@ -1134,15 +1211,27 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
           <div className="flex items-center gap-2 text-zinc-400 py-10"><Loader2 className="w-6 h-6 animate-spin text-amber-500" /> Loading…</div>
         ) : (
           <>
-            {detailTracks.length > 0 && (
-              <section className="mb-10">
-                <div className="flex items-center justify-between gap-3 mb-4">
-                  <SectionHead>{detail.kind === 'artist' ? 'Popular' : 'Songs'}</SectionHead>
-                  {sortSelect}
-                </div>
-                <SongList tracks={shownTracks} onPlay={(i) => playQueue(shownTracks, i)} />
-              </section>
-            )}
+            {detailTracks.length > 0 && (() => {
+              // An artist's page leads with their ten most popular songs, then
+              // their releases, as Spotify's does; all fifty in a row buried the
+              // albums. The rest are one tap away. An album lists every song.
+              const isArtist = detail.kind === 'artist';
+              const list = isArtist && !popularAll ? shownTracks.slice(0, 10) : shownTracks;
+              return (
+                <section className="mb-10">
+                  <div className="flex items-center justify-between gap-3 mb-4">
+                    <SectionHead>{isArtist ? 'Popular' : 'Songs'}</SectionHead>
+                    {!isArtist && sortSelect}
+                  </div>
+                  <SongList tracks={list} onPlay={(i) => playQueue(shownTracks, i)} />
+                  {isArtist && shownTracks.length > 10 && (
+                    <button onClick={() => setPopularAll((v) => !v)} data-tv-focusable className="lux-chip mt-3">
+                      {popularAll ? 'Show less' : `See all ${shownTracks.length} songs`}
+                    </button>
+                  )}
+                </section>
+              );
+            })()}
             {detail.kind === 'artist' && detailAlbums.length > 0 && (
               <section><SectionHead>Albums & Singles</SectionHead><div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{detailAlbums.map(albumTile)}</div></section>
             )}
@@ -1206,22 +1295,36 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
             ) : (
               <div className="space-y-8">
                 {/* Top result + Songs (Spotify-exact, spec §1.3.7) */}
-                <div className="grid lg:grid-cols-2 gap-5 lg:gap-7 items-start">
-                  {rSongs[0] && (
+                <div className="grid grid-cols-[minmax(0,1fr)] lg:grid-cols-2 gap-5 lg:gap-7 items-start">
+                  {rTopArtist ? (
+                    // The search names an artist: they are the top result, as in Spotify.
+                    <div>
+                      <SectionHead>Top result</SectionHead>
+                      <button onClick={() => openArtist(rTopArtist)} tabIndex={0} data-tv-focusable className="group relative w-full text-left rounded-2xl p-5 bg-white/5 hover:bg-white/10 transition-colors">
+                        <div className="w-24 h-24 rounded-full overflow-hidden mb-4 relative shadow-xl bg-zinc-800">
+                          {rTopArtist.thumbnail ? <img src={rTopArtist.thumbnail} alt="" className="absolute inset-0 w-full h-full object-cover" /> : <User className="w-10 h-10 text-zinc-500 absolute inset-0 m-auto" />}
+                        </div>
+                        <p className="text-2xl font-display font-bold text-white truncate">{rTopArtist.name}</p>
+                        <p className="text-sm text-zinc-300 font-semibold mt-1">Artist</p>
+                        <span onClick={(e) => { e.stopPropagation(); if (rSongs.length) playQueue(rSongs, 0, rTopArtist.name); }} role="button" aria-label={`Play ${rTopArtist.name}`}
+                          className="btn-sauti absolute bottom-5 right-5 w-12 h-12 rounded-full flex items-center justify-center shadow-lg"><Play className="w-5 h-5 fill-current ml-0.5" /></span>
+                      </button>
+                    </div>
+                  ) : rSongs[0] && (
                     <div>
                       <SectionHead>Top result</SectionHead>
                       <button onClick={() => playQueue(rSongs, 0)} tabIndex={0} data-tv-focusable className="group relative w-full text-left rounded-2xl p-5 bg-white/5 hover:bg-white/10 transition-colors">
                         <div className="w-24 h-24 rounded-xl overflow-hidden mb-4 relative shadow-xl"><CoverArt imageUrl={rSongs[0].artworkLarge || rSongs[0].artwork} fallbackUrl={rSongs[0].artwork} dominantColor={rSongs[0].dominantColor} rounded="" className="absolute inset-0 w-full h-full" /></div>
                         <p className="text-2xl font-display font-bold text-white truncate">{rSongs[0].title}</p>
                         <p className="text-sm text-zinc-400 mt-1 truncate">{rSongs[0].artist} · <span className="text-zinc-300 font-semibold">Song</span></p>
-                        <span className="absolute bottom-5 right-5 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all btn-sauti w-12 h-12 rounded-full flex items-center justify-center shadow-lg"><Play className="w-5 h-5 fill-current ml-0.5" /></span>
+                        <span className="btn-sauti absolute bottom-5 right-5 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all w-12 h-12 rounded-full flex items-center justify-center shadow-lg"><Play className="w-5 h-5 fill-current ml-0.5" /></span>
                       </button>
                     </div>
                   )}
                   {rSongs.length > 0 && (
                     <div>
                       <SectionHead>Songs</SectionHead>
-                      <div className="space-y-1">{rSongs.slice(0, 4).map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(rSongs, i)} /></Fragment>)}</div>
+                      <div>{rSongs.slice(0, 5).map((t, i) => <Fragment key={t.id}><TrackRow track={t} list onPlay={() => playQueue(rSongs, i)} /></Fragment>)}</div>
                     </div>
                   )}
                 </div>
@@ -1615,54 +1718,15 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
         </section>
       ) : (
         <>
-          {/* YouTube Music Connection Banner */}
-          {!isYoutubeConnected ? (
-            <div className="p-5 rounded-3xl bg-gradient-to-br from-red-600/10 via-red-500/5 to-transparent border border-red-500/15 mb-8 flex flex-col md:flex-row items-center justify-between gap-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-red-600 flex items-center justify-center shadow-lg shadow-red-600/20 text-white shrink-0">
-                  <Youtube className="w-6 h-6 fill-current" />
-                </div>
-                <div>
-                  <h3 className="font-display font-bold text-base text-white">Sync YouTube Music</h3>
-                  <p className="text-xs text-zinc-400">Import your real playlists and liked songs from your YouTube account instantly.</p>
-                </div>
-              </div>
-              <button onClick={handleConnectYoutube} className="btn-sauti bg-red-600 hover:bg-red-500 text-white border-none shadow-[0_0_15px_rgba(220,38,38,0.25)] px-6 py-2.5 rounded-full text-xs font-black shrink-0">
-                Connect Account
-              </button>
-            </div>
-          ) : (
-            <div className="p-4 rounded-3xl bg-zinc-900/40 border border-white/5 mb-8 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                {youtubeProfile?.picture ? (
-                  <img loading="lazy" decoding="async" src={youtubeProfile.picture} alt="" className="w-10 h-10 rounded-full border border-white/10" referrerPolicy="no-referrer" />
-                ) : (
-                  <div className="w-10 h-10 rounded-full bg-red-600/20 text-red-400 flex items-center justify-center font-bold">
-                    {youtubeProfile?.name?.charAt(0) || 'Y'}
-                  </div>
-                )}
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-black text-red-400 uppercase tracking-wider flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> Synced with YouTube
-                    </span>
-                  </div>
-                  <p className="text-sm font-bold text-white">{youtubeProfile?.name || 'YouTube Listener'}</p>
-                </div>
-              </div>
-              <button onClick={handleDisconnectYoutube} className="text-xs text-zinc-400 hover:text-red-400 px-4 py-2 rounded-full border border-white/5 hover:border-red-500/20 transition-all">
-                Disconnect
-              </button>
-            </div>
-          )}
-
           {/* Catalog connector status.
               Everything in Sauti — charts, shelves, search, radio — is served by
               the official YouTube Data API. When that is unreachable the app
               still works off the old proxy network, but quietly degraded, and a
               silent degrade is exactly what made Music feel broken before. So
               the state is shown rather than hidden. */}
-          {catalogState !== 'ok' && (
+          {/* Only when it matters: the passing 'unknown' state while the first
+              request is out read as a fault at the top of the Library. */}
+          {catalogState !== 'ok' && catalogState !== 'unknown' && (
             <div className={`p-4 rounded-3xl border mb-6 flex flex-col sm:flex-row sm:items-center gap-3 ${
               catalogState === 'disabled' ? 'bg-amber-500/10 border-amber-500/30' : 'bg-zinc-900/40 border-white/10'
             }`}>
@@ -1677,7 +1741,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                       ? 'Enable YouTube Data API v3 on this app’s Google project and charts, search and radio all come straight from YouTube.'
                       : catalogState === 'quota'
                         ? 'Today’s YouTube search allowance is used up. Browsing still works; search resets at midnight Pacific.'
-                        : 'Connecting to YouTube…'}
+                        : 'YouTube is not answering Sahrae right now, so songs come from the backup catalog. Everything still plays.'}
                   </p>
                 </div>
               </div>
@@ -1690,67 +1754,75 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
             </div>
           )}
 
-          {/* Import a playlist by link.
-              Signing in covers your own library, but a YouTube Music playlist is
-              usually SHARED as a link — and that path needs no account, no
-              consent screen and no permissions. Kept visible whether or not the
-              account is connected, since the two do different jobs. */}
-          <div className="p-4 rounded-3xl bg-zinc-900/40 border border-white/10 mb-8">
-            <div className="flex items-center gap-2 mb-2">
-              <LinkIcon className="w-4 h-4 text-sauti shrink-0" />
-              <h3 className="font-display font-bold text-sm text-white">Import a YouTube Music playlist</h3>
+          {/* ── Your Library, laid out the way Spotify and Apple Music do it: what
+              you can do (new, import, tune) as small buttons, a filter, then ONE
+              list: Liked Songs, your playlists, YouTube's, and the artists you
+              play. Connecting and importing from YouTube moved to the foot of the
+              page; two large panels used to stand above everything you own. ── */}
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 mb-4">
+            <button onClick={() => setCreating(true)} data-tv-focusable className="lux-chip flex items-center gap-1.5 shrink-0"><Plus className="w-4 h-4" /> New playlist</button>
+            <button onClick={() => document.getElementById('sauti-import')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} data-tv-focusable className="lux-chip flex items-center gap-1.5 shrink-0"><LinkIcon className="w-4 h-4" /> Import</button>
+            <button onClick={() => setRedoTaste(true)} data-tv-focusable className="lux-chip flex items-center gap-1.5 shrink-0"><Sparkles className="w-4 h-4" /> Tune your taste</button>
+          </div>
+          {creating && (
+            <div className="flex items-center gap-2 p-2 mb-4 rounded-2xl bg-zinc-900/60 border border-white/10">
+              <input autoFocus value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newName.trim()) { createPlaylist(newName); setNewName(''); setCreating(false); } }} placeholder="Playlist name" aria-label="Playlist name" className="flex-1 min-w-0 bg-transparent px-2 text-sm text-white focus:outline-none" />
+              <button onClick={() => { if (newName.trim()) { createPlaylist(newName); setNewName(''); setCreating(false); } }} className="btn-sauti px-4 py-2 rounded-full text-xs font-bold shrink-0">Create</button>
+              <button onClick={() => { setCreating(false); setNewName(''); }} aria-label="Cancel" className="p-2 rounded-full text-zinc-400 hover:text-white shrink-0"><X className="w-4 h-4" /></button>
             </div>
-            <p className="text-xs text-zinc-400 mb-3">
-              Paste a playlist link and it lands in your library with the same order and artwork. The playlist has to be Public or Unlisted for Sahrae to read it.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <input
-                value={importUrl}
-                onChange={(e) => { setImportUrl(e.target.value); setImportMsg(null); }}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleImportPlaylist(); }}
-                placeholder="https://music.youtube.com/playlist?list=..."
-                aria-label="YouTube Music playlist link"
-                className="flex-1 min-w-0 bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-sauti/60"
-              />
-              <button
-                onClick={handleImportPlaylist}
-                disabled={importing || !importUrl.trim()}
-                className="btn-sauti px-5 py-2.5 rounded-full text-xs font-black shrink-0 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {importing ? <><Loader2 className="w-4 h-4 animate-spin" /> Importing…</> : 'Import'}
+          )}
+          <div className="flex gap-2 mb-3" role="group" aria-label="Show">
+            {(['all', 'playlists', 'artists'] as const).map((f) => (
+              <button key={f} onClick={() => setLibFilter(f)} aria-pressed={libFilter === f} data-tv-focusable className="lux-chip">
+                {f === 'all' ? 'All' : f === 'playlists' ? 'Playlists' : 'Artists'}
               </button>
-            </div>
-            {importMsg && (
-              <p className={`text-xs mt-2.5 ${importMsg.ok ? 'text-emerald-400' : 'text-red-400'}`} role="status">{importMsg.text}</p>
+            ))}
+          </div>
+          <div className="flex flex-col gap-0.5 mb-10">
+            {libFilter !== 'artists' && (
+              <>
+                <LibRow title="Liked Songs" subtitle={`Playlist · ${likedTracks.length} ${likedTracks.length === 1 ? 'song' : 'songs'}`} onClick={() => setOpenId('liked')}
+                  art={<span className="absolute inset-0 bg-gradient-to-br from-amber-400 via-orange-500 to-rose-600 flex items-center justify-center"><Heart className="w-7 h-7 text-[#fff] fill-current drop-shadow" /></span>} />
+                {ytReady && (
+                  <LibRow title="YouTube Liked Music" subtitle="Playlist · YouTube Music" onClick={() => setOpenId('yt_liked')}
+                    art={<span className="absolute inset-0 bg-gradient-to-br from-red-600 via-rose-500 to-amber-500 flex items-center justify-center"><Heart className="w-7 h-7 text-[#fff] fill-current drop-shadow" /></span>} />
+                )}
+                {playlists.map((p) => (
+                  <LibRow key={p.id} title={p.name} subtitle={`Playlist · ${p.tracks.length} ${p.tracks.length === 1 ? 'song' : 'songs'}`}
+                    onClick={() => setOpenId(p.id)} art={<ListArt name={p.name} tracks={p.tracks} />} />
+                ))}
+                {ytReady && youtubePlaylists.map((p) => (
+                  <LibRow key={p.id} title={p.title} subtitle={`YouTube playlist · ${p.trackCount} songs`} onClick={() => setOpenId(`yt_${p.id}`)}
+                    art={p.thumbnail ? <img loading="lazy" decoding="async" src={p.thumbnail} alt="" className="absolute inset-0 w-full h-full object-cover" /> : <ListArt name={p.title} tracks={[]} />} />
+                ))}
+              </>
+            )}
+            {libFilter !== 'playlists' && libArtists.map((a) => (
+              <LibRow key={a.key} round title={a.name} subtitle="Artist" onClick={() => { void openArtistNamed(a.name, a.tracks); }}
+                art={<CoverArt imageUrl={a.tracks[0].artworkLarge || a.tracks[0].artwork} dominantColor={a.tracks[0].dominantColor} rounded="" className="absolute inset-0 w-full h-full" />} />
+            ))}
+            {libFilter === 'playlists' && playlists.length === 0 && (
+              <p className="text-sm text-zinc-500 px-1.5 py-3">No playlists of your own yet. Press New playlist, or + on any song.</p>
+            )}
+            {libFilter === 'artists' && libArtists.length === 0 && (
+              <p className="text-sm text-zinc-500 px-1.5 py-3">The artists you play and like will appear here.</p>
             )}
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-10">
-            <button onClick={() => setOpenId('liked')} tabIndex={0} data-tv-focusable className="card-lift flex items-center gap-3 p-4 rounded-2xl bg-gradient-to-br from-orange-500/20 to-rose-600/20 border border-rose-500/25 text-left">
-              <span className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 via-orange-500 to-rose-600 flex items-center justify-center shrink-0 shadow-lg shadow-rose-600/25"><Heart className="w-6 h-6 text-white fill-current" /></span>
-              <span><span className="block font-bold text-white">Liked Songs</span><span className="block text-xs text-zinc-300 tabular">{likedTracks.length} songs</span></span>
-            </button>
-            {creating ? (
-              <div className="flex items-center gap-2 p-2 rounded-2xl bg-zinc-900/60 border border-white/10 col-span-2 sm:col-span-1">
-                <input autoFocus value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newName.trim()) { createPlaylist(newName); setNewName(''); setCreating(false); } }} placeholder="Playlist name" className="flex-1 min-w-0 bg-transparent px-2 text-sm text-white focus:outline-none" />
-                <button onClick={() => { if (newName.trim()) { createPlaylist(newName); setNewName(''); setCreating(false); } }} className="btn-sauti px-3 py-2 rounded-full text-xs font-bold shrink-0">Add</button>
-              </div>
-            ) : (
-              <button onClick={() => setCreating(true)} tabIndex={0} data-tv-focusable className="card-lift flex items-center gap-3 p-4 rounded-2xl bg-zinc-900/50 border border-white/10 text-left"><span className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center shrink-0"><Plus className="w-6 h-6 text-sauti" /></span><span className="font-bold text-white">New playlist</span></button>
-            )}
-            <button onClick={() => setRedoTaste(true)} tabIndex={0} data-tv-focusable className="card-lift flex items-center gap-3 p-4 rounded-2xl bg-gradient-to-br from-violet-500/20 to-fuchsia-600/20 border border-violet-500/25 text-left">
-              <span className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center shrink-0 shadow-lg shadow-fuchsia-600/25"><Sparkles className="w-6 h-6 text-white" /></span>
-              <span><span className="block font-bold text-white">Tune your taste</span><span className="block text-xs text-zinc-300">Refresh your mixes</span></span>
-            </button>
-          </div>
-          {recentlyPlayed.length > 0 && (
-            <section className="mb-10"><SectionHead>Recently Played</SectionHead><div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{recentlyPlayed.map((t, i) => <Fragment key={t.id}><TrackCard track={t} onPlay={() => playQueue(recentlyPlayed, i)} /></Fragment>)}</div></section>
-          )}
+          {libFilter === 'all' && (() => {
+            const again = uniqueSongs(recentlyPlayed);
+            return again.length > 0 && (
+              <section className="mb-10">
+                <SectionHead>Recently played</SectionHead>
+                <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{again.map((t, i) => <Fragment key={t.id}><TrackCard track={t} onPlay={() => playQueue(again, i)} /></Fragment>)}</div>
+              </section>
+            );
+          })()}
 
           {/* YouTube Music Playlists Section */}
-          {isYoutubeConnected && (
+          {isYoutubeConnected && (youtubeLoading || youtubeError) && (
             <section className="mb-10">
-              <SectionHead icon={<Youtube className="w-5 h-5 text-red-500 fill-current animate-pulse" />}>Your YouTube Music Playlists</SectionHead>
+              <SectionHead>Your YouTube Music playlists</SectionHead>
               {youtubeLoading ? (
                 <div className="flex items-center gap-3 text-zinc-400 py-6">
                   <Loader2 className="w-5 h-5 animate-spin text-amber-500" />
@@ -1798,51 +1870,89 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                   );
                 })()
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {/* Liked Music Special Playlist */}
-                  <button onClick={() => setOpenId('yt_liked')} tabIndex={0} data-tv-focusable className="card-lift text-left rounded-2xl overflow-hidden border border-white/10 bg-zinc-900">
-                    <div className="aspect-square relative flex items-center justify-center overflow-hidden bg-gradient-to-br from-red-600 via-rose-500 to-amber-500">
-                      <div aria-hidden className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-black/20" />
-                      <Heart className="relative w-12 h-12 text-white fill-current drop-shadow" />
-                      <Youtube className="absolute top-2 right-2 w-5 h-5 text-red-500 fill-current drop-shadow" />
-                    </div>
-                    <div className="p-2.5">
-                      <p className="text-sm font-semibold text-white truncate">YouTube Liked Music</p>
-                      <p className="text-xs text-zinc-500">Liked on YT Music</p>
-                    </div>
-                  </button>
-
-                  {/* Synced Playlists */}
-                  {youtubePlaylists.map((p) => (
-                    <button key={p.id} onClick={() => setOpenId(`yt_${p.id}`)} tabIndex={0} data-tv-focusable className="card-lift text-left rounded-2xl overflow-hidden border border-white/10 bg-zinc-900">
-                      <div className="aspect-square relative flex items-center justify-center overflow-hidden bg-zinc-800">
-                        {p.thumbnail ? (
-                          <img loading="lazy" decoding="async" src={p.thumbnail} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-black/20" />
-                        )}
-                        <Youtube className="absolute top-2 right-2 w-5 h-5 text-red-500 fill-current drop-shadow" />
-                      </div>
-                      <div className="p-2.5">
-                        <p className="text-sm font-semibold text-white truncate">{p.title}</p>
-                        <p className="text-xs text-zinc-500 tabular">{p.trackCount} songs</p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
+                null
               )}
             </section>
           )}
 
-          <section><SectionHead>Your Playlists</SectionHead>
-            {playlists.length === 0 ? <EmptyState compact illustration="playlist" title="No playlists yet" message="Create one above, or tap + on any song to start one." /> : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">{playlists.map((p) => (
-                <button key={p.id} onClick={() => setOpenId(p.id)} tabIndex={0} data-tv-focusable className="card-lift text-left rounded-2xl overflow-hidden border border-white/10 bg-zinc-900">
-                  <div className={`aspect-square relative flex items-center justify-center overflow-hidden ${p.tracks[0]?.artwork ? 'bg-zinc-800' : `bg-gradient-to-br ${gradFor(p.name)}`}`}>{p.tracks[0]?.artwork ? <img loading="lazy" decoding="async" src={p.tracks[0].artwork} alt="" className="w-full h-full object-cover" /> : <><div aria-hidden className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-black/20" /><span className="relative font-display font-black text-white/95 text-3xl tracking-tight drop-shadow">{monogram(p.name)}</span></>}</div>
-                  <div className="p-2.5"><p className="text-sm font-semibold text-white truncate">{p.name}</p><p className="text-xs text-zinc-500 tabular">{p.tracks.length} songs</p></div>
+          <section id="sauti-import" className="mt-2 pt-8 border-t border-white/10 scroll-mt-28">
+            <SectionHead>Bring your music from YouTube</SectionHead>
+            {/* YouTube Music Connection Banner */}
+            {!isYoutubeConnected ? (
+              <div className="p-5 rounded-3xl bg-gradient-to-br from-red-600/10 via-red-500/5 to-transparent border border-red-500/15 mb-8 flex flex-col md:flex-row items-center justify-between gap-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-red-600 flex items-center justify-center shadow-lg shadow-red-600/20 text-white shrink-0">
+                    <Youtube className="w-6 h-6 fill-current" />
+                  </div>
+                  <div>
+                    <h3 className="font-display font-bold text-base text-white">Sync YouTube Music</h3>
+                    <p className="text-xs text-zinc-400">Import your real playlists and liked songs from your YouTube account instantly.</p>
+                  </div>
+                </div>
+                <button onClick={handleConnectYoutube} className="btn-sauti bg-red-600 hover:bg-red-500 text-white border-none shadow-[0_0_15px_rgba(220,38,38,0.25)] px-6 py-2.5 rounded-full text-xs font-black shrink-0">
+                  Connect Account
                 </button>
-              ))}</div>
+              </div>
+            ) : (
+              <div className="p-4 rounded-3xl bg-zinc-900/40 border border-white/5 mb-8 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  {youtubeProfile?.picture ? (
+                    <img loading="lazy" decoding="async" src={youtubeProfile.picture} alt="" className="w-10 h-10 rounded-full border border-white/10" referrerPolicy="no-referrer" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-red-600/20 text-red-400 flex items-center justify-center font-bold">
+                      {youtubeProfile?.name?.charAt(0) || 'Y'}
+                    </div>
+                  )}
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-black text-red-400 uppercase tracking-wider flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> Synced with YouTube
+                      </span>
+                    </div>
+                    <p className="text-sm font-bold text-white">{youtubeProfile?.name || 'YouTube Listener'}</p>
+                  </div>
+                </div>
+                <button onClick={handleDisconnectYoutube} className="text-xs text-zinc-400 hover:text-red-400 px-4 py-2 rounded-full border border-white/5 hover:border-red-500/20 transition-all">
+                  Disconnect
+                </button>
+              </div>
             )}
+
+            {/* Import a playlist by link.
+                Signing in covers your own library, but a YouTube Music playlist is
+                usually SHARED as a link — and that path needs no account, no
+                consent screen and no permissions. Kept visible whether or not the
+                account is connected, since the two do different jobs. */}
+            <div className="p-4 rounded-3xl bg-zinc-900/40 border border-white/10 mb-8">
+              <div className="flex items-center gap-2 mb-2">
+                <LinkIcon className="w-4 h-4 text-sauti shrink-0" />
+                <h3 className="font-display font-bold text-sm text-white">Import a YouTube Music playlist</h3>
+              </div>
+              <p className="text-xs text-zinc-400 mb-3">
+                Paste a playlist link and it lands in your library with the same order and artwork. The playlist has to be Public or Unlisted for Sahrae to read it.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  value={importUrl}
+                  onChange={(e) => { setImportUrl(e.target.value); setImportMsg(null); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleImportPlaylist(); }}
+                  placeholder="https://music.youtube.com/playlist?list=..."
+                  aria-label="YouTube Music playlist link"
+                  className="flex-1 min-w-0 bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-sauti/60"
+                />
+                <button
+                  onClick={handleImportPlaylist}
+                  disabled={importing || !importUrl.trim()}
+                  className="btn-sauti px-5 py-2.5 rounded-full text-xs font-black shrink-0 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {importing ? <><Loader2 className="w-4 h-4 animate-spin" /> Importing…</> : 'Import'}
+                </button>
+              </div>
+              {importMsg && (
+                <p className={`text-xs mt-2.5 ${importMsg.ok ? 'text-emerald-400' : 'text-red-400'}`} role="status">{importMsg.text}</p>
+              )}
+            </div>
+
           </section>
         </>
       )}

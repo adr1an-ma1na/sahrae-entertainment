@@ -104,7 +104,7 @@ function keep(path: string, data: unknown) {
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-const artist = (a: any): CArtist => ({ id: a.id, name: a.name, picture: a.picture_xl || a.picture_big || a.picture_medium });
+const artist = (a: any): CArtist => ({ id: a.id, name: a.name, picture: a.picture_xl || a.picture_big || a.picture_medium, fans: a.nb_fan });
 const track = (t: any): CTrack => ({
   id: t.id, title: t.title_short || t.title, artist: t.artist?.name || '', artistId: t.artist?.id || 0,
   duration: t.duration || 0, cover: t.album?.cover_medium, coverXl: t.album?.cover_xl || t.album?.cover_big, rank: t.rank,
@@ -125,6 +125,14 @@ export interface DzAlbum { id: number; title: string; cover?: string; coverXl?: 
 export const deezer = {
   searchArtists: async (q: string, limit = 24, urgent = false): Promise<CArtist[]> =>
     (await get<List<unknown>>(`/search/artist?q=${encodeURIComponent(q)}&limit=${limit}`, 7 * DAY, urgent)).data?.filter(real).map(artist) || [],
+  /** Songs for a search, in the catalogue's order. */
+  searchTracks: async (q: string, limit = 25): Promise<CTrack[]> =>
+    (await get<List<unknown>>(`/search/track?q=${encodeURIComponent(q)}&limit=${limit}`, DAY, true)).data?.map(track).filter((t) => t.duration >= 60) || [],
+  /** Releases for a search. */
+  searchAlbums: async (q: string, limit = 16): Promise<DzAlbum[]> => {
+    const j = await get<List<{ id: number; title: string; cover_medium?: string; cover_xl?: string; cover_big?: string; record_type?: string; artist?: { id?: number; name?: string } }>>(`/search/album?q=${encodeURIComponent(q)}&limit=${limit}`, DAY, true);
+    return (j.data || []).map((x) => ({ id: x.id, title: x.title, cover: x.cover_medium, coverXl: x.cover_xl || x.cover_big, date: '', type: x.record_type || 'album', artist: x.artist?.name || '', artistId: x.artist?.id || 0 }));
+  },
   /** The best-known artist by that name, or null. */
   artistByName: async (name: string): Promise<CArtist | null> => (await deezer.searchArtists(name, 1))[0] || null,
   related: async (id: number, limit = 12, urgent = false): Promise<CArtist[]> =>

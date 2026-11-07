@@ -11,7 +11,7 @@
  * (owner, 2026-11-01). Pure, so it is testable alone (curate-check.mjs).
  */
 
-export interface CArtist { id: number; name: string; picture?: string }
+export interface CArtist { id: number; name: string; picture?: string; fans?: number }
 export interface CTrack { id: number; title: string; artist: string; artistId: number; duration: number; cover?: string; coverXl?: string; rank?: number }
 
 const norm = (s: string) => (s || '').toLowerCase()
