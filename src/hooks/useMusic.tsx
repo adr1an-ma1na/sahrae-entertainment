@@ -9,7 +9,9 @@ import { attachEq, applyWebEq, resumeEq } from '../services/eqWeb';
 import { loadEq, EQ_CHANGE } from '../services/eq';
 import { cleanTrackText } from '../services/trackText.ts';
 import { songKey } from '../services/tasteHome';
-import { resolveYt, prefetchMatches } from '../services/resolveYt';
+import { resolveYt, prefetchMatches, asTrack } from '../services/resolveYt';
+import { upNext } from '../services/upNext';
+import { songBase, isVersion } from '../services/curate';
 import { hifiWanted, hifiSrc, prefetchHifi } from '../services/hifiAudio';
 import { Capacitor } from '@capacitor/core';
 
@@ -687,9 +689,27 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     if (extendingRef.current === c.id) return;
     extendingRef.current = c.id;
     (async () => {
+      // Nothing already queued or recently played comes back, in any version.
+      const avoid = new Set([...queue, ...recentlyPlayed].map((t) => songBase(t.title)));
+      const appendNew = (list: Track[]) => setQueue((prev) => {
+        const queued = new Set(prev.map((t) => songBase(t.title)));
+        const add = list.filter((t) => !queued.has(songBase(t.title)));
+        return add.length ? [...prev, ...add] : prev;
+      });
+      // The catalogue first: this artist and related artists, as Spotify's radio does (upNext.ts).
+      const cat = await upNext(c, avoid, 25).catch(() => []);
+      if (extendingRef.current !== c.id) return;
+      if (cat.length >= 8) { appendNew(cat.map((t) => asTrack(t))); return; }
+
+      // Fallback: YouTube's related videos, held to the same rules.
       const have = new Set(queue.map((t) => t.id));
       const fresh: Track[] = [];
-      const take = (list: Track[]) => { for (const t of list) if (t && !have.has(t.id)) { have.add(t.id); fresh.push(t); } };
+      const take = (list: Track[]) => {
+        for (const t of list) {
+          if (!t || have.has(t.id) || isVersion(t.title) || avoid.has(songBase(t.title))) continue;
+          have.add(t.id); avoid.add(songBase(t.title)); fresh.push(t);
+        }
+      };
       // 1) related to what's playing
       take(await ytmusic.related(c.id).catch(() => [] as Track[]));
       // 2) thin? seed off the freshest queued tracks (different roots = new picks)
@@ -704,12 +724,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         take(await ytmusic.search(`${c.artist} mix`).catch(() => [] as Track[]));
       }
       if (!fresh.length) return;
-      setQueue((prev) => {
-        const ph = new Set(prev.map((t) => t.id));
-        // Diversify the appended run so radio doesn't stack the same artist.
-        const add = diverseSample(fresh.filter((t) => !ph.has(t.id)), 25);
-        return add.length ? [...prev, ...add] : prev;
-      });
+      // Diversify the appended run so radio doesn't stack the same artist.
+      appendNew(diverseSample(fresh, 25));
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id, queue.length, autoplay]);
@@ -876,16 +892,25 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     playQueue([seed], 0, `${seed.title} Radio`);
     const sid = seed.id;
     (async () => {
+      const onRadio = (radio: Track[]) => setQueue((prev) => (prev.length && prev[0]?.id === sid ? radio : prev));
+      // The catalogue first (upNext.ts): related artists' songs, each song once, no versions.
+      const cat = await upNext(seed, new Set([songBase(seed.title)]), 49).catch(() => []);
+      if (cat.length >= 8) { onRadio([seed, ...cat.map((t) => asTrack(t))]); return; }
       const have = new Set<string>([sid]);
+      const avoid = new Set([songBase(seed.title)]);
       const pool: Track[] = [];
-      const take = (list: Track[]) => { for (const t of list) if (t && !have.has(t.id)) { have.add(t.id); pool.push(t); } };
+      const take = (list: Track[]) => {
+        for (const t of list) {
+          if (!t || have.has(t.id) || isVersion(t.title) || avoid.has(songBase(t.title))) continue;
+          have.add(t.id); avoid.add(songBase(t.title)); pool.push(t);
+        }
+      };
       take(await ytmusic.related(sid).catch(() => [] as Track[]));
       if (pool.length < 20 && seed.artist) take(await ytmusic.search(`${seed.artist} mix`).catch(() => [] as Track[]));
       if (pool.length < 10) take(await ytmusic.search('top hits 2026').catch(() => [] as Track[]));
       if (!pool.length) return;
       const radio = songRadio(seed, pool, 50);
-      // only apply if the user is still on this radio (didn't start something else)
-      setQueue((prev) => (prev.length && prev[0]?.id === sid ? radio : prev));
+      onRadio(radio);
     })();
   };
   const removeFromQueue = (i: number) => {

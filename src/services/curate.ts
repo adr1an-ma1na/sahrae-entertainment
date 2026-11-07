@@ -14,6 +14,80 @@
 export interface CArtist { id: number; name: string; picture?: string; fans?: number }
 export interface CTrack { id: number; title: string; artist: string; artistId: number; duration: number; cover?: string; coverXl?: string; rank?: number }
 
+// ── One song, whatever version ───────────────────────────────────────────────
+// "Calm Down", "Calm Down (Remix)", "Calm Down - Sped Up" and a cover of it are
+// one song: Up next and an artist's releases must not offer it twice (owner,
+// 2026-11-07: "not repeating songs of remixes of the same song").
+
+/** A remix, live take, edit or other version of a song, named in its brackets or after a dash. */
+const VERSION = /\b(remix(es)?|rmx|edit|version|acoustic|stripped|live|sped\s*up|slowed|reverb|instrumental|karaoke|a\s*cappella|acapella|cover|demo|extended|vip|bootleg|rework|unplugged|8d|nightcore|amapiano\s+mix|piano)\b/i;
+
+const fold = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+/** The parts of a title that describe it: what is in brackets, and what follows " - ". */
+function titleTags(title: string): string {
+  const t = fold(title);
+  const brackets = [...t.matchAll(/\((.*?)\)|\[(.*?)\]/g)].map((m) => m[1] ?? m[2] ?? '');
+  const dash = t.match(/\s[-–]\s(.*)$/)?.[1] ?? '';
+  return [...brackets, dash].join(' | ');
+}
+
+/** True for a version of a song (remix, live, acoustic, sped up...), not the song itself. */
+export function isVersion(title: string): boolean {
+  return VERSION.test(titleTags(title)) || /\bremix(es)?\b/i.test(title);
+}
+
+/** The song itself: its title without brackets, " - ..." tails or featured artists. */
+export function songBase(title: string): string {
+  return fold(title)
+    .replace(/\(.*?\)|\[.*?\]/g, ' ')
+    .replace(/\s[-–|]\s.*$/, ' ')
+    .replace(/\b(feat|ft|featuring|with)\b.*$/, ' ')
+    .replace(/\b(the\s+)?remixes\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+/**
+ * Each song once, in the list's order: where a song comes in several versions
+ * the song itself stands in the first one's place, a remix only when there is
+ * nothing else.
+ */
+export function onePerSong<T extends { title: string }>(list: T[]): T[] {
+  const out: T[] = [];
+  const at = new Map<string, number>();
+  for (const t of list) {
+    const key = songBase(t.title);
+    const i = at.get(key);
+    if (i === undefined) { at.set(key, out.length); out.push(t); }
+    else if (isVersion(out[i].title) && !isVersion(t.title)) out[i] = t;
+  }
+  return out;
+}
+
+/**
+ * An artist's releases as Spotify lists them: each release once (the Deluxe,
+ * Extended and Live editions of an album are that album; the best-loved
+ * edition stands for it), remix packages left out, then albums apart from
+ * singles and EPs, the most popular first (`fans`: listeners who saved it).
+ */
+export function splitReleases<T extends { title: string; type: string; fans?: number }>(list: T[]): { albums: T[]; singles: T[] } {
+  const rank = (r: T) => (r.type === 'album' ? 2 : r.type === 'ep' ? 1 : 0);
+  const best = new Map<string, T>();
+  for (const r of list) {
+    if (/\bremix(es)?\b/i.test(r.title)) continue;
+    const key = songBase(r.title);
+    if (!key) continue;
+    const had = best.get(key);
+    const better = !had
+      || Number(isVersion(had.title)) - Number(isVersion(r.title)) > 0
+      || (isVersion(had.title) === isVersion(r.title) && (rank(r) - rank(had) || (r.fans ?? 0) - (had.fans ?? 0)) > 0);
+    if (better) best.set(key, r);
+  }
+  const byFans = (a: T, b: T) => (b.fans ?? 0) - (a.fans ?? 0);
+  const all = [...best.values()];
+  return { albums: all.filter((r) => r.type === 'album').sort(byFans), singles: all.filter((r) => r.type !== 'album').sort(byFans) };
+}
+
 const norm = (s: string) => (s || '').toLowerCase()
   .normalize('NFD').replace(/[̀-ͯ]/g, '')
   .replace(/\(.*?\)|\[.*?\]/g, ' ')

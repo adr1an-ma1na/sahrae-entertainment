@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 type Size = 'sm' | 'md' | 'lg' | 'hero';
 
@@ -30,8 +30,11 @@ export function CoverArt({
 }) {
   const [src, setSrc] = useState(imageUrl);
   const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => { setSrc(imageUrl); setLoaded(false); }, [imageUrl]);
+  // A new image: reset during render, not in an effect. The effect ran after
+  // mount too, and a cached cover can finish loading before it does; the reset
+  // then hid that cover for good, leaving a tile of flat colour.
+  const [forUrl, setForUrl] = useState(imageUrl);
+  if (imageUrl !== forUrl) { setForUrl(imageUrl); setSrc(imageUrl); setLoaded(false); }
 
   return (
     <div
@@ -46,6 +49,8 @@ export function CoverArt({
           loading="lazy"
           decoding="async"
           draggable={false}
+          // Already decoded (from the cache) by the time it is attached: show it.
+          ref={(el) => { if (el && el.complete && el.naturalWidth > 0 && !loaded) setLoaded(true); }}
           onLoad={() => setLoaded(true)}
           onError={() => {
             // HD variant missing → drop to the reliable thumbnail once.

@@ -4,7 +4,7 @@
  *
  * Run: node --experimental-strip-types curate-check.mjs
  */
-import { interleave, buildMix, clusterArtists, mixSubtitle, matchScore, bestMatch } from './src/services/curate.ts';
+import { interleave, buildMix, clusterArtists, mixSubtitle, matchScore, bestMatch, songBase, isVersion, onePerSong, splitReleases } from './src/services/curate.ts';
 
 let pass = 0, fail = 0;
 const eq = (name, got, want) => {
@@ -54,6 +54,37 @@ eq('the closest of several wins', bestMatch(song, [
   { id: 'z', title: 'Eloko', artist: 'Random', duration: 400 },
 ])?.id, 'y');
 eq('nothing at all, no match', bestMatch(song, []), null);
+
+console.log('\none song, whatever version');
+eq('a remix is the song', songBase('Calm Down (Remix)'), songBase('Calm Down'));
+eq('a dash tail is the song', songBase('Calm Down - Sped Up'), 'calm down');
+eq('featured artists are the song', songBase('Inama feat. Fally Ipupa'), 'inama');
+eq('a remix is a version', isVersion('Calm Down (Ian Asher Remix)'), true);
+eq('a live take is a version', isVersion('Eastside (Live From Webster Hall)'), true);
+eq('sped up is a version', isVersion('Calm Down - Sped Up'), true);
+eq('a song named Live Your Life is not', isVersion('Live Your Life'), false);
+eq('a featured artist is not a version', isVersion('Waah! (feat. Koffi Olomide)'), false);
+eq('a film credit is not a version', isVersion('Hand That Feeds (From the Film Ballerina)'), false);
+
+const versions = [{ title: 'Calm Down (Remix)' }, { title: 'Essence' }, { title: 'Calm Down' }, { title: 'Calm Down - Sped Up' }];
+eq('each song once, the song itself in the first place', onePerSong(versions).map((t) => t.title), ['Calm Down', 'Essence']);
+
+console.log('\nan artist\'s releases');
+// Halsey's catalogue, as the catalogue lists it (title, type, fans).
+const rel = (title, type, fans) => ({ title, type, fans });
+const halsey = [
+  rel('The Great Impersonator', 'album', 4562), rel('The Great Impersonator', 'album', 2528), rel('The Great Impersonator (Deluxe)', 'album', 1077),
+  rel('If I Can’t Have Love, I Want Power', 'album', 19886), rel('If I Can’t Have Love, I Want Power (Extended)', 'album', 5335),
+  rel('BADLANDS', 'album', 23732), rel('BADLANDS (Deluxe)', 'album', 118939), rel('BADLANDS (Live From Webster Hall)', 'album', 2691),
+  rel('Manic', 'album', 18418), rel('Room 93', 'ep', 20703), rel('Bad At Love Remixes', 'ep', 3979), rel('Room 93: The Remixes', 'single', 3762),
+  rel('Eastside', 'single', 45578), rel('Eastside (Acoustic)', 'single', 5393), rel('Alone', 'single', 5890), rel('Alone (Calvin Harris Remix)', 'single', 1659),
+  rel('safeword', 'single', 489), rel('safeword', 'single', 6),
+];
+const { albums, singles } = splitReleases(halsey);
+eq('each album once, most popular first', albums.map((r) => r.title), ['BADLANDS (Deluxe)', 'If I Can’t Have Love, I Want Power', 'Manic', 'The Great Impersonator']);
+eq('the live edition of an album is that album', albums.some((r) => /Live/.test(r.title)), false);
+eq('singles and EPs apart, most popular first', singles.map((r) => r.title), ['Eastside', 'Room 93', 'Alone', 'safeword']);
+eq('no remix packages', [...albums, ...singles].some((r) => /remix/i.test(r.title)), false);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -23,7 +23,8 @@ import { loadPicks, savePicks, dailyMixes as curatedDailyMixes, pickedGenreMixes
 import { asTrack } from '../services/resolveYt';
 import { weigh, loadTaste, artistKey, TASTE_CHANGE } from '../services/taste';
 import { buildTasteHome, songKey, uniqueSongs, type TasteHome } from '../services/tasteHome';
-import { deezer } from '../services/deezer';
+import { deezer, type DzAlbum } from '../services/deezer';
+import { splitReleases, onePerSong } from '../services/curate';
 import { searchCatalogue } from '../services/musicSearch';
 import { LuxHeader, LuxSeg } from './ui/Lux';
 import Coachmark from './Coachmark';
@@ -195,6 +196,63 @@ function TrackRow({ track, onPlay, onRemove, index, list = false }: { track: Tra
       ) : (
         <button onClick={(e) => { e.stopPropagation(); openAddSheet(track); }} className="p-2 rounded-full text-zinc-500 hover:text-white" aria-label="Add to playlist"><Plus className="w-4 h-4" /></button>
       )}
+    </div>
+  );
+}
+
+/**
+ * A "Mixed for you" card, drawn as a poster rather than a tile: the lead
+ * artist's photo melting into the mix's colour, the name set large over it, the
+ * artists inside as a row of small covers, a gold hairline at the foot and a
+ * faint record in the corner (Sauti's vinyl motif). The flat colour band it
+ * replaces copied Spotify exactly and looked cheaper than the rest of Sahrae.
+ */
+function MixCard({ title, subtitle, tracks, cover, tint, onOpen, onPlay }: {
+  title: string; subtitle: string; tracks: Track[]; cover?: string; tint?: string; onOpen: () => void; onPlay: () => void;
+}) {
+  const colour = tint || tracks[0]?.dominantColor || 'rgb(var(--acc-rgb))';
+  const faces: Track[] = [];
+  const seen = new Set<string>();
+  for (const t of tracks) {
+    const a = (t.artist || '').toLowerCase();
+    if (!t.artwork || seen.has(a)) continue;
+    seen.add(a); faces.push(t);
+    if (faces.length === 3) break;
+  }
+  const wash = 'linear-gradient(to top, #000 0%, #000 34%, transparent 74%)';
+  return (
+    <div role="button" onClick={onOpen} tabIndex={0} data-tv-focusable aria-label={title}
+      onKeyDown={(e) => { if (e.key === 'Enter') onOpen(); }}
+      className="group flex-none w-[168px] md:w-[208px] text-left rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 cursor-pointer">
+      <div className="relative aspect-[4/5] overflow-hidden rounded-2xl bg-zinc-900 ring-1 ring-white/10 shadow-[0_18px_40px_-18px_rgba(0,0,0,0.9)]">
+        <CoverArt imageUrl={cover || tracks[0]?.artworkLarge || tracks[0]?.artwork} dominantColor={tracks[0]?.dominantColor} rounded=""
+          className="absolute inset-0 w-full h-[82%] transition-transform duration-[1200ms] ease-out group-hover:scale-[1.06]" />
+        {/* The photo melts into the mix's colour. */}
+        <div aria-hidden className="absolute inset-0" style={{ background: colour, maskImage: wash, WebkitMaskImage: wash }} />
+        <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-black/25" />
+        {/* A record turning out of the corner, barely there. */}
+        <span aria-hidden className="absolute -right-10 -bottom-10 w-32 h-32 rounded-full opacity-[0.14]"
+          style={{ background: 'repeating-radial-gradient(circle, #fff 0 1px, transparent 1px 4px)' }} />
+        {/* A light sweep on hover. */}
+        <span aria-hidden className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-[1100ms] ease-out bg-gradient-to-r from-transparent via-white/15 to-transparent" />
+        <span className="absolute top-2.5 left-2.5 px-2 py-[3px] rounded-full bg-black/40 backdrop-blur-sm text-[9px] font-bold uppercase tracking-[0.2em] text-amber-200 ring-1 ring-amber-200/25">Made for you</span>
+        <div className="absolute inset-x-0 bottom-0 p-3 md:p-3.5">
+          <p className="font-display font-extrabold text-[21px] md:text-[25px] leading-[1.02] tracking-tight text-[#fff] line-clamp-2 [text-shadow:0_2px_14px_rgba(0,0,0,0.45)]">{title}</p>
+          <div className="mt-2 flex items-center justify-between">
+            <span className="flex -space-x-2">
+              {faces.map((t) => (
+                <img key={t.id} src={t.artwork} alt="" loading="lazy" className="w-6 h-6 md:w-7 md:h-7 rounded-full object-cover" style={{ boxShadow: `0 0 0 2px ${colour}` }} />
+              ))}
+            </span>
+            <button onClick={(e) => { e.stopPropagation(); onPlay(); }} tabIndex={-1} aria-label={`Play ${title}`}
+              className="btn-sauti w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center shadow-[0_8px_18px_rgba(0,0,0,0.5)] transition-transform duration-200 group-hover:scale-105">
+              <Play className="w-4 h-4 fill-current ml-0.5" />
+            </button>
+          </div>
+        </div>
+        <span aria-hidden className="absolute inset-x-6 bottom-0 h-px bg-gradient-to-r from-transparent via-amber-300/70 to-transparent" />
+      </div>
+      <p className="mt-2.5 text-xs text-zinc-400 line-clamp-2 leading-snug">{subtitle}</p>
     </div>
   );
 }
@@ -551,7 +609,8 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   // Detail pages (artist / album)
   const [detail, setDetail] = useState<Detail | null>(null);
   const [detailTracks, setDetailTracks] = useState<Track[]>([]);
-  const [detailAlbums, setDetailAlbums] = useState<Album[]>([]);
+  const [detailAlbums, setDetailAlbums] = useState<(Album & { sub?: string })[]>([]);
+  const [detailSingles, setDetailSingles] = useState<(Album & { sub?: string })[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [trackSort, setTrackSort] = useState<'default' | 'title' | 'artist' | 'duration'>('default');
 
@@ -914,16 +973,21 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   const openArtist = async (a: Artist) => {
     setDetail({ kind: 'artist', id: a.id, name: a.name, thumbnail: a.thumbnail, subtitle: 'Artist' });
     setPopularAll(false);
-    setDetailLoading(true); setDetailTracks([]); setDetailAlbums([]);
+    setDetailLoading(true); setDetailTracks([]); setDetailAlbums([]); setDetailSingles([]);
     // A catalogue artist (dz:<id>): their real top songs and releases, matched to YouTube as they play.
+    // Each song and release once (no remix or Deluxe twice), albums apart from
+    // singles and EPs, the most saved first (curate.ts).
     if (a.id.startsWith('dz:')) {
       const id = Number(a.id.slice(3));
-      const [songs, albums] = await Promise.all([
+      const [songs, releases] = await Promise.all([
         deezer.topTracks(id, 50).catch(() => []),
-        deezer.artistAlbums({ id, name: a.name }, 24).catch(() => []),
+        deezer.artistAlbums({ id, name: a.name }, 100).catch(() => []),
       ]);
-      setDetailTracks(songs.map((t) => asTrack(t)));
-      setDetailAlbums(albums.map((r) => ({ id: `dz:${r.id}`, name: r.title, thumbnail: r.coverXl || r.cover, artist: r.artist })));
+      const { albums, singles } = splitReleases(releases);
+      const tile = (r: DzAlbum) => ({ id: `dz:${r.id}`, name: r.title, thumbnail: r.coverXl || r.cover, artist: r.artist, sub: [r.date.slice(0, 4), r.type === 'album' ? 'Album' : r.type === 'ep' ? 'EP' : 'Single'].filter(Boolean).join(' · ') });
+      setDetailTracks(onePerSong(songs).map((t) => asTrack(t)));
+      setDetailAlbums(albums.slice(0, 20).map(tile));
+      setDetailSingles(singles.slice(0, 30).map(tile));
       setDetailLoading(false);
       return;
     }
@@ -978,10 +1042,15 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
       <p className="text-sm font-semibold text-white truncate">{a.name}</p><p className="text-xs text-zinc-500 truncate">{sub}</p>
     </button>
   );
-  const albumTile = (al: Album) => (
-    <button key={al.id} onClick={() => openAlbum(al)} tabIndex={0} data-tv-focusable className="card-lift flex-none w-[150px] rounded-2xl overflow-hidden border border-white/10 bg-zinc-900 text-left focus:outline-none">
-      <div className="aspect-square bg-zinc-800 relative">{al.thumbnail ? <img src={al.thumbnail} alt="" className="w-full h-full object-cover" loading="lazy" /> : <Disc3 className="w-8 h-8 text-zinc-600 absolute inset-0 m-auto" />}</div>
-      <div className="p-2.5"><p className="text-sm font-semibold text-white truncate">{al.name}</p><p className="text-xs text-zinc-500 truncate">{al.artist || 'Album'}</p></div>
+  // Bare cover and two lines, like the song shelves (ArtCard). On an artist's
+  // page the second line is the year and kind ("2018 · Single"), as in Spotify.
+  const albumTile = (al: Album & { sub?: string }) => (
+    <button key={al.id} onClick={() => openAlbum(al)} tabIndex={0} data-tv-focusable className="group flex-none w-[144px] md:w-[164px] text-left rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400">
+      <div className="aspect-square bg-zinc-800 relative rounded-lg overflow-hidden shadow-[0_8px_24px_rgba(0,0,0,0.5)]">
+        {al.thumbnail ? <img src={al.thumbnail} alt="" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" loading="lazy" /> : <Disc3 className="w-8 h-8 text-zinc-600 absolute inset-0 m-auto" />}
+      </div>
+      <p className="mt-2.5 text-[13px] md:text-sm font-semibold text-white truncate">{al.name}</p>
+      <p className="text-xs text-zinc-400 truncate mt-0.5">{al.sub || al.artist || 'Album'}</p>
     </button>
   );
 
@@ -1233,7 +1302,10 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
               );
             })()}
             {detail.kind === 'artist' && detailAlbums.length > 0 && (
-              <section><SectionHead>Albums & Singles</SectionHead><div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{detailAlbums.map(albumTile)}</div></section>
+              <section className="mb-8"><SectionHead>{detailSingles.length ? 'Albums' : 'Albums & Singles'}</SectionHead><div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{detailAlbums.map((al) => albumTile(al))}</div></section>
+            )}
+            {detail.kind === 'artist' && detailSingles.length > 0 && (
+              <section className="mb-8"><SectionHead>Singles & EPs</SectionHead><div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{detailSingles.map((al) => albumTile(al))}</div></section>
             )}
             {detailTracks.length === 0 && <EmptyState compact illustration="playlist" title="Nothing here yet" message="This list has no playable songs at the moment." />}
           </>
@@ -1451,20 +1523,10 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                   <SectionHead>Mixed for you</SectionHead>
                   <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">
                     {mixes.map((m) => (
-                      <div key={m.id} role="button" onClick={() => setViewMix(m)} tabIndex={0} data-tv-focusable
-                        className="group flex-none w-[156px] md:w-[196px] text-left rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 cursor-pointer">
-                        {/* A Daily Mix card the way Spotify draws one: the lead artist's
-                            photo, a band of the mix's colour along the foot with its name. */}
-                        <div className="aspect-square relative bg-zinc-800 overflow-hidden rounded-lg shadow-[0_8px_24px_rgba(0,0,0,0.5)]">
-                          <CoverArt imageUrl={m.cover || m.tracks[0]?.artworkLarge || m.tracks[0]?.artwork} dominantColor={m.tracks[0]?.dominantColor} rounded="" className="absolute inset-0 w-full h-full transition-transform duration-700 group-hover:scale-105" />
-                          <div className="absolute inset-x-0 bottom-0 h-[30%] flex items-center px-3" style={{ background: m.tint || m.tracks[0]?.dominantColor || 'rgb(var(--acc-rgb))' }}>
-                            <p className="text-[#fff] font-display font-extrabold text-[15px] leading-tight line-clamp-2 drop-shadow">{m.title}</p>
-                          </div>
-                          <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-black/45 backdrop-blur text-[9px] font-bold uppercase tracking-wider text-[#fff]">Made for you</span>
-                          <button onClick={(e) => { e.stopPropagation(); playQueue(m.tracks, 0, m.title); }} className="absolute top-2 right-2 btn-sauti w-9 h-9 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" aria-label="Play"><Play className="w-4 h-4 fill-current ml-0.5" /></button>
-                        </div>
-                        <p className="mt-2.5 text-xs text-zinc-400 line-clamp-2 leading-snug">{m.subtitle}</p>
-                      </div>
+                      <Fragment key={m.id}>
+                        <MixCard title={m.title} subtitle={m.subtitle} tracks={m.tracks} cover={m.cover} tint={m.tint}
+                          onOpen={() => setViewMix(m)} onPlay={() => playQueue(m.tracks, 0, m.title)} />
+                      </Fragment>
                     ))}
                   </div>
                 </section>

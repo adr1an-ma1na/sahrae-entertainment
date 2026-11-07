@@ -120,7 +120,7 @@ const real = (a: any) => a && a.id && a.name && !/various artists/i.test(a.name)
 type List<T> = { data?: T[] };
 
 /** A release on the catalogue: album, EP or single. */
-export interface DzAlbum { id: number; title: string; cover?: string; coverXl?: string; date: string; type: string; artist: string; artistId: number }
+export interface DzAlbum { id: number; title: string; cover?: string; coverXl?: string; date: string; type: string; artist: string; artistId: number; fans?: number }
 
 export const deezer = {
   searchArtists: async (q: string, limit = 24, urgent = false): Promise<CArtist[]> =>
@@ -151,8 +151,8 @@ export const deezer = {
   },
   /** An artist's releases, newest first. */
   artistAlbums: async (a: CArtist, limit = 12): Promise<DzAlbum[]> => {
-    const j = await get<List<{ id: number; title: string; cover_medium?: string; cover_xl?: string; cover_big?: string; release_date?: string; record_type?: string }>>(`/artist/${a.id}/albums?limit=${limit}`, DAY);
-    return (j.data || []).map((x) => ({ id: x.id, title: x.title, cover: x.cover_medium, coverXl: x.cover_xl || x.cover_big, date: x.release_date || '', type: x.record_type || 'album', artist: a.name, artistId: a.id }))
+    const j = await get<List<{ id: number; title: string; cover_medium?: string; cover_xl?: string; cover_big?: string; release_date?: string; record_type?: string; fans?: number }>>(`/artist/${a.id}/albums?limit=${limit}`, DAY);
+    return (j.data || []).map((x) => ({ id: x.id, title: x.title, cover: x.cover_medium, coverXl: x.cover_xl || x.cover_big, date: x.release_date || '', type: x.record_type || 'album', artist: a.name, artistId: a.id, fans: x.fans }))
       .sort((x, y) => y.date.localeCompare(x.date));
   },
   /** A release's songs, with its cover (the tracklist leaves it out). */
