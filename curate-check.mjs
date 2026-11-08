@@ -4,7 +4,7 @@
  *
  * Run: node --experimental-strip-types curate-check.mjs
  */
-import { interleave, buildMix, clusterArtists, mixSubtitle, matchScore, bestMatch, songBase, isVersion, onePerSong, splitReleases, dealQueue, shuffled, onePerPlay } from './src/services/curate.ts';
+import { interleave, buildMix, clusterArtists, mixSubtitle, matchScore, bestMatch, songBase, isVersion, onePerSong, splitReleases, dealQueue, shuffled, onePerPlay, blendMood } from './src/services/curate.ts';
 
 let pass = 0, fail = 0;
 const eq = (name, got, want) => {
@@ -68,6 +68,18 @@ eq('a film credit is not a version', isVersion('Hand That Feeds (From the Film B
 
 const versions = [{ title: 'Calm Down (Remix)' }, { title: 'Essence' }, { title: 'Calm Down' }, { title: 'Calm Down - Sped Up' }];
 eq('each song once, the song itself in the first place', onePerSong(versions).map((t) => t.title), ['Calm Down', 'Essence']);
+
+console.log('\na mood');
+const moodTrack = (i, artist, title = `Song ${i}`) => ({ id: i, title, artist, artistId: artist.length * 100 + artist.charCodeAt(0), duration: 200 });
+const moodA = Array.from({ length: 30 }, (_, i) => moodTrack(i, 'Rema'));
+const moodB = Array.from({ length: 30 }, (_, i) => moodTrack(100 + i, `Artist ${String.fromCharCode(65 + i)}`, `Other ${i}`));
+const moodC = [moodTrack(500, 'Tems', 'Free Mind (Remix)'), moodTrack(501, 'Tems', 'Free Mind Live'), moodTrack(502, 'Tems', 'Essence (Live)')];
+const mood = blendMood([moodA, moodB, moodC], () => 0.5);
+eq('no artist more than three times', mood.filter((t) => t.artist === 'Rema').length, 3);
+eq('no remix or live take', mood.some((t) => /remix|\(live\)/i.test(t.title)), false);
+eq('each song once', new Set(mood.map((t) => t.title)).size, mood.length);
+eq('every playlist is heard', mood.some((t) => t.artist === 'Rema') && mood.some((t) => t.artist.startsWith('Artist')), true);
+eq('nothing loaded, nothing returned', blendMood([[], []]), []);
 
 console.log('\nshuffle');
 const fifty = Array.from({ length: 50 }, (_, i) => ({ title: `Song ${i}`, artist: 'A' }));

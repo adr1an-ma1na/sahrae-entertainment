@@ -73,6 +73,15 @@ export function onePerPlay<T extends { title: string; artist?: string }>(list: T
   return list.filter((t) => { const k = playKey(t); if (seen.has(k)) return false; seen.add(k); return true; });
 }
 
+/**
+ * A mood's mix from several playlists: each shuffled, then taken in turn, so no
+ * playlist or artist dominates. No remixes, live takes or sped-up edits, each
+ * song once, at most three songs by anyone.
+ */
+export function blendMood(lists: CTrack[][], rng: () => number = Math.random, size = 60): CTrack[] {
+  return onePerPlay(interleave(lists.map((l) => shuffled(onePerPlay(l).filter((t) => !isVersion(t.title)), rng)), size, 3));
+}
+
 /** Fisher-Yates: every order equally likely. (Sorting on a random number is not.) */
 export function shuffled<T>(list: T[], rng: () => number = Math.random): T[] {
   const a = [...list];

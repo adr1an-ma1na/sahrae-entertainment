@@ -16,7 +16,10 @@ function loadHls(): Promise<typeof HlsT> {
 
 /** The hls.js class once it has loaded, else null (the caller waits a render). */
 export function useHls(): typeof HlsT | null {
-  const [hls, setHls] = useState<typeof HlsT | null>(loaded);
+  // Through a function too: given the class directly, React called it as a lazy
+  // initialiser, so the second stream of a visit crashed the whole app with
+  // "Class constructor cannot be invoked without 'new'" (owner, TV, 2026-11-08).
+  const [hls, setHls] = useState<typeof HlsT | null>(() => loaded);
   useEffect(() => {
     if (hls) return;
     let live = true;

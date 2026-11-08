@@ -26,6 +26,7 @@ import { buildTasteHome, songKey, uniqueSongs, type TasteHome } from '../service
 import { deezer, type DzAlbum } from '../services/deezer';
 import { splitReleases, onePerSong } from '../services/curate';
 import { searchCatalogue } from '../services/musicSearch';
+import { moodSongs } from '../services/moodMixes';
 import { LuxHeader, LuxSeg } from './ui/Lux';
 import { isTelevision } from '../tv/spatialNavigation';
 import Coachmark from './Coachmark';
@@ -539,6 +540,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   const [daylist, setDaylist] = useState<Track[]>([]);
   const [moodTracks, setMoodTracks] = useState<Track[]>([]);
   const [moodLoading, setMoodLoading] = useState(false);
+  const [moodTry, setMoodTry] = useState(0);
 
   // Live Trending Charts region. This defaulted to 'US' for everyone, in an app
   // built for Kenya — the first chart a Nairobi listener saw was Billboard. Now:
@@ -826,18 +828,10 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
     setMoodTracks([]);
     (async () => {
       try {
-        const moodQueries: Record<string, string> = {
-          'Energize': `best energy upbeat pop songs ${YEAR}`,
-          'Relax': 'lofi chill relax acoustic instrumental indie',
-          'Focus': 'deep focus study brain music ambient lofi',
-          'Workout': 'gym motivation workout pump hip hop electro dance',
-          'Feel Good': `happy feel good positive hits ${YEAR}`,
-        };
-        const q = moodQueries[activeMood] || `${activeMood} music`;
-        const raw = await ytmusic.search(q);
+        const day = new Date().toDateString();
+        const songs = await moodSongs(activeMood, mulberry32(hashStr(activeMood + day)));
         if (cancelled) return;
-        const cleaned = raw.filter(isCleanSong).slice(0, 24);
-        setMoodTracks(cleaned);
+        setMoodTracks(songs.map((t) => asTrack(t)));
       } catch (err) {
         console.error('Error fetching mood tracks', err);
       } finally {
@@ -845,7 +839,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
       }
     })();
     return () => { cancelled = true; };
-  }, [activeMood]);
+  }, [activeMood, moodTry]);
 
   // Home shelves (parallel, fast, simple)
   useEffect(() => {
@@ -1419,7 +1413,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
               <div className="flex items-center justify-between">
                 <SectionHead>{activeMood}</SectionHead>
                 {moodTracks.length > 0 && (
-                  <button onClick={() => playQueue(moodTracks, 0, activeMood)} className="btn-sauti px-5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5">
+                  <button onClick={() => playQueue(moodTracks, 0, activeMood)} data-tv-focusable className="btn-sauti px-5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5">
                     <Play className="w-3.5 h-3.5 fill-current" /> Play All
                   </button>
                 )}
@@ -1431,7 +1425,10 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                   <span>Curating {activeMood} vibes…</span>
                 </div>
               ) : moodTracks.length === 0 ? (
-                <p className="text-zinc-500 text-center py-10">Vibes are refreshing. Try again shortly.</p>
+                <div className="text-center py-10">
+                  <p className="text-zinc-400 mb-4">Couldn't load {activeMood}. Check your connection and try again.</p>
+                  <button onClick={() => setMoodTry((n) => n + 1)} data-tv-focusable className="lux-chip">Try again</button>
+                </div>
               ) : (
                 <SongList tracks={moodTracks} onPlay={(i) => playQueue(moodTracks, i, activeMood)} />
               )}
