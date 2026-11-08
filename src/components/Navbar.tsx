@@ -19,6 +19,8 @@ interface NavbarProps {
   onPlay: (id: number, type: 'movie' | 'tv', startInInfo?: boolean) => void;
 }
 
+export const OPEN_PROFILE = 'sahrae:open-profile';
+
 export default function Navbar({ activeTab, setActiveTab, onPlay }: NavbarProps) {
   const [isScrolled, setIsScrolled] = useState(false);
   const { theme, pick } = useTheme();
@@ -73,9 +75,16 @@ export default function Navbar({ activeTab, setActiveTab, onPlay }: NavbarProps)
   // legible. A shaded strip here ended in a visible line across the picture.
   const overHero = !isScrolled && ['home', 'movies', 'series'].includes(activeTab);
 
+  // Settings (SettingsView.tsx) asks for the account window, which lives here.
+  useEffect(() => {
+    const open = () => setIsProfileModalOpen(true);
+    window.addEventListener(OPEN_PROFILE, open);
+    return () => window.removeEventListener(OPEN_PROFILE, open);
+  }, []);
+
   return (
     <>
-    <nav className={`fixed top-0 left-0 right-0 md:left-16 lg:left-64 tv-navbar z-40 transition-all duration-500 pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] ${overHero ? 'dark bg-transparent' : isScrolled ? 'nav-solid bg-zinc-950/95 border-b border-white/10' : 'nav-solid bg-gradient-to-b from-black/60 via-black/25 to-transparent'}`}>
+    <nav className={`lg:hidden fixed top-0 left-0 right-0 md:left-16 lg:left-64 tv-navbar z-40 transition-all duration-500 pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] ${overHero ? 'dark bg-transparent' : isScrolled ? 'nav-solid bg-zinc-950/95 border-b border-white/10' : 'nav-solid bg-gradient-to-b from-black/60 via-black/25 to-transparent'}`}>
       <div className="px-4 md:px-12 py-4 flex items-center justify-between">
         <div className="flex items-center gap-8 md:gap-12 min-w-0 flex-1">
           <h1
@@ -88,7 +97,8 @@ export default function Navbar({ activeTab, setActiveTab, onPlay }: NavbarProps)
           {/* Section nav now lives in the Sidebar (desktop) + BottomTabBar (mobile). */}
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-4 md:gap-6 shrink-0">
+        {/* On a phone only: with a sidebar these live in Settings. */}
+        <div className="flex md:hidden items-center gap-2 sm:gap-4 md:gap-6 shrink-0">
           {/* Opens the Search page, where the one search box is. Phones have the
               Search tab at the bottom, so it shows from tablet width up. */}
           <button

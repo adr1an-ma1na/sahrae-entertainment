@@ -1,5 +1,9 @@
 import { t as tr } from '../i18n';
-import { Home, Search, Headphones, Radio, Film, Tv2, Clapperboard, Trophy, Heart, Clock, Download, Library, PanelLeftClose, PanelLeftOpen, Music2, Mic2, Youtube } from 'lucide-react';
+import { Home, Search, Headphones, Radio, Film, Tv2, Clapperboard, Trophy, Heart, Clock, Download, Library, PanelLeftClose, PanelLeftOpen, Music2, Mic2, Youtube, Settings } from 'lucide-react';
+import { useNotifications } from '../hooks/useNotifications';
+import { useMusic } from '../hooks/useMusic';
+import { isTelevision } from '../tv/spatialNavigation';
+import { CoverArt } from './ui/CoverArt';
 
 /**
  * Left navigation, grouped Watch / Listen / Library.
@@ -35,6 +39,9 @@ const LIBRARY = [
 type NavItem = { id: string; label: string; icon: typeof Home };
 
 export default function Sidebar({ activeTab, setActiveTab, collapsed = false, onToggle }: { activeTab: string; setActiveTab: (t: string) => void; collapsed?: boolean; onToggle?: () => void }) {
+  const { unreadCount } = useNotifications();
+  const { current, active: musicOn, setExpanded } = useMusic();
+  const SETTINGS: NavItem[] = [{ id: 'settings', label: 'Settings', icon: Settings }];
   const renderNav = (items: NavItem[]) =>
     items.map((t) => {
       const Icon = t.icon;
@@ -89,6 +96,8 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
         <div className="flex flex-col items-center gap-1">{LISTEN.map(railBtn)}</div>
         {railDivider}
         <div className="flex flex-col items-center gap-1">{LIBRARY.map(railBtn)}</div>
+        {railDivider}
+        <div className="flex flex-col items-center gap-1">{SETTINGS.map(railBtn)}</div>
       </aside>
 
       {/* Reveal button — only on lg+ and only while the full sidebar is hidden. */}
@@ -111,6 +120,20 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
           </button>
         </div>
 
+        {/* TV: what is playing, one press from anywhere (the remote can always go left). */}
+        {isTelevision() && musicOn && current && (
+          <div className="px-3 pb-3">
+            <button onClick={() => setExpanded(true)} tabIndex={0} data-tv-focusable aria-label={`Open the player: ${current.title}`}
+              className="w-full flex items-center gap-3 p-2 rounded-xl bg-white/[0.07] text-left focus:outline-none">
+              <CoverArt imageUrl={current.artwork} dominantColor={current.dominantColor} className="w-11 h-11 shrink-0" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-amber-300">Now playing</span>
+                <span className="block text-sm font-semibold text-white truncate">{current.title}</span>
+              </span>
+            </button>
+          </div>
+        )}
+
         <nav className="px-3 space-y-1">{renderNav(PRIMARY)}</nav>
 
         <div className="mt-6 px-3 flex-1 overflow-y-auto custom-scrollbar pb-4">
@@ -120,6 +143,12 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
           <nav className="space-y-1 mb-5">{renderNav(LISTEN)}</nav>
           <div className="overline px-3 mb-1.5 flex items-center gap-2"><Library className="w-3.5 h-3.5" /> Your Library</div>
           <nav className="space-y-1">{renderNav(LIBRARY)}</nav>
+        </div>
+
+        {/* Always in reach at the foot, whatever the list above is scrolled to. */}
+        <div className="relative px-3 py-3 border-t border-white/10">
+          {renderNav(SETTINGS)}
+          {unreadCount > 0 && <span aria-label={`${unreadCount} new notifications`} className="absolute right-7 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-red-500 pointer-events-none" />}
         </div>
       </aside>
     </>

@@ -27,6 +27,7 @@ import { deezer, type DzAlbum } from '../services/deezer';
 import { splitReleases, onePerSong } from '../services/curate';
 import { searchCatalogue } from '../services/musicSearch';
 import { LuxHeader, LuxSeg } from './ui/Lux';
+import { isTelevision } from '../tv/spatialNavigation';
 import Coachmark from './Coachmark';
 
 const fmt = (s: number) => {
@@ -163,12 +164,15 @@ const REGION_MUSIC: Record<string, { name: string; releases: string; discover: s
 };
 const regionMusic = (code: string) => REGION_MUSIC[code] || REGION_MUSIC.KE;
 
+/** The song playing, even after a catalogue song took its YouTube id as it started. */
+const sameSong = (a: Track | null | undefined, b: Track) => !!a && (a.id === b.id || (!!a.dz && a.dz.id === b.dz?.id));
+
 function TrackRow({ track, onPlay, onRemove, index, list = false }: { track: Track; onPlay: () => void; onRemove?: () => void; index?: number; list?: boolean }) {
-  const { current, isPlaying, toggle, toggleLike, isLiked, openAddSheet } = useMusic();
-  const active = current?.id === track.id;
+  const { current, isPlaying, toggle, toggleLike, isLiked, openAddSheet, setExpanded } = useMusic();
+  const active = sameSong(current, track);
   const { handlers, consumed } = useLongPress(() => openAddSheet(track));
   return (
-    <div tabIndex={0} data-tv-focusable role="button" {...handlers} onClick={() => { if (consumed()) return; active ? toggle() : onPlay(); }}
+    <div tabIndex={0} data-tv-focusable role="button" {...handlers} onClick={() => { if (consumed()) return; if (active && isTelevision()) setExpanded(true); else if (active) toggle(); else onPlay(); }}
       className={list
         ? `group flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer focus:outline-none transition-colors hover:bg-white/[0.06] focus-visible:bg-white/[0.08] ${active ? 'bg-amber-400/[0.08]' : ''}`
         : 'card-lift group flex items-center gap-3 p-2 pr-2 rounded-xl border border-white/5 bg-zinc-900/40 cursor-pointer focus:outline-none'}>
@@ -366,8 +370,8 @@ function SongList({ tracks, onPlay, onRemove }: { tracks: Track[]; onPlay: (i: n
  * out of the artwork on hover.
  */
 function TrackCard({ track, onPlay }: { track: Track; onPlay: () => void }) {
-  const { current, isPlaying, toggle, openAddSheet } = useMusic();
-  const active = current?.id === track.id;
+  const { current, isPlaying, toggle, openAddSheet, setExpanded } = useMusic();
+  const active = sameSong(current, track);
   const { handlers, consumed } = useLongPress(() => openAddSheet(track));
   return (
     <div {...handlers} className="relative shrink-0 group/card">
@@ -377,7 +381,7 @@ function TrackCard({ track, onPlay }: { track: Track; onPlay: () => void }) {
         artwork={track.artworkLarge || track.artwork}
         dominantColor={track.dominantColor}
         playing={active && isPlaying}
-        onClick={() => { if (consumed()) return; onPlay(); }}
+        onClick={() => { if (consumed()) return; if (active && isTelevision()) setExpanded(true); else onPlay(); }}
         onPlay={() => { if (active) toggle(); else onPlay(); }}
       />
       <button onClick={(e) => { e.stopPropagation(); openAddSheet(track); }}
@@ -391,11 +395,11 @@ function TrackCard({ track, onPlay }: { track: Track; onPlay: () => void }) {
 
 // Compact, borderless row for the YouTube-Music-style "Quick picks" grid.
 function QuickRow({ track, onPlay }: { track: Track; onPlay: () => void }) {
-  const { current, isPlaying, toggle, openAddSheet } = useMusic();
-  const active = current?.id === track.id;
+  const { current, isPlaying, toggle, openAddSheet, setExpanded } = useMusic();
+  const active = sameSong(current, track);
   const { handlers, consumed } = useLongPress(() => openAddSheet(track));
   return (
-    <div tabIndex={0} data-tv-focusable role="button" {...handlers} onClick={() => { if (consumed()) return; active ? toggle() : onPlay(); }}
+    <div tabIndex={0} data-tv-focusable role="button" {...handlers} onClick={() => { if (consumed()) return; if (active && isTelevision()) setExpanded(true); else if (active) toggle(); else onPlay(); }}
       className="group flex items-center gap-3 p-1.5 rounded-lg hover:bg-white/5 focus:bg-white/5 cursor-pointer focus:outline-none">
       <div className="relative w-12 h-12 rounded-md overflow-hidden bg-zinc-800 shrink-0">
         <CoverArt imageUrl={track.artworkLarge || track.artwork} fallbackUrl={track.artwork} dominantColor={track.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
@@ -1690,7 +1694,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                 ) : (
                   <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                     {chartTracks.slice(0, 9).map((t, i) => {
-                      const playing = current?.id === t.id && isPlaying;
+                      const playing = sameSong(current, t) && isPlaying;
                       // The whole row plays: the round button only shows on hover,
                       // so on a phone a chart row used to do nothing when tapped.
                       return (
@@ -1703,7 +1707,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                           </span>
                           <CoverArt imageUrl={t.artwork} dominantColor={t.dominantColor} className="w-12 h-12 rounded-lg shrink-0" />
                           <div className="min-w-0 flex-1">
-                            <p className={`text-sm font-bold truncate ${current?.id === t.id ? 'text-sauti' : 'text-white'}`}>{t.title}</p>
+                            <p className={`text-sm font-bold truncate ${sameSong(current, t) ? 'text-sauti' : 'text-white'}`}>{t.title}</p>
                             <p className="text-xs text-zinc-400 truncate">{t.artist}</p>
                           </div>
                           <span aria-hidden className="btn-sauti w-8 h-8 rounded-full hidden sm:flex items-center justify-center opacity-0 group-hover/chart:opacity-100 transition-opacity shrink-0">

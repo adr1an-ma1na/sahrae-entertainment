@@ -1136,8 +1136,6 @@ a:focus-visible {
 .dawn-still *, .dawn-still { animation-duration: 1ms !important; animation-delay: 0s !important; }
 .dawn-still.dawn-out { animation: dawn-fade .3s ease forwards !important; }
 @keyframes dawn-fade { to { opacity: 0; visibility: hidden; } }
-/* Held still until the sound is ready (SplashIntro.tsx). */
-.dawn-wait, .dawn-wait * { animation-play-state: paused !important; }
 /* The apps: glows that would be redrawn on every frame, off, as on a TV. */
 .dawn-lite .dawn-word, .dawn-lite .dawn-crest { filter: none; }
 .dawn-lite.dawn-out { animation-name: dawn-fade; }
@@ -1389,7 +1387,7 @@ html.tv-mode .card-lift:focus-within { transform: none !important; box-shadow: n
 html.tv-mode .tv-rail { display: none !important; }
 html.tv-mode:not(.nav-collapsed) .tv-full { display: flex !important; transform: none !important; }
 html.tv-mode:not(.nav-collapsed) .tv-shell { padding-left: 16rem !important; }
-html.tv-mode:not(.nav-collapsed) .tv-navbar { left: 16rem !important; }
+html.tv-mode .tv-navbar { display: none !important; }
 /* The TV sidebar carries the logo; a second one in the header ran into the icons. */
 html.tv-mode:not(.nav-collapsed) .nav-wordmark { display: none !important; }
 /* Hero on a TV: a 1080p TV WebView is often 540 CSS px tall, and with the 118%

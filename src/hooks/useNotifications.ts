@@ -13,6 +13,8 @@ export interface AppNotification {
   posterPath: string | null;
 }
 
+const CHANGED = 'sahrae:notifications';
+
 export function useNotifications() {
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
     const saved = localStorage.getItem('sahrae_notifications');
@@ -21,9 +23,21 @@ export function useNotifications() {
   const [isChecking, setIsChecking] = useState(false);
   const { myList } = useMyList();
 
+  // Several parts of the app show these (the phone's bell, Settings, the sidebar's dot): one list.
   useEffect(() => {
-    localStorage.setItem('sahrae_notifications', JSON.stringify(notifications));
+    const json = JSON.stringify(notifications);
+    if (localStorage.getItem('sahrae_notifications') === json) return;
+    localStorage.setItem('sahrae_notifications', json);
+    window.dispatchEvent(new Event(CHANGED));
   }, [notifications]);
+  useEffect(() => {
+    const reload = () => {
+      const saved = localStorage.getItem('sahrae_notifications') || '[]';
+      setNotifications((prev) => (JSON.stringify(prev) === saved ? prev : JSON.parse(saved)));
+    };
+    window.addEventListener(CHANGED, reload);
+    return () => window.removeEventListener(CHANGED, reload);
+  }, []);
 
   const checkUpdates = async () => {
     // Only check once every 5 minutes to avoid API spam but allow testing

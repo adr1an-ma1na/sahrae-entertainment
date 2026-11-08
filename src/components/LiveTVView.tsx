@@ -3,7 +3,9 @@ import { useRail } from '../hooks/useRail';
 import { haptics } from '../services/haptics';
 import type HlsT from 'hls.js';
 import { useHls } from '../services/hlsLoader';
-import { X, Maximize, Search, Heart, Loader2, WifiOff, Play } from 'lucide-react';
+import { X, Maximize, Search, Heart, Loader2, WifiOff, Play, Captions } from 'lucide-react';
+import { lockLandscape, unlockOrientation } from '../services/fullscreen';
+import { isTelevision } from '../tv/spatialNavigation';
 import { Capacitor } from '@capacitor/core';
 import Coachmark from './Coachmark';
 import Illustration from './ui/Illustration';
@@ -11,6 +13,8 @@ import { LiveMeta, LuxChapter, RailHeader } from './ui/Lux';
 
 /** How long the player's buttons stay up after the last key, touch or move. */
 const CHROME_IDLE_MS = 3500;
+/** On a TV the title leaves a full-screen channel this fast, as on a live match. */
+const TV_TITLES_MS = 500;
 
 interface Channel { name: string; country: string; category: Category; url: string; kind?: 'hls' | 'yt' }
 type Category = 'News' | 'Regional' | 'Sports' | 'Documentary' | 'Science' | 'Wildlife' | 'Anime' | 'Music' | 'Kids' | 'Lifestyle';
@@ -148,8 +152,22 @@ const FAV_KEY = 'sahrae.livetv.fav.v1';
 const RECENT_KEY = 'sahrae.livetv.recent.v1';
 
 // Robust player: tries the stream direct, then through the HLS proxy, then reports offline.
-function HLSPlayer({ src, onOffline }: { src: string; onOffline: () => void }) {
+function HLSPlayer({ src, onOffline, captions, onCaptionTracks }: { src: string; onOffline: () => void; captions: boolean; onCaptionTracks: (any: boolean) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  // Off unless asked for. A stream's caption track switches itself on as it is found.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const apply = () => {
+      const tracks = [...video.textTracks].filter((t) => t.kind === 'subtitles' || t.kind === 'captions');
+      tracks.forEach((t) => { t.mode = captions ? 'showing' : 'disabled'; });
+      onCaptionTracks(tracks.length > 0);
+    };
+    apply();
+    video.textTracks.addEventListener('addtrack', apply);
+    return () => video.textTracks.removeEventListener('addtrack', apply);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [captions]);
   const offRef = useRef(onOffline);
   offRef.current = onOffline;
   const Hls = useHls();
@@ -413,6 +431,65 @@ export default function LiveTVView() {
   const [active, setActive] = useState<Channel | null>(null);
   const [offline, setOffline] = useState(false);
   const playerRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<HTMLIFrameElement>(null);
+
+  // Full screen as a live match does it: opening a channel fills the screen,
+  // edge to edge, on the browser's own full screen where allowed, else the window.
+  const [maxed, setMaxed] = useState(false);
+  const [nativeFull, setNativeFull] = useState(false);
+  const isFull = maxed || nativeFull;
+  useEffect(() => {
+    const sync = () => setNativeFull(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', sync);
+    return () => document.removeEventListener('fullscreenchange', sync);
+  }, []);
+  const channelOpen = !!active;
+  useEffect(() => {
+    document.documentElement.classList.toggle('sports-open', channelOpen);
+    if (!channelOpen) { setMaxed(false); return; }
+    const el = playerRef.current;
+    let fallback = 0;
+    if (el?.requestFullscreen) {
+      el.requestFullscreen().then(lockLandscape, () => setMaxed(true));
+      fallback = window.setTimeout(() => { if (!document.fullscreenElement) setMaxed(true); }, 1500);
+    } else setMaxed(true);
+    return () => {
+      clearTimeout(fallback);
+      document.documentElement.classList.remove('sports-open');
+      if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+      unlockOrientation();
+    };
+  }, [channelOpen]);
+  useEffect(() => {
+    document.documentElement.classList.toggle('sports-full', isFull);
+    return () => document.documentElement.classList.remove('sports-full');
+  }, [isFull]);
+
+  // Captions stay off until someone asks, with a button of our own: the
+  // player's is small and hard to reach. A YouTube channel is told again as it
+  // starts, because it can turn them on by itself once it is playing.
+  const [captions, setCaptions] = useState(false);
+  const [captionTracks, setCaptionTracks] = useState(false);
+  const captionsRef = useRef(false);
+  captionsRef.current = captions;
+  const ytSend = (func: string, args: unknown[] = []) => {
+    try { frameRef.current?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func, args }), '*'); } catch { /* gone */ }
+  };
+  const applyCaptions = (on: boolean) => {
+    if (on) {
+      ytSend('loadModule', ['captions']);
+      ytSend('setOption', ['captions', 'track', { languageCode: 'en' }]);
+    } else {
+      ytSend('setOption', ['captions', 'track', {}]);
+      ytSend('unloadModule', ['captions']);
+      ytSend('unloadModule', ['cc']);
+    }
+  };
+  const toggleCaptions = () => { const on = !captions; setCaptions(on); applyCaptions(on); };
+  const onYtLoad = () => {
+    try { frameRef.current?.contentWindow?.postMessage(JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }), '*'); } catch { /* gone */ }
+    [500, 2000, 5000, 10000, 20000].forEach((ms) => window.setTimeout(() => applyCaptions(captionsRef.current), ms));
+  };
   // The player's buttons fade out after a few quiet seconds, as a TV player's
   // do, and come back on any key, touch or pointer movement over the player.
   const [chrome, setChrome] = useState(true);
@@ -463,6 +540,13 @@ export default function LiveTVView() {
     return () => window.removeEventListener('keydown', onKey);
   }, [active]);
 
+  // A TV: the title leaves half a second after full screen; a press brings it back.
+  useEffect(() => {
+    if (!isFull || !isTelevision()) return;
+    clearTimeout(chromeTimer.current);
+    chromeTimer.current = window.setTimeout(() => setChrome(false), TV_TITLES_MS);
+  }, [isFull]);
+
   useEffect(() => {
     if (!active) return;
     wake();
@@ -480,8 +564,12 @@ export default function LiveTVView() {
   const showChrome = chrome || offline;
 
   const toggleFullScreen = () => {
-    if (!document.fullscreenElement) playerRef.current?.requestFullscreen?.().catch(() => {});
-    else document.exitFullscreen?.().catch(() => {});
+    if (isFull) {
+      setMaxed(false);
+      if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+      unlockOrientation();
+    } else if (playerRef.current?.requestFullscreen) playerRef.current.requestFullscreen().then(lockLandscape, () => setMaxed(true));
+    else setMaxed(true);
   };
 
   const renderCard = (ch: Channel) => (
@@ -510,7 +598,7 @@ export default function LiveTVView() {
       {active && (
         <div role="dialog" data-tv-layer onPointerMove={wake} onPointerDown={wake} className={`fixed inset-0 z-[100] bg-black/95 flex items-center justify-center backdrop-blur-sm p-3 md:p-10 ${showChrome ? '' : 'cursor-none'}`}>
           <div className="w-full max-w-5xl">
-            <div ref={playerRef} className="w-full aspect-video bg-black rounded-xl shadow-2xl overflow-hidden relative border border-white/10">
+            <div ref={playerRef} className={isFull ? 'fixed inset-0 z-[400] bg-black overflow-hidden' : 'w-full aspect-video bg-black rounded-xl shadow-2xl overflow-hidden relative border border-white/10'}>
               {/* Our controls sit CENTRED, not flush right. The embedded player
                   stacks its own volume / CC / quality buttons in the top-right
                   corner, so edge-anchored buttons landed on top of them and you
@@ -522,6 +610,12 @@ export default function LiveTVView() {
                   <h3 className="text-white font-bold text-sm md:text-lg truncate">{active.name}</h3>
                 </div>
                 <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 shrink-0">
+                  {(active.kind === 'yt' || captionTracks) && (
+                    <button onClick={toggleCaptions} tabIndex={0} data-tv-focusable aria-pressed={captions} aria-label={captions ? 'Turn captions off' : 'Turn captions on'} title="Captions"
+                      className={`h-10 px-3 rounded-full flex items-center gap-1.5 text-sm font-bold border ${captions ? 'bg-amber-400 text-amber-950 border-amber-400' : 'bg-black/60 hover:bg-white/20 text-white border-white/10'}`}>
+                      <Captions className="w-5 h-5" /> {captions ? 'On' : 'Off'}
+                    </button>
+                  )}
                   <button onClick={toggleFullScreen} tabIndex={0} data-tv-focusable aria-label="Toggle full screen" className="w-10 h-10 rounded-full bg-black/60 hover:bg-white/20 text-white flex items-center justify-center border border-white/10 backdrop-blur"><Maximize className="w-5 h-5" /></button>
                   <button onClick={() => setActive(null)} tabIndex={0} data-tv-focusable data-tv-close aria-label="Close player" className="w-10 h-10 rounded-full bg-red-500/85 hover:bg-red-500 text-white flex items-center justify-center backdrop-blur"><X className="w-5 h-5" /></button>
                 </div>
@@ -539,7 +633,9 @@ export default function LiveTVView() {
                 </div>
               ) : active.kind === 'yt' ? (
                 <iframe
-                  src={active.url}
+                  ref={frameRef}
+                  onLoad={onYtLoad}
+                  src={`${active.url}&enablejsapi=1&cc_load_policy=0&iv_load_policy=3&rel=0`}
                   title={active.name}
                   className="absolute inset-0 w-full h-full border-none bg-black"
                   allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen"
@@ -548,7 +644,7 @@ export default function LiveTVView() {
               ) : (
                 <>
                   <div className="absolute inset-0 flex items-center justify-center text-zinc-600 -z-0"><Loader2 className="w-8 h-8 animate-spin" /></div>
-                  <HLSPlayer src={active.url} onOffline={() => setOffline(true)} />
+                  <HLSPlayer src={active.url} onOffline={() => setOffline(true)} captions={captions} onCaptionTracks={setCaptionTracks} />
                 </>
               )}
             </div>

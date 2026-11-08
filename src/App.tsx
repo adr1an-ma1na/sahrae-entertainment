@@ -62,6 +62,7 @@ import Onboarding, { TasteGenre } from './components/Onboarding';
 import EmptyState from './components/EmptyState';
 import Coachmark from './components/Coachmark';
 import { applyEq, loadEq } from './services/eq';
+import SettingsView from './components/SettingsView';
 import { startSync } from './services/cloudSync';
 import Illustration from './components/ui/Illustration';
 import { LuxHeader, LuxGlow, LuxSeg } from './components/ui/Lux';
@@ -512,7 +513,7 @@ export default function App() {
     // `loading` tracks the TMDB catalog fetch. Destinations that don't read TMDB
     // must be listed here or they sit behind a skeleton waiting on data they
     // never use — 'music' was missing, so Sauti stalled on a cold start.
-    const NEEDS_TMDB = !['home', 'radio', 'audio', 'music', 'podcasts', 'connect', 'tv', 'sports', 'continue'].includes(activeTab);
+    const NEEDS_TMDB = !['home', 'radio', 'audio', 'music', 'podcasts', 'connect', 'tv', 'sports', 'continue', 'settings'].includes(activeTab);
     if (loading && NEEDS_TMDB) {
       // A skeleton in the shape of the destination, not a spinner over a blank
       // screen: the layout stays still, and the wait reads as "loading this"
@@ -715,6 +716,8 @@ export default function App() {
         return <PodcastsView onNav={navigate} />;
       case 'connect':
         return <ConnectView onNav={navigate} />;
+      case 'settings':
+        return <SettingsView onPlay={handlePlay} />;
       case 'downloads':
         return <DownloadsView onPlay={handlePlay} />;
       case 'tv':

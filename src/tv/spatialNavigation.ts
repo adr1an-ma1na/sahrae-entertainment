@@ -294,7 +294,8 @@ function glideTo(el: HTMLElement, vertical: boolean, end?: 'top' | 'bottom') {
   const fromLeft = rail ? rail.scrollLeft : 0;
   const fromTop = scroller.scrollTop;
   const reduce = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const ms = reduce ? 0 : heldKey ? GLIDE_HELD_MS : GLIDE_MS;
+  // The sidebar moves at once, as it always did (owner, 2026-11-08).
+  const ms = reduce || el.closest('.tv-full, .tv-rail') ? 0 : heldKey ? GLIDE_HELD_MS : GLIDE_MS;
   const start = performance.now();
   gliding = true;
   const step = (now: number) => {

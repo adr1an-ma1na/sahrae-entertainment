@@ -6,6 +6,7 @@ import { hdArtwork } from '../services/albumArt';
 import { CoverArt } from './ui/CoverArt';
 import { DynamicBackground } from './ui/DynamicBackground';
 import { posterColor, cachedPosterColor } from '../services/posterColor';
+import { isTelevision, tvFocus } from '../tv/spatialNavigation';
 import EqualizerPanel from './EqualizerPanel';
 
 const fmt = (s: number) => {
@@ -272,6 +273,19 @@ export default function MusicPlayer() {
     }
   };
 
+  // TV: Down at the foot of a page lands on the mini player; OK there opens the full one.
+  const miniOpenRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!isTelevision()) return;
+    const onEdge = (e: Event) => {
+      if ((e as CustomEvent<string>).detail !== 'down' || !miniOpenRef.current) return;
+      e.preventDefault();
+      tvFocus(miniOpenRef.current);
+    };
+    window.addEventListener('sahrae:tv-edge', onEdge);
+    return () => window.removeEventListener('sahrae:tv-edge', onEdge);
+  }, []);
+
   // The mini player takes its colour from the cover, as Spotify's does.
   // track.dominantColor is a hash of the id, not the artwork's colour, so the
   // pixels are sampled (Deezer and YouTube art both allow it); until they are,
@@ -392,7 +406,7 @@ export default function MusicPlayer() {
                   <button onClick={toggleShuffle} tabIndex={0} data-tv-focusable className={`w-11 h-11 flex items-center justify-center rounded-full ${shuffle ? 'text-sauti' : 'text-zinc-400 hover:text-white'}`} aria-label="Shuffle"><Shuffle className="w-5 h-5" /></button>
                 )}
                 <button onClick={prev} tabIndex={0} data-tv-focusable className="w-12 h-12 flex items-center justify-center text-white" aria-label="Previous"><SkipBack className="w-7 h-7 fill-current" /></button>
-                <button onClick={toggle} tabIndex={0} data-tv-focusable className="lux-btn w-[72px] h-[72px]" aria-label={isPlaying ? 'Pause' : 'Play'}>
+                <button onClick={toggle} tabIndex={0} data-tv-focusable data-tv-autofocus className="lux-btn w-[72px] h-[72px]" aria-label={isPlaying ? 'Pause' : 'Play'}>
                   {isPlaying ? <Pause className="w-8 h-8 fill-current" /> : <Play className="w-8 h-8 fill-current ml-1" />}
                 </button>
                 <button onClick={next} tabIndex={0} data-tv-focusable className="w-12 h-12 flex items-center justify-center text-white" aria-label="Next"><SkipForward className="w-7 h-7 fill-current" /></button>
@@ -637,6 +651,9 @@ export default function MusicPlayer() {
             <div className="flex items-center gap-3 p-2 pr-3">
               <button 
                 onClick={() => setExpanded(true)} 
+                ref={miniOpenRef}
+                tabIndex={0}
+                data-tv-focusable
                 onTouchStart={handleTouchStart}
                 onTouchEnd={handleTouchEnd}
                 className="flex items-center gap-3 min-w-0 flex-1 text-left cursor-pointer" 
