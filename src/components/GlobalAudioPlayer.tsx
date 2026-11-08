@@ -2,7 +2,7 @@ import { useRadio } from '../hooks/useRadio';
 import { Pause, X, Radio } from 'lucide-react';
 
 export default function GlobalAudioPlayer() {
-  const { playingUrl, playingName, togglePlay, stop } = useRadio();
+  const { playingUrl, playingName, status, togglePlay, stop } = useRadio();
 
   if (!playingUrl) return null;
 
@@ -15,14 +15,14 @@ export default function GlobalAudioPlayer() {
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-white truncate">{playingName || 'Live Audio'}</p>
-            <p className="text-xs text-zinc-400 truncate">Live radio · now playing</p>
+            <p className="text-xs text-zinc-400 truncate">{status === 'tuning' ? 'Tuning in…' : 'Live radio'}</p>
           </div>
           <button
             onClick={() => togglePlay(playingUrl, playingName || '')}
             tabIndex={0}
             data-tv-focusable
             className="btn-sauti w-11 h-11 rounded-full flex items-center justify-center shrink-0"
-            aria-label="Pause radio"
+            aria-label="Stop radio"
           >
             <Pause className="w-5 h-5 fill-current" />
           </button>
@@ -31,7 +31,7 @@ export default function GlobalAudioPlayer() {
             tabIndex={0}
             data-tv-focusable
             className="w-10 h-10 rounded-full flex items-center justify-center text-zinc-400 hover:text-red-400 shrink-0"
-            aria-label="Stop radio"
+            aria-label="Close radio"
           >
             <X className="w-5 h-5" />
           </button>

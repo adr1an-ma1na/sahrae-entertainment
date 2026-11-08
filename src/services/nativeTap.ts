@@ -45,7 +45,7 @@ export function canFrameKick(): boolean {
 }
 
 /** Ask the player in `frame` to play, or to play/pause (the remote's OK). */
-export function tellFrame(frame: HTMLIFrameElement | null | undefined, what: 'play' | 'toggle'): boolean {
+export function tellFrame(frame: HTMLIFrameElement | null | undefined, what: 'play' | 'toggle' | 'wake'): boolean {
   if (!frame?.contentWindow || !canFrameKick()) return false;
   try { frame.contentWindow.postMessage({ sahrae: what }, '*'); return true; } catch { return false; }
 }

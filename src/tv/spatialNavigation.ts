@@ -202,12 +202,35 @@ function hideRing() {
   ringOn = null;
 }
 
+/**
+ * Whether the ring belongs on this control. Never around a picture, and never
+ * on a control the viewer cannot see: a gold box hung over films and matches,
+ * around the picture itself, around buttons that had faded out, and around the
+ * Play button a player had opened on top of (owner, TV, 2026-11-08).
+ */
+function ringBelongsOn(el: HTMLElement, r: DOMRect): boolean {
+  if (el.closest('[data-tv-noring]') || el.matches('iframe, video') || el.querySelector('iframe, video')) return false;
+  if (r.width * r.height >= window.innerWidth * window.innerHeight * 0.6) return false;
+  const st = getComputedStyle(el);
+  if (st.pointerEvents === 'none' || st.visibility === 'hidden') return false;
+  const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  if (cx < 0 || cy < 0 || cx >= window.innerWidth || cy >= window.innerHeight) return true; // Off screen until the scroll lands.
+  const top = document.elementFromPoint(cx, cy);
+  return !(top && top.matches('iframe, video') && !el.contains(top));
+}
+
 /** Put the ring back on its control after something else moved it (content loading, a list growing). */
 function syncRing() {
   if (gliding || !ringOn) return;
   if (!ringOn.isConnected) { hideRing(); return; }
   const r = ringOn.getBoundingClientRect();
   if (r.width <= 1 || r.height <= 1) { hideRing(); return; }
+  if (!ringBelongsOn(ringOn, r)) {
+    // Kept in mind: a bar that fades back in gets its ring back.
+    if (ring) ring.style.opacity = '0';
+    ringBox = null;
+    return;
+  }
   const b = ringBox;
   if (!b || Math.abs(b.x - r.left) > 0.5 || Math.abs(b.y - r.top) > 0.5 || Math.abs(b.w - r.width) > 0.5 || Math.abs(b.h - r.height) > 0.5) {
     paintRing({ x: r.left, y: r.top, w: r.width, h: r.height });
@@ -283,7 +306,7 @@ function glideTo(el: HTMLElement, vertical: boolean, end?: 'top' | 'bottom') {
   else if (r.bottom > view.bottom - padBottom) dy = r.bottom - (view.bottom - padBottom);
   dy = clamp(dy, -scroller.scrollTop, scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop);
 
-  const showRing = !el.hasAttribute('data-tv-noring');
+  const showRing = ringBelongsOn(el, r);
   if (showRing) {
     ringOn = el;
     ringElement().style.borderRadius = getComputedStyle(el).borderTopLeftRadius || '0.75rem';
@@ -506,6 +529,9 @@ export function initSpatialNavigation() {
     scrollPending = true;
     requestAnimationFrame(() => { scrollPending = false; syncRing(); });
   }, { capture: true, passive: true });
+  // A control can fade away or be covered with nothing else changing (the bar
+  // over a film hiding itself), and no event says so.
+  window.setInterval(() => { if (tvMode && ringOn && !gliding && !document.hidden) syncRing(); }, 300);
   // The ring has to live inside the browser's full screen while there is one.
   document.addEventListener('fullscreenchange', () => { if (ring && ringOn) { ringElement(); syncRing(); } });
 
@@ -578,7 +604,16 @@ export function initSpatialNavigation() {
       }
 
       const vertical = dir === 'up' || dir === 'down';
-      const next = pickInDirection(current, dir, focusables);
+      // Rows of choices (the servers strip). Sideways stays on the row; up and
+      // down go to the next row even when it is too short to sit under this chip.
+      let pool = focusables;
+      const stripRow = current.closest('[data-strip-row]');
+      if (stripRow) {
+        const rows = Array.from(stripRow.parentElement?.querySelectorAll(':scope > [data-strip-row]') ?? []);
+        const beside = vertical ? rows[rows.indexOf(stripRow) + (dir === 'down' ? 1 : -1)] : stripRow;
+        if (beside) pool = focusables.filter((f) => beside.contains(f));
+      }
+      const next = pickInDirection(current, dir, pool);
       if (next) {
         e.preventDefault();
         // Up onto the first row: show the top of the page too (the banner, the title).

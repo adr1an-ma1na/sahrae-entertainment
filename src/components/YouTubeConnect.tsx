@@ -29,11 +29,11 @@ type Tab = 'home' | 'foryou' | 'music' | 'videos' | 'artists' | 'playlists';
 
 const TABS: { id: Tab; label: string; icon: typeof Music2; blurb: string }[] = [
   { id: 'home', label: 'Home', icon: Home, blurb: 'The newest from the channels you subscribe to' },
-  { id: 'foryou', label: 'Made for you', icon: Sparkles, blurb: 'Mixes built from what you listen to' },
-  { id: 'music', label: 'YouTube Music', icon: Music2, blurb: 'Songs you have liked' },
-  { id: 'videos', label: 'YouTube', icon: Video, blurb: 'Everything you have liked' },
-  { id: 'artists', label: 'Artists', icon: Users, blurb: 'Channels you subscribe to' },
+  { id: 'artists', label: 'Subscriptions', icon: Users, blurb: 'Channels you subscribe to' },
   { id: 'playlists', label: 'Playlists', icon: ListMusic, blurb: 'Your saved playlists' },
+  { id: 'videos', label: 'Liked videos', icon: Video, blurb: 'Everything you have liked' },
+  { id: 'music', label: 'YouTube Music', icon: Music2, blurb: 'Songs you have liked' },
+  { id: 'foryou', label: 'Made for you', icon: Sparkles, blurb: 'Mixes built from what you listen to' },
 ];
 
 const fmt = (s: number) => {
@@ -496,7 +496,7 @@ export default function YouTubeConnect() {
       ) : /* Artist detail — a channel's recent uploads */
       openArtist ? (
         <div>
-          <button onClick={() => setOpenArtist(null)} className="text-xs font-bold text-sauti mb-4 hover:underline">← All artists</button>
+          <button onClick={() => setOpenArtist(null)} className="text-xs font-bold text-sauti mb-4 hover:underline">← All subscriptions</button>
           <div className="flex items-end gap-4 mb-5">
             <div className="w-24 h-24 rounded-full overflow-hidden bg-zinc-800 shrink-0 relative">
               <CoverArt imageUrl={openArtist.c.thumbnail} rounded="" className="absolute inset-0 w-full h-full" />

@@ -4,6 +4,7 @@ import { Loader2, Subtitles, Languages } from 'lucide-react';
 import { useHls } from '../services/hlsLoader';
 import { pictureRule, heightLabel, type PictureSetting } from '../services/cleanStream';
 import { isTvBuild } from '../tv/tvViewport';
+import { qualityList, type PlayerChoices } from '../services/playerChoices';
 
 /**
  * Sahrae's own film and episode player, used in the Android app (phone,
@@ -26,9 +27,11 @@ export interface CleanPlayerProps {
   onEnded: () => void;
   /** Why it gave up, in a few words. */
   onFail: (why: string) => void;
+  /** The quality and sound this stream offers. */
+  onChoices?: (c: PlayerChoices | null) => void;
 }
 
-export default function CleanPlayer({ src, picture, startAt = 0, onPlaying, onProgress, onEnded, onFail }: CleanPlayerProps) {
+export default function CleanPlayer({ src, picture, startAt = 0, onPlaying, onProgress, onEnded, onFail, onChoices }: CleanPlayerProps) {
   const Hls = useHls();
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<HlsT | null>(null);
@@ -38,6 +41,9 @@ export default function CleanPlayer({ src, picture, startAt = 0, onPlaying, onPr
   const [sub, setSub] = useState(-1);
   const [audio, setAudio] = useState<{ id: number; name: string }[]>([]);
   const [aud, setAud] = useState(0);
+  const [levels, setLevels] = useState<{ id: number; label: string; height: number }[]>([]);
+  const [pinned, setPinned] = useState(-1);
+  const capRef = useRef(-1);
   const cb = useRef({ onPlaying, onProgress, onEnded, onFail });
   cb.current = { onPlaying, onProgress, onEnded, onFail };
 
@@ -63,6 +69,9 @@ export default function CleanPlayer({ src, picture, startAt = 0, onPlaying, onPr
     hlsRef.current = hls;
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
       const rule = pictureRule(hls.levels.map((l) => ({ height: l.height, bitrate: l.bitrate })), picture, isTvBuild());
+      capRef.current = rule.cap;
+      setLevels([{ id: -1, label: 'Auto', height: 0 }, ...hls.levels.map((l, i) => ({ id: i, label: l.name || '', height: l.height }))]);
+      setPinned(rule.start >= 0 && rule.lock ? rule.start : -1);
       if (rule.start >= 0) {
         hls.startLevel = rule.start;
         if (rule.lock) hls.currentLevel = rule.start;
@@ -131,6 +140,26 @@ export default function CleanPlayer({ src, picture, startAt = 0, onPlaying, onPr
     else if (e.key === 'ArrowLeft' || e.key === 'MediaRewind') { e.preventDefault(); v.currentTime = Math.max(0, v.currentTime - 10); }
   };
 
+  // Set at the next segment, so the picture carries on while it changes.
+  const pickQuality = (id: number) => {
+    const h = hlsRef.current; if (!h) return;
+    h.autoLevelCapping = id === -1 ? capRef.current : -1;
+    h.nextLevel = id;
+    setPinned(id);
+  };
+  const pickAudio = (id: number) => {
+    const h = hlsRef.current; if (!h) return;
+    h.audioTrack = id;
+    setAud(id);
+  };
+  const choicesRef = useRef(onChoices);
+  choicesRef.current = onChoices;
+  useEffect(() => {
+    choicesRef.current?.({ quality: qualityList(levels), qualityOn: pinned, audio: audio.map((t) => ({ id: t.id, label: t.name })), audioOn: aud, pickQuality, pickAudio });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [levels, pinned, audio, aud]);
+  useEffect(() => () => choicesRef.current?.(null), []);
+
   const cycleSub = () => {
     const h = hlsRef.current; if (!h) return;
     const next = sub + 1 >= subs.length ? -1 : sub + 1;
@@ -142,7 +171,7 @@ export default function CleanPlayer({ src, picture, startAt = 0, onPlaying, onPr
   };
 
   return (
-    <div className="absolute inset-0 bg-black" tabIndex={0} data-tv-focusable data-tv-seek onKeyDown={onKey}>
+    <div className="absolute inset-0 bg-black" tabIndex={0} data-tv-focusable data-tv-noring data-tv-seek onKeyDown={onKey}>
       <video ref={videoRef} className="w-full h-full bg-black" controls playsInline autoPlay crossOrigin="anonymous" />
       {waiting && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Play, Pause, Radio, Signal, Search } from 'lucide-react';
+import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { Play, Square, Radio, Search, Loader2, SkipBack, SkipForward, Heart, RotateCw, WifiOff } from 'lucide-react';
 import { useRadio } from '../hooks/useRadio';
 import { LuxHeader, LiveMeta } from './ui/Lux';
 import Illustration from './ui/Illustration';
@@ -89,337 +89,211 @@ export const STATIONS = [
   { name: 'Mirchi Top 20', country: 'India', category: 'Bollywood', frequency: 'Digital', url: 'https://drive.uber.radio/uber/bollywoodnow/icecast.audio' },
 ];
 
-// Each station gets a stable, hand-picked duotone so the grid reads as a wall of
-// distinct stations (not identical grey tiles). Literal class strings so Tailwind
-// keeps them. Deterministic by name → the same station is always the same colour.
-const STATION_GRADS = [
-  'from-rose-500 to-orange-600',
-  'from-amber-400 to-orange-700',
-  'from-emerald-500 to-teal-700',
-  'from-sky-500 to-indigo-700',
-  'from-violet-500 to-fuchsia-700',
-  'from-fuchsia-500 to-rose-700',
-  'from-cyan-500 to-blue-700',
-  'from-lime-500 to-emerald-700',
-  'from-indigo-500 to-purple-800',
-  'from-red-500 to-rose-800',
-  'from-teal-400 to-cyan-700',
-  'from-orange-500 to-red-700',
-];
-const hashStr = (s: string) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
-const gradFor = (name: string) => STATION_GRADS[hashStr(name) % STATION_GRADS.length];
-const monogram = (n: string) => n.replace(/[^A-Za-z0-9 ]/g, '').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
-// Concentric "vinyl grooves" texture painted over each station's colour.
-const GROOVES = { backgroundImage: 'repeating-radial-gradient(circle at 50% 46%, rgba(0,0,0,0.16) 0px, rgba(0,0,0,0.16) 1px, transparent 1px, transparent 8px)' } as const;
+type Station = (typeof STATIONS)[number];
 
-// Animated equalizer bars — the universal "this is playing" signal.
-function EqBars({ className = 'h-6', bar = 'bg-white' }: { className?: string; bar?: string }) {
+const FAVS_KEY = 'sahrae.radio.favs.v1';
+const readList = (key: string): string[] => {
+  try { const v = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []; } catch { return []; }
+};
+
+const hashStr = (s: string) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+/** A station's own two colours, the same every time, deep enough for white type. */
+const hueOf = (name: string) => hashStr(name) % 360;
+const artStyle = (name: string): CSSProperties => {
+  const h = hueOf(name);
+  return { background: `linear-gradient(150deg, hsl(${h} 58% 36%), hsl(${(h + 42) % 360} 68% 12%))` };
+};
+const washStyle = (name: string): CSSProperties => {
+  const h = hueOf(name);
+  return { background: `radial-gradient(90% 140% at 12% 0%, hsl(${h} 60% 30%), transparent 65%), linear-gradient(120deg, hsl(${(h + 42) % 360} 55% 11%), #09090b 85%)` };
+};
+
+/** "Kenyan · Kenya" says one thing twice. */
+const where = (s: Station) => (s.category === 'Kenyan' ? s.country : `${s.category} · ${s.country}`);
+const isFm = (s: Station) => /^\d/.test(s.frequency);
+/** Where the needle sits on the FM band. */
+const needleAt = (s: Station) => Math.min(96, Math.max(4, ((parseFloat(s.frequency) - 87.5) / 20.5) * 100));
+
+/** The tuner scale along the foot of a station, with its needle on the real frequency. */
+function Tuner({ station, active }: { station: Station; active?: boolean }) {
   return (
-    <div className={`flex items-end gap-1 ${className}`} aria-hidden>
-      {[3, 5, 2, 4].map((h, i) => (
-        <span key={i} className={`w-1.5 rounded-full ${bar} animate-[eq_0.9s_ease-in-out_infinite]`} style={{ height: `${h * 16}%`, animationDelay: `${i * 0.15}s` }} />
-      ))}
-    </div>
+    <span aria-hidden className="absolute inset-x-3 bottom-3 h-3 block">
+      <span className="absolute inset-0 opacity-40" style={{ backgroundImage: 'repeating-linear-gradient(90deg, #fff 0 1px, transparent 1px 6px)' }} />
+      {isFm(station) && <span className={`absolute top-[-3px] bottom-[-3px] w-[2px] rounded-full ${active ? 'bg-[#fbbf24]' : 'bg-[#fff]'}`} style={{ left: `${needleAt(station)}%` }} />}
+    </span>
   );
 }
 
-export default function AudioHubView({ onNav }: { onNav?: (tab: string) => void }) {
-  const [radioCategory, setRadioCategory] = useState<string>('All');
-  const [selectedCountry, setSelectedCountry] = useState<string>('All');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const { playingUrl, togglePlay } = useRadio();
+function EqBars({ className = 'h-5' }: { className?: string }) {
+  return (
+    <span className={`inline-flex items-end gap-[3px] ${className}`} aria-hidden>
+      {[3, 5, 2, 4].map((h, i) => (
+        <span key={i} className="w-1 rounded-full bg-[#fff] animate-[eq_0.9s_ease-in-out_infinite]" style={{ height: `${h * 18}%`, animationDelay: `${i * 0.15}s` }} />
+      ))}
+    </span>
+  );
+}
 
-  const radioCategories = ['All', ...Array.from(new Set(STATIONS.map((s) => s.category)))].sort();
-  
-  const filteredStations = STATIONS.filter((s) => {
-    const matchesCategory = radioCategory === 'All' || s.category === radioCategory;
-    const matchesCountry = selectedCountry === 'All' || s.country === selectedCountry;
-    const matchesSearch = searchQuery === '' || 
-      s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      s.category.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      s.country.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesCountry && matchesSearch;
+function StationTile({ s, active, tuning, onPlay }: { s: Station; active: boolean; tuning: boolean; onPlay: () => void }) {
+  return (
+    <button onClick={onPlay} tabIndex={0} data-tv-focusable aria-pressed={active} aria-label={`${s.name}, ${s.category}, ${s.country}`}
+      className="group w-full text-left rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400">
+      <span className={`relative block aspect-square rounded-2xl overflow-hidden shadow-[0_14px_30px_-16px_rgba(0,0,0,0.9)] ring-1 transition-transform duration-300 group-hover:-translate-y-1 ${active ? 'ring-2 ring-amber-400' : 'ring-white/10'}`} style={artStyle(s.name)}>
+        <span aria-hidden className="absolute inset-0 bg-gradient-to-b from-white/10 via-transparent to-black/30" />
+        <span className="absolute top-3 left-3 right-3 flex items-center justify-between text-[11px] font-semibold text-[#fff]/80 tabular">
+          <span>{isFm(s) ? `${s.frequency} FM` : 'Online'}</span>
+          {active && (tuning ? <Loader2 className="w-4 h-4 animate-spin text-[#fff]" /> : <EqBars className="h-4" />)}
+        </span>
+        <span className="absolute inset-x-3 top-1/2 -translate-y-1/2 font-display font-black text-[#fff] text-[1.35rem] md:text-2xl leading-[1.08] tracking-tight line-clamp-3">{s.name}</span>
+        <Tuner station={s} active={active} />
+        {!active && (
+          <span aria-hidden className="absolute right-2.5 bottom-6 w-10 h-10 rounded-full bg-[#fff] text-[#111] grid place-items-center opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 group-focus-visible:opacity-100 group-focus-visible:translate-y-0 transition-all duration-200">
+            <Play className="w-4 h-4 fill-current ml-0.5" />
+          </span>
+        )}
+      </span>
+      <span className="block mt-2.5 px-0.5 text-xs text-zinc-400 truncate">{where(s)}</span>
+    </button>
+  );
+}
+
+function Rail({ title, list, render }: { title: string; list: Station[]; render: (s: Station) => ReactNode }) {
+  if (!list.length) return null;
+  return (
+    <section className="mb-9">
+      <h2 className="lux-h text-xl md:text-2xl mb-3.5">{title}</h2>
+      <div className="flex gap-3 md:gap-4 overflow-x-auto scrollbar-hide py-1 -mx-1 px-1">
+        {list.map((s) => <div key={s.name} className="flex-none w-[9.5rem] md:w-44">{render(s)}</div>)}
+      </div>
+    </section>
+  );
+}
+
+export default function AudioHubView({ onNav: _onNav }: { onNav?: (tab: string) => void }) {
+  const [genre, setGenre] = useState('All');
+  const [region, setRegion] = useState('All');
+  const [query, setQuery] = useState('');
+  const { playingUrl, failedUrl, status, lastUrl, recentUrls, togglePlay } = useRadio();
+  const [favs, setFavs] = useState<string[]>(() => readList(FAVS_KEY));
+
+  const toggleFav = (url: string) => setFavs((cur) => {
+    const next = cur.includes(url) ? cur.filter((u) => u !== url) : [url, ...cur];
+    try { localStorage.setItem(FAVS_KEY, JSON.stringify(next)); } catch { /* storage full */ }
+    return next;
   });
 
-  const nowPlaying = STATIONS.find((s) => s.url === playingUrl) || null;
+  const genres = useMemo(() => ['All', ...Array.from(new Set(STATIONS.map((s) => s.category))).sort()], []);
+  const q = query.trim().toLowerCase();
+  const filtering = !!q || genre !== 'All' || region !== 'All';
+  const filtered = STATIONS.filter((s) => (genre === 'All' || s.category === genre)
+    && (region === 'All' || s.country === region)
+    && (!q || `${s.name} ${s.category} ${s.country}`.toLowerCase().includes(q)));
+
+  const byUrl = (u: string | null) => STATIONS.find((s) => s.url === u);
+  // The stage always has a station on it: playing, just failed, last heard, or the first.
+  const stage = byUrl(playingUrl) || byUrl(failedUrl) || byUrl(lastUrl) || STATIONS[0];
+  const onAir = playingUrl === stage.url;
+  const tuning = onAir && status === 'tuning';
+  const failed = failedUrl === stage.url && !onAir;
+  const list = filtering && filtered.length ? filtered : STATIONS;
+  const step = (by: number) => {
+    const at = list.findIndex((s) => s.url === stage.url);
+    const next = list[(at + by + list.length) % list.length];
+    togglePlay(next.url, next.name);
+  };
+
+  const tile = (s: Station) => (
+    <StationTile s={s} active={playingUrl === s.url} tuning={playingUrl === s.url && status === 'tuning'} onPlay={() => togglePlay(s.url, s.name)} />
+  );
+  const yours = [...favs, ...recentUrls.filter((u) => !favs.includes(u))].map(byUrl).filter(Boolean) as Station[];
+  const AFRICA = ['Nigeria', 'South Africa', 'Tanzania', 'Uganda'];
+  const NEWS = ['News', 'Talk'];
+  const CHILL = ['Lofi', 'Lounge', 'Chillout', 'Jazz', 'Classical'];
+
+  const round = 'rounded-full grid place-items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 transition-colors';
 
   return (
     <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-40 relative">
-      {/* Aurora glow behind the header — warms to the now-playing station's colour */}
-      <div aria-hidden className="pointer-events-none absolute -top-10 left-0 right-0 h-64 -z-10 opacity-70"
-        style={{ background: 'radial-gradient(60% 70% at 12% 0%, rgba(251,191,36,0.22), transparent 70%), radial-gradient(50% 60% at 80% 10%, rgba(251,191,36,0.12), transparent 72%)', filter: 'blur(8px)' }} />
-      {/* Header */}
       <LuxHeader kicker={<><Radio className="w-3.5 h-3.5" /> Sahrae · Listen</>} title="Radio"
         meta={<><LiveMeta>{STATIONS.length} stations on air</LiveMeta><span>News, talk and music, live</span></>} />
 
-      {/* Music and Podcasts render this same switcher, so all three Listen
-          destinations sit under one control instead of Radio being a dead end. */}
+      <div className="animate-in fade-in duration-500">
+        {/* The stage */}
+        <section className="dark relative overflow-hidden rounded-3xl ring-1 ring-white/10 mb-10" style={washStyle(stage.name)} aria-label="Now on air">
+          <div className="relative flex flex-col sm:flex-row sm:items-center gap-5 md:gap-9 p-5 md:p-9">
+            <div className="relative w-32 h-32 md:w-52 md:h-52 shrink-0 rounded-3xl overflow-hidden ring-1 ring-white/15 shadow-[0_24px_50px_-20px_rgba(0,0,0,0.9)]" style={artStyle(stage.name)}>
+              <span aria-hidden className="absolute inset-0 bg-gradient-to-b from-white/10 via-transparent to-black/30" />
+              <span className="absolute top-3 left-3 text-xs font-semibold text-[#fff]/80 tabular">{isFm(stage) ? `${stage.frequency} FM` : 'Online'}</span>
+              <span className="absolute inset-x-3 top-1/2 -translate-y-1/2 font-display font-black text-[#fff] text-2xl md:text-4xl leading-[1.05] tracking-tight line-clamp-3">{stage.name}</span>
+              <Tuner station={stage} active={onAir} />
+            </div>
 
-      <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-        
-        {/* Live Radio Studio Desk (Analog Console + Active EQ + Controls) */}
-        {nowPlaying && (
-          <div className="lux-spot mb-10 p-6 md:p-8 animate-in fade-in duration-500">
-            {/* Colored atmospheric glow corresponding to station gradient */}
-            <div className={`absolute -right-24 -top-24 w-80 h-80 rounded-full bg-gradient-to-br ${gradFor(nowPlaying.name)} blur-3xl opacity-20 pointer-events-none`} />
-            
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center relative z-10">
-              
-              {/* Vinyl Record Player Column */}
-              <div className="md:col-span-4 flex flex-col items-center justify-center text-center">
-                <div className="relative group/vinyl">
-                  {/* Outer Record Plate */}
-                  <div className="absolute inset-0 bg-black/60 rounded-full blur-xl group-hover/vinyl:scale-105 transition-transform duration-500" />
-                  
-                  <div className={`w-44 h-44 md:w-52 md:h-52 rounded-full bg-zinc-900 border-4 border-zinc-850 flex items-center justify-center shadow-2xl relative overflow-hidden transition-transform duration-500 hover:scale-105 ${playingUrl ? 'animate-[vinyl-spin_8s_linear_infinite]' : ''}`}>
-                    {/* Vinyl grooves radial pattern */}
-                    <div aria-hidden className="absolute inset-0 opacity-40" style={GROOVES} />
-                    <div aria-hidden className="absolute inset-0 bg-radial-gradient from-transparent via-black/10 to-black/60" />
-                    
-                    {/* Center Label (The Station Core) */}
-                    <div className={`w-16 h-16 md:w-20 md:h-20 rounded-full bg-gradient-to-br ${gradFor(nowPlaying.name)} flex items-center justify-center border-4 border-zinc-950 relative shadow-inner`}>
-                      <span className="font-display font-black text-white text-xl md:text-2xl drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)] select-none">
-                        {monogram(nowPlaying.name)}
-                      </span>
-                      {/* Spindle hole */}
-                      <div className="absolute w-2.5 h-2.5 rounded-full bg-zinc-950 shadow-[inset_0_1px_2px_rgba(0,0,0,0.8)]" />
-                    </div>
-                  </div>
-                  
-                  {/* Stylus / Tonearm overlay indicator */}
-                  <div className={`absolute top-0 right-4 w-12 h-20 origin-top-right transition-transform duration-700 pointer-events-none ${playingUrl ? 'rotate-12' : '-rotate-12'}`} style={{ transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)' }}>
-                    <svg viewBox="0 0 40 80" className="w-full h-full text-zinc-400 drop-shadow-[0_4px_8px_rgba(0,0,0,0.5)]">
-                      {/* Stylus arm lines */}
-                      <path d="M 35 5 L 35 45 L 20 65 L 12 60" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                      {/* Cartridge head */}
-                      <rect x="5" y="55" width="10" height="14" rx="2" style={{ fill: 'var(--acc-500)' }} transform="rotate(-15, 10, 62)" />
-                    </svg>
-                  </div>
-                </div>
-                
-                {/* On-air active badge */}
-                <div className="mt-4 flex items-center gap-2 px-3 py-1 bg-red-500/10 border border-red-500/20 rounded-full text-red-500 text-xs font-bold uppercase tracking-wider">
-                  <Signal className="w-3.5 h-3.5" />
-                  On Air
-                </div>
-              </div>
-              
-              {/* Station Meta & Signal Dashboard Column */}
-              <div className="md:col-span-5 flex flex-col gap-4">
-                <div>
-                  <span className="lux-kicker mb-2">Live broadcast · {nowPlaying.country}</span>
-                  <h3 className="lux-title text-3xl md:text-5xl mb-2 truncate pb-1">{nowPlaying.name}</h3>
-                  <p className="text-sm text-zinc-400 font-medium">{nowPlaying.category} Stream · {nowPlaying.frequency}</p>
-                </div>
-                
-                {/* Animated Digital Signal Analyzer */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
-                    <span>On air</span>
-                    <span className="text-amber-500">{playingUrl ? 'Live' : 'Paused'}</span>
-                  </div>
-                  
-                  {/* Spectrum bars inside desk */}
-                  <div className="flex items-end gap-1.5 h-16 w-full px-3 py-2 bg-zinc-950 rounded-xl border border-white/5 overflow-hidden relative">
-                    {Array.from({ length: 18 }).map((_, i) => {
-                      const h = [6, 10, 4, 8, 12, 7, 3, 9, 11, 5, 8, 4, 10, 6, 9, 3, 7, 5][i];
-                      const delay = (i * 0.05).toFixed(2);
-                      const duration = (0.5 + Math.random() * 0.4).toFixed(2);
-                      return (
-                        <div key={i} className="flex-1 flex flex-col justify-end h-full gap-0.5">
-                          {/* Multi-colored LED columns */}
-                          {Array.from({ length: 4 }).map((_, j) => {
-                            const activeColor = j === 3 ? 'bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.5)]' : j === 2 ? 'bg-amber-400' : 'bg-emerald-500';
-                            const activeClass = playingUrl ? 'animate-[eq_1s_ease-in-out_infinite_alternate]' : '';
-                            return (
-                              <div
-                                key={j}
-                                style={{
-                                  height: `${h * 18}%`,
-                                  animationDelay: `${delay}s`,
-                                  animationDuration: `${duration}s`,
-                                }}
-                                className={`w-full h-1.5 rounded-sm transition-colors ${playingUrl ? activeColor : 'bg-zinc-800'} ${activeClass}`}
-                              />
-                            );
-                          })}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  
-                  {/* Audio Console Signal Stats */}
-                  <div className="grid grid-cols-3 gap-2 text-center text-[10px]">
-                    {[['Station', nowPlaying.frequency], ['Genre', nowPlaying.category], ['From', nowPlaying.country]].map(([k, v]) => (
-                      <div key={k} className="rounded-xl p-2 bg-white/[0.04] ring-1 ring-white/10">
-                        <span className="text-zinc-500 block uppercase tracking-widest font-bold">{k}</span>
-                        <span className="text-zinc-200 font-bold text-xs truncate block">{v}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              
-              {/* Equalizer Console Presets & Controls Column */}
-              <div className="md:col-span-3 flex flex-col justify-between h-full gap-4 md:border-l md:border-white/5 md:pl-6">
-                <p className="text-xs text-zinc-400 leading-relaxed">Streaming live from {nowPlaying.name}. It keeps playing while you browse the rest of Sahrae.</p>
-                
-                {/* Main Console Play/Pause trigger */}
-                <button
-                  onClick={() => togglePlay(nowPlaying.url, nowPlaying.name)}
-                  className="w-full lux-btn py-3.5 px-4 text-sm"
-                >
-                  {playingUrl ? (
-                    <>
-                      <Pause className="w-4 h-4 fill-current" />
-                      Stop Broadcast
-                    </>
-                  ) : (
-                    <>
-                      <Play className="w-4 h-4 fill-current" />
-                      Tune Broadcast
-                    </>
-                  )}
+            <div className="min-w-0 flex-1">
+              <p role="status" aria-live="polite" className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-[#fff]/85 min-h-5">
+                {failed ? <><WifiOff className="w-4 h-4 text-red-400" /> Couldn't reach this station</>
+                  : tuning ? <><Loader2 className="w-4 h-4 animate-spin" /> Tuning in</>
+                  : onAir ? <><span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /> On air</>
+                  : <>Ready to tune</>}
+              </p>
+              <h2 className="font-display font-black text-[#fff] text-3xl md:text-6xl leading-[1.05] tracking-tight mt-2 truncate pb-1">{stage.name}</h2>
+              <p className="text-sm md:text-base text-[#fff]/65 mt-1 truncate">{where(stage)}{isFm(stage) ? ` · ${stage.frequency} FM` : ''}</p>
+
+              <div className="flex items-center gap-2.5 md:gap-3 mt-5">
+                <button onClick={() => step(-1)} tabIndex={0} data-tv-focusable aria-label="Previous station" className={`w-11 h-11 md:w-12 md:h-12 bg-white/10 hover:bg-white/20 text-[#fff] ${round}`}><SkipBack className="w-5 h-5 fill-current" /></button>
+                <button onClick={() => togglePlay(stage.url, stage.name)} tabIndex={0} data-tv-focusable aria-label={onAir ? 'Stop' : failed ? 'Try again' : 'Play'}
+                  className={`w-14 h-14 md:w-16 md:h-16 bg-[#fff] hover:bg-[#f1f1f1] text-[#111] ${round}`}>
+                  {tuning ? <Loader2 className="w-6 h-6 animate-spin" /> : onAir ? <Square className="w-5 h-5 fill-current" /> : failed ? <RotateCw className="w-6 h-6" /> : <Play className="w-6 h-6 fill-current ml-0.5" />}
                 </button>
+                <button onClick={() => step(1)} tabIndex={0} data-tv-focusable aria-label="Next station" className={`w-11 h-11 md:w-12 md:h-12 bg-white/10 hover:bg-white/20 text-[#fff] ${round}`}><SkipForward className="w-5 h-5 fill-current" /></button>
+                <button onClick={() => toggleFav(stage.url)} tabIndex={0} data-tv-focusable aria-pressed={favs.includes(stage.url)} aria-label={favs.includes(stage.url) ? 'Remove from your stations' : 'Add to your stations'}
+                  className={`w-11 h-11 md:w-12 md:h-12 bg-white/10 hover:bg-white/20 ${favs.includes(stage.url) ? 'text-[#fbbf24]' : 'text-[#fff]'} ${round}`}><Heart className={`w-5 h-5 ${favs.includes(stage.url) ? 'fill-current' : ''}`} /></button>
+                {onAir && !tuning && <span className="ml-2 hidden sm:inline-flex"><EqBars className="h-7" /></span>}
               </div>
-              
             </div>
           </div>
+        </section>
+
+        {/* Find a station */}
+        <div className="relative max-w-xl mb-4">
+          <Search className="absolute z-10 left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+          <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search stations, styles or countries"
+            aria-label="Search stations" className="w-full lux-field text-sm pl-10 pr-14 py-3" />
+          {query && <button onClick={() => setQuery('')} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white text-xs font-bold">Clear</button>}
+        </div>
+        <div className="flex overflow-x-auto gap-2 py-1 mb-1 scrollbar-hide">
+          {COUNTRIES.map((c) => (
+            <button key={c.code} onClick={() => setRegion(c.code)} tabIndex={0} data-tv-focusable aria-pressed={region === c.code} className="lux-chip shrink-0">
+              <span className="text-sm leading-none">{c.flag}</span>{c.name}
+            </button>
+          ))}
+        </div>
+        <div className="flex overflow-x-auto gap-2 py-1 mb-8 scrollbar-hide">
+          {genres.map((g) => <button key={g} onClick={() => setGenre(g)} tabIndex={0} data-tv-focusable aria-pressed={genre === g} className="lux-chip shrink-0">{g}</button>)}
+        </div>
+
+        {!filtering && (
+          <>
+            <Rail title="Your stations" list={yours} render={tile} />
+            <Rail title="Kenya" list={STATIONS.filter((s) => s.country === 'Kenya')} render={tile} />
+            <Rail title="Across Africa" list={STATIONS.filter((s) => AFRICA.includes(s.country))} render={tile} />
+            <Rail title="News and talk" list={STATIONS.filter((s) => NEWS.includes(s.category))} render={tile} />
+            <Rail title="Slow it down" list={STATIONS.filter((s) => CHILL.includes(s.category))} render={tile} />
+          </>
         )}
 
-        {/* Search & Filter bar for stations */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute z-10 left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search radio stations, categories or countries..."
-              className="w-full lux-field text-sm pl-10 pr-14 py-3"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white text-xs font-bold"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-          
-          <span className="text-xs text-zinc-500 font-medium self-end md:self-auto">
-            Showing {filteredStations.length} of {STATIONS.length} stations
-          </span>
-        </div>
-
-        {/* Region / Country selector with flags */}
-        <div className="mb-6">
-          <div className="flex items-center gap-2 mb-2 px-1 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-            <span>Filter by Region</span>
-          </div>
-          <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-hide">
-            {COUNTRIES.map((c) => {
-              const active = selectedCountry === c.code;
-              return (
-                <button
-                  key={c.code}
-                  onClick={() => setSelectedCountry(c.code)}
-                  aria-pressed={active}
-                  className="lux-chip"
-                >
-                  <span className="text-sm leading-none">{c.flag}</span>
-                  {c.name}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Category pills */}
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-2 px-1 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-            <span>Filter by Style / Genre</span>
-          </div>
-          <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-hide">
-            {radioCategories.map((category) => {
-              const active = radioCategory === category;
-              return (
-                <button
-                  key={category}
-                  onClick={() => setRadioCategory(category)}
-                  aria-pressed={active}
-                  className="lux-chip"
-                >
-                  {category}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {filteredStations.length > 0 ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
-            {filteredStations.map((station) => {
-              const active = playingUrl === station.url;
-              const grad = gradFor(station.name);
-              return (
-                <div
-                  key={station.name}
-                  tabIndex={0}
-                  data-tv-focusable
-                  role="button"
-                  aria-pressed={active}
-                  className={`lux-card p-3 group flex flex-col cursor-pointer focus:outline-none ${active ? 'ring-2 ring-amber-400/70' : ''}`}
-                  onClick={() => togglePlay(station.url, station.name)}
-                >
-                  {/* Station "cover" — its signature colour + vinyl grooves + monogram */}
-                  <div className={`w-full aspect-square rounded-xl mb-3 flex items-center justify-center relative overflow-hidden bg-gradient-to-br ${grad} shadow-lg`}>
-                    <div aria-hidden className="absolute inset-0 opacity-30" style={GROOVES} />
-                    <div aria-hidden className="absolute inset-0 bg-gradient-to-br from-white/25 via-transparent to-black/25" />
-                    {/* Center label: equalizer when playing, else the monogram */}
-                    {active ? (
-                      <EqBars className="h-8 relative z-10" bar="bg-white" />
-                    ) : (
-                      <span className="relative z-10 font-display font-black text-white/95 text-4xl md:text-5xl tracking-tight drop-shadow-[0_2px_6px_rgba(0,0,0,0.35)] group-hover:scale-110 transition-transform duration-500">{monogram(station.name)}</span>
-                    )}
-
-                    {/* Live / on-air chip */}
-                    <div className={`absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-black/40 backdrop-blur-sm transition-opacity ${active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                      <Signal className="w-3 h-3 text-white" />
-                      <span className="text-[9px] font-bold uppercase tracking-wide text-white">Live</span>
-                    </div>
-
-                    {/* Play / pause */}
-                    <div className={`absolute bottom-2 right-2 w-10 h-10 rounded-full btn-sauti flex items-center justify-center shadow-xl transition-all duration-300 ${active ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 group-hover:opacity-100 group-hover:translate-y-0'}`}>
-                      {active ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
-                    </div>
-                  </div>
-
-                  <div className="relative z-10 px-0.5">
-                    <h3 className={`text-base font-bold mb-1 truncate ${active ? 'text-sauti' : 'text-white'}`}>{station.name}</h3>
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-zinc-400 text-xs font-medium truncate">{station.category} · {station.country}</p>
-                      <span className="bg-white/10 text-zinc-200 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold shrink-0 tabular">{station.frequency}</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+        {filtered.length > 0 ? (
+          <section>
+            <h2 className="lux-h text-xl md:text-2xl mb-3.5">{filtering ? `${filtered.length} ${filtered.length === 1 ? 'station' : 'stations'}` : 'Every station'}</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-4 gap-y-6">
+              {filtered.map((s) => <div key={s.name}>{tile(s)}</div>)}
+            </div>
+          </section>
         ) : (
           <div className="text-center py-16 lux-card">
             <Illustration name="radio" className="w-44 md:w-52 h-auto mx-auto mb-4" />
-            <h4 className="text-lg font-bold text-white mb-1">No stations found</h4>
-            <p className="text-sm text-zinc-500 max-w-md mx-auto px-4">
-              We couldn't find any radio stations matching your active filters. Try searching for something else or clearing your search.
-            </p>
-            <button
-              onClick={() => { setSearchQuery(''); setSelectedCountry('All'); setRadioCategory('All'); }}
-              className="mt-4 px-5 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-full text-xs font-bold transition-colors"
-            >
-              Reset Filters
-            </button>
+            <h3 className="text-lg font-bold text-white mb-1">No stations found</h3>
+            <p className="text-sm text-zinc-500 max-w-md mx-auto px-4">Nothing matches those filters. Try another word or clear them.</p>
+            <button onClick={() => { setQuery(''); setRegion('All'); setGenre('All'); }} tabIndex={0} data-tv-focusable className="lux-chip mt-4">Clear filters</button>
           </div>
         )}
       </div>

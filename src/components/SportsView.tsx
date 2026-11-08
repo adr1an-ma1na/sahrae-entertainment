@@ -17,6 +17,9 @@ import { suppressPopups } from '../services/popupGuard';
 import { lockLandscape, unlockOrientation } from '../services/fullscreen';
 import { tapCenterOf, canTap, canFrameKick, tellFrame, isFramePlaying, isFrameStalled } from '../services/nativeTap';
 import { TvServerStrip, useTvServerStrip } from './ui/TvServerStrip';
+import { useFrameChoices } from '../hooks/useFrameChoices';
+import { isDataSaver } from '../services/dataSaver';
+import { isLiteDevice } from '../services/deviceTier';
 import TvPointer from './TvPointer';
 import { isTelevision, tvFocus } from '../tv/spatialNavigation';
 import { competitionOf, isTeamSport, knownBadge, findBadge } from '../services/sportBadges';
@@ -1326,6 +1329,26 @@ export default function SportsView() {
   const sportFrameRef = useRef<HTMLDivElement>(null);
   const [sportPointer, setSportPointer] = useState(false);
 
+  // The next feed, opened out of sight and silent, so switching to it only has
+  // to show it: the 2 seconds of black between feeds lost viewers the action
+  // (owner, 2026-11-08). The Android apps only, where the helper in the frame
+  // can keep it quiet. One at a time, and not on Data Saver. A TV opens the one
+  // the remote is resting on; a phone or laptop the next in the list, once the
+  // match is running.
+  const [warmUrl, setWarmUrl] = useState<string | null>(null);
+  const canWarm = () => canFrameKick() && !isDataSaver();
+  const warmable = (i: number): string | null => {
+    const p = playingRef.current;
+    const s = p?.sources[i];
+    return p && s?.url && s.kind === 'server' && !s.url.includes('.m3u8') && s.status !== 'offline' && s.url !== p.sources[p.idx]?.url ? s.url : null;
+  };
+  const stripWarmTimer = useRef(0);
+  const warmServer = (i: number) => {
+    window.clearTimeout(stripWarmTimer.current);
+    stripWarmTimer.current = window.setTimeout(() => { if (canWarm()) setWarmUrl(warmable(i)); }, 120);
+  };
+  const sportPicture = () => sportFrameRef.current?.querySelector<HTMLIFrameElement>('iframe[data-on]');
+
   // Once a feed starts it goes full screen, as a film does: once per feed, so
   // leaving full screen is not undone. A real full screen where the browser
   // allows it (right after the tap that chose the feed), else the player fills
@@ -1352,13 +1375,17 @@ export default function SportsView() {
 
   useEffect(() => {
     setSportPointer(false);
+    setWarmUrl((w) => (!activeUrl || w === activeUrl ? null : w));
     if (!activeUrl || !isEmbedUrl) return;
-    const frame = () => sportFrameRef.current?.querySelector('iframe');
+    const frame = sportPicture;
+    // Already waiting out of sight: sound on, and on with the match.
+    tellFrame(frame(), 'wake');
     // The website cannot see inside the feed's page: it goes full screen once
     // the page has loaded (the iframe's onLoad, below), or after 6 s if that was missed.
     if (!canTap()) { const t = window.setTimeout(() => goFullRef.current(), 6000); return () => clearTimeout(t); }
     const pointerOut = () => document.documentElement.classList.contains('tv-pointer');
     let playing = false;
+    let warmNext = 0;
     // The player helper inside the feed's page (nativeTap.canFrameKick) starts it
     // itself and says when the picture really moves; Sahrae nudges it too. Only
     // if nothing moves after 15 s does a tap try the play button, once.
@@ -1371,15 +1398,26 @@ export default function SportsView() {
       };
       const onMsg = (e: MessageEvent) => {
         if (isFrameStalled(e, frame())) { giveWay(); return; }
-        if (isFramePlaying(e, frame()) && !playing) { playing = true; goFullRef.current(); }
+        if (isFramePlaying(e, frame()) && !playing) {
+          playing = true;
+          goFullRef.current();
+          if (!isTelevision() && !isLiteDevice() && canWarm()) warmNext = window.setTimeout(() => {
+            const p = playingRef.current;
+            if (!p) return;
+            for (let n = 1; n < p.sources.length; n++) {
+              const u = warmable((p.idx + n) % p.sources.length);
+              if (u) { setWarmUrl(u); return; }
+            }
+          }, 8000);
+        }
       };
       window.addEventListener('message', onMsg);
       const timers = [
-        ...[1500, 5000, 9000].map((ms) => setTimeout(() => { if (!playing) tellFrame(frame(), 'play'); }, ms)),
+        ...[0, 250, 700, 1500, 5000, 9000].map((ms) => setTimeout(() => { if (!playing) tellFrame(frame(), 'play'); }, ms)),
         setTimeout(() => { const el = sportFrameRef.current; if (!playing && el && !pointerOut()) tapCenterOf(el, isTelevision() ? el : null); }, 15000),
         setTimeout(() => { if (!playing) giveWay(); }, NO_PICTURE_MS),
       ];
-      return () => { window.removeEventListener('message', onMsg); timers.forEach(clearTimeout); };
+      return () => { window.removeEventListener('message', onMsg); timers.forEach(clearTimeout); window.clearTimeout(warmNext); };
     }
     // An older WebView, no helper: taps, while the app has seen no video.
     // ('sahrae:embed-media' also fires for a player that only preloads, so
@@ -1397,6 +1435,30 @@ export default function SportsView() {
 
   // A TV: Up at the top of the picture brings the servers.
   const strip = useTvServerStrip(!!playing && !!activeUrl && isTelevision(), sportFrameRef);
+  useEffect(() => {
+    if (strip.open || !isTelevision()) return;
+    window.clearTimeout(stripWarmTimer.current);
+    setWarmUrl(null);
+  }, [strip.open]);
+  const sportChoices = useFrameChoices(sportPicture, isEmbedUrl && activeUrl ? activeUrl : null);
+
+  // Every feed's address is looked up and connected to as soon as the match
+  // opens: a slow first connection is most of a cold switch on a mobile line.
+  const feedOrigins = (playing?.sources || []).flatMap((s) => {
+    try { return s.url && s.kind === 'server' ? [new URL(s.url).origin] : []; } catch { return []; }
+  }).filter((o, i, all) => all.indexOf(o) === i).slice(0, 8).join(' ');
+  useEffect(() => {
+    if (!feedOrigins) return;
+    const links = feedOrigins.split(' ').map((href) => {
+      const l = document.createElement('link');
+      l.rel = 'preconnect';
+      l.href = href;
+      l.crossOrigin = 'anonymous';
+      document.head.appendChild(l);
+      return l;
+    });
+    return () => links.forEach((l) => l.remove());
+  }, [feedOrigins]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('sports-open', !!playing);
@@ -1449,6 +1511,8 @@ export default function SportsView() {
                 <TvServerStrip
                   servers={playing.sources.map((s) => ({ id: s.id, label: s.label, detail: s.quality || undefined, down: s.status === 'offline' }))}
                   active={playing.idx}
+                  choices={sportChoices}
+                  onFocusServer={warmServer}
                   onPick={(i) => { selectSource(i); strip.close(); }}>
                   {isEmbedUrl && canTap() && (
                     <button type="button" onClick={() => { strip.close(); setSportPointer(true); }} tabIndex={0} data-tv-focusable
@@ -1466,21 +1530,28 @@ export default function SportsView() {
               ) : activeUrl && isEmbedUrl ? (
                 // On a TV, OK here presses the stream site's own play button
                 // (services/nativeTap.ts): its player is in a frame a remote cannot enter.
-                <div ref={sportFrameRef} className="absolute inset-0 w-full h-full" data-tv-noring={isFull || undefined}
+                <div ref={sportFrameRef} className="absolute inset-0 w-full h-full" data-tv-noring
                   {...(canTap() ? {
                     tabIndex: 0, 'data-tv-focusable': true, 'data-tv-autofocus': true, 'aria-label': 'Play the match',
                     // OK: play or pause through the player helper; a tap where there is none.
-                    onClick: (e: React.MouseEvent<HTMLDivElement>) => { if (e.detail !== 0) return; if (!tellFrame(e.currentTarget.querySelector('iframe'), 'toggle')) tapCenterOf(e.currentTarget, e.currentTarget); },
+                    onClick: (e: React.MouseEvent<HTMLDivElement>) => { if (e.detail !== 0) return; if (!tellFrame(e.currentTarget.querySelector<HTMLIFrameElement>('iframe[data-on]'), 'toggle')) tapCenterOf(e.currentTarget, e.currentTarget); },
                   } : {})}>
+                  {/* In list order, so the frames never change places: moving an
+                      iframe reloads it. The waiting one becomes the picture in place. */}
+                  {playing.sources.filter((s, i, all) => (s.url === activeUrl || s.url === warmUrl) && all.findIndex((x) => x.url === s.url) === i).map((s) => { const on = s.url === activeUrl; return (
                   <iframe
                     // Re-mount when the shield flips: sandbox only applies at
                     // frame creation, so toggling has to rebuild the iframe.
-                    key={`sports-${shieldOn ? 'shield' : 'open'}`}
-                    src={activeUrl}
+                    key={`sports-${shieldOn ? 'shield' : 'open'}-${s.url}`}
+                    src={s.url}
+                    name={on ? undefined : 'sahrae-warm'}
+                    data-on={on || undefined}
+                    tabIndex={on ? undefined : -1}
+                    aria-hidden={on ? undefined : true}
                     // The website: full screen once the feed's page has loaded. (A
                     // listener added after rendering missed a page that loaded fast.)
-                    onLoad={() => { if (!canTap()) window.setTimeout(() => goFullRef.current(), 1200); }}
-                    className="absolute inset-0 w-full h-full border-0 bg-black"
+                    onLoad={() => { if (on && !canTap()) window.setTimeout(() => goFullRef.current(), 1200); }}
+                    className={`absolute inset-0 w-full h-full border-0 bg-black ${on ? 'z-[1]' : 'opacity-0 pointer-events-none'}`}
                     allow="autoplay; encrypted-media; fullscreen"
                     allowFullScreen
                     referrerPolicy="no-referrer-when-downgrade"
@@ -1492,7 +1563,7 @@ export default function SportsView() {
                     // Android this is undefined: the native shell blocks popups
                     // already, without breaking any provider.
                     sandbox={activeSrc?.kind === 'server' ? undefined : playerSandbox(shieldOn, activeUrl)}
-                  />
+                  />); })}
                   {!chromeHidden && !strip.open && <span aria-hidden className="tv-ok-hint pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 z-20 items-center gap-2 px-4 py-2 rounded-full bg-black/75 text-white text-sm font-bold">Press OK to play</span>}
                   {sportPointer && <TvPointer area={sportFrameRef.current} onExit={() => setSportPointer(false)} />}
                   {isSandboxed && (

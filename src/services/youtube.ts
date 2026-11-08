@@ -410,8 +410,8 @@ class YoutubeService {
    * Sorted alphabetically rather than by subscription date: this is a library to
    * find something in, not a feed.
    */
-  async fetchSubscriptions(limit = 200): Promise<YoutubeChannel[]> {
-    const items = await this.paged('youtube/v3/subscriptions?part=snippet&mine=true&order=alphabetical', true, limit);
+  async fetchSubscriptions(limit = 200, order: 'alphabetical' | 'unread' = 'alphabetical'): Promise<YoutubeChannel[]> {
+    const items = await this.paged(`youtube/v3/subscriptions?part=snippet&mine=true&order=${order}`, true, limit);
     const out: YoutubeChannel[] = [];
     const seen = new Set<string>();
     for (const it of items) {

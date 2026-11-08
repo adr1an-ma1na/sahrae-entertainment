@@ -1,4 +1,4 @@
-import { ChevronDown, X, ExternalLink, AlertCircle, Play, RefreshCw, Plus, Check, Maximize, Minimize, MousePointer2, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle, Gauge, Star } from 'lucide-react';
+import { Volume2, ChevronDown, X, ExternalLink, AlertCircle, Play, RefreshCw, Plus, Check, Maximize, Minimize, MousePointer2, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle, Gauge, Star } from 'lucide-react';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { fetchMediaDetails, MediaDetails, getImageUrl, fetchSimilar, MediaItem, SeasonDetails, fetchSeasonDetails, certificationOf } from '../services/tmdb';
@@ -16,9 +16,11 @@ import CleanPlayer from './CleanPlayer';
 import { useRemoved, isRemoved } from '../services/removed';
 import { tapCenterOf, canTap, tellFrame } from '../services/nativeTap';
 import TvPointer from './TvPointer';
+import { useFrameChoices } from '../hooks/useFrameChoices';
+import { hasChoices, type PlayerChoices } from '../services/playerChoices';
 import { openLegal } from '../services/consent';
 import { canPlayClean, resolveFilmStream, relayUrl, cleanFirst, isCleanOn, setCleanOn } from '../services/cleanStream';
-import { isTelevision } from '../tv/spatialNavigation';
+import { isTelevision, tvFocus } from '../tv/spatialNavigation';
 import TitleLogo from './ui/TitleLogo';
 import { TvServerStrip, useTvServerStrip } from './ui/TvServerStrip';
 import { NO_START_LIMIT_MS, COUNTDOWN_S, isPlaybackEvidence, markWorking, markDown, startServer } from '../services/serverHealth';
@@ -126,6 +128,8 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   // Audio enhancement (native global EQ / virtualizer — affects the movie audio too).
   const [eqPreset, setEqPreset] = useState<string>(() => loadEq().preset);
   const [showAudioMenu, setShowAudioMenu] = useState(false);
+  const [showChoices, setShowChoices] = useState(false);
+  const [cleanChoices, setCleanChoices] = useState<PlayerChoices | null>(null);
   const [showAdNotice, setShowAdNotice] = useState(false);
   const [failedServers, setFailedServers] = useState<string[]>([]);
   const [showServerDeadNotice, setShowServerDeadNotice] = useState(false);
@@ -441,8 +445,19 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   useEffect(() => { if (!playerUp) setBarHidden(false); }, [playerUp]);
   // A TV: Up at the top of the picture brings the servers, as on a live match.
   const strip = useTvServerStrip(isOpen && isPlaying && !playingTrailer && isTelevision(), serverFrameRef);
-  const barVisible = !barHidden && !strip.open && (!fsActive || peek || paused === true || showAudioMenu);
+  const frameChoices = useFrameChoices(() => serverFrameRef.current?.querySelector('iframe'),
+    isOpen && isPlaying && !playingTrailer ? `${selectedServer}-${selectedSeason}-${selectedEpisode}-${refreshKey}` : null);
+  const barVisible = !barHidden && !strip.open && (!fsActive || peek || paused === true || showAudioMenu || showChoices);
   const showBar = () => { setBarHidden(false); peekBar(5000); };
+  // The bar has gone: the remote goes back to the picture, or OK would press a
+  // button nobody can see (Sports does the same).
+  useEffect(() => {
+    if (barVisible || !fsActive || !isOpen || !isTelevision()) return;
+    const active = document.activeElement as HTMLElement | null;
+    if (!active || active.closest('[data-tv-strip], [data-tv-noring]') || !active.closest('[data-tv-layer]')) return;
+    const picture = active.closest('[data-tv-layer]')!.querySelector<HTMLElement>('[data-tv-noring][data-tv-focusable]');
+    if (picture) tvFocus(picture);
+  }, [barVisible, fsActive, isOpen]);
 
   // When a movie/show starts playing, silence music & radio (claim the speaker).
   useEffect(() => {
@@ -1042,6 +1057,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   }, [isOpen, isPlaying, currentMediaId, selectedSeason, selectedEpisode]);
 
   if (!isOpen || !currentMediaId || !currentMediaType || !details) return null;
+  const choices = clean.state === 'ready' && clean.url ? cleanChoices : frameChoices;
 
   const dynamicServers = [...SERVERS];
 
@@ -1097,10 +1113,11 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                         onProgress={(t, d) => notePosition(t, d)}
                         onEnded={() => window.dispatchEvent(new Event(CLEAN_ENDED))}
                         onFail={(why) => { console.info('[sahrae-player]', JSON.stringify({ server: cleanServer?.id, playFailed: why })); setClean({ state: 'failed', why }); }}
+                        onChoices={setCleanChoices}
                       />
                     ) : clean.state === 'resolving' ? null : (
                     // On a TV, OK presses the server's own play button (services/nativeTap.ts).
-                    <div ref={serverFrameRef} className="absolute inset-0"
+                    <div ref={serverFrameRef} className="absolute inset-0" data-tv-noring
                       {...(canTap() ? {
                         tabIndex: 0, 'data-tv-focusable': true, 'aria-label': 'Play',
                         onClick: (e: React.MouseEvent<HTMLDivElement>) => { if (e.detail !== 0) return; if (!tellFrame(e.currentTarget.querySelector('iframe'), 'toggle')) tapCenterOf(e.currentTarget, e.currentTarget); },
@@ -1283,7 +1300,13 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                 <TvServerStrip
                   servers={dynamicServers.map((sv, i) => ({ id: sv.id || String(i), label: (sv.name || `Server ${i + 1}`).split(' · ')[0], detail: crowd.good.has(sv.id) ? 'works for others' : undefined, down: failedServers.includes(sv.id) }))}
                   active={selectedServer}
-                  onPick={(i) => { pickServer(i); strip.close(); }} />
+                  choices={choices}
+                  onPick={(i) => { pickServer(i); strip.close(); }}>
+                  {pointerOffered && !(clean.state === 'ready' && clean.url) && (
+                    <button type="button" onClick={() => { strip.close(); setPointerOn(true); }} tabIndex={0} data-tv-focusable
+                      className="shrink-0 h-12 px-5 rounded-full text-base font-bold flex items-center gap-2 bg-white/15 text-white"><MousePointer2 className="w-4 h-4" /> Pointer</button>
+                  )}
+                </TvServerStrip>
               )}
               <div className={`flex flex-wrap items-center gap-1.5 px-2 py-2 ${fsActive
                 ? `dark absolute inset-x-0 top-0 z-30 pb-8 bg-gradient-to-b from-black/90 via-black/60 to-transparent transition-opacity duration-300 ${strip.open ? 'invisible' : barVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`
@@ -1311,6 +1334,12 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       <ChevronDown className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-white/70 pointer-events-none" />
                     </label>
                     <div className="flex-1" />
+                    {hasChoices(choices) && !isTelevision() && (
+                      <button onClick={() => setShowChoices((v) => !v)} aria-expanded={showChoices} title="Quality and sound" aria-label="Quality and sound"
+                        className="h-10 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-sm font-semibold flex items-center gap-1.5 transition-colors active:scale-95">
+                        <Gauge className="w-4 h-4" /> {choices.quality.find((q) => q.id === choices.qualityOn)?.label || 'Quality'}
+                      </button>
+                    )}
                     {pointerOffered && !(clean.state === 'ready' && clean.url) && (
                       <button onClick={() => setPointerOn(true)} data-tv-focusable title="Pointer: use the server's own controls (quality, volume, settings)" aria-label="Use the pointer on the player"
                         className="h-10 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-sm font-semibold flex items-center gap-1.5 transition-colors active:scale-95">
@@ -1325,6 +1354,20 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                 )}
                 {pointerOn && <TvPointer area={serverFrameRef.current} onExit={() => setPointerOn(false)} />}
                 <button onClick={() => { if (playingTrailer) { setPlayingTrailer(null); return; } onClose(); }} data-tv-focusable data-tv-close title="Close" aria-label="Close" className="w-10 h-10 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"><X className="w-4 h-4" /></button>
+                {!playingTrailer && showChoices && hasChoices(choices) && (
+                  <div className={`absolute ${fsActive ? 'top-full mt-1' : 'bottom-full mb-2'} right-2 z-50 w-56 max-h-[60vh] overflow-y-auto bg-zinc-950/95 rounded-xl border border-white/15 shadow-2xl p-2 animate-in fade-in duration-150`}>
+                    {([['Quality', Gauge, choices.quality, choices.qualityOn, choices.pickQuality], ['Sound', Volume2, choices.audio, choices.audioOn, choices.pickAudio]] as const).map(([title, Icon, items, on, pick]) => items.length > 1 && (
+                      <div key={title}>
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 px-2 pt-1 pb-2 flex items-center gap-1.5"><Icon className="w-3.5 h-3.5" /> {title}</p>
+                        {items.map((c) => (
+                          <button key={c.id} onClick={() => { pick(c.id); setShowChoices(false); }} className={`w-full text-left px-3 py-2 rounded-lg text-sm font-semibold flex items-center justify-between transition-colors ${c.id === on ? 'bg-amber-500 text-amber-950' : 'text-white hover:bg-white/10'}`}>
+                            {c.label} {c.id === on && <Check className="w-4 h-4" />}
+                          </button>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {!playingTrailer && showAudioMenu && (
                     <div className={`absolute ${fsActive ? 'top-full mt-1' : 'bottom-full mb-2'} right-2 z-50 w-56 bg-zinc-950/95 backdrop-blur rounded-xl border border-white/15 shadow-2xl p-2 animate-in fade-in slide-in-from-top-2 duration-200`}>
                       <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 px-2 pt-1 pb-2 flex items-center gap-1.5"><Waves className="w-3.5 h-3.5" /> Audio Enhancement</p>

@@ -443,6 +443,19 @@ public class MainActivity extends BridgeActivity {
      * URL is dropped — this is the strict-allow-list gate the earlier, removed
      * /__openext lacked.
      */
+    private void openYouTube() {
+        runOnUiThread(() -> {
+            try {
+                android.content.pm.PackageManager pm = getPackageManager();
+                android.content.Intent i = pm.getLeanbackLaunchIntentForPackage("com.google.android.youtube.tv");
+                if (i == null) i = pm.getLaunchIntentForPackage("com.google.android.youtube");
+                if (i == null) i = new android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://www.youtube.com/"));
+                i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(i);
+            } catch (Throwable ignore) {}
+        });
+    }
+
     private void openDownloadUrl(String url) {
         if (url == null) return;
         final String u = url.trim();
@@ -1403,7 +1416,7 @@ public class MainActivity extends BridgeActivity {
      * do. Replaces guessing from outside: a tap at the middle could not tell a
      * player waiting from one already playing (owner, TV, 2026-11-01).
      */
-    private static final String FRAME_HELPER = "(function(){try{if(window===window.top)return;if(/(^|[.])youtube(-nocookie)?[.]com$/.test(location.hostname))return;var ao=location.ancestorOrigins;if(!ao||!ao.length||ao[ao.length-1]!=='https://localhost')return;var said=false,tries=0;function vids(){return [].slice.call(document.querySelectorAll('video'));}function on(v){return !v.paused&&!v.ended&&v.readyState>2&&v.currentTime>0;}function up(m){try{parent.postMessage(m,'*');}catch(e){}}function report(){if(!said){said=true;up({sahrae:'frame-playing'});}}function jw(){try{return window.jwplayer?window.jwplayer():null;}catch(e){return null;}}function play(){var p=jw();try{if(p&&p.play)p.play(true);}catch(e){}vids().forEach(function(v){try{var r=v.play();if(r&&r.catch)r.catch(function(){v.muted=true;v.play().catch(function(){});});}catch(e){}});}function pause(){var p=jw();try{if(p&&p.pause)p.pause(true);}catch(e){}vids().forEach(function(v){try{v.pause();}catch(e){}});}function kids(m){[].slice.call(document.querySelectorAll('iframe')).forEach(function(f){try{f.contentWindow.postMessage(m,'*');}catch(e){}});}function kick(){tries++;if(vids().some(on)){report();return;}play();if(tries===3||tries===7){var b=document.querySelector('.jw-display-icon-display,.jw-icon-display,.vjs-big-play-button,.plyr__control--overlaid,.play-button,[aria-label=Play]');if(b){try{b.click();}catch(e){}}}if(tries<30)setTimeout(kick,tries<8?900:1600);}window.addEventListener('message',function(e){var d=e.data;if(!d||typeof d!=='object'||typeof d.sahrae!=='string')return;if(e.source===parent){if(d.sahrae==='play'){said=false;tries=0;kick();}else if(d.sahrae==='toggle'){var v=vids();if(v.length){if(v.some(on))pause();else play();}}kids(d);}else if(d.sahrae==='frame-playing'){report();}else if(d.sahrae==='frame-stalled'){up({sahrae:'frame-stalled'});}});var last=-1,still=0,told=false;setInterval(function(){if(!said)return;var v=vids().filter(function(x){return !x.paused&&!x.ended;})[0];if(!v){still=0;return;}if(Math.abs(v.currentTime-last)>0.2){last=v.currentTime;still=0;told=false;return;}still+=3;if(still>=15&&!told){told=true;up({sahrae:'frame-stalled'});}},3000);document.addEventListener('playing',function(e){if(e.target&&e.target.tagName==='VIDEO')report();},true);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(kick,1000);});else setTimeout(kick,1000);}catch(e){}})();";
+    private static final String FRAME_HELPER = "(function(){try{if(window===window.top)return;if(/(^|[.])youtube(-nocookie)?[.]com$/.test(location.hostname))return;var ao=location.ancestorOrigins;if(!ao||!ao.length||ao[ao.length-1]!=='https://localhost')return;var said=false,tries=0;function vids(){return [].slice.call(document.querySelectorAll('video'));}function on(v){return !v.paused&&!v.ended&&v.readyState>2&&v.currentTime>0;}function up(m){try{parent.postMessage(m,'*');}catch(e){}}function report(){if(!said){said=true;up({sahrae:'frame-playing'});}}function jw(){try{return window.jwplayer?window.jwplayer():null;}catch(e){return null;}}function play(){var p=jw();try{if(p&&p.play)p.play(true);}catch(e){}vids().forEach(function(v){if(!v.currentSrc&&!v.src&&!v.querySelector('source'))return;try{var r=v.play();if(r&&r.catch)r.catch(function(x){if(x&&x.name==='NotAllowedError'){v.muted=true;v.play().catch(function(){});}});}catch(e){}});}function pause(){var p=jw();try{if(p&&p.pause)p.pause(true);}catch(e){}vids().forEach(function(v){try{v.pause();}catch(e){}});}function kids(m){[].slice.call(document.querySelectorAll('iframe')).forEach(function(f){try{f.contentWindow.postMessage(m,'*');}catch(e){}});}function kick(){tries++;if(vids().some(on)){report();return;}play();if(tries===9||tries===18){var b=document.querySelector('.jw-display-icon-display,.jw-icon-display,.vjs-big-play-button,.plyr__control--overlaid,.play-button,[aria-label=Play]');if(b){try{b.click();}catch(e){}}}if(tries<45)setTimeout(kick,tries<18?300:1600);}window.addEventListener('message',function(e){var d=e.data;if(!d||typeof d!=='object'||typeof d.sahrae!=='string')return;if(e.source===parent){if(d.sahrae==='play'){said=false;tries=0;kick();}else if(d.sahrae==='toggle'){var v=vids();if(v.length){if(v.some(on))pause();else play();}}kids(d);}else if(d.sahrae==='frame-playing'){report();}else if(d.sahrae==='frame-stalled'){up({sahrae:'frame-stalled'});}});var last=-1,still=0,told=false;setInterval(function(){if(!said)return;var v=vids().filter(function(x){return !x.paused&&!x.ended;})[0];if(!v){still=0;return;}if(Math.abs(v.currentTime-last)>0.2){last=v.currentTime;still=0;told=false;return;}still+=3;if(still>=15&&!told){told=true;up({sahrae:'frame-stalled'});}},3000);document.addEventListener('playing',function(e){if(e.target&&e.target.tagName==='VIDEO')report();},true);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(kick,150);});else setTimeout(kick,150);}catch(e){}})();";
     private static volatile boolean sFrameHelper = false;
 
     private static void installFrameHelper(WebView wv) {
@@ -1412,6 +1425,13 @@ public class MainActivity extends BridgeActivity {
                 java.util.Set<String> anyOrigin = new java.util.HashSet<>();
                 anyOrigin.add("*");
                 androidx.webkit.WebViewCompat.addDocumentStartJavaScript(wv, FRAME_HELPER, anyOrigin);
+                // Quality, sound and the feed waiting out of sight: assets/frame-options.js.
+                try (java.io.InputStream in = wv.getContext().getAssets().open("frame-options.js")) {
+                    java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+                    byte[] buf = new byte[8192];
+                    for (int n; (n = in.read(buf)) > 0; ) out.write(buf, 0, n);
+                    androidx.webkit.WebViewCompat.addDocumentStartJavaScript(wv, out.toString("UTF-8"), anyOrigin);
+                } catch (Throwable ignore) {}
                 sFrameHelper = true;
                 java.util.Set<String> youtube = new java.util.HashSet<>(Arrays.asList(
                     "https://www.youtube.com", "https://youtube.com", "https://www.youtube-nocookie.com"));
@@ -2255,6 +2275,9 @@ public class MainActivity extends BridgeActivity {
                         } else if (path.startsWith("/__dltitle")) {
                             DownloadStore.setPendingTitle(u.getQueryParameter("t"));
                             return DownloadStore.json("{\"ok\":true}");
+                        } else if (path.startsWith("/__openyoutube")) {
+                            openYouTube();
+                            return DownloadStore.json("{\"ok\":true}");
                         } else if (path.startsWith("/__tap")) {
                             // A TV remote's OK on a stream site's player. The play button is
                             // inside another site's frame, which a D-pad cannot reach, so the
@@ -2468,7 +2491,7 @@ public class MainActivity extends BridgeActivity {
                 // with disguised segment names would look silent and be switched
                 // away from while playing), measure data used, cap video quality.
                 view.evaluateJavascript(
-                    "window.__sahraeCaps=Object.assign(window.__sahraeCaps||{},{mediaSignal:true,media:true,traffic:true,dataSaver:true,embedHosts:true,reminders:true,quality:true,filmStream:true,tap:true" + (sFrameHelper ? ",frameKick:true" : "") + "});"
+                    "window.__sahraeCaps=Object.assign(window.__sahraeCaps||{},{mediaSignal:true,media:true,traffic:true,dataSaver:true,embedHosts:true,reminders:true,quality:true,filmStream:true,tap:true,openYoutube:true" + (sFrameHelper ? ",frameKick:true" : "") + "});"
                     + "window.dispatchEvent(new Event('sahrae:caps'))", null);
 
                 // This phone has lost its screen engine before: flatten the heavy

@@ -883,6 +883,11 @@
   will-change: transform;
   transition: opacity 0.12s ease;
 }
+/* The picture is never outlined, by the remote or by keyboard focus. */
+[data-tv-noring]:focus, [data-tv-noring]:focus-visible, iframe:focus, iframe:focus-visible, video:focus, video:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
 /* A rail scrolled a little each frame must not be pulled back to a snap point. */
 .tv-mode .snap-x { scroll-snap-type: none !important; }
 /* Keyboard focus everywhere else (laptop / TV) gets a visible ring too. */

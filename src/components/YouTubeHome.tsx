@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, X, RefreshCw } from 'lucide-react';
+import { Loader2, X, RefreshCw, ExternalLink } from 'lucide-react';
 import { youtubeService, type YoutubeChannel } from '../services/youtube';
 import type { Track } from '../services/ytmusic';
 import { useMusic } from '../hooks/useMusic';
@@ -12,12 +12,22 @@ import { useMusic } from '../hooks/useMusic';
  *
  * What YouTube lets another app see of an account is the subscriptions, the
  * likes and the playlists; watch history, Watch Later and the personal home
- * feed are closed to everyone outside YouTube. So this Home is built from the
- * subscriptions: what YouTube's Subscriptions page shows.
+ * feed are closed to everyone outside YouTube (checked in Google's API docs,
+ * 2026-11-08: activities.list home answers as for a logged-out visitor). So this
+ * Home is built from the subscriptions, and "Open YouTube" goes to the real one.
  */
 type Video = Track & { channelId: string; channelTitle: string };
 
-const KEY = 'sahrae.yt.home.v1';
+const KEY = 'sahrae.yt.home.v2';
+/** How many videos come before the Shorts shelf, as on YouTube's own Home. */
+const BEFORE_SHORTS = 8;
+
+/** The real YouTube: its own app on a phone or TV, its site in a browser. */
+export function openYouTube() {
+  const caps = (window as unknown as { __sahraeCaps?: { openYoutube?: boolean } }).__sahraeCaps;
+  if (caps?.openYoutube) fetch('https://localhost/__openyoutube', { cache: 'no-store' }).catch(() => {});
+  else window.open('https://www.youtube.com/', '_blank', 'noopener,noreferrer');
+}
 const TTL = 30 * 60_000;
 
 function ago(ms?: number): string {
@@ -55,6 +65,18 @@ function VideoCard({ v, avatar, onOpen }: { v: Video; avatar?: string; onOpen: (
           <span className="block text-xs text-zinc-500 truncate">{[views(v.views), ago(v.uploaded)].filter(Boolean).join(' · ')}</span>
         </span>
       </span>
+    </button>
+  );
+}
+
+function ShortCard({ v, onOpen }: { v: Video; onOpen: () => void }) {
+  return (
+    <button onClick={onOpen} data-tv-focusable className="group flex-none w-40 md:w-44 text-left focus:outline-none">
+      <span className="relative block aspect-[9/16] rounded-xl overflow-hidden bg-zinc-800 ring-1 ring-white/5 group-hover:ring-white/20">
+        <img src={v.artworkLarge || v.artwork} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
+      </span>
+      <span className="block mt-2 text-sm font-semibold text-white leading-snug line-clamp-2">{v.title}</span>
+      <span className="block text-xs text-zinc-500 mt-0.5 truncate">{views(v.views)}</span>
     </button>
   );
 }
@@ -109,6 +131,7 @@ export default function YouTubeHome({ onOpenChannel }: { onOpenChannel: (c: Yout
   const { isPlaying, toggle } = useMusic();
   const [subs, setSubs] = useState<YoutubeChannel[] | null>(null);
   const [feed, setFeed] = useState<Video[] | null>(null);
+  const [shorts, setShorts] = useState<Video[]>([]);
   const [watching, setWatching] = useState<Video | null>(null);
   const [error, setError] = useState(false);
   const [bump, setBump] = useState(0);
@@ -117,23 +140,27 @@ export default function YouTubeHome({ onOpenChannel }: { onOpenChannel: (c: Yout
     let live = true;
     (async () => {
       try {
-        const kept = JSON.parse(localStorage.getItem(KEY) || 'null') as { at: number; subs: YoutubeChannel[]; feed: Video[] } | null;
-        if (!bump && kept && Date.now() - kept.at < TTL) { setSubs(kept.subs); setFeed(kept.feed); return; }
+        const kept = JSON.parse(localStorage.getItem(KEY) || 'null') as { at: number; subs: YoutubeChannel[]; feed: Video[]; shorts: Video[] } | null;
+        if (!bump && kept && Date.now() - kept.at < TTL) { setSubs(kept.subs); setFeed(kept.feed); setShorts(kept.shorts || []); return; }
       } catch { /* nothing kept */ }
       try {
         setError(false);
-        const s = await youtubeService.fetchSubscriptions(100);
+        // By latest activity: alphabetical order made this A to C channels only.
+        const s = await youtubeService.fetchSubscriptions(100, 'unread');
         if (!live) return;
         setSubs(s);
         // The newest from the channels: what YouTube's Subscriptions page shows.
-        const top = s.slice(0, 18);
+        const top = s.slice(0, 24);
         const lists = await Promise.all(top.map((c) => youtubeService.fetchChannelUploads(c.id, 6)
           .then((ts) => ts.map((t) => ({ ...t, channelId: c.id, channelTitle: c.title }) as Video))
           .catch(() => [] as Video[])));
         if (!live) return;
-        const all = lists.flat().filter((v) => !v.duration || v.duration >= 60).sort((a, b) => (b.uploaded || 0) - (a.uploaded || 0)).slice(0, 60);
+        const newest = lists.flat().sort((a, b) => (b.uploaded || 0) - (a.uploaded || 0));
+        const all = newest.filter((v) => !v.duration || v.duration > 60).slice(0, 60);
+        const short = newest.filter((v) => v.duration > 0 && v.duration <= 60).slice(0, 18);
         setFeed(all);
-        try { localStorage.setItem(KEY, JSON.stringify({ at: Date.now(), subs: s, feed: all })); } catch { /* storage full */ }
+        setShorts(short);
+        try { localStorage.setItem(KEY, JSON.stringify({ at: Date.now(), subs: s, feed: all, shorts: short })); } catch { /* storage full */ }
       } catch { if (live) setError(true); }
     })();
     return () => { live = false; };
@@ -159,8 +186,12 @@ export default function YouTubeHome({ onOpenChannel }: { onOpenChannel: (c: Yout
 
       <div className="flex items-center justify-between mb-4">
         <h2 className="lux-h text-xl md:text-2xl">Latest from your subscriptions</h2>
-        <button onClick={() => setBump((b) => b + 1)} aria-label="Refresh" data-tv-focusable className="lux-arrow inline-flex"><RefreshCw className="w-4 h-4" /></button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button onClick={openYouTube} data-tv-focusable className="lux-chip !py-2"><ExternalLink className="w-4 h-4" /> Open YouTube</button>
+          <button onClick={() => setBump((b) => b + 1)} aria-label="Refresh" data-tv-focusable className="lux-arrow inline-flex"><RefreshCw className="w-4 h-4" /></button>
+        </div>
       </div>
+      <p className="text-xs text-zinc-500 -mt-2 mb-5 max-w-2xl leading-relaxed">YouTube keeps your personal recommendations, history and Watch Later inside its own app. Open YouTube takes you to them.</p>
 
       {error ? (
         <p className="text-sm text-zinc-400 py-8">YouTube did not answer. Try Refresh in a moment.</p>
@@ -173,9 +204,22 @@ export default function YouTubeHome({ onOpenChannel }: { onOpenChannel: (c: Yout
       ) : feed.length === 0 ? (
         <p className="text-sm text-zinc-400 py-8">{subs?.length ? 'Your channels have not posted lately.' : 'Subscribe to channels on YouTube and their videos appear here.'}</p>
       ) : (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8">
-          {feed.map((v) => <VideoCard key={v.id} v={v} avatar={avatars.get(v.channelId)} onOpen={() => open(v)} />)}
-        </div>
+        <>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8">
+            {feed.slice(0, BEFORE_SHORTS).map((v) => <VideoCard key={v.id} v={v} avatar={avatars.get(v.channelId)} onOpen={() => open(v)} />)}
+          </div>
+          {shorts.length > 0 && (
+            <section className="my-9">
+              <h3 className="lux-h text-lg md:text-xl mb-3">Shorts</h3>
+              <div className="flex gap-3 overflow-x-auto scrollbar-hide py-1">
+                {shorts.map((v) => <ShortCard key={v.id} v={v} onOpen={() => open(v)} />)}
+              </div>
+            </section>
+          )}
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8 mt-8">
+            {feed.slice(BEFORE_SHORTS).map((v) => <VideoCard key={v.id} v={v} avatar={avatars.get(v.channelId)} onOpen={() => open(v)} />)}
+          </div>
+        </>
       )}
       {!feed && !error && <div className="flex justify-center mt-6"><Loader2 className="w-5 h-5 animate-spin text-zinc-500" /></div>}
 
