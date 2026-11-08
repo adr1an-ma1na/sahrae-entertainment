@@ -868,19 +868,23 @@
    to whatever element the remote is currently on. Bright amber ring
    so the selected item is unmistakable across a room.
    ───────────────────────────────────────────────────────────── */
-.tv-focused {
-  outline: none !important;
-  /* Brighter, larger ambient halo — reads clearly across a room and feels alive. */
-  box-shadow:
-    0 0 0 3px var(--acc-400),
-    0 0 32px 6px rgb(var(--acc-rgb) / 0.85),
-    0 0 70px 16px rgb(var(--acc-rgb) / 0.5),
-    0 0 120px 30px rgb(var(--acc-rgb) / 0.25) !important;
-  border-radius: 0.75rem;
-  position: relative;
-  z-index: 40;
-  transition: box-shadow 0.12s ease, transform 0.12s ease;
+.tv-focused { outline: none !important; }
+/* One ring that glides between controls (spatialNavigation.ts). A solid edge and
+   a thin dark line so it reads on any artwork; no blur, so the TV has nothing
+   heavy to redraw as it moves. */
+.tv-ring {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 2147483000;
+  pointer-events: none;
+  opacity: 0;
+  box-shadow: 0 0 0 4px var(--acc-400), 0 0 0 7px rgb(0 0 0 / 0.45);
+  will-change: transform;
+  transition: opacity 0.12s ease;
 }
+/* A rail scrolled a little each frame must not be pulled back to a snap point. */
+.tv-mode .snap-x { scroll-snap-type: none !important; }
 /* Keyboard focus everywhere else (laptop / TV) gets a visible ring too. */
 button:focus-visible,
 a:focus-visible,
@@ -936,10 +940,6 @@ html.tv-mode {
    labels. Only the top bar, and never a fixed colour. */
 .tv-mode .tv-navbar {
   background-color: color-mix(in srgb, var(--zinc-950) 95%, transparent) !important;
-}
-/* A touch more pop on the focused item for living-room legibility. */
-.tv-mode .tv-focused {
-  box-shadow: 0 0 0 4px var(--acc-400), 0 0 30px 6px rgb(var(--acc-rgb) / 0.6) !important;
 }
 /* Poster titles/years/ratings are set in literal px (Tailwind arbitrary
    values), so the root font-size bump above skips them — the whole point of
@@ -1367,6 +1367,7 @@ html.tv-mode .glass-liquid::before { opacity: .35; }
   .btn-glass, .glass-liquid { background-color: var(--zinc-800) !important; }
 }
 html.tv-mode .np-bleed { filter: blur(24px) saturate(120%) !important; }
+html.tv-mode .hero-bleed, html.low-gfx .hero-bleed { filter: blur(24px) !important; }
 /* No hover-float / will-change repaint churn on the remote — the focus ring is
    the selection cue, so the card doesn't also need to scale + cast a big shadow. */
 html.tv-mode .card-lift { transition: none !important; will-change: auto !important; }
@@ -1713,6 +1714,11 @@ html.low-gfx.player-open .aurora-glow { visibility: hidden !important; }
    html.player-maxed), as with Live TV and Sports full screen. */
 html.player-maxed,
 html.player-maxed body { overflow: hidden !important; overscroll-behavior: none; }
+/* Full screen is the whole screen: a player keeps its rounded corners and border
+   otherwise, and black shows at every corner (owner, 2026-11-08). */
+:fullscreen, :-webkit-full-screen { border-radius: 0 !important; border: 0 !important; }
+/* Filling the window: the page scrollbar (kept visible on big screens) must not take a strip of it. */
+html.sports-full { overflow: hidden !important; }
 /* No blur on the backdrop in full screen: a backdrop-filter makes the element the
    anchor of every position:fixed inside it, so the "full screen" player was
    pinned to the scrolling details page, not the screen, and sat off-screen if

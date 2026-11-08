@@ -1915,10 +1915,15 @@ public class MainActivity extends BridgeActivity {
         });
     }
 
+    private static int intParam(Uri u, String name) {
+        try { return Integer.parseInt(u.getQueryParameter(name)); } catch (Throwable t) { return 0; }
+    }
+
     @Override
     public void onDestroy() {
         // The page is going with the app: nothing is left to play.
         try { MediaPlaybackService.stop(getApplicationContext()); } catch (Throwable ignore) {}
+        AudioFx.release();
         super.onDestroy();
     }
     /** The renderer went while the app was in the background: reload on return. */
@@ -2270,11 +2275,19 @@ public class MainActivity extends BridgeActivity {
                                     u.getQueryParameter("title"), u.getQueryParameter("artist"), u.getQueryParameter("art"),
                                     playing, pos, dur);
                                 keepPlayerAwake(view, true);
+                                AudioFx.playing(playing);
                             } else {
                                 MediaPlaybackService.stop(getApplicationContext());
                                 keepPlayerAwake(view, false);
+                                AudioFx.playing(false);
                             }
                             return DownloadStore.json("{\"ok\":true}");
+                        } else if (path.startsWith("/__eq")) {
+                            // The equaliser's settings; the answer says whether this phone can apply them.
+                            int[] gains = new int[5];
+                            for (int i = 0; i < 5; i++) gains[i] = intParam(u, "b" + i);
+                            AudioFx.set("1".equals(u.getQueryParameter("on")), gains, intParam(u, "bass"), intParam(u, "virt"), intParam(u, "loud"));
+                            return DownloadStore.json("{\"ok\":true,\"fx\":" + AudioFx.capable() + "}");
                         } else if (path.startsWith("/__bglog")) {
                             // The music report: lines from the page, or the whole report to share.
                             String add = u.getQueryParameter("add");

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Trophy, Play, X, Maximize, Loader2, Radio, Tv, Clapperboard, Search, ShieldCheck, AlertCircle, ExternalLink, AlertTriangle, MousePointer2 } from 'lucide-react';
+import { Trophy, Play, X, Maximize, Loader2, Radio, Tv, Clapperboard, Search, ShieldCheck, AlertCircle, ExternalLink, AlertTriangle, MousePointer2, Shield } from 'lucide-react';
 import type HlsT from 'hls.js';
 import { useHls } from '../services/hlsLoader';
 import { Capacitor } from '@capacitor/core';
@@ -17,7 +17,8 @@ import { suppressPopups } from '../services/popupGuard';
 import { lockLandscape, unlockOrientation } from '../services/fullscreen';
 import { tapCenterOf, canTap, canFrameKick, tellFrame, isFramePlaying } from '../services/nativeTap';
 import TvPointer from './TvPointer';
-import { isTelevision } from '../tv/spatialNavigation';
+import { isTelevision, tvFocus } from '../tv/spatialNavigation';
+import { competitionOf, isTeamSport, knownBadge, findBadge } from '../services/sportBadges';
 import { readAudioFormat, bestAudioTrack, upscaleDecision, bestHeight, type AudioFormat } from '../services/streamQuality.ts';
 import { gpuReport } from '../services/gpu.ts';
 import { attachUpscaler } from '../services/upscaler.ts';
@@ -133,18 +134,66 @@ function fallbackChannels(sport: string): Channel[] {
   return out;
 }
 
-const initials = (n: string) => n.replace(/[^A-Za-z0-9 ]/g, '').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+/** How long the titles stay on a full-screen match on a TV, and after an arrow press brings them back. */
+const TV_TITLES_MS = 500;
+const TV_TITLES_BACK_MS = 3500;
+
 const SPORT_EMOJI: Record<string, string> = {
   football: '⚽', 'american-football': '🏈', basketball: '🏀', baseball: '⚾', hockey: '🏒',
   'motor-sports': '🏎️', fight: '🥊', tennis: '🎾', cricket: '🏏', golf: '⛳', rugby: '🏉', darts: '🎯', other: '🏆',
 };
-/** Team crest with a graceful fallback: shows the badge image, but if it's
- *  missing or 404s, draws the team's initials so every event has a logo. */
-function TeamLogo({ name, src, size = 'w-10 h-10', text = 'text-[11px]', color }: { name: string; src?: string; size?: string; text?: string; color?: string }) {
-  const [err, setErr] = useState(false);
-  if (src && !err) return <img loading="lazy" decoding="async" src={src} alt="" onError={() => setErr(true)} className={`${size} object-contain drop-shadow-[0_6px_18px_rgba(0,0,0,0.6)]`} />;
-  // No crest: the team's own colour, from the source, when it gives one.
-  return <div className={`${size} rounded-full ${color ? '' : 'bg-gradient-to-br from-zinc-600 to-zinc-800'} border border-white/20 flex items-center justify-center ${text} font-extrabold text-white [text-shadow:0_1px_4px_rgba(0,0,0,0.6)]`} style={color ? { background: `radial-gradient(circle at 30% 25%, ${color}, color-mix(in srgb, ${color} 55%, black))` } : undefined}>{initials(name) || '?'}</div>;
+/**
+ * A team's badge: from the listing when it has one, otherwise found by name
+ * (sportBadges.ts). Never letters: a listener looks for the crest. Looked up
+ * only as the card comes on screen, and while there is none a plain shield in
+ * the team's colour holds the place.
+ */
+function TeamLogo({ name, src, category, size = 'w-10 h-10', color }: { name: string; src?: string; category: string; size?: string; color?: string }) {
+  const [srcFailed, setSrcFailed] = useState(false);
+  const [found, setFound] = useState(() => knownBadge(name, category) || '');
+  const [foundFailed, setFoundFailed] = useState(false);
+  const holder = useRef<HTMLSpanElement>(null);
+  const needLookup = (!src || srcFailed) && !found && isTeamSport(category);
+  useEffect(() => {
+    const el = holder.current;
+    if (!needLookup || !el) return;
+    let live = true;
+    const look = () => { void findBadge(name, category).then((u) => { if (live && u) setFound(u); }); };
+    if (typeof IntersectionObserver !== 'function') { look(); return () => { live = false; }; }
+    const io = new IntersectionObserver((seen) => { if (seen.some((x) => x.isIntersecting)) { io.disconnect(); look(); } }, { rootMargin: '300px' });
+    io.observe(el);
+    return () => { live = false; io.disconnect(); };
+  }, [needLookup, name, category]);
+
+  const image = src && !srcFailed ? src : !foundFailed ? found : '';
+  if (image) {
+    return <img loading="lazy" decoding="async" src={image} alt="" onError={() => (image === src ? setSrcFailed(true) : setFoundFailed(true))} className={`${size} object-contain drop-shadow-[0_6px_18px_rgba(0,0,0,0.6)]`} />;
+  }
+  return (
+    <span ref={holder} className={`${size} grid place-items-center`}>
+      <Shield aria-hidden className="w-full h-full" strokeWidth={1.25} style={{ color: color || '#a1a1aa', fill: color ? `color-mix(in srgb, ${color} 70%, black)` : 'rgba(255,255,255,0.08)' }} />
+    </span>
+  );
+}
+
+/**
+ * What a session or fight belongs to, for an event with no two teams: the
+ * series' logo on a light tile (several are dark artwork), else the sport's
+ * symbol. "São Paulo Qualifying" alone does not say Formula 1.
+ */
+function CompetitionMark({ event, size }: { event: FeedEvent; size: string }) {
+  const comp = competitionOf(event);
+  const [failed, setFailed] = useState(false);
+  if (comp?.logo && !failed) {
+    return (
+      <span className={`${size} shrink-0 grid place-items-center rounded-2xl bg-white p-2 shadow-[0_8px_24px_rgba(0,0,0,0.45)]`}>
+        <img src={comp.logo} alt={comp.name} loading="lazy" decoding="async" onError={() => setFailed(true)} className="w-full h-full object-contain" />
+      </span>
+    );
+  }
+  return (
+    <span aria-hidden className={`${size} shrink-0 grid place-items-center rounded-2xl bg-white/[0.06] ring-1 ring-white/10 text-3xl`}>{SPORT_EMOJI[event.category] || SPORT_EMOJI.other}</span>
+  );
 }
 
 // FeedEvent / Feed now come from services/sportsFeed.ts, which loads fixtures
@@ -650,6 +699,54 @@ export default function SportsView() {
     return () => window.removeEventListener('keydown', onKey);
   }, [playing, maxed]);
 
+  // The player is full screen either way: the browser's own, or filling the window.
+  const [nativeFull, setNativeFull] = useState(false);
+  useEffect(() => {
+    const sync = () => {
+      const d = document as any;
+      setNativeFull(!!(d.fullscreenElement || d.webkitFullscreenElement));
+    };
+    document.addEventListener('fullscreenchange', sync);
+    document.addEventListener('webkitfullscreenchange', sync);
+    return () => { document.removeEventListener('fullscreenchange', sync); document.removeEventListener('webkitfullscreenchange', sync); };
+  }, []);
+  const isFull = maxed || nativeFull;
+  useEffect(() => {
+    document.documentElement.classList.toggle('sports-full', isFull);
+    return () => document.documentElement.classList.remove('sports-full');
+  }, [isFull]);
+
+  // On a TV the title, buttons and "Press OK" leave the picture half a second
+  // after it goes full screen. An arrow brings them back for a few seconds; Up
+  // lands on the buttons. OK is left alone: it plays and pauses the match.
+  const [chromeHidden, setChromeHidden] = useState(false);
+  const chromeTimer = useRef(0);
+  const chromeBarRef = useRef<HTMLDivElement>(null);
+  const hideChromeIn = (ms: number) => {
+    window.clearTimeout(chromeTimer.current);
+    chromeTimer.current = window.setTimeout(() => {
+      setChromeHidden(true);
+      // The buttons are gone: the remote goes back to the picture.
+      const frame = sportFrameRef.current;
+      if (frame) tvFocus(frame);
+    }, ms);
+  };
+  useEffect(() => {
+    if (!isFull || !isTelevision()) { window.clearTimeout(chromeTimer.current); setChromeHidden(false); return; }
+    hideChromeIn(TV_TITLES_MS);
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.key.startsWith('Arrow')) return;
+      setChromeHidden(false);
+      hideChromeIn(TV_TITLES_BACK_MS);
+      if (e.key === 'ArrowUp' && document.activeElement === sportFrameRef.current) {
+        const first = chromeBarRef.current?.querySelector<HTMLElement>('button');
+        if (first) tvFocus(first);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => { window.removeEventListener('keydown', onKey); window.clearTimeout(chromeTimer.current); };
+  }, [isFull]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const toggleFullScreen = () => {
     haptics.tap();
     const doc = document as any;
@@ -1119,15 +1216,15 @@ export default function SportsView() {
             ) : (
               <span className="px-2.5 py-1 rounded-full bg-white/10 backdrop-blur text-white text-[11px] font-bold tabular">{formatEventDateTime(m.date)}</span>
             )}
-            <span className="px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white/90 bg-black/30 backdrop-blur border border-white/10">{m.league || SPORT_LABELS[m.category] || m.category}</span>
+            <span className="px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white/90 bg-black/30 backdrop-blur border border-white/10">{competitionOf(m)?.name || m.league || SPORT_LABELS[m.category] || m.category}</span>
             <span className="ml-auto hidden sm:inline text-[10px] font-semibold uppercase tracking-[0.22em] text-white/45">Featured match</span>
           </div>
 
-          {home?.name && away?.name ? (
+          {home?.name && away?.name && isTeamSport(m.category) ? (
             <div className="flex items-center justify-center gap-4 md:gap-14 py-4">
               <div className="flex flex-col items-center gap-3 flex-1 min-w-0">
                 <div className="relative grid place-items-center w-20 h-20 md:w-32 md:h-32 rounded-full bg-black/45 backdrop-blur-sm ring-1 ring-white/15" style={{ boxShadow: `0 0 0 6px rgba(${rgb},0.08), 0 12px 40px -10px rgba(${rgb},0.45)` }}>
-                  <TeamLogo name={home.name} color={home.color} src={home.badge ? badge(home.badge) : undefined} size="w-12 h-12 md:w-20 md:h-20" text="text-lg md:text-2xl" />
+                  <TeamLogo name={home.name} category={m.category} color={home.color} src={home.badge ? badge(home.badge) : undefined} size="w-12 h-12 md:w-20 md:h-20" />
                 </div>
                 <span className="text-sm md:text-xl font-display font-bold text-white text-center line-clamp-2 leading-tight">{home.name}</span>
               </div>
@@ -1137,13 +1234,16 @@ export default function SportsView() {
               </div>
               <div className="flex flex-col items-center gap-3 flex-1 min-w-0">
                 <div className="relative grid place-items-center w-20 h-20 md:w-32 md:h-32 rounded-full bg-black/45 backdrop-blur-sm ring-1 ring-white/15" style={{ boxShadow: `0 0 0 6px rgba(${rgb},0.08), 0 12px 40px -10px rgba(${rgb},0.45)` }}>
-                  <TeamLogo name={away.name} color={away.color} src={away.badge ? badge(away.badge) : undefined} size="w-12 h-12 md:w-20 md:h-20" text="text-lg md:text-2xl" />
+                  <TeamLogo name={away.name} category={m.category} color={away.color} src={away.badge ? badge(away.badge) : undefined} size="w-12 h-12 md:w-20 md:h-20" />
                 </div>
                 <span className="text-sm md:text-xl font-display font-bold text-white text-center line-clamp-2 leading-tight">{away.name}</span>
               </div>
             </div>
           ) : (
-            <h3 className="py-6 text-2xl md:text-5xl font-display font-black text-white tracking-tight leading-tight max-w-3xl">{m.title}</h3>
+            <div className="flex items-center gap-4 md:gap-6 py-6">
+              <CompetitionMark event={m} size="w-20 h-20 md:w-32 md:h-32" />
+              <h3 className="min-w-0 text-2xl md:text-5xl font-display font-black text-white tracking-tight leading-tight max-w-3xl">{m.title}</h3>
+            </div>
           )}
 
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -1168,7 +1268,7 @@ export default function SportsView() {
         <div aria-hidden className="pointer-events-none absolute -top-16 -right-16 w-40 h-40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" style={{ background: `radial-gradient(circle, rgba(${rgb},0.22), transparent 70%)` }} />
         <div className="flex items-center justify-between gap-2">
           <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-400">
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: `rgb(${rgb})` }} />{m.league && !isChannelEvent(m) ? m.league : SPORT_LABELS[m.category] || m.category}
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: `rgb(${rgb})` }} />{competitionOf(m)?.name || (m.league && !isChannelEvent(m) ? m.league : SPORT_LABELS[m.category] || m.category)}
           </span>
           {live ? (
             <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-[0.14em] bg-red-500/15 text-red-300 ring-1 ring-red-500/30">
@@ -1179,20 +1279,23 @@ export default function SportsView() {
           )}
         </div>
 
-        {home?.name && away?.name ? (
+        {home?.name && away?.name && isTeamSport(m.category) ? (
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
             <div className="flex flex-col items-center gap-2 min-w-0">
-              <div className="grid place-items-center w-14 h-14 rounded-full bg-white/[0.04] ring-1 ring-white/10"><TeamLogo name={home.name} color={home.color} src={home.badge ? badge(home.badge) : undefined} /></div>
+              <div className="grid place-items-center w-14 h-14 rounded-full bg-white/[0.04] ring-1 ring-white/10"><TeamLogo name={home.name} category={m.category} color={home.color} src={home.badge ? badge(home.badge) : undefined} /></div>
               <span className="text-[13px] font-semibold text-zinc-100 text-center line-clamp-2 leading-snug">{home.name}</span>
             </div>
             <span className="text-[10px] font-black tracking-[0.25em] text-zinc-500">VS</span>
             <div className="flex flex-col items-center gap-2 min-w-0">
-              <div className="grid place-items-center w-14 h-14 rounded-full bg-white/[0.04] ring-1 ring-white/10"><TeamLogo name={away.name} color={away.color} src={away.badge ? badge(away.badge) : undefined} /></div>
+              <div className="grid place-items-center w-14 h-14 rounded-full bg-white/[0.04] ring-1 ring-white/10"><TeamLogo name={away.name} category={m.category} color={away.color} src={away.badge ? badge(away.badge) : undefined} /></div>
               <span className="text-[13px] font-semibold text-zinc-100 text-center line-clamp-2 leading-snug">{away.name}</span>
             </div>
           </div>
         ) : (
-          <h3 className="text-[15px] font-display font-bold text-white leading-snug line-clamp-2 min-h-[44px]">{m.title}</h3>
+          <div className="flex items-center gap-3">
+            <CompetitionMark event={m} size="w-14 h-14" />
+            <h3 className="min-w-0 text-[15px] font-display font-bold text-white leading-snug line-clamp-3">{m.title}</h3>
+          </div>
         )}
 
         <div className="mt-auto flex items-center justify-between gap-2 pt-3 border-t border-white/[0.06]">
@@ -1310,10 +1413,10 @@ export default function SportsView() {
             <button onClick={toggleFullScreen} tabIndex={0} aria-label="Full screen" className="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center shrink-0"><Maximize className="w-5 h-5" /></button>
           </div>
           <div className="w-full max-w-5xl flex flex-col gap-3 px-3 md:px-0 pb-6">
-            <div ref={playerRef} className={maxed
+            <div ref={playerRef} className={isFull
               ? 'fixed inset-0 z-[400] bg-black overflow-hidden'
               : 'w-full aspect-video bg-black rounded-xl shadow-2xl overflow-hidden relative border border-white/10'}>
-              <div className={`absolute top-0 left-0 right-0 p-3 md:p-4 bg-gradient-to-b from-black/80 to-transparent z-10 justify-between items-center ${maxed ? 'flex' : 'hidden md:flex'}`}>
+              <div ref={chromeBarRef} className={`absolute top-0 left-0 right-0 p-3 md:p-4 bg-gradient-to-b from-black/80 to-transparent z-10 justify-between items-center transition-opacity duration-300 ${isFull ? 'flex' : 'hidden md:flex'} ${chromeHidden ? 'opacity-0 pointer-events-none' : ''}`}>
                 <div className="flex items-center gap-3 min-w-0">
                   {playing.startsAt
                     ? <div className="bg-amber-500 text-amber-950 px-2.5 py-1 rounded-sm shrink-0 text-xs font-bold uppercase tracking-wider">{kickOffLabel(playing.startsAt)}</div>
@@ -1340,7 +1443,7 @@ export default function SportsView() {
               ) : activeUrl && isEmbedUrl ? (
                 // On a TV, OK here presses the stream site's own play button
                 // (services/nativeTap.ts): its player is in a frame a remote cannot enter.
-                <div ref={sportFrameRef} className="absolute inset-0 w-full h-full"
+                <div ref={sportFrameRef} className="absolute inset-0 w-full h-full" data-tv-noring={isFull || undefined}
                   {...(canTap() ? {
                     tabIndex: 0, 'data-tv-focusable': true, 'data-tv-autofocus': true, 'aria-label': 'Play the match',
                     // OK: play or pause through the player helper; a tap where there is none.
@@ -1367,7 +1470,7 @@ export default function SportsView() {
                     // already, without breaking any provider.
                     sandbox={activeSrc?.kind === 'server' ? undefined : playerSandbox(shieldOn, activeUrl)}
                   />
-                  <span aria-hidden className="tv-ok-hint pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 z-20 items-center gap-2 px-4 py-2 rounded-full bg-black/75 text-white text-sm font-bold">Press OK to play</span>
+                  {!chromeHidden && <span aria-hidden className="tv-ok-hint pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 z-20 items-center gap-2 px-4 py-2 rounded-full bg-black/75 text-white text-sm font-bold">Press OK to play</span>}
                   {sportPointer && <TvPointer area={sportFrameRef.current} onExit={() => setSportPointer(false)} />}
                   {isSandboxed && (
                     <div className="absolute top-0 left-0 w-full z-40 bg-amber-500/95 text-amber-950 text-xs md:text-sm font-bold px-4 py-3 flex flex-col md:flex-row items-center justify-center gap-3 md:gap-4 text-center backdrop-blur shadow-2xl border-b border-amber-400/30 animate-in slide-in-from-top-2">

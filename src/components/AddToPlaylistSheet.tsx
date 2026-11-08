@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { X, Plus, Check, ListMusic, Music2, Play, ListPlus, Download, Loader2, Radio } from 'lucide-react';
+import { X, Plus, Check, ListMusic, Music2, Play, ListPlus, Download, Loader2, Radio, Heart } from 'lucide-react';
 import { useMusic } from '../hooks/useMusic';
 import { haptics } from '../services/haptics';
 import { downloads } from '../services/downloads';
 import Illustration from './ui/Illustration';
 
 export default function AddToPlaylistSheet() {
-  const { addSheetTrack, closeAddSheet, playlists, createPlaylist, addToPlaylist, addToQueue, playNext, startRadio } = useMusic();
+  const { addSheetTrack, closeAddSheet, playlists, createPlaylist, addToPlaylist, addToQueue, playNext, startRadio, toggleLike, isLiked } = useMusic();
   const [name, setName] = useState('');
   const [creating, setCreating] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
@@ -69,6 +69,11 @@ export default function AddToPlaylistSheet() {
           </div>
           <button onClick={closeAddSheet} className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-white" aria-label="Close"><X className="w-5 h-5" /></button>
         </div>
+
+        {/* Saved or not, first: the song rows have one menu instead of a heart on every line. */}
+        <div className="px-4 pt-4"><button onClick={() => toggleLike(track)} aria-pressed={isLiked(track.id)} className="w-full btn-glass flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold">
+          <Heart className={`w-4 h-4 ${isLiked(track.id) ? 'fill-current text-sauti' : ''}`} /> {isLiked(track.id) ? 'In Liked Songs' : 'Add to Liked Songs'}
+        </button></div>
 
         {/* Queue actions */}
         <div className="grid grid-cols-4 gap-2 p-4 border-b border-white/5">

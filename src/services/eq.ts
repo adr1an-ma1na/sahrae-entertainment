@@ -1,5 +1,6 @@
 /**
- * Equalizer settings → native global audio effects (see AudioFx.java).
+ * Equalizer settings → Android's audio effects (AudioFx.java), which shape
+ * everything Sahrae plays, songs in YouTube's player included.
  *
  * The 5 sliders are gains in millibels (-1500..+1500), low→high. `bass` and
  * `spatial` (virtualizer) are 0..1000. Settings persist in localStorage and are
@@ -20,14 +21,22 @@ export const EQ_FREQS = ['60Hz', '230Hz', '910Hz', '3.6kHz', '14kHz'];
 export const EQ_PRESETS: Record<string, number[]> = {
   Premium:       [500, 150, -50, 250, 550],
   Flat:          [0, 0, 0, 0, 0],
-  'Bass Boost':  [1100, 650, 150, 0, 200],
-  'Super Bass':  [1500, 1000, 300, -100, 0],
-  Treble:        [0, 0, 100, 600, 1100],
-  Vocal:         [-300, -100, 500, 400, -100],
+  Afrobeats:     [800, 450, -100, 300, 450],
+  Amapiano:      [1200, 500, -200, 150, 350],
+  'Bongo Flava': [650, 350, 150, 400, 400],
+  'Hip-Hop':     [900, 550, -150, 200, 300],
   'R&B':         [700, 400, -100, 200, 600],
   Pop:           [-100, 300, 500, 300, -100],
   Rock:          [600, 300, -200, 300, 700],
+  Gospel:        [300, 200, 350, 450, 300],
   Jazz:          [400, 200, -100, 200, 400],
+  Vocal:         [-300, -100, 500, 400, -100],
+  'Bass Boost':  [1100, 650, 150, 0, 200],
+  'Super Bass':  [1500, 1000, 300, -100, 0],
+  Treble:        [0, 0, 100, 600, 1100],
+  Earbuds:       [350, 100, -150, 200, 500],
+  'Small Speaker': [-200, 450, 400, 300, 150],
+  'Spoken Word': [-400, -100, 450, 500, 0],
   Live:          [-200, 200, 350, 350, 250],
   Cinema:        [600, 250, 0, 300, 700],
 };
@@ -39,6 +48,10 @@ export const PRESET_EXTRAS: Record<string, { bass: number; spatial: number; loud
   Cinema:       { bass: 550, spatial: 850, loud: 450 },
   'Bass Boost': { bass: 750, spatial: 250, loud: 250 },
   'Super Bass': { bass: 1000, spatial: 250, loud: 350 },
+  Afrobeats:    { bass: 450, spatial: 450, loud: 450 },
+  Amapiano:     { bass: 800, spatial: 400, loud: 350 },
+  'Hip-Hop':    { bass: 650, spatial: 300, loud: 450 },
+  Earbuds:      { bass: 250, spatial: 600, loud: 300 },
 };
 
 const KEY = 'sahrae.eq.v1';
@@ -52,13 +65,20 @@ export function loadEq(): EqSettings {
   return { ...DEFAULT };
 }
 
+/** Android's effects are working on this phone, so they, not the page, do the shaping. */
+let nativeFx = false;
+export const nativeEqActive = (): boolean => nativeFx;
+
 export function applyEq(s: EqSettings): void {
   const b = s.bands;
   const q =
     `on=${s.on ? 1 : 0}` +
     `&b0=${b[0] | 0}&b1=${b[1] | 0}&b2=${b[2] | 0}&b3=${b[3] | 0}&b4=${b[4] | 0}` +
     `&bass=${s.bass | 0}&virt=${s.spatial | 0}&loud=${s.loud | 0}`;
-  fetch(`https://localhost/__eq?${q}`).catch(() => {});
+  fetch(`https://localhost/__eq?${q}`)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((j: { fx?: boolean } | null) => { nativeFx = !!j?.fx; })
+    .catch(() => { /* the web: no such bridge */ });
 }
 
 export const EQ_CHANGE = 'sahrae:eqchange';
@@ -68,5 +88,5 @@ export function saveEq(s: EqSettings): void {
   try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* ignore */ }
   applyEq(s);
   // Switching it on or off changes which engine a song plays through (hifiAudio.ts).
-  if (wasOn !== s.on) { try { window.dispatchEvent(new Event(EQ_CHANGE)); } catch { /* no window */ } }
+  if (wasOn !== s.on && !nativeFx) { try { window.dispatchEvent(new Event(EQ_CHANGE)); } catch { /* no window */ } }
 }

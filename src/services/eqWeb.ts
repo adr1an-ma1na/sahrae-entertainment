@@ -1,4 +1,4 @@
-import type { EqSettings } from './eq';
+import { nativeEqActive, type EqSettings } from './eq';
 
 /**
  * A real equaliser for web playback.
@@ -200,7 +200,8 @@ export function applyWebEq(s: EqSettings): void {
   // start it suspended until a user gesture.
   if (ctx.state === 'suspended') ctx.resume().catch(() => {});
 
-  if (!s.on) {
+  // Android's effects are already shaping this; twice would double every boost.
+  if (!s.on || nativeEqActive()) {
     ramp(chain.wet.gain, 0);
     ramp(chain.bypass.gain, 1);
     return;

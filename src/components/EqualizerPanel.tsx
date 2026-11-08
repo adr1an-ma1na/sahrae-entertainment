@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X, SlidersHorizontal, Sparkles, Waves, Moon, Timer } from 'lucide-react';
-import { EqSettings, EQ_FREQS, EQ_PRESETS, PRESET_EXTRAS, loadEq, saveEq } from '../services/eq';
+import { EqSettings, EQ_FREQS, EQ_PRESETS, PRESET_EXTRAS, loadEq, saveEq, nativeEqActive } from '../services/eq';
+import EqCurve from './ui/EqCurve';
+import { isTelevision } from '../tv/spatialNavigation';
 import { useMusic } from '../hooks/useMusic';
 import { hifiAvailable } from '../services/hifiAudio';
 
@@ -13,7 +15,13 @@ export default function EqualizerPanel({ open, onClose }: { open: boolean; onClo
   // Re-read on open so it reflects anything changed elsewhere.
   useEffect(() => { if (open) setEq(loadEq()); }, [open]);
 
-  const commit = (next: EqSettings) => { setEq(next); saveEq(next); };
+  // The curve answers every finger movement; the sound follows a few times a second.
+  const saveTimer = useRef(0);
+  const commit = (next: EqSettings) => {
+    setEq(next);
+    window.clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(() => saveEq(next), 70);
+  };
 
   const setBand = (i: number, v: number) => {
     const bands = eq.bands.slice(); bands[i] = v;
@@ -31,7 +39,8 @@ export default function EqualizerPanel({ open, onClose }: { open: boolean; onClo
   // cross-origin iframe and never reaches this page. Saying so beats letting
   // someone drag a control that does nothing and conclude the app is broken —
   // which is what happened while this panel was native-only and inert on web.
-  const inert = active && !eqReachable;
+  const fx = nativeEqActive();
+  const inert = active && !eqReachable && !fx;
 
   return (
     <div role="dialog" data-tv-layer className="lux-stage fixed inset-0 z-[135] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200"
@@ -44,7 +53,7 @@ export default function EqualizerPanel({ open, onClose }: { open: boolean; onClo
             <span className="w-10 h-10 rounded-xl bg-sauti flex items-center justify-center shrink-0"><SlidersHorizontal className="w-5 h-5 text-amber-950" /></span>
             <div className="min-w-0">
               <p className="text-white font-display font-bold text-lg leading-tight">Equalizer</p>
-              <p className="text-[11px] text-zinc-400 truncate">{eq.preset} · shapes all audio</p>
+              <p className="text-[11px] text-zinc-400 truncate">{eq.on ? eq.preset : 'Off'}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -57,17 +66,14 @@ export default function EqualizerPanel({ open, onClose }: { open: boolean; onClo
           </div>
         </div>
 
-        {/* What the equaliser reaches, said plainly. In the Android app, switching
-            it on moves songs to Sahrae's own audio engine (hifiAudio.ts), where it
-            shapes them; on the web a song plays inside YouTube's player, out of reach. */}
-        {hifiAvailable() ? (
-          eq.on && !inert ? (
-            <div className="mx-4 mt-4 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3.5 py-3">
-              <p className="text-xs text-emerald-200 leading-relaxed">Shaping what is playing now. Songs play through Sahrae's own audio engine while the equaliser is on, and keep playing with the screen off.</p>
-            </div>
-          ) : (
+        {/* What the equaliser reaches, said plainly. On Android its effects sit on
+            the phone's output and shape everything (AudioFx.java). On a phone that
+            refuses them, songs move to Sahrae's own engine (hifiAudio.ts). On the
+            web a song plays inside YouTube's player, out of reach. */}
+        {fx ? null : hifiAvailable() ? (
+          !(eq.on && !inert) && (
             <div className="mx-4 mt-4 rounded-xl border px-3.5 py-3" style={{ borderColor: 'rgb(var(--acc-rgb) / .35)', background: 'rgb(var(--acc-rgb) / .10)' }}>
-              <p className="text-xs text-zinc-200 leading-relaxed">{eq.on ? 'Moving this song to Sahrae\'s audio engine. If it cannot be fetched, it stays in YouTube\'s player for now and the next song tries again.' : 'Switch the equaliser on and songs play through Sahrae\'s own audio engine, so every band, bass and spatial setting shapes them.'}</p>
+              <p className="text-xs text-zinc-200 leading-relaxed">{eq.on ? 'Moving this song to Sahrae\'s audio engine. If it cannot be fetched, it stays in YouTube\'s player for now and the next song tries again.' : 'Switch it on to shape what you hear.'}</p>
             </div>
           )
         ) : inert && (
@@ -91,8 +97,9 @@ export default function EqualizerPanel({ open, onClose }: { open: boolean; onClo
             ))}
           </div>
 
-          {/* Band sliders */}
-          <div className="space-y-3.5">
+          {/* The curve to shape with a finger. A remote has no finger: the TV keeps sliders. */}
+          {!isTelevision() && <EqCurve bands={eq.bands} dimmed={!eq.on} onChange={setBand} />}
+          {isTelevision() && <div className="space-y-3.5">
             {EQ_FREQS.map((freq, i) => (
               <div key={freq} className="flex items-center gap-3">
                 <span className="w-12 text-[11px] font-bold text-zinc-400 tabular shrink-0">{freq}</span>
@@ -103,7 +110,7 @@ export default function EqualizerPanel({ open, onClose }: { open: boolean; onClo
                 <span className="w-12 text-right text-[11px] font-semibold text-zinc-300 tabular shrink-0">{fmtDb(eq.bands[i] ?? 0)}</span>
               </div>
             ))}
-          </div>
+          </div>}
 
           <div className="h-px bg-white/10" />
 
@@ -134,9 +141,9 @@ export default function EqualizerPanel({ open, onClose }: { open: boolean; onClo
 
           <div className="h-px bg-white/10" />
 
-          {/* Spotify Features: Crossfade + Sleep Timer */}
+          {/* Crossfade + Sleep Timer */}
           <div className="space-y-4">
-            <p className="text-xs font-bold text-sauti uppercase tracking-wider">Spotify Pro Audio Tuning</p>
+            <p className="text-xs font-bold text-sauti uppercase tracking-wider">Playback</p>
             
             {/* Crossfade */}
             <div className="flex items-center gap-3">
@@ -178,7 +185,7 @@ export default function EqualizerPanel({ open, onClose }: { open: boolean; onClo
           </div>
 
           <p className="text-[11px] text-zinc-500 leading-relaxed">
-            Tuned at the system level, so it shapes every track in Sauti. Crossfade provides seamless, gapless song transition. Sleep Timer pauses audio automatically.
+            Crossfade blends one song into the next. Sleep Timer pauses the music for you.
           </p>
         </div>
       </div>

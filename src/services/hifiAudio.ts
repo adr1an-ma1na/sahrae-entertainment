@@ -16,11 +16,13 @@
  */
 import { Capacitor } from '@capacitor/core';
 import { ytmusic } from './ytmusic';
-import { loadEq } from './eq';
+import { loadEq, nativeEqActive } from './eq';
 
 export const hifiAvailable = (): boolean => Capacitor.isNativePlatform();
 /** Songs go through the engine when the equaliser is on (and the app can). */
-export const hifiWanted = (): boolean => hifiAvailable() && loadEq().on;
+// Only on a phone that refuses Android's own effects (AudioFx.java): where they
+// work, a song stays in YouTube's player and is shaped on its way out.
+export const hifiWanted = (): boolean => hifiAvailable() && loadEq().on && !nativeEqActive();
 
 const KEEP = 3;
 const ready = new Map<string, string>(); // YouTube id -> blob: URL

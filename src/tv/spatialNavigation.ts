@@ -15,9 +15,8 @@
  *     (<html class="tv-mode">) so the CSS can keep the top navigation bar always
  *     visible/reachable and give focus room to breathe.
  *
- * Movement is INSTANT (no smooth-scroll animation) so it feels as snappy as
- * Netflix on low-powered TV hardware. It's a no-op for touch/mouse users (they
- * never send arrow keys), so phones and desktop pointer use are unaffected.
+ * It's a no-op for touch/mouse users (they never send arrow keys), so phones
+ * and desktop pointer use are unaffected.
  */
 
 import { haptics } from '../services/haptics';
@@ -150,12 +149,73 @@ function isTypingTarget(el: Element | null): boolean {
 }
 const NOT_TYPED = new Set(['range', 'checkbox', 'radio', 'button', 'submit', 'reset', 'color', 'file', 'image']);
 
+// ── The focus highlight ───────────────────────────────────────────────────────
+// One ring that glides from control to control, with the row sliding under it
+// in the same frames, the way Netflix and Apple TV move. It used to be a large
+// glow painted on the focused element: the TV repainted two big blurred shadows
+// on every press, and focus jumped from one button to the next with the page
+// snapping after it (owner, TV, 2026-11-08). The ring is a single small layer
+// moved by transform, so a press costs next to nothing to draw.
+const GLIDE_MS = 170;
+const GLIDE_HELD_MS = 80; // A held key: keep up with the repeat.
+
+interface Box { x: number; y: number; w: number; h: number }
+let ring: HTMLDivElement | null = null;
+let ringBox: Box | null = null;
+let ringOn: HTMLElement | null = null;
+let glideFrame = 0;
+let gliding = false;
+let settleTimer = 0;
+
+function ringElement(): HTMLDivElement {
+  if (!ring) {
+    ring = document.createElement('div');
+    ring.className = 'tv-ring';
+    ring.setAttribute('aria-hidden', 'true');
+  }
+  // Inside the browser's full screen only that element is drawn.
+  const host = document.fullscreenElement || document.body;
+  if (ring.parentElement !== host) host.appendChild(ring);
+  return ring;
+}
+
+function paintRing(b: Box) {
+  const r = ringElement();
+  r.style.transform = `translate3d(${b.x}px,${b.y}px,0)`;
+  r.style.width = `${b.w}px`;
+  r.style.height = `${b.h}px`;
+  r.style.opacity = '1';
+  ringBox = b;
+}
+
+function hideRing() {
+  cancelAnimationFrame(glideFrame);
+  gliding = false;
+  window.clearTimeout(settleTimer);
+  if (ring) ring.style.opacity = '0';
+  ringBox = null;
+  ringOn = null;
+}
+
+/** Put the ring back on its control after something else moved it (content loading, a list growing). */
+function syncRing() {
+  if (gliding || !ringOn) return;
+  if (!ringOn.isConnected) { hideRing(); return; }
+  const r = ringOn.getBoundingClientRect();
+  if (r.width <= 1 || r.height <= 1) { hideRing(); return; }
+  const b = ringBox;
+  if (!b || Math.abs(b.x - r.left) > 0.5 || Math.abs(b.y - r.top) > 0.5 || Math.abs(b.w - r.width) > 0.5 || Math.abs(b.h - r.height) > 0.5) {
+    paintRing({ x: r.left, y: r.top, w: r.width, h: r.height });
+  }
+}
+
 function clearHighlight() {
   document.querySelectorAll('.' + FOCUS_CLASS).forEach((n) => n.classList.remove(FOCUS_CLASS));
+  hideRing();
 }
 
 function highlight(el: HTMLElement) {
-  clearHighlight();
+  document.querySelectorAll('.' + FOCUS_CLASS).forEach((n) => n.classList.remove(FOCUS_CLASS));
   el.classList.add(FOCUS_CLASS);
 }
 
@@ -168,14 +228,91 @@ function scrollParent(el: HTMLElement): HTMLElement | null {
   return null;
 }
 
-/** Scroll the page (or the dialog the element is in) to its very top or bottom. */
-function scrollToEnd(el: HTMLElement, end: 'top' | 'bottom') {
-  const sp = scrollParent(el);
-  const top = end === 'top' ? 0 : (sp ? sp.scrollHeight : document.documentElement.scrollHeight);
-  if (sp) sp.scrollTo({ top }); else window.scrollTo({ top });
+/** The nearest ancestor that scrolls sideways (a rail), or null. */
+function railParent(el: HTMLElement): HTMLElement | null {
+  for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+    if (p.scrollWidth <= p.clientWidth + 2) continue;
+    const ox = getComputedStyle(p).overflowX;
+    if (ox === 'auto' || ox === 'scroll') return p;
+  }
+  return null;
 }
 
-function focusElement(el: HTMLElement, vertical = false) {
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+/**
+ * Bring `el` into place and move the ring onto it, together. Up and down settle
+ * the new row near the middle of the screen, the way a TV app scrolls a page;
+ * left and right only bring a tile into view. With the least possible movement
+ * the banner above the first row and everything below the last were never shown
+ * (owner, TV, 2026-11-01). `end` takes the page to its very top or bottom instead.
+ */
+function glideTo(el: HTMLElement, vertical: boolean, end?: 'top' | 'bottom') {
+  cancelAnimationFrame(glideFrame);
+  window.clearTimeout(settleTimer);
+  const r = el.getBoundingClientRect();
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+
+  // Sideways: the rail the tile sits in.
+  const rail = railParent(el);
+  let dx = 0;
+  if (rail) {
+    const b = rail.getBoundingClientRect();
+    const pad = 2.5 * rem;
+    if (r.left < b.left + pad) dx = r.left - (b.left + pad);
+    else if (r.right > b.right - pad) dx = r.right - (b.right - pad);
+    dx = clamp(dx, -rail.scrollLeft, rail.scrollWidth - rail.clientWidth - rail.scrollLeft);
+  }
+
+  // Up and down: the dialog it is in, or the page. Clear of the fixed navbar.
+  const sp = scrollParent(el);
+  const scroller = sp || (document.scrollingElement as HTMLElement) || document.documentElement;
+  const view = sp ? sp.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+  const padTop = sp ? rem : 7 * rem;
+  const padBottom = (sp ? 1 : 3) * rem;
+  let dy = 0;
+  if (end === 'top') dy = -scroller.scrollTop;
+  else if (end === 'bottom') dy = scroller.scrollHeight;
+  else if (vertical) dy = (r.top + r.height / 2) - (view.top + view.bottom) / 2;
+  else if (r.top < view.top + padTop) dy = r.top - (view.top + padTop);
+  else if (r.bottom > view.bottom - padBottom) dy = r.bottom - (view.bottom - padBottom);
+  dy = clamp(dy, -scroller.scrollTop, scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop);
+
+  const showRing = !el.hasAttribute('data-tv-noring');
+  if (showRing) {
+    ringOn = el;
+    ringElement().style.borderRadius = getComputedStyle(el).borderTopLeftRadius || '0.75rem';
+  } else hideRing();
+
+  const to: Box = { x: r.left - dx, y: r.top - dy, w: r.width, h: r.height };
+  const from: Box = ringBox || to;
+  const fromLeft = rail ? rail.scrollLeft : 0;
+  const fromTop = scroller.scrollTop;
+  const reduce = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const ms = reduce ? 0 : heldKey ? GLIDE_HELD_MS : GLIDE_MS;
+  const start = performance.now();
+  gliding = true;
+  const step = (now: number) => {
+    const p = ms ? Math.min(1, (now - start) / ms) : 1;
+    const e = 1 - (1 - p) ** 3;
+    if (rail && dx) rail.scrollLeft = fromLeft + dx * e;
+    if (dy) scroller.scrollTop = fromTop + dy * e;
+    if (showRing) {
+      paintRing({ x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e, w: from.w + (to.w - from.w) * e, h: from.h + (to.h - from.h) * e });
+    }
+    if (p < 1) { glideFrame = requestAnimationFrame(step); return; }
+    gliding = false;
+    syncRing();
+    // A tile still finishing its own entrance has not reached its final place.
+    settleTimer = window.setTimeout(syncRing, 350);
+  };
+  glideFrame = requestAnimationFrame(step);
+}
+
+/** The current press is a key held down: glide faster, to keep up. */
+let heldKey = false;
+
+function focusElement(el: HTMLElement, vertical = false, end?: 'top' | 'bottom') {
   try {
     el.focus({ preventScroll: true });
   } catch {
@@ -185,14 +322,11 @@ function focusElement(el: HTMLElement, vertical = false) {
   // Tactile tick as focus lands on a new tile — the remote/gamepad equivalent of
   // the touch "selection" haptic. No-ops on devices without a rumble motor.
   haptics.select();
-  // INSTANT — no smooth animation. CSS scroll-padding/scroll-margin (see
-  // index.css .tv-mode rules) keeps it clear of the fixed navbar and screen edges.
-  // Up and down settle the new row near the middle of the screen, the way a
-  // TV app scrolls a page; left and right only bring a tile into view. With
-  // 'nearest' alone the page moved the least it could, so the banner above the
-  // first row and everything below the last were never shown (owner, TV, 2026-11-01).
-  el.scrollIntoView({ block: vertical ? 'center' : 'nearest', inline: 'nearest' });
+  glideTo(el, vertical, end);
 }
+
+/** Give a control the remote's focus from the page (the Sports player's title bar and picture). */
+export function tvFocus(el: HTMLElement) { focusElement(el); }
 
 /**
  * Pick the best element in `dir` from `current`.
@@ -349,6 +483,7 @@ export function initSpatialNavigation() {
   const observer = new MutationObserver(() => {
     invalidateFocusCache();
     if (!tvMode) return;
+    syncRing();
     const target = document.querySelector<HTMLElement>('[data-tv-autofocus]');
     if (target && !autoFocused.has(target) && isElementVisible(target)) {
       autoFocused.add(target);
@@ -357,7 +492,16 @@ export function initSpatialNavigation() {
     }
   });
   observer.observe(document.body, { childList: true, subtree: true });
-  window.addEventListener('resize', invalidateFocusCache);
+  window.addEventListener('resize', () => { invalidateFocusCache(); syncRing(); });
+  // Anything else that scrolls under the ring takes it along.
+  let scrollPending = false;
+  window.addEventListener('scroll', () => {
+    if (gliding || !ringOn || scrollPending) return;
+    scrollPending = true;
+    requestAnimationFrame(() => { scrollPending = false; syncRing(); });
+  }, { capture: true, passive: true });
+  // The ring has to live inside the browser's full screen while there is one.
+  document.addEventListener('fullscreenchange', () => { if (ring && ringOn) { ringElement(); syncRing(); } });
 
   // Expose a Back handler for the native Android Back button (MainActivity calls
   // this; if it returns false, the app does its default Back/exit).
@@ -397,6 +541,7 @@ export function initSpatialNavigation() {
       if (!dir) return;
 
       enableTvMode();
+      heldKey = e.repeat;
 
       // Let arrow keys move the caret while typing in a text field.
       if (isTypingTarget(active)) return;
@@ -430,15 +575,14 @@ export function initSpatialNavigation() {
       const next = pickInDirection(current, dir, focusables);
       if (next) {
         e.preventDefault();
-        focusElement(next, vertical);
         // Up onto the first row: show the top of the page too (the banner, the title).
-        if (dir === 'up' && !pickInDirection(next, 'up', focusables)) scrollToEnd(next, 'top');
+        focusElement(next, vertical, dir === 'up' && !pickInDirection(next, 'up', focusables) ? 'top' : undefined);
       } else {
         // Nothing further that way: show the rest of the page in that direction
         // (its top, or what sits below the last row), keeping the focus put.
         e.preventDefault();
-        if (vertical) scrollToEnd(current, dir === 'up' ? 'top' : 'bottom');
-        else current.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        if (vertical) glideTo(current, true, dir === 'up' ? 'top' : 'bottom');
+        else glideTo(current, false);
       }
     },
     true,

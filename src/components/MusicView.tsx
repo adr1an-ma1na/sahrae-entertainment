@@ -3,7 +3,7 @@ import { isSong } from '../services/musicCatalog';
 import { isMusicTrack } from '../services/musicFilter';
 import { artistsIn, genrePage, myGenres, catalogueSongsBy, GENRES as CATALOG_GENRES, genreById, type GenrePage } from '../services/musicLibrary';
 import { ytDataApi } from '../services/ytDataApi';
-import { Search, Play, Pause, Heart, Loader2, Music2, Plus, X, ListMusic, Shuffle, Trash2, ChevronLeft, Library, Sparkles, Disc3, User, Youtube, Link2 as LinkIcon, Radio as RadioIcon, Sunrise } from 'lucide-react';
+import { Search, Play, Pause, Heart, Loader2, Music2, Plus, X, ListMusic, Shuffle, Trash2, ChevronLeft, Library, Sparkles, Disc3, User, Youtube, Link2 as LinkIcon, Radio as RadioIcon, Sunrise, MoreVertical } from 'lucide-react';
 import AudioShowcase, { type ShowcaseSlide } from './ui/AudioShowcase';
 import { momentFor } from '../services/discoverCore';
 import { ytmusic, Track, Artist, Album } from '../services/ytmusic';
@@ -186,13 +186,16 @@ function TrackRow({ track, onPlay, onRemove, index, list = false }: { track: Tra
         <p className={`text-sm font-semibold truncate ${active ? 'text-sauti' : 'text-white'}`}>{track.title}</p>
         <p className="text-xs text-zinc-400 truncate">{track.artist}</p>
       </div>
-      {active && isPlaying && !list && <Equalizer />}
+      {active && isPlaying && (list ? <span className="sm:hidden"><Equalizer /></span> : <Equalizer />)}
       {fmtDur(track.duration) && (
         <span className="text-xs text-zinc-500 tabular shrink-0 hidden sm:block">{fmtDur(track.duration)}</span>
       )}
-      <button onClick={(e) => { e.stopPropagation(); toggleLike(track); }} className={`p-2 rounded-full ${isLiked(track.id) ? 'text-sauti' : 'text-zinc-500 hover:text-white'}`} aria-label="Like"><Heart className={`w-4 h-4 ${isLiked(track.id) ? 'fill-current' : ''}`} /></button>
+      <button onClick={(e) => { e.stopPropagation(); toggleLike(track); }} className={`p-2 rounded-full ${list ? 'hidden md:block' : ''} ${isLiked(track.id) ? 'text-sauti' : 'text-zinc-500 hover:text-white'}`} aria-label="Like"><Heart className={`w-4 h-4 ${isLiked(track.id) ? 'fill-current' : ''}`} /></button>
       {onRemove ? (
         <button onClick={(e) => { e.stopPropagation(); onRemove(); }} className="p-2 rounded-full text-zinc-500 hover:text-red-400" aria-label="Remove"><X className="w-4 h-4" /></button>
+      ) : list ? (
+        // One menu for the rest (like, playlist, radio, queue, download), as in Spotify.
+        <button onClick={(e) => { e.stopPropagation(); openAddSheet(track); }} className="p-2 rounded-full text-zinc-400 hover:text-white" aria-label={`More for ${track.title}`}><MoreVertical className="w-5 h-5" /></button>
       ) : (
         <button onClick={(e) => { e.stopPropagation(); openAddSheet(track); }} className="p-2 rounded-full text-zinc-500 hover:text-white" aria-label="Add to playlist"><Plus className="w-4 h-4" /></button>
       )}
@@ -299,23 +302,29 @@ function runtime(tracks: Track[]): string {
  * playlist, the way Spotify and Apple Music show one), a kicker, a metal title,
  * the count and running time, and the actions.
  */
-function CollectionHero({ kicker, title, tracks, image, icon, round = false, tint, meta: metaText, children }: {
-  kicker: ReactNode; title: string; tracks: Track[]; image?: string; icon?: ReactNode; round?: boolean; tint?: string;
+function CollectionHero({ kicker, title, tracks, image, icon, round = false, blurb, meta: metaText, children }: {
+  kicker: ReactNode; title: string; tracks: Track[]; image?: string; icon?: ReactNode; round?: boolean;
+  /** A line under the title: who is in a mix. */
+  blurb?: string;
   /** Replaces the song count and running time; '' shows none (an artist is not a playlist). */
   meta?: string;
   children?: ReactNode;
 }) {
   const covers = [...new Set(tracks.map((t) => t.artworkLarge || t.artwork).filter(Boolean) as string[])].slice(0, 4);
   const lead = image || covers[0];
-  const glow = tint || tracks[0]?.dominantColor || 'rgb(var(--acc-rgb) / .45)';
   const meta = metaText ?? [tracks.length ? `${tracks.length} songs` : '', runtime(tracks)].filter(Boolean).join(' · ');
   return (
-    <section className="lux-stage relative overflow-hidden rounded-[2rem] mb-8 shadow-[inset_0_0_0_1px_var(--lux-line-2),0_30px_70px_-28px_rgba(0,0,0,0.75)]">
-      {lead && <img src={lead} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover scale-125 blur-3xl opacity-60" />}
-      <div aria-hidden className="absolute inset-0" style={{ background: `radial-gradient(80% 100% at 15% 0%, ${glow}, transparent 70%)`, opacity: 0.7 }} />
-      <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/45 to-black/20" />
-      <div className="relative flex flex-col sm:flex-row sm:items-end gap-6 p-6 md:p-10">
-        <div className={`relative shrink-0 w-44 h-44 md:w-56 md:h-56 overflow-hidden shadow-[0_30px_60px_-20px_rgba(0,0,0,0.85),0_0_0_1px_rgba(255,255,255,0.12)] ${round ? 'rounded-full' : 'rounded-2xl'}`}>
+    <section className="mb-7">
+      {/* The artwork's own light, filling the top of the page and fading into it. A
+          dark box around the hero cut the page in two. */}
+      {lead && (
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[560px] -z-10 overflow-hidden">
+          <img src={lead} alt="" className="hero-bleed absolute inset-0 w-full h-full object-cover scale-125 blur-3xl opacity-55" />
+          <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, transparent 0%, var(--page-ground) 92%)' }} />
+        </div>
+      )}
+      <div className="flex flex-col items-center sm:flex-row sm:items-end gap-5 md:gap-8">
+        <div className={`relative shrink-0 w-56 h-56 md:w-60 md:h-60 overflow-hidden shadow-[0_30px_60px_-18px_rgba(0,0,0,0.85),0_0_0_1px_rgba(255,255,255,0.1)] ${round ? 'rounded-full' : 'rounded-xl'}`}>
           {icon ? icon
             : !image && covers.length >= 4 ? (
               <div className="grid grid-cols-2 grid-rows-2 w-full h-full">
@@ -323,13 +332,13 @@ function CollectionHero({ kicker, title, tracks, image, icon, round = false, tin
               </div>
             ) : lead ? <img src={lead} alt="" className="absolute inset-0 w-full h-full object-cover" />
             : <div className={`absolute inset-0 bg-gradient-to-br ${gradFor(title)} flex items-center justify-center`}><ListMusic className="w-16 h-16 text-[#fff] drop-shadow" /></div>}
-          <span aria-hidden className="absolute inset-0 bg-gradient-to-br from-white/15 via-transparent to-transparent pointer-events-none" />
         </div>
-        <div className="min-w-0 flex-1">
-          <p className="lux-kicker mb-2">{kicker}</p>
-          <h2 className="lux-title text-4xl md:text-6xl pb-1 line-clamp-2">{title}</h2>
-          {meta && <p className="mt-2 text-sm font-semibold text-zinc-300 tabular">{meta}</p>}
-          <div className="mt-5 flex flex-wrap items-center gap-3">{children}</div>
+        <div className="min-w-0 w-full sm:flex-1">
+          <p className="lux-kicker mb-1.5">{kicker}</p>
+          <h2 className="lux-title text-[34px] leading-[1.05] md:text-6xl pb-1 line-clamp-2">{title}</h2>
+          {blurb && <p className="mt-1.5 text-sm text-zinc-300 line-clamp-2">{blurb}</p>}
+          {meta && <p className="mt-1.5 text-[13px] font-semibold text-zinc-400 tabular">{meta}</p>}
+          <div className="mt-4 flex flex-wrap items-center gap-3">{children}</div>
         </div>
       </div>
     </section>
@@ -1181,22 +1190,22 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
     const list = catPage ? (catTab === 'new' ? catPage.fresh : catPage.popular) : [];
     const title = g?.name || 'Genre';
     return (
-      <div className="sauti pt-[calc(env(safe-area-inset-top)+6.25rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
+      <div className="sauti pt-[calc(env(safe-area-inset-top)+6.25rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative isolate">
         <div aria-hidden className="absolute inset-x-0 top-0 h-80 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${g?.tint || '#555'} 0%, transparent 100%)`, opacity: 0.45 }} />
         <button onClick={() => setCatGenre(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-5 text-sm px-3.5 py-2 rounded-full bg-zinc-900/85 backdrop-blur-xl border border-white/10 shadow-lg"><ChevronLeft className="w-4 h-4" /> Back</button>
-        <div className="overline mb-1">Genre</div>
-        <h2 className="text-3xl md:text-5xl font-display font-bold text-white mb-1">{title}</h2>
-        {catPage && <p className="text-sm text-zinc-400 mb-4">{catPage.total} songs · {catPage.artists.length} artists</p>}
-        {catPage && catPage.popular.length > 0 && (
-          <div className="flex gap-2 mb-6">
-            <button onClick={() => playQueue(catPage.popular, 0, title)} className="btn-sauti px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Play className="w-4 h-4 fill-current" /> Play</button>
-            <button onClick={() => { const arr = [...catPage.popular].sort(() => Math.random() - 0.5); playQueue(arr, 0, title); }} className="btn-glass px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Shuffle className="w-4 h-4" /> Shuffle</button>
-          </div>
-        )}
+        <CollectionHero kicker="Genre" title={title} tracks={catPage?.popular || []}
+          meta={catPage ? `${catPage.total} songs · ${catPage.artists.length} artists` : ''}>
+          {catPage && catPage.popular.length > 0 && (
+            <>
+              <button onClick={() => playQueue(catPage.popular, 0, title)} data-tv-focusable className="lux-btn px-7 py-3 text-sm md:text-base"><Play className="w-4 h-4 fill-current" /> Play</button>
+              <button onClick={() => { const arr = [...catPage.popular].sort(() => Math.random() - 0.5); playQueue(arr, 0, title); }} data-tv-focusable aria-label="Shuffle" className="btn-glass w-12 h-12 rounded-full flex items-center justify-center"><Shuffle className="w-5 h-5" /></button>
+            </>
+          )}
+        </CollectionHero>
         <div className="flex gap-2 mb-6" role="tablist">
           {([['popular', 'Popular'], ['new', 'New releases'], ['artists', 'Artists']] as const).map(([k, label]) => (
             <button key={k} role="tab" aria-selected={catTab === k} onClick={() => setCatTab(k)} tabIndex={0} data-tv-focusable
-              className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${catTab === k ? 'bg-amber-500 text-amber-950' : 'bg-zinc-900 text-zinc-300 hover:text-white border border-white/10'}`}>{label}</button>
+              aria-pressed={catTab === k} className="lux-chip">{label}</button>
           ))}
         </div>
         {!catPage ? (
@@ -1208,7 +1217,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
         ) : list.length === 0 ? (
           <EmptyState compact illustration="search" title={catTab === 'new' ? 'No new releases in the last four weeks' : `Nothing for ${title} right now`} message={catTab === 'new' ? 'Try Popular, or check back after Friday.' : 'This genre could not be loaded. Check your connection and try again.'} />
         ) : (
-          <div className="grid sm:grid-cols-2 gap-2">{list.map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(list, i, title)} /></Fragment>)}</div>
+          <SongList tracks={list} onPlay={(i) => playQueue(list, i, title)} />
         )}
       </div>
     );
@@ -1216,26 +1225,24 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
 
   if (genre) {
     const shown = sortTracks(genreTracks);
-    const hc = genreTint || genreTracks[0]?.dominantColor || 'rgba(251,191,36,0.4)';
     return (
-      <div className="sauti pt-[calc(env(safe-area-inset-top)+6.25rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
-        <div aria-hidden className="absolute inset-x-0 top-0 h-80 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${hc} 0%, transparent 100%)`, opacity: 0.5 }} />
+      <div className="sauti pt-[calc(env(safe-area-inset-top)+6.25rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative isolate">
         <button onClick={() => setGenre(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-5 text-sm px-3.5 py-2 rounded-full bg-zinc-900/85 backdrop-blur-xl border border-white/10 shadow-lg"><ChevronLeft className="w-4 h-4" /> Back</button>
-        <div className="overline mb-1">Mood &amp; genre</div>
-        <h2 className="text-3xl md:text-5xl font-display font-bold text-white mb-4">{genre}</h2>
-        {genreTracks.length > 0 && (
-          <div className="flex gap-2 mb-8">
-            <button onClick={() => playQueue(shown, 0, genre)} className="btn-sauti px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Play className="w-4 h-4 fill-current" /> Play</button>
-            <button onClick={() => { const arr = [...genreTracks].sort(() => Math.random() - 0.5); playQueue(arr, 0, genre); }} className="btn-glass px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2"><Shuffle className="w-4 h-4" /> Shuffle</button>
-            {sortSelect}
-          </div>
-        )}
+        <CollectionHero kicker="Mood and genre" title={genre} tracks={genreTracks}>
+          {genreTracks.length > 0 && (
+            <>
+              <button onClick={() => playQueue(shown, 0, genre)} data-tv-focusable className="lux-btn px-7 py-3 text-sm md:text-base"><Play className="w-4 h-4 fill-current" /> Play</button>
+              <button onClick={() => { const arr = [...genreTracks].sort(() => Math.random() - 0.5); playQueue(arr, 0, genre); }} data-tv-focusable aria-label="Shuffle" className="btn-glass w-12 h-12 rounded-full flex items-center justify-center"><Shuffle className="w-5 h-5" /></button>
+              {sortSelect}
+            </>
+          )}
+        </CollectionHero>
         {genreLoading ? (
           <div className="flex items-center gap-2 text-zinc-400 py-10"><Loader2 className="w-6 h-6 animate-spin text-amber-500" /> Loading {genre}…</div>
         ) : genreTracks.length === 0 ? (
           <EmptyState compact illustration="search" title={`Nothing for ${genre} right now`} message="Try another mood or genre. These fill from YouTube and change through the day." />
         ) : (
-          <div className="grid sm:grid-cols-2 gap-2">{shown.map((t, i) => <Fragment key={t.id}><TrackRow track={t} onPlay={() => playQueue(shown, i, genre)} /></Fragment>)}</div>
+          <SongList tracks={shown} onPlay={(i) => playQueue(shown, i, genre)} />
         )}
       </div>
     );
@@ -1243,15 +1250,12 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
 
   if (viewMix) {
     const shown = sortTracks(viewMix.tracks);
-    const hc = viewMix.tracks[0]?.dominantColor || 'rgba(251,191,36,0.4)';
     return (
-      <div className="sauti pt-[calc(env(safe-area-inset-top)+6.25rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
-        <div aria-hidden className="absolute inset-x-0 top-0 h-80 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${hc} 0%, transparent 100%)`, opacity: 0.5 }} />
+      <div className="sauti pt-[calc(env(safe-area-inset-top)+6.25rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative isolate">
         <button onClick={() => setViewMix(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-5 text-sm px-3.5 py-2 rounded-full bg-zinc-900/85 backdrop-blur-xl border border-white/10 shadow-lg"><ChevronLeft className="w-4 h-4" /> Back</button>
-        <CollectionHero kicker={`Made for you · ${viewMix.subtitle}`} title={viewMix.title} tracks={viewMix.tracks}>
+        <CollectionHero kicker="Made for you" blurb={viewMix.subtitle} title={viewMix.title} tracks={viewMix.tracks}>
           <button onClick={() => playQueue(shown, 0, viewMix.title)} data-tv-focusable className="lux-btn px-7 py-3 text-sm md:text-base"><Play className="w-4 h-4 fill-current" /> Play</button>
           <button onClick={() => { const arr = [...viewMix.tracks].sort(() => Math.random() - 0.5); playQueue(arr, 0, viewMix.title); }} data-tv-focusable aria-label="Shuffle" className="btn-glass w-12 h-12 rounded-full flex items-center justify-center"><Shuffle className="w-5 h-5" /></button>
-          {sortSelect}
         </CollectionHero>
         <SongList tracks={shown} onPlay={(i) => playQueue(shown, i, viewMix.title)} />
       </div>
@@ -1260,10 +1264,8 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
 
   if (detail) {
     const shownTracks = sortTracks(detailTracks);
-    const heroColor = detailTracks[0]?.dominantColor || 'rgba(251,191,36,0.4)';
     return (
-      <div className="sauti pt-[calc(env(safe-area-inset-top)+6.25rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative">
-        <div aria-hidden className="absolute inset-x-0 top-0 h-80 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${heroColor} 0%, transparent 100%)`, opacity: 0.5 }} />
+      <div className="sauti pt-[calc(env(safe-area-inset-top)+6.25rem)] md:pt-24 px-4 md:px-12 pb-40 mx-auto min-h-screen relative isolate">
         <button onClick={() => setDetail(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-5 text-sm px-3.5 py-2 rounded-full bg-zinc-900/85 backdrop-blur-xl border border-white/10 shadow-lg"><ChevronLeft className="w-4 h-4" /> Back</button>
         <CollectionHero kicker={detail.subtitle} title={detail.name} tracks={detailTracks} image={detail.thumbnail} round={detail.kind === 'artist'}
           meta={detail.kind === 'artist' ? '' : undefined}
@@ -1411,9 +1413,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
           ) : activeMood !== 'All' ? (
             <div className="space-y-6 mt-4">
               <div className="flex items-center justify-between">
-                <SectionHead icon={<span className="w-2 h-6 rounded bg-sauti" />}>
-                  {activeMood} Anthems
-                </SectionHead>
+                <SectionHead>{activeMood}</SectionHead>
                 {moodTracks.length > 0 && (
                   <button onClick={() => playQueue(moodTracks, 0, activeMood)} className="btn-sauti px-5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5">
                     <Play className="w-3.5 h-3.5 fill-current" /> Play All
@@ -1429,13 +1429,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
               ) : moodTracks.length === 0 ? (
                 <p className="text-zinc-500 text-center py-10">Vibes are refreshing. Try again shortly.</p>
               ) : (
-                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {moodTracks.map((t, i) => (
-                    <Fragment key={t.id}>
-                      <TrackRow track={t} onPlay={() => playQueue(moodTracks, i, activeMood)} />
-                    </Fragment>
-                  ))}
-                </div>
+                <SongList tracks={moodTracks} onPlay={(i) => playQueue(moodTracks, i, activeMood)} />
               )}
             </div>
           ) : (
@@ -1748,8 +1742,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
           )}
         </>
       ) : openList ? (
-        <section className="relative">
-          <div aria-hidden className="absolute inset-x-0 -top-24 h-72 -z-10 pointer-events-none" style={{ background: `linear-gradient(180deg, ${openList.tracks[0]?.dominantColor || 'rgba(251,191,36,0.4)'} 0%, transparent 100%)`, opacity: 0.5 }} />
+        <section className="relative isolate">
           <button onClick={() => setOpenId(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-4 text-sm px-3.5 py-2 rounded-full bg-zinc-900/85 backdrop-blur-xl border border-white/10 shadow-lg"><ChevronLeft className="w-4 h-4" /> Library</button>
           <CollectionHero
             kicker={openList.id === 'liked' ? 'Your library' : openList.id.startsWith('yt_') ? 'From YouTube Music' : 'Playlist'}
