@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Suspense, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
@@ -11,7 +11,7 @@ import { LuxChapter } from './components/ui/Lux';
 import MediaRow from './components/MediaRow';
 import Top10Row from './components/Top10Row';
 import MediaGrid from './components/MediaGrid';
-import PlayerModal from './components/PlayerModal';
+const PlayerModal = lazyView(() => import('./components/PlayerModal'));
 import RemotePanel from './components/RemotePanel';
 import QuickPick from './components/QuickPick';
 import TasteCard from './components/TasteCard';
@@ -23,13 +23,12 @@ import WatchParty from './components/WatchParty';
 import { setRoomOpener } from './services/room';
 import { setScreenHandlers, startScreen } from './services/remote';
 import { isTelevision } from './tv/spatialNavigation';
-import AudioHubView from './components/AudioHubView';
-import PodcastsView from './components/PodcastsView';
-import ConnectView from './components/ConnectView';
-import LiveTVView from './components/LiveTVView';
-import SportsView from './components/SportsView';
-import ContinueWatchingView from './components/ContinueWatchingView';
-import FlowChannelsView from './components/FlowChannelsView';
+const AudioHubView = lazyView(() => import('./components/AudioHubView'));
+const PodcastsView = lazyView(() => import('./components/PodcastsView'));
+const LiveTVView = lazyView(() => import('./components/LiveTVView'));
+const SportsView = lazyView(() => import('./components/SportsView'));
+const ContinueWatchingView = lazyView(() => import('./components/ContinueWatchingView'));
+const FlowChannelsView = lazyView(() => import('./components/FlowChannelsView'));
 import GlobalAudioPlayer from './components/GlobalAudioPlayer';
 import ProfileSelection from './components/ProfileSelection';
 import SignInGate, { NewPasswordSheet } from './components/SignInGate';
@@ -37,13 +36,13 @@ import LegalCenter from './components/LegalCenter';
 import ConsentBanner from './components/ConsentBanner';
 import SearchBox from './components/SearchBox';
 import { onRecovery } from './firebase';
-import DiscoveryView from './components/DiscoveryView';
-import TalentExplorer from './components/TalentExplorer';
+const DiscoveryView = lazyView(() => import('./components/DiscoveryView'));
+const TalentExplorer = lazyView(() => import('./components/TalentExplorer'));
 import Sidebar from './components/Sidebar';
 import BottomTabBar from './components/BottomTabBar';
 import PodcastProgressTracker from './components/PodcastProgressTracker';
-import MusicView from './components/MusicView';
-import DownloadsView from './components/DownloadsView';
+const MusicView = lazyView(() => import('./components/MusicView'));
+const DownloadsView = lazyView(() => import('./components/DownloadsView'));
 import MusicPlayer from './components/MusicPlayer';
 import AddToPlaylistSheet from './components/AddToPlaylistSheet';
 import { BrowseSkeleton, GridSkeleton, ListSkeleton } from './components/PageSkeleton';
@@ -62,11 +61,12 @@ import Onboarding, { TasteGenre } from './components/Onboarding';
 import EmptyState from './components/EmptyState';
 import Coachmark from './components/Coachmark';
 import { applyEq, loadEq } from './services/eq';
-import SettingsView from './components/SettingsView';
+const SettingsView = lazyView(() => import('./components/SettingsView'));
 import { startSync } from './services/cloudSync';
 import Illustration from './components/ui/Illustration';
 import { LuxHeader, LuxGlow, LuxSeg } from './components/ui/Lux';
 import { crumb } from './services/bootCrumbs';
+import { lazyView, preloadViews } from './services/lazyView';
 
 export default function App() {
   const { user, activeProfile, loading: authLoading } = useAuth();
@@ -103,6 +103,11 @@ export default function App() {
     return () => { clearTimeout(t); stop(); };
   }, [user, authLoading]);
   const [activeTab, setActiveTab] = useState('home');
+  // Screens are fetched once the opening has finished, so they never compete with it.
+  useEffect(() => {
+    const t = window.setTimeout(preloadViews, 3500);
+    return () => window.clearTimeout(t);
+  }, []);
   // The page is built once the intro is on screen (SplashIntro onShown): on a TV, building it first held the screen past the intro.
   const [introShown, setIntroShown] = useState(false);
   useEffect(() => { crumb(`tab:${activeTab}`); }, [activeTab]);
@@ -153,6 +158,8 @@ export default function App() {
     initialEpisode?: number;
     playTrailer?: boolean;
   }>({ isOpen: false, mediaId: null, mediaType: null, startInInfo: false });
+  const playerOpened = useRef(false);
+  if (playerConfig.isOpen) playerOpened.current = true;
 
   const [initialLoadError, setInitialLoadError] = useState<boolean>(false);
 
@@ -513,7 +520,7 @@ export default function App() {
     // `loading` tracks the TMDB catalog fetch. Destinations that don't read TMDB
     // must be listed here or they sit behind a skeleton waiting on data they
     // never use — 'music' was missing, so Sauti stalled on a cold start.
-    const NEEDS_TMDB = !['home', 'radio', 'audio', 'music', 'podcasts', 'connect', 'tv', 'sports', 'continue', 'settings'].includes(activeTab);
+    const NEEDS_TMDB = !['home', 'radio', 'audio', 'music', 'podcasts', 'tv', 'sports', 'continue', 'settings'].includes(activeTab);
     if (loading && NEEDS_TMDB) {
       // A skeleton in the shape of the destination, not a spinner over a blank
       // screen: the layout stays still, and the wait reads as "loading this"
@@ -714,8 +721,6 @@ export default function App() {
         return <MusicView onNav={navigate} />;
       case 'podcasts':
         return <PodcastsView onNav={navigate} />;
-      case 'connect':
-        return <ConnectView onNav={navigate} />;
       case 'settings':
         return <SettingsView onPlay={handlePlay} />;
       case 'downloads':
@@ -799,24 +804,18 @@ export default function App() {
           />
 
           <main className="pb-28 md:pb-0">
-            {/* Cinematic crossfade between sections. Opacity-only on purpose:
-                a transform here would re-anchor fixed overlays (e.g. the Sports
-                fullscreen player) to this wrapper instead of the viewport. */}
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeTab}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-              >
+            {/* The new section draws at once and fades up. It used to wait out a
+                fade of the old one first, a delay on every press. Opacity only: a
+                transform would re-anchor fixed overlays (the Sports player). */}
+            <div key={activeTab} className="tab-in">
+              <Suspense fallback={<div className="min-h-screen" aria-hidden />}>
                 {introShown ? renderContent() : null}
-              </motion.div>
-            </AnimatePresence>
+              </Suspense>
+            </div>
           </main>
         </div>
 
-        <PlayerModal 
+        {(playerConfig.isOpen || playerOpened.current) && <Suspense fallback={null}><PlayerModal
           isOpen={playerConfig.isOpen}
           mediaId={playerConfig.mediaId}
           mediaType={playerConfig.mediaType}
@@ -825,7 +824,7 @@ export default function App() {
           initialEpisode={playerConfig.initialEpisode}
           playTrailer={playerConfig.playTrailer}
           onClose={handleClosePlayer}
-        />
+        /></Suspense>}
         
         <GlobalAudioPlayer />
         <MusicPlayer />

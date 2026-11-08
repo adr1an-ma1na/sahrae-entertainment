@@ -87,7 +87,7 @@ const privacy: LegalDoc = {
       'We use your account, library and settings because they are needed to provide the service you asked for (performance of our agreement with you). We keep the service secure and working on the basis of our legitimate interest in doing so. Server reports and the YouTube connection are based on your consent, which you can withdraw at any time.',
     ] },
     { h: '4. Who else receives information', p: [
-      'Supabase, which runs our accounts, stores your library and carries Watch together and the phone remote. Google (Firebase), for "Connect YouTube" sign-in. These providers act on our behalf and only as needed to run Sahrae.',
+      'Supabase, which runs our accounts, stores your library and carries Watch together and the phone remote. These providers act on our behalf and only as needed to run Sahrae.',
       'Services you use through Sahrae receive what any website receives when your device contacts it, including your IP address and device details: YouTube and Google, The Movie Database (film and series information), Deezer (music catalogue), lrclib (lyrics), Apple (podcast search), DiceBear (avatars), Piped (YouTube mirrors), GitHub and jsDelivr (app files and schedules), and the radio stations, TV channels, podcast hosts, streaming and sports sites whose players you open. Their own privacy policies apply.',
       'We may disclose information if the law requires it, or to protect the safety of people or of Sahrae.',
     ] },

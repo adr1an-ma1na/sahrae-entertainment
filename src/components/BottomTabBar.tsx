@@ -1,6 +1,6 @@
 import { t as tr } from '../i18n';
 import { useState } from 'react';
-import { Home, Search, Headphones, Radio, RadioTower, Grid3x3, X, Film, Tv2, Clapperboard, Trophy, Heart, Clock, Download, Mic2, Youtube } from 'lucide-react';
+import { Home, Search, Headphones, Radio, RadioTower, Grid3x3, X, Film, Tv2, Clapperboard, Trophy, Heart, Clock, Download, Mic2 } from 'lucide-react';
 
 /**
  * Mobile bottom navigation (Spotify-style). Replaces the top scrolling strip on
@@ -18,12 +18,11 @@ const PRIMARY = [
 // The Listen destinations. The primary tab (Music) stays lit for any of them,
 // because from the phone bar they are all "Listen"; the others are in More
 // (the in-page Music/Podcasts/Radio/Connect bar was removed, 2026-11-01).
-const AUDIO_TABS = ['audio', 'music', 'podcasts', 'connect'];
+const AUDIO_TABS = ['audio', 'music', 'podcasts'];
 
 const MORE = [
   { id: 'podcasts', label: 'Podcasts', icon: Mic2 },
   { id: 'audio', label: 'Radio', icon: RadioTower },
-  { id: 'connect', label: 'Connect', icon: Youtube },
   { id: 'movies', label: 'Movies', icon: Film },
   { id: 'series', label: 'Series', icon: Tv2 },
   { id: 'tv', label: 'Live TV', icon: Radio },

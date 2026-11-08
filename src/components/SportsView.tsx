@@ -18,6 +18,9 @@ import { lockLandscape, unlockOrientation } from '../services/fullscreen';
 import { tapCenterOf, canTap, canFrameKick, tellFrame, isFramePlaying, isFrameStalled } from '../services/nativeTap';
 import { TvServerStrip, useTvServerStrip } from './ui/TvServerStrip';
 import { useFrameChoices } from '../hooks/useFrameChoices';
+import { fetchProof, reportPlay } from '../services/playProof';
+import { FEED_PROOF_KEY, feedServerId, orderByProof, longestSinceFailing } from '../services/feedProof';
+import type { ProofRow } from '../services/playProofRank';
 import { isDataSaver } from '../services/dataSaver';
 import { isLiteDevice } from '../services/deviceTier';
 import TvPointer from './TvPointer';
@@ -143,6 +146,14 @@ const TV_TITLES_MS = 500;
 const TV_TITLES_BACK_MS = 3500;
 /** A live match with no picture after this long moves to the next feed by itself. */
 const NO_PICTURE_MS = 30_000;
+/** A feed moved to because the last one died: the viewer is already waiting. */
+const NO_PICTURE_AFTER_DROP_MS = 12_000;
+/** Still playing after this long counts as a feed that holds up. */
+const HELD_UP_MS = 3 * 60_000;
+/** How often the match's feed list is read again while it plays: links change during a game. */
+const FEED_REFRESH_MS = 4 * 60_000;
+/** Every feed has failed: go round again, but stop after this many so a finished match rests. */
+const MAX_LAST_RESORTS = 8;
 
 const SPORT_EMOJI: Record<string, string> = {
   football: '⚽', 'american-football': '🏈', basketball: '🏀', baseball: '⚾', hockey: '🏒',
@@ -422,6 +433,14 @@ const HLSPlayer = ({ src, onUnplayable }: { src: string; onUnplayable?: () => vo
         video.play().catch(() => {});
       });
       hls.on(Hls.Events.FRAG_BUFFERED, () => { started = true; });
+      // A live stream can simply stop: no error, the picture just stays still.
+      let lastTime = -1, frozenFor = 0;
+      const frozen = setInterval(() => {
+        if (!started || video.paused || document.hidden || navigator.onLine === false) { frozenFor = 0; return; }
+        if (Math.abs(video.currentTime - lastTime) > 0.2) { lastTime = video.currentTime; frozenFor = 0; return; }
+        frozenFor += 2;
+        if (frozenFor >= 10) { clearInterval(frozen); hls.destroy(); giveUp(); }
+      }, 2000);
       hls.on(Hls.Events.ERROR, (_e, data) => {
         if (!data.fatal) return;
         const d = String(data.details || '');
@@ -437,7 +456,7 @@ const HLSPlayer = ({ src, onUnplayable }: { src: string; onUnplayable?: () => vo
         }
       });
       hlsRef.current = hls;
-      return () => { clearTimeout(watchdog); hlsRef.current = null; setLevels([]); hls.destroy(); };
+      return () => { clearTimeout(watchdog); clearInterval(frozen); hlsRef.current = null; setLevels([]); hls.destroy(); };
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = src;
       const onMeta = () => video.play().catch(() => {});
@@ -866,7 +885,7 @@ export default function SportsView() {
     // "the event says it starts at 8 but nothing plays" complaint: the app was
     // manufacturing links it had no reason to believe in. If there are no
     // embeds, we say so instead ("No stream for this match yet").
-    const rawEmbeds = m.embeds && m.embeds.length > 0 ? [...m.embeds] : [];
+    const rawEmbeds = m.embeds && m.embeds.length > 0 ? orderByProof([...m.embeds], hostOf, feedProofRef.current) : [];
 
     // When the API can give us the real per-stream list, do NOT also seed a
     // server from the feed's constructed URL. That placeholder is what showed up
@@ -986,6 +1005,42 @@ export default function SportsView() {
    * and the failed id joins this session's guard set so failover cannot ping-pong
    * between the same two dead sources (§17).
    */
+  const lastResorts = useRef(0);
+  const [feedReload, setFeedReload] = useState(0);
+  const refreshFeedsRef = useRef<() => void>(() => {});
+
+  // What has lasted for other viewers, ready before a match is opened.
+  const feedProofRef = useRef<ProofRow[]>([]);
+  useEffect(() => { void fetchProof(FEED_PROOF_KEY).then((rows) => { feedProofRef.current = rows; }); }, []);
+
+  // Links change during a game and sites add feeds: read the match again while
+  // it plays and add what is new. Nothing that is playing is disturbed.
+  const refreshFeeds = useCallback(async () => {
+    const p = playingRef.current;
+    const eventId = p?.sources[0]?.eventId;
+    if (!p || !eventId) return;
+    const feed = await loadSportsFeed().catch(() => null);
+    const m = feed?.events.find((e) => e.id === eventId);
+    const now = playingRef.current;
+    if (!m?.embeds?.length || !now || now.sources[0]?.eventId !== eventId) return;
+    const known = new Set(now.sources.flatMap((s) => [s.embed, s.url]).filter(Boolean));
+    const fresh = m.embeds.filter((u) => !known.has(u)).slice(0, 8);
+    if (!fresh.length) return;
+    const added = buildStreams(eventId, fresh, [], m.feeds).map((s, i) => ({ ...s, id: `srv-new-${Date.now()}-${i}` }));
+    const sources = [...now.sources, ...added];
+    playingRef.current = { ...now, sources };
+    setPlaying((prev) => (prev && prev.sources[0]?.eventId === eventId ? { ...prev, sources } : prev));
+    added.forEach((s) => { void checkStream(s.id, false); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  refreshFeedsRef.current = () => { void refreshFeeds(); };
+  const watchingEvent = playing?.sources[0]?.eventId;
+  useEffect(() => {
+    if (!watchingEvent) return;
+    const t = window.setInterval(() => { void refreshFeeds(); }, FEED_REFRESH_MS);
+    return () => window.clearInterval(t);
+  }, [watchingEvent, refreshFeeds]);
+
   const failoverFrom = useCallback((reason: FailureReason, announce: boolean) => {
     // Read from the ref, not inside a state updater. React may invoke an
     // updater more than once, so scheduling validation from inside one fires
@@ -1008,10 +1063,23 @@ export default function SportsView() {
       metrics.failovers++;
       const next = nextStream(sources, current.id, failed, now);
       if (!next) {
-        setPlaying((prev) => (prev ? { ...prev, sources, failed } : prev)); // nothing left; stay put
+        // Every feed has failed once. Sitting on a dead one is the worst answer
+        // mid-match: go round again from the one that failed longest ago, since
+        // live feeds come back. A single feed reloads.
+        lastResorts.current++;
+        const again = lastResorts.current <= MAX_LAST_RESORTS ? longestSinceFailing(sources.filter((s) => s.kind === 'server' && (s.url || s.embed)), current.id) : null;
+        const idx = again ? sources.findIndex((s) => s.id === again.id) : -1;
+        const round = new Set<string>();
+        playingRef.current = { ...p, sources, idx: idx >= 0 ? idx : p.idx, failed: round };
+        setPlaying((prev) => (prev ? { ...prev, sources, idx: idx >= 0 ? idx : prev.idx, failed: round } : prev));
+        if (!again && lastResorts.current <= MAX_LAST_RESORTS) setFeedReload((n) => n + 1);
+        if (again) void checkStream(again.id, false);
+        refreshFeedsRef.current();
       } else {
         metrics.failoversSucceeded++;
         const idx = sources.findIndex((s) => s.id === next.id);
+        // Set now as well: the feed's watchdog reads this the moment the switch lands.
+        playingRef.current = { ...p, sources, idx: idx >= 0 ? idx : p.idx, failed };
         setPlaying((prev) => (prev ? { ...prev, sources, idx: idx >= 0 ? idx : prev.idx, failed } : prev));
         if (needsCheck(next, DEFAULT_CONFIG, now)) void checkStream(next.id, false);
       }
@@ -1348,6 +1416,8 @@ export default function SportsView() {
     stripWarmTimer.current = window.setTimeout(() => { if (canWarm()) setWarmUrl(warmable(i)); }, 120);
   };
   const sportPicture = () => sportFrameRef.current?.querySelector<HTMLIFrameElement>('iframe[data-on]');
+  /** Was this feed reached by losing the last one? */
+  const afterDrop = useRef(false);
 
   // Once a feed starts it goes full screen, as a film does: once per feed, so
   // leaving full screen is not undone. A real full screen where the browser
@@ -1386,6 +1456,7 @@ export default function SportsView() {
     const pointerOut = () => document.documentElement.classList.contains('tv-pointer');
     let playing = false;
     let warmNext = 0;
+    let heldUp = 0;
     // The player helper inside the feed's page (nativeTap.canFrameKick) starts it
     // itself and says when the picture really moves; Sahrae nudges it too. Only
     // if nothing moves after 15 s does a tap try the play button, once.
@@ -1394,13 +1465,22 @@ export default function SportsView() {
       // next. Not before kick-off: a feed can be up and waiting for the match.
       const giveWay = () => {
         const p = playingRef.current;
-        if (p && !p.startsAt && !pointerOut()) failoverFrom('PLAYBACK_STALL', true);
+        if (!p || p.startsAt || pointerOut()) return;
+        // The viewer's own connection, not the feed: every feed would look dead.
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+        const host = feedServerId(hostOf(activeUrl));
+        if (host.length > 1) reportPlay(FEED_PROOF_KEY, host, false);
+        afterDrop.current = true;
+        failoverFrom('PLAYBACK_STALL', true);
       };
       const onMsg = (e: MessageEvent) => {
         if (isFrameStalled(e, frame())) { giveWay(); return; }
         if (isFramePlaying(e, frame()) && !playing) {
           playing = true;
           goFullRef.current();
+          afterDrop.current = false;
+          lastResorts.current = 0;
+          heldUp = window.setTimeout(() => { const host = feedServerId(hostOf(activeUrl)); if (host.length > 1) reportPlay(FEED_PROOF_KEY, host, true); }, HELD_UP_MS);
           if (!isTelevision() && !isLiteDevice() && canWarm()) warmNext = window.setTimeout(() => {
             const p = playingRef.current;
             if (!p) return;
@@ -1415,9 +1495,9 @@ export default function SportsView() {
       const timers = [
         ...[0, 250, 700, 1500, 5000, 9000].map((ms) => setTimeout(() => { if (!playing) tellFrame(frame(), 'play'); }, ms)),
         setTimeout(() => { const el = sportFrameRef.current; if (!playing && el && !pointerOut()) tapCenterOf(el, isTelevision() ? el : null); }, 15000),
-        setTimeout(() => { if (!playing) giveWay(); }, NO_PICTURE_MS),
+        setTimeout(() => { if (!playing) giveWay(); }, afterDrop.current ? NO_PICTURE_AFTER_DROP_MS : NO_PICTURE_MS),
       ];
-      return () => { window.removeEventListener('message', onMsg); timers.forEach(clearTimeout); window.clearTimeout(warmNext); };
+      return () => { window.removeEventListener('message', onMsg); timers.forEach(clearTimeout); window.clearTimeout(warmNext); window.clearTimeout(heldUp); };
     }
     // An older WebView, no helper: taps, while the app has seen no video.
     // ('sahrae:embed-media' also fires for a player that only preloads, so
@@ -1431,7 +1511,7 @@ export default function SportsView() {
     }, ms));
     timers.push(setTimeout(() => goFullRef.current(), 4500));
     return () => { window.removeEventListener('sahrae:embed-media', onStream); timers.forEach(clearTimeout); };
-  }, [activeUrl, isEmbedUrl]);
+  }, [activeUrl, isEmbedUrl, feedReload]);
 
   // A TV: Up at the top of the picture brings the servers.
   const strip = useTvServerStrip(!!playing && !!activeUrl && isTelevision(), sportFrameRef);
@@ -1542,7 +1622,7 @@ export default function SportsView() {
                   <iframe
                     // Re-mount when the shield flips: sandbox only applies at
                     // frame creation, so toggling has to rebuild the iframe.
-                    key={`sports-${shieldOn ? 'shield' : 'open'}-${s.url}`}
+                    key={`sports-${shieldOn ? 'shield' : 'open'}-${s.url}-${on ? feedReload : 0}`}
                     src={s.url}
                     name={on ? undefined : 'sahrae-warm'}
                     data-on={on || undefined}

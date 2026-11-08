@@ -9,7 +9,7 @@ import { momentFor } from '../services/discoverCore';
 import { ytmusic, Track, Artist, Album } from '../services/ytmusic';
 import { getApiState, ENABLE_URL, type ApiState } from '../services/ytDataApi';
 import { useMusic } from '../hooks/useMusic';
-import { youtubeService, YoutubePlaylist, YoutubeUserProfile } from '../services/youtube';
+import { youtubeService } from '../services/youtube';
 import { CoverArt } from './ui/CoverArt';
 import { ArtCard, QuickTile } from './ui/Shelf';
 import VideoCard from './ui/VideoCard';
@@ -636,17 +636,8 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   const [popularAll, setPopularAll] = useState(false);
   const [newName, setNewName] = useState('');
 
-  // YouTube Sync States
-  const [isYoutubeConnected, setIsYoutubeConnected] = useState(youtubeService.isConnected());
-  const [youtubeProfile, setYoutubeProfile] = useState<YoutubeUserProfile | null>(null);
-  const [youtubePlaylists, setYoutubePlaylists] = useState<YoutubePlaylist[]>([]);
-  const [youtubeLoading, setYoutubeLoading] = useState(false);
-  const [youtubeError, setYoutubeError] = useState<string | null>(null);
-  // Connected, loaded, no error: YouTube's liked list and playlists can sit in the Library list.
-  const ytReady = isYoutubeConnected && !youtubeLoading && !youtubeError;
-
-  const [ytTracks, setYtTracks] = useState<Track[]>([]);
-  const [ytTracksLoading, setYtTracksLoading] = useState(false);
+  // Connect has gone (owner, 2026-11-08): a sign-in left from before is forgotten.
+  useEffect(() => { if (youtubeService.isConnected()) youtubeService.disconnect(); }, []);
 
   // Catalog connector state, polled because it is learned from the first real
   // API response rather than known up front.
@@ -660,79 +651,6 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
   const [importUrl, setImportUrl] = useState('');
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null);
-
-  const loadYoutubeData = async () => {
-    if (!youtubeService.isConnected()) return;
-    setYoutubeLoading(true);
-    setYoutubeError(null);
-    try {
-      const profile = await youtubeService.fetchUserProfile();
-      setYoutubeProfile(profile);
-      const playlists = await youtubeService.fetchPlaylists();
-      setYoutubePlaylists(playlists);
-    } catch (err: any) {
-      console.error('Error loading YouTube data:', err);
-      setYoutubeError(err.message || 'Failed to sync your YouTube Music account.');
-    } finally {
-      setYoutubeLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (isYoutubeConnected) {
-      loadYoutubeData();
-    }
-  }, [isYoutubeConnected]);
-
-  useEffect(() => {
-    if (!openId) {
-      setYtTracks([]);
-      return;
-    }
-
-    if (openId === 'yt_liked') {
-      setYtTracksLoading(true);
-      youtubeService.fetchLikedMusic()
-        .then(tracks => {
-          setYtTracks(tracks);
-        })
-        .catch(err => {
-          console.error(err);
-          setYoutubeError(err.message || 'Failed to load Liked Music.');
-        })
-        .finally(() => {
-          setYtTracksLoading(false);
-        });
-    } else if (openId.startsWith('yt_')) {
-      const pId = openId.replace('yt_', '');
-      setYtTracksLoading(true);
-      youtubeService.fetchPlaylistTracks(pId)
-        .then(tracks => {
-          setYtTracks(tracks);
-        })
-        .catch(err => {
-          console.error(err);
-          setYoutubeError(err.message || 'Failed to load YouTube playlist.');
-        })
-        .finally(() => {
-          setYtTracksLoading(false);
-        });
-    }
-  }, [openId]);
-
-  const handleConnectYoutube = async () => {
-    setYoutubeLoading(true);
-    setYoutubeError(null);
-    try {
-      await youtubeService.signInWithGoogle();
-      setIsYoutubeConnected(true);
-    } catch (err: any) {
-      console.error('YouTube login error:', err);
-      setYoutubeError(err.message || 'Failed to connect your YouTube Music account.');
-    } finally {
-      setYoutubeLoading(false);
-    }
-  };
 
   // Import a public/unlisted playlist by link — no sign-in required.
   const handleImportPlaylist = async () => {
@@ -754,14 +672,6 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
     } finally {
       setImporting(false);
     }
-  };
-
-  const handleDisconnectYoutube = () => {
-    youtubeService.disconnect();
-    setIsYoutubeConnected(false);
-    setYoutubeProfile(null);
-    setYoutubePlaylists([]);
-    setOpenId(null);
   };
 
   // Fetch real-time YouTube trending songs based on region choice
@@ -1061,16 +971,9 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
     </button>
   );
 
-  const isYtList = openId && openId.startsWith('yt_');
   let openList: { name: string; tracks: Track[]; id: string } | null = null;
   if (openId === 'liked') {
     openList = { name: 'Liked Songs', tracks: likedTracks, id: 'liked' };
-  } else if (openId === 'yt_liked') {
-    openList = { name: 'YouTube Liked Music', tracks: ytTracks, id: 'yt_liked' };
-  } else if (isYtList) {
-    const pId = openId!.replace('yt_', '');
-    const ytPl = youtubePlaylists.find(p => p.id === pId);
-    openList = ytPl ? { name: ytPl.title, tracks: ytTracks, id: openId! } : null;
   } else {
     const localPl = playlists.find((p) => p.id === openId);
     openList = localPl ? { name: localPl.name, tracks: localPl.tracks, id: localPl.id } : null;
@@ -1751,19 +1654,14 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
             icon={openList.id === 'liked' || openList.id === 'yt_liked'
               ? <div className={`absolute inset-0 bg-gradient-to-br ${openList.id === 'liked' ? 'from-amber-400 via-orange-500 to-rose-600' : 'from-red-600 via-rose-500 to-amber-500'} flex items-center justify-center`}><Heart className="w-20 h-20 text-[#fff] fill-current drop-shadow-lg" /></div>
               : undefined}>
-            <button disabled={!openList.tracks.length || ytTracksLoading} onClick={() => playQueue(openList.tracks, 0)} data-tv-focusable className="lux-btn px-7 py-3 text-sm md:text-base disabled:opacity-40"><Play className="w-4 h-4 fill-current" /> Play</button>
-            <button disabled={!openList.tracks.length || ytTracksLoading} onClick={() => playShuffled(openList.tracks)} data-tv-focusable aria-label="Shuffle" className="btn-glass w-12 h-12 rounded-full flex items-center justify-center disabled:opacity-40"><Shuffle className="w-5 h-5" /></button>
+            <button disabled={!openList.tracks.length} onClick={() => playQueue(openList.tracks, 0)} data-tv-focusable className="lux-btn px-7 py-3 text-sm md:text-base disabled:opacity-40"><Play className="w-4 h-4 fill-current" /> Play</button>
+            <button disabled={!openList.tracks.length} onClick={() => playShuffled(openList.tracks)} data-tv-focusable aria-label="Shuffle" className="btn-glass w-12 h-12 rounded-full flex items-center justify-center disabled:opacity-40"><Shuffle className="w-5 h-5" /></button>
             {openList.tracks.length > 0 && sortSelect}
             {openList.id !== 'liked' && openList.id !== 'yt_liked' && !openList.id.startsWith('yt_') && (
               <button onClick={() => { deletePlaylist(openList.id); setOpenId(null); }} aria-label="Delete playlist" className="w-12 h-12 rounded-full text-red-300 border border-red-400/30 hover:bg-red-500/15 flex items-center justify-center"><Trash2 className="w-5 h-5" /></button>
             )}
           </CollectionHero>
-          {ytTracksLoading ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-3 text-zinc-400">
-              <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
-              <span className="text-sm font-bold">Syncing tracks from YouTube…</span>
-            </div>
-          ) : openList.tracks.length === 0 ? (
+          {openList.tracks.length === 0 ? (
             <EmptyState compact illustration="music" title="No songs yet" message={openList.id === 'liked' ? 'Tap the heart on a song, or Add to Liked Songs in its menu, and it appears here.' : 'Songs you add will appear here.'} />
           ) : (
             <>
@@ -1839,17 +1737,9 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
               <>
                 <LibRow title="Liked Songs" subtitle={`Playlist · ${likedTracks.length} ${likedTracks.length === 1 ? 'song' : 'songs'}`} onClick={() => setOpenId('liked')}
                   art={<span className="absolute inset-0 bg-gradient-to-br from-amber-400 via-orange-500 to-rose-600 flex items-center justify-center"><Heart className="w-7 h-7 text-[#fff] fill-current drop-shadow" /></span>} />
-                {ytReady && (
-                  <LibRow title="YouTube Liked Music" subtitle="Playlist · YouTube Music" onClick={() => setOpenId('yt_liked')}
-                    art={<span className="absolute inset-0 bg-gradient-to-br from-red-600 via-rose-500 to-amber-500 flex items-center justify-center"><Heart className="w-7 h-7 text-[#fff] fill-current drop-shadow" /></span>} />
-                )}
                 {playlists.map((p) => (
                   <LibRow key={p.id} title={p.name} subtitle={`Playlist · ${p.tracks.length} ${p.tracks.length === 1 ? 'song' : 'songs'}`}
                     onClick={() => setOpenId(p.id)} art={<ListArt name={p.name} tracks={p.tracks} />} />
-                ))}
-                {ytReady && youtubePlaylists.map((p) => (
-                  <LibRow key={p.id} title={p.title} subtitle={`YouTube playlist · ${p.trackCount} songs`} onClick={() => setOpenId(`yt_${p.id}`)}
-                    art={p.thumbnail ? <img loading="lazy" decoding="async" src={p.thumbnail} alt="" className="absolute inset-0 w-full h-full object-cover" /> : <ListArt name={p.title} tracks={[]} />} />
                 ))}
               </>
             )}
@@ -1875,110 +1765,9 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
             );
           })()}
 
-          {/* YouTube Music Playlists Section */}
-          {isYoutubeConnected && (youtubeLoading || youtubeError) && (
-            <section className="mb-10">
-              <SectionHead>Your YouTube Music playlists</SectionHead>
-              {youtubeLoading ? (
-                <div className="flex items-center gap-3 text-zinc-400 py-6">
-                  <Loader2 className="w-5 h-5 animate-spin text-amber-500" />
-                  <span className="text-sm font-semibold">Syncing your YouTube playlists…</span>
-                </div>
-              ) : youtubeError ? (
-                (() => {
-                  const isApiDisabledError = youtubeError.includes('YouTube Data API v3') || youtubeError.includes('disabled') || youtubeError.includes('971530348054');
-                  if (isApiDisabledError) {
-                    return (
-                      <div className="p-5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-zinc-300 flex flex-col gap-3">
-                        <div className="flex items-start gap-2.5">
-                          <div className="w-2 h-2 rounded-full bg-amber-500 mt-1.5 shrink-0 animate-pulse" />
-                          <div>
-                            <h4 className="font-bold text-amber-400 text-sm mb-1">YouTube Data API Needs to be Enabled</h4>
-                            <p className="text-xs text-zinc-300 leading-relaxed">
-                              To view your YouTube playlists, you must enable the YouTube Data API v3 in your Google Cloud Console for project <code className="bg-black/30 px-1 py-0.5 rounded text-[11px] text-amber-300 font-mono">971530348054</code>.
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-3 mt-1.5 pl-4.5">
-                          <a
-                            href="https://console.developers.google.com/apis/api/youtube.googleapis.com/overview?project=971530348054"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-amber-950 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5"
-                          >
-                            Enable YouTube API in Cloud Console
-                          </a>
-                          <button
-                            onClick={loadYoutubeData}
-                            className="px-4 py-2 bg-white/10 hover:bg-white/15 text-white text-xs font-bold rounded-lg transition-colors"
-                          >
-                            I Enabled It, Retry
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  }
-                  return (
-                    <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-300 flex items-center justify-between">
-                      <span>{youtubeError}</span>
-                      <button onClick={loadYoutubeData} className="px-3 py-1 bg-red-600/20 rounded-lg hover:bg-red-600/30 font-bold">Retry</button>
-                    </div>
-                  );
-                })()
-              ) : (
-                null
-              )}
-            </section>
-          )}
-
           <section id="sauti-import" className="mt-2 pt-8 border-t border-white/10 scroll-mt-28">
             <SectionHead>Bring your music from YouTube</SectionHead>
-            {/* YouTube Music Connection Banner */}
-            {!isYoutubeConnected ? (
-              <div className="p-5 rounded-3xl bg-gradient-to-br from-red-600/10 via-red-500/5 to-transparent border border-red-500/15 mb-8 flex flex-col md:flex-row items-center justify-between gap-6">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-red-600 flex items-center justify-center shadow-lg shadow-red-600/20 text-white shrink-0">
-                    <Youtube className="w-6 h-6 fill-current" />
-                  </div>
-                  <div>
-                    <h3 className="font-display font-bold text-base text-white">Sync YouTube Music</h3>
-                    <p className="text-xs text-zinc-400">Import your real playlists and liked songs from your YouTube account instantly.</p>
-                  </div>
-                </div>
-                <button onClick={handleConnectYoutube} className="btn-sauti bg-red-600 hover:bg-red-500 text-white border-none shadow-[0_0_15px_rgba(220,38,38,0.25)] px-6 py-2.5 rounded-full text-xs font-black shrink-0">
-                  Connect Account
-                </button>
-              </div>
-            ) : (
-              <div className="p-4 rounded-3xl bg-zinc-900/40 border border-white/5 mb-8 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  {youtubeProfile?.picture ? (
-                    <img loading="lazy" decoding="async" src={youtubeProfile.picture} alt="" className="w-10 h-10 rounded-full border border-white/10" referrerPolicy="no-referrer" />
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-red-600/20 text-red-400 flex items-center justify-center font-bold">
-                      {youtubeProfile?.name?.charAt(0) || 'Y'}
-                    </div>
-                  )}
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] font-black text-red-400 uppercase tracking-wider flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> Synced with YouTube
-                      </span>
-                    </div>
-                    <p className="text-sm font-bold text-white">{youtubeProfile?.name || 'YouTube Listener'}</p>
-                  </div>
-                </div>
-                <button onClick={handleDisconnectYoutube} className="text-xs text-zinc-400 hover:text-red-400 px-4 py-2 rounded-full border border-white/5 hover:border-red-500/20 transition-all">
-                  Disconnect
-                </button>
-              </div>
-            )}
-
-            {/* Import a playlist by link.
-                Signing in covers your own library, but a YouTube Music playlist is
-                usually SHARED as a link — and that path needs no account, no
-                consent screen and no permissions. Kept visible whether or not the
-                account is connected, since the two do different jobs. */}
+            {/* Import a playlist by link: needs no account and no permissions. */}
             <div className="p-4 rounded-3xl bg-zinc-900/40 border border-white/10 mb-8">
               <div className="flex items-center gap-2 mb-2">
                 <LinkIcon className="w-4 h-4 text-sauti shrink-0" />

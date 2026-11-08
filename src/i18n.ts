@@ -30,7 +30,6 @@ const SW: Record<string, string> = {
   'Podcasts': 'Podikasti',
   'Radio': 'Redio',
   'Listen': 'Sikiliza',
-  'Connect': 'Unganisha',
   'My List': 'Orodha Yangu',
   'Continue Watching': 'Endelea Kutazama',
   'Downloads': 'Vipakuliwa',
