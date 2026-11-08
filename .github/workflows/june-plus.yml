@@ -76,10 +76,24 @@ jobs:
           rm -f android/app/src/main/java/com/sahrae/entertainment/MainActivity.java
           cp -r android-overlay/. android/
 
+      # androidx.webkit ships inside the app through Capacitor, but only at run
+      # time; MainActivity compiles against it (installFrameHelper), as in android.yml.
+      - name: Declare androidx.webkit
+        run: |
+          grep -q 'androidx.webkit:webkit' android/app/build.gradle || sed -i '0,/^dependencies {/s//dependencies {
+    implementation "androidx.webkit:webkit:1.9.0"/' android/app/build.gradle
+          grep -n 'androidx.webkit' android/app/build.gradle
+
       - name: Build the APK
         run: |
           npx cap sync android
           chmod +x android/gradlew
+          # The wrapper gives up after 10 s; a slow download failed every build on 2026-11-08.
+          sed -i 's/networkTimeout=.*/networkTimeout=180000/' android/gradle/wrapper/gradle-wrapper.properties
+          for attempt in 1 2 3 4 5; do
+            (cd android && ./gradlew --version) && break
+            echo "Gradle download failed (attempt $attempt), waiting"; sleep 30
+          done
           cd android && ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Install the test driver
