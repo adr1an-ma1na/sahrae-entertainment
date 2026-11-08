@@ -93,6 +93,8 @@ export default function Hero({ items, onPlay, genreName, inList, onToggleList, r
 
         {/* Light from the theme, rising from the lower left behind the type. */}
         <div className="absolute inset-0 z-10 pointer-events-none" style={{ background: 'radial-gradient(70% 60% at 12% 100%, rgb(var(--acc-rgb) / .22), transparent 70%)' }} />
+        {/* The top of the picture darkens gently, far past the icons sitting on it. */}
+        <div className="absolute inset-x-0 top-0 h-56 z-10 bg-gradient-to-b from-black/70 via-black/30 to-transparent"></div>
         {/* Cinematic scrims: side, deep bottom, and a foot that melts into the
             page colour, so the art ends softly on light themes too. */}
         <div className="absolute inset-0 bg-gradient-to-r from-black/90 via-black/45 to-transparent z-10 hidden md:block"></div>

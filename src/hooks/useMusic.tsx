@@ -72,6 +72,7 @@ interface MusicCtx {
   canShowVideo: boolean;
   /** Now Playing registers the element the video should cover. */
   setVideoSlot: (el: HTMLElement | null) => void;
+  setVideoCovered: (covered: boolean) => void;
   // Library
   playlists: Playlist[];
   recentlyPlayed: Track[];
@@ -204,6 +205,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   // in the DOM, so the player never moves; its fixed container is repositioned
   // to cover the slot instead. Same element, same playback position, no reload,
   // no second buffer, no audio drift.
+  /** A panel is open over Now Playing: the video must not float above it. */
+  const [videoCovered, setVideoCovered] = useState(false);
   const videoModeRef = useRef(false);
   const [videoMode, setVideoModeState] = useState<boolean>(() => {
     try { return localStorage.getItem('sahrae.music.videoMode.v1') === '1'; } catch { return false; }
@@ -1108,7 +1111,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       frame.style.height = '1px';
     };
 
-    const show = videoMode && canShowVideo && expanded && !!videoSlot;
+    const show = videoMode && canShowVideo && expanded && !!videoSlot && !videoCovered;
     if (!show || !videoSlot) { park(); return; }
 
     const place = () => {
@@ -1151,7 +1154,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       document.removeEventListener('scroll', place, true);
       park();
     };
-  }, [videoMode, canShowVideo, expanded, videoSlot, current?.id]);
+  }, [videoMode, canShowVideo, expanded, videoSlot, current?.id, videoCovered]);
 
   return (
     <Ctx.Provider
@@ -1161,7 +1164,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         playQueue, playShuffled, addToQueue, playNext, startRadio, removeFromQueue, jumpTo,
         toggle, stop, next, prev, seek, setRate, toggleShuffle, cycleRepeat, toggleLike, isLiked,
         likedTracks, setExpanded,
-        videoMode, setVideoMode, canShowVideo, setVideoSlot,
+        videoMode, setVideoMode, canShowVideo, setVideoSlot, setVideoCovered,
         playlists, recentlyPlayed, tasteSeeds, onboarded, addTasteSeeds, completeOnboarding,
         eqReachable,
         playbackError, clearPlaybackError: () => setPlaybackError(null),

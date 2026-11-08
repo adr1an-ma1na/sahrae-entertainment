@@ -938,7 +938,7 @@ html.tv-mode {
    colour. This used to be fixed near-black on every <nav>, which in Sand and
    Cosmic painted a black header and a black box behind the sidebar's dark menu
    labels. Only the top bar, and never a fixed colour. */
-.tv-mode .tv-navbar {
+.tv-mode .tv-navbar.nav-solid {
   background-color: color-mix(in srgb, var(--zinc-950) 95%, transparent) !important;
 }
 /* Poster titles/years/ratings are set in literal px (Tailwind arbitrary
@@ -1136,6 +1136,12 @@ a:focus-visible {
 .dawn-still *, .dawn-still { animation-duration: 1ms !important; animation-delay: 0s !important; }
 .dawn-still.dawn-out { animation: dawn-fade .3s ease forwards !important; }
 @keyframes dawn-fade { to { opacity: 0; visibility: hidden; } }
+/* Held still until the sound is ready (SplashIntro.tsx). */
+.dawn-wait, .dawn-wait * { animation-play-state: paused !important; }
+/* The apps: glows that would be redrawn on every frame, off, as on a TV. */
+.dawn-lite .dawn-word, .dawn-lite .dawn-crest { filter: none; }
+.dawn-lite.dawn-out { animation-name: dawn-fade; }
+.dawn-lite .dawn-sub { letter-spacing: .55em; animation-name: dawn-sub-still; }
 html.tv-mode .dawn-word > span, html.low-gfx .dawn-word > span { filter: none; }
 html.tv-mode .dawn-crest, html.low-gfx .dawn-crest, html.tv-mode .dawn-word, html.low-gfx .dawn-word { filter: none; }
 html.tv-mode .dawn-out, html.low-gfx .dawn-out { animation-name: dawn-fade; }

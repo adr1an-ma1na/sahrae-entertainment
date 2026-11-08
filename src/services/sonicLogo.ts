@@ -70,17 +70,33 @@ function env(g: GainNode, t: number, peak: number, attack: number, decay: number
   g.gain.exponentialRampToValueAtTime(0.0001, t + attack + decay);
 }
 
-export async function playSonicLogo(): Promise<boolean> {
-  if (!introSoundOn()) return false;
+/** The sound, built and ready. start() begins it and says how many seconds until it is heard. */
+export interface SonicLogo { start: () => number; cancel: () => void }
+
+const NOISE_BED_S = 4;
+
+/**
+ * Everything slow is done here, before the dawn begins: the hall's reverb and
+ * the noise bed took long enough to freeze the first moments of the animation
+ * on a phone or a TV, and the sound then started late, out of step with the
+ * picture. (The website rarely hit this: browsers refuse sound until a tap.)
+ */
+export async function prepareSonicLogo(): Promise<SonicLogo | null> {
+  if (!introSoundOn()) return null;
   const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!AC) return false;
+  if (!AC) return null;
   let ctx: Ctx;
-  try { ctx = new AC({ latencyHint: 'interactive' }); } catch { return false; }
+  try { ctx = new AC({ latencyHint: 'interactive' }); } catch { return null; }
   if (ctx.state === 'suspended') {
     try { await Promise.race([ctx.resume(), new Promise((r) => setTimeout(r, 150))]); } catch { /* refused */ }
   }
-  if (ctx.state !== 'running') { void ctx.close().catch(() => {}); return false; }
+  if (ctx.state !== 'running') { void ctx.close().catch(() => {}); return null; }
 
+  const verb = ctx.createConvolver();
+  verb.buffer = hall(ctx, 4.2, 2.4);
+  const bed = noise(ctx, NOISE_BED_S);
+
+  const start = (): number => {
   const t0 = ctx.currentTime + 0.05;
   const HIT = t0 + SONIC_HIT_S;
   const THROUGH = t0 + SONIC_THROUGH_S;
@@ -95,7 +111,6 @@ export async function playSonicLogo(): Promise<boolean> {
   master.gain.setValueAtTime(0.9, t0 + 5.0);
   master.gain.linearRampToValueAtTime(0, t0 + 5.7);
   master.connect(glue).connect(ceiling).connect(ctx.destination);
-  const verb = ctx.createConvolver(); verb.buffer = hall(ctx, 4.2, 2.4);
   const wet = ctx.createGain(); wet.gain.value = 0.3;
   verb.connect(wet).connect(master);
 
@@ -109,7 +124,7 @@ export async function playSonicLogo(): Promise<boolean> {
     const o = ctx.createOscillator(); o.type = type; o.frequency.value = f; o.start(start); o.stop(stop); return o;
   };
   const noiseAt = (start: number, seconds: number) => {
-    const s = ctx.createBufferSource(); s.buffer = noise(ctx, seconds); s.start(start); s.stop(start + seconds); return s;
+    const s = ctx.createBufferSource(); s.buffer = bed; s.start(start, Math.random() * (NOISE_BED_S - seconds), seconds); return s;
   };
 
   // ── 1. Tension (0 to the arrival) ──
@@ -226,5 +241,15 @@ export async function playSonicLogo(): Promise<boolean> {
   });
 
   setTimeout(() => { void ctx.close().catch(() => {}); }, 6200);
+  return 0.05 + (ctx.outputLatency || ctx.baseLatency || 0);
+  };
+
+  return { start, cancel: () => { void ctx.close().catch(() => {}); } };
+}
+
+export async function playSonicLogo(): Promise<boolean> {
+  const logo = await prepareSonicLogo();
+  if (!logo) return false;
+  logo.start();
   return true;
 }

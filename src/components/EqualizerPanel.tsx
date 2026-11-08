@@ -10,7 +10,14 @@ const fmtDb = (mb: number) => `${mb > 0 ? '+' : ''}${(mb / 100).toFixed(0)} dB`;
 
 export default function EqualizerPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [eq, setEq] = useState<EqSettings>(() => loadEq());
-  const { crossfade, setCrossfade, sleepTimer, setSleepTimer, eqReachable, active } = useMusic();
+  const { crossfade, setCrossfade, sleepTimer, setSleepTimer, eqReachable, active, setVideoCovered } = useMusic();
+
+  // The song keeps playing; its picture waits behind the panel.
+  useEffect(() => {
+    if (!open) return;
+    setVideoCovered(true);
+    return () => setVideoCovered(false);
+  }, [open, setVideoCovered]);
 
   // Re-read on open so it reflects anything changed elsewhere.
   useEffect(() => { if (open) setEq(loadEq()); }, [open]);

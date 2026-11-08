@@ -68,9 +68,14 @@ export default function Navbar({ activeTab, setActiveTab, onPlay }: NavbarProps)
     { id: 'downloads', label: 'Downloads' },
   ];
 
+  // At the top of a page that opens on a poster the bar has no surface of its own:
+  // the wordmark and icons sit on the artwork, whose own shading (Hero) keeps them
+  // legible. A shaded strip here ended in a visible line across the picture.
+  const overHero = !isScrolled && ['home', 'movies', 'series'].includes(activeTab);
+
   return (
     <>
-    <nav className={`fixed top-0 left-0 right-0 md:left-16 lg:left-64 tv-navbar z-40 transition-all duration-500 pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] ${isScrolled ? 'bg-zinc-950/95 border-b border-white/10' : 'bg-gradient-to-b from-black/60 via-black/25 to-transparent'}`}>
+    <nav className={`fixed top-0 left-0 right-0 md:left-16 lg:left-64 tv-navbar z-40 transition-all duration-500 pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] ${overHero ? 'dark bg-transparent' : isScrolled ? 'nav-solid bg-zinc-950/95 border-b border-white/10' : 'nav-solid bg-gradient-to-b from-black/60 via-black/25 to-transparent'}`}>
       <div className="px-4 md:px-12 py-4 flex items-center justify-between">
         <div className="flex items-center gap-8 md:gap-12 min-w-0 flex-1">
           <h1

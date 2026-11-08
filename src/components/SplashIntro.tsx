@@ -1,5 +1,6 @@
-import { useEffect, useState, type CSSProperties } from 'react';
-import { playSonicLogo } from '../services/sonicLogo';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { prepareSonicLogo, type SonicLogo } from '../services/sonicLogo';
 import { isTelevision } from '../tv/spatialNavigation';
 
 /**
@@ -12,6 +13,8 @@ import { isTelevision } from '../tv/spatialNavigation';
  * fade for anyone who has asked for less motion.
  */
 const WORD = 'SAHRAE';
+/** The longest the dawn waits for its sound; past this it runs silent rather than late. */
+const SOUND_WAIT_MS = 900;
 
 /**
  * Each moving part of the scene is its own small picture, placed where it sits
@@ -45,7 +48,7 @@ const sceneUnit = () => {
  * home page under it only then: on a TV, building it first held the screen
  * for longer than the whole intro, which was over before anything was drawn
  * (owner, TCL, 2026-11-01). The clock starts from that first frame too.
- * On a TV even building it during the dawn stalls the dawn, so there it is
+ * In the apps even building it during the dawn stalls the dawn, so there it is
  * built once the dawn has finished moving, under its last still frame, and
  * the dawn fades only after the home page has been drawn.
  */
@@ -54,18 +57,25 @@ export default function SplashIntro({ onShown }: { onShown?: () => void } = {}) 
   const [phase, setPhase] = useState<'in' | 'out' | 'done'>(() => (playedThisVisit() ? 'done' : 'in'));
 
   const [unit] = useState(() => (typeof window === 'undefined' ? 1 : sceneUnit()));
+  const rootRef = useRef<HTMLDivElement>(null);
+  const native = Capacitor.isNativePlatform();
 
   useEffect(() => {
     if (playedThisVisit()) { onShown?.(); return; }
-    let t1 = 0, t2 = 0, raf2 = 0, started = false;
+    let t0 = 0, t1 = 0, t2 = 0, raf = 0, raf2 = 0, safety = 0, started = false, chosen = false, gone = false;
     const twoFrames = (fn: () => void) => { raf2 = requestAnimationFrame(() => { raf2 = requestAnimationFrame(fn); }); };
-    const start = () => {
+    // The picture and the sound leave together: the sound is told to start, and
+    // the dawn is released the moment that sound reaches the speaker.
+    const start = (logo: SonicLogo | null) => {
       if (started) return;
       started = true;
       try { sessionStorage.setItem(PLAYED_KEY, '1'); } catch { /* plays again next reload */ }
-      // The Sahrae sound (services/sonicLogo.ts) opens with the dawn.
-      void playSonicLogo();
-      if (isTelevision() && !reduce) {
+      const untilHeard = logo ? logo.start() * 1000 : 0;
+      t0 = window.setTimeout(release, untilHeard);
+    };
+    const release = () => {
+      rootRef.current?.classList.remove('dawn-wait');
+      if ((isTelevision() || native) && !reduce) {
         t1 = window.setTimeout(() => {
           onShown?.();
           twoFrames(() => {
@@ -79,17 +89,24 @@ export default function SplashIntro({ onShown }: { onShown?: () => void } = {}) 
       t1 = window.setTimeout(() => setPhase('out'), reduce ? 500 : 2150);
       t2 = window.setTimeout(() => setPhase('done'), reduce ? 850 : 2900);
     };
-    // Two frames: the first is drawn by the time the second is asked for.
-    const raf = requestAnimationFrame(() => requestAnimationFrame(start));
-    const safety = window.setTimeout(start, 400); // a page in the background draws no frames
-    return () => { cancelAnimationFrame(raf); cancelAnimationFrame(raf2); clearTimeout(safety); clearTimeout(t1); clearTimeout(t2); };
+    // The sound is prepared while the screen is still dark, and only then does anything move.
+    const ready = (logo: SonicLogo | null) => {
+      if (chosen || gone) { logo?.cancel(); return; }
+      chosen = true;
+      // Two frames: the first is drawn by the time the second is asked for.
+      raf = requestAnimationFrame(() => { raf = requestAnimationFrame(() => start(logo)); });
+      safety = window.setTimeout(() => start(logo), 400); // a page in the background draws no frames
+    };
+    void prepareSonicLogo().catch(() => null).then(ready);
+    const limit = window.setTimeout(() => ready(null), SOUND_WAIT_MS);
+    return () => { gone = true; cancelAnimationFrame(raf); cancelAnimationFrame(raf2); clearTimeout(limit); clearTimeout(safety); clearTimeout(t0); clearTimeout(t1); clearTimeout(t2); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reduce]);
 
   if (phase === 'done') return null;
 
   return (
-    <div className={`dawn fixed inset-0 z-[200] overflow-hidden ${phase === 'out' ? 'dawn-out' : ''} ${reduce ? 'dawn-still' : ''}`} style={{ '--u': `${unit}px` } as CSSProperties} aria-hidden>
+    <div ref={rootRef} className={`dawn dawn-wait fixed inset-0 z-[200] overflow-hidden ${native ? 'dawn-lite' : ''} ${phase === 'out' ? 'dawn-out' : ''} ${reduce ? 'dawn-still' : ''}`} style={{ '--u': `${unit}px` } as CSSProperties} aria-hidden>
       <div className="dawn-sky" />
       <svg width="0" height="0" className="absolute">
         <defs>
