@@ -156,6 +156,14 @@ jobs:
 
       - name: Make gradlew executable
         run: chmod +x android/gradlew
+      - name: Fetch Gradle (patiently)
+        # The wrapper gives up after 10 s; a slow download failed every build on 2026-11-08.
+        run: |
+          sed -i 's/networkTimeout=.*/networkTimeout=180000/' android/gradle/wrapper/gradle-wrapper.properties
+          for attempt in 1 2 3 4 5; do
+            (cd android && ./gradlew --version) && break
+            echo "Gradle download failed (attempt $attempt), waiting"; sleep 30
+          done
 
       - name: Build debug APK
         working-directory: android
