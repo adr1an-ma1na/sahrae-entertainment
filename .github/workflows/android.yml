@@ -384,6 +384,8 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           chmod +x gradlew
+          sed -i 's/networkTimeout=.*/networkTimeout=180000/' gradle/wrapper/gradle-wrapper.properties
+          for attempt in 1 2 3 4 5; do ./gradlew --version && break; echo "Gradle download failed (attempt $attempt), waiting"; sleep 30; done
           ./gradlew assembleDebug --no-daemon --stacktrace
 
       # Kept out of the release page: one standard APK is published there, and a
