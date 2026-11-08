@@ -1460,7 +1460,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                     <QuickTile
                       title="Liked Songs"
                       icon={<span className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-amber-300 via-amber-500 to-orange-700"><Heart className="w-6 h-6 text-[#fff] fill-current drop-shadow" /></span>}
-                      onClick={() => setOpenId('liked')}
+                      onClick={() => { setTab('library'); setOpenId('liked'); }}
                     />
                     {tiles}
                   </div>
@@ -1763,7 +1763,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
               <span className="text-sm font-bold">Syncing tracks from YouTube…</span>
             </div>
           ) : openList.tracks.length === 0 ? (
-            <EmptyState compact illustration="music" title="No songs yet" message="Like songs on YouTube Music, or connect your account, and they appear here." />
+            <EmptyState compact illustration="music" title="No songs yet" message={openList.id === 'liked' ? 'Tap the heart on a song, or Add to Liked Songs in its menu, and it appears here.' : 'Songs you add will appear here.'} />
           ) : (
             <>
               <SongList tracks={sortTracks(openList.tracks)} onPlay={(i) => playQueue(sortTracks(openList.tracks), i)}
