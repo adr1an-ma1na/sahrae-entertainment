@@ -103,6 +103,83 @@ export interface MediaDetails extends MediaItem {
   next_episode_to_air?: Episode | null;
   last_episode_to_air?: Episode | null;
   status?: string;
+  tagline?: string;
+  release_dates?: { results: { iso_3166_1: string; release_dates: { certification: string }[] }[] };
+  content_ratings?: { results: { iso_3166_1: string; rating: string }[] };
+}
+
+/** The age rating (PG-13, TV-MA), from the US listing, which nearly every title has. */
+export function certificationOf(d: MediaDetails): string {
+  const films = d.release_dates?.results?.find((r) => r.iso_3166_1 === 'US')?.release_dates || [];
+  return films.map((x) => x.certification).find(Boolean)
+    || d.content_ratings?.results?.find((r) => r.iso_3166_1 === 'US')?.rating
+    || '';
+}
+
+// ── Title logos ──────────────────────────────────────────────────────────────
+const LOGO_KEY = 'sahrae.titleLogos.v1';
+let logos: Record<string, string> | null = null;
+const logoStore = (): Record<string, string> => {
+  if (logos) return logos;
+  try { logos = JSON.parse(localStorage.getItem(LOGO_KEY) || '{}') as Record<string, string>; } catch { logos = {}; }
+  return logos!;
+};
+const logoRequests = new Map<string, Promise<string>>();
+
+/** A logo already found on this device: a URL, '' for "none suitable", undefined if never looked. */
+export const knownTitleLogo = (id: number, type: 'movie' | 'tv'): string | undefined => logoStore()[`${type}-${id}`];
+
+/** A black logo disappears on dark artwork. Assumed fine if the pixels cannot be read. */
+function logoReads(url: string): Promise<boolean> {
+  return new Promise((done) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onerror = () => done(true);
+    img.onload = () => {
+      try {
+        const c = document.createElement('canvas');
+        c.width = 48; c.height = 24;
+        const ctx = c.getContext('2d', { willReadFrequently: true });
+        if (!ctx) { done(true); return; }
+        ctx.drawImage(img, 0, 0, 48, 24);
+        const { data } = ctx.getImageData(0, 0, 48, 24);
+        let sum = 0, n = 0;
+        for (let i = 0; i < data.length; i += 4) if (data[i + 3] > 128) { sum += 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]; n++; }
+        done(!n || sum / n > 55);
+      } catch { done(true); }
+    };
+    img.src = url;
+  });
+}
+
+/** The title's English logo, or '' when it has none that reads on dark artwork. */
+export function fetchTitleLogo(id: number, type: 'movie' | 'tv'): Promise<string> {
+  const key = `${type}-${id}`;
+  const known = logoStore()[key];
+  if (known !== undefined) return Promise.resolve(known);
+  const running = logoRequests.get(key);
+  if (running) return running;
+  const job = (async () => {
+    try {
+      const res = await tmdbFetch(`${BASE_URL}/${type}/${id}/images?api_key=${API_KEY}&include_image_language=en,null`);
+      const j = await res.json() as { logos?: { file_path: string; iso_639_1: string | null; vote_average: number }[] };
+      const ranked = (j.logos || []).filter((l) => l.iso_639_1 === 'en').sort((a, b) => b.vote_average - a.vote_average).slice(0, 3);
+      let found = '';
+      for (const l of ranked) {
+        const url = `https://image.tmdb.org/t/p/w500${l.file_path}`;
+        if (await logoReads(url)) { found = url; break; }
+      }
+      logoStore()[key] = found;
+      try { localStorage.setItem(LOGO_KEY, JSON.stringify(logoStore())); } catch { /* storage full: this session still has it */ }
+      return found;
+    } catch {
+      return '';
+    } finally {
+      logoRequests.delete(key);
+    }
+  })();
+  logoRequests.set(key, job);
+  return job;
 }
 
 export const fetchTrending = async (type: 'movie' | 'tv' = 'movie'): Promise<MediaItem[]> => {
@@ -249,7 +326,7 @@ function evictOldestDetails(keep: number): void {
 }
 
 export const fetchMediaDetails = async (id: number, type: 'movie' | 'tv' = 'movie'): Promise<MediaDetails> => {
-  const cacheKey = `sahrae_tmdb_details_${type}_${id}`;
+  const cacheKey = `v2-sahrae_tmdb_details_${type}_${id}`;
   try {
     const cached = localStorage.getItem(cacheKey);
     if (cached) {
@@ -263,7 +340,7 @@ export const fetchMediaDetails = async (id: number, type: 'movie' | 'tv' = 'movi
     console.error('Error reading media details cache', e);
   }
 
-  const res = await tmdbFetch(`${BASE_URL}/${type}/${id}?api_key=${API_KEY}&append_to_response=credits,videos&language=en-US&include_video_language=en,null`);
+  const res = await tmdbFetch(`${BASE_URL}/${type}/${id}?api_key=${API_KEY}&append_to_response=credits,videos,release_dates,content_ratings&language=en-US&include_video_language=en,null`);
   const data = await res.json();
   const result = { ...data, media_type: type };
 

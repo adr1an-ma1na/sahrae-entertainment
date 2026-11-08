@@ -456,7 +456,7 @@ function greeting(): string {
 }
 
 export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) {
-  const { current, isPlaying, playQueue, startRadio, likedTracks, playlists, recentlyPlayed: rawRecent, tasteSeeds, onboarded, addTasteSeeds, completeOnboarding, createPlaylist, importPlaylist, deletePlaylist, removeFromPlaylist, openAddSheet, setVideoMode, setExpanded } = useMusic();
+  const { current, isPlaying, playQueue, playShuffled, startRadio, likedTracks, playlists, recentlyPlayed: rawRecent, tasteSeeds, onboarded, addTasteSeeds, completeOnboarding, createPlaylist, importPlaylist, deletePlaylist, removeFromPlaylist, openAddSheet, setVideoMode, setExpanded } = useMusic();
   // One hover preview at a time across the Music videos shelf.
   const [videoPreviewId, setVideoPreviewId] = useState<string | null>(null);
   // Sauti is music only — podcasts play through the shared engine, so strip them
@@ -1198,7 +1198,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
           {catPage && catPage.popular.length > 0 && (
             <>
               <button onClick={() => playQueue(catPage.popular, 0, title)} data-tv-focusable className="lux-btn px-7 py-3 text-sm md:text-base"><Play className="w-4 h-4 fill-current" /> Play</button>
-              <button onClick={() => { const arr = [...catPage.popular].sort(() => Math.random() - 0.5); playQueue(arr, 0, title); }} data-tv-focusable aria-label="Shuffle" className="btn-glass w-12 h-12 rounded-full flex items-center justify-center"><Shuffle className="w-5 h-5" /></button>
+              <button onClick={() => playShuffled(catPage.popular, title)} data-tv-focusable aria-label="Shuffle" className="btn-glass w-12 h-12 rounded-full flex items-center justify-center"><Shuffle className="w-5 h-5" /></button>
             </>
           )}
         </CollectionHero>
@@ -1232,7 +1232,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
           {genreTracks.length > 0 && (
             <>
               <button onClick={() => playQueue(shown, 0, genre)} data-tv-focusable className="lux-btn px-7 py-3 text-sm md:text-base"><Play className="w-4 h-4 fill-current" /> Play</button>
-              <button onClick={() => { const arr = [...genreTracks].sort(() => Math.random() - 0.5); playQueue(arr, 0, genre); }} data-tv-focusable aria-label="Shuffle" className="btn-glass w-12 h-12 rounded-full flex items-center justify-center"><Shuffle className="w-5 h-5" /></button>
+              <button onClick={() => playShuffled(genreTracks, genre)} data-tv-focusable aria-label="Shuffle" className="btn-glass w-12 h-12 rounded-full flex items-center justify-center"><Shuffle className="w-5 h-5" /></button>
               {sortSelect}
             </>
           )}
@@ -1255,7 +1255,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
         <button onClick={() => setViewMix(null)} className="sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 w-fit flex items-center gap-1 text-zinc-200 hover:text-white mb-5 text-sm px-3.5 py-2 rounded-full bg-zinc-900/85 backdrop-blur-xl border border-white/10 shadow-lg"><ChevronLeft className="w-4 h-4" /> Back</button>
         <CollectionHero kicker="Made for you" blurb={viewMix.subtitle} title={viewMix.title} tracks={viewMix.tracks}>
           <button onClick={() => playQueue(shown, 0, viewMix.title)} data-tv-focusable className="lux-btn px-7 py-3 text-sm md:text-base"><Play className="w-4 h-4 fill-current" /> Play</button>
-          <button onClick={() => { const arr = [...viewMix.tracks].sort(() => Math.random() - 0.5); playQueue(arr, 0, viewMix.title); }} data-tv-focusable aria-label="Shuffle" className="btn-glass w-12 h-12 rounded-full flex items-center justify-center"><Shuffle className="w-5 h-5" /></button>
+          <button onClick={() => playShuffled(viewMix.tracks, viewMix.title)} data-tv-focusable aria-label="Shuffle" className="btn-glass w-12 h-12 rounded-full flex items-center justify-center"><Shuffle className="w-5 h-5" /></button>
         </CollectionHero>
         <SongList tracks={shown} onPlay={(i) => playQueue(shown, i, viewMix.title)} />
       </div>
@@ -1273,7 +1273,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
           {detailTracks.length > 0 && (
             <>
               <button onClick={() => playQueue(detailTracks, 0)} data-tv-focusable className="lux-btn px-7 py-3 text-sm md:text-base"><Play className="w-4 h-4 fill-current" /> Play</button>
-              <button onClick={() => { const arr = [...detailTracks].sort(() => Math.random() - 0.5); playQueue(arr, 0); }} data-tv-focusable aria-label="Shuffle" className="btn-glass w-12 h-12 rounded-full flex items-center justify-center"><Shuffle className="w-5 h-5" /></button>
+              <button onClick={() => playShuffled(detailTracks)} data-tv-focusable aria-label="Shuffle" className="btn-glass w-12 h-12 rounded-full flex items-center justify-center"><Shuffle className="w-5 h-5" /></button>
             </>
           )}
         </CollectionHero>
@@ -1751,7 +1751,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
               ? <div className={`absolute inset-0 bg-gradient-to-br ${openList.id === 'liked' ? 'from-amber-400 via-orange-500 to-rose-600' : 'from-red-600 via-rose-500 to-amber-500'} flex items-center justify-center`}><Heart className="w-20 h-20 text-[#fff] fill-current drop-shadow-lg" /></div>
               : undefined}>
             <button disabled={!openList.tracks.length || ytTracksLoading} onClick={() => playQueue(openList.tracks, 0)} data-tv-focusable className="lux-btn px-7 py-3 text-sm md:text-base disabled:opacity-40"><Play className="w-4 h-4 fill-current" /> Play</button>
-            <button disabled={!openList.tracks.length || ytTracksLoading} onClick={() => { const arr = [...openList.tracks].sort(() => Math.random() - 0.5); playQueue(arr, 0); }} data-tv-focusable aria-label="Shuffle" className="btn-glass w-12 h-12 rounded-full flex items-center justify-center disabled:opacity-40"><Shuffle className="w-5 h-5" /></button>
+            <button disabled={!openList.tracks.length || ytTracksLoading} onClick={() => playShuffled(openList.tracks)} data-tv-focusable aria-label="Shuffle" className="btn-glass w-12 h-12 rounded-full flex items-center justify-center disabled:opacity-40"><Shuffle className="w-5 h-5" /></button>
             {openList.tracks.length > 0 && sortSelect}
             {openList.id !== 'liked' && openList.id !== 'yt_liked' && !openList.id.startsWith('yt_') && (
               <button onClick={() => { deletePlaylist(openList.id); setOpenId(null); }} aria-label="Delete playlist" className="w-12 h-12 rounded-full text-red-300 border border-red-400/30 hover:bg-red-500/15 flex items-center justify-center"><Trash2 className="w-5 h-5" /></button>

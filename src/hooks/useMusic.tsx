@@ -11,7 +11,7 @@ import { cleanTrackText } from '../services/trackText.ts';
 import { songKey } from '../services/tasteHome';
 import { resolveYt, prefetchMatches, asTrack } from '../services/resolveYt';
 import { upNext } from '../services/upNext';
-import { songBase, isVersion } from '../services/curate';
+import { songBase, isVersion, dealQueue, onePerPlay, shuffled } from '../services/curate';
 import { hifiWanted, hifiSrc, prefetchHifi } from '../services/hifiAudio';
 import { Capacitor } from '@capacitor/core';
 
@@ -46,6 +46,8 @@ interface MusicCtx {
   toggleAutoplay: () => void;
   queueSource: string;
   playQueue: (tracks: Track[], startIndex?: number, source?: string) => void;
+  /** Play these in one random order, shuffle on: each song once. */
+  playShuffled: (tracks: Track[], source?: string) => void;
   addToQueue: (t: Track) => void;
   playNext: (t: Track) => void;
   startRadio: (seed: Track) => void;
@@ -340,10 +342,16 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const next = () => {
     if (!queue.length) return;
     haptics.tap();
-    let ni = shuffle ? Math.floor(Math.random() * queue.length) : index + 1;
+    // The queue is already in its shuffled order (dealQueue): next is simply the next.
+    let ni = index + 1;
     if (ni >= queue.length) {
-      if (repeat === 'all') ni = 0;
-      else { playerRef.current?.pauseVideo?.(); return; }
+      if (repeat !== 'all') { playerRef.current?.pauseVideo?.(); return; }
+      ni = 0;
+      // Every song has had its turn. A new deal for the next round, this one not first.
+      if (shuffle && queue.length > 1) {
+        const round = shuffled(queue.filter((_, i) => i !== index));
+        setQueue([...round, queue[index]]);
+      }
     }
     setIndex(ni);
   };
@@ -632,6 +640,9 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     if (c.id.startsWith('dz:')) {
       loadedIdRef.current = c.id;
       setBuffering(true);
+      // The song before's clock is no use to anyone. Left running while this one is
+      // matched, it read as "nearly over" and the crossfade skipped this song too.
+      setPosition(0); setDuration(0);
       const at = index;
       void resolveYt(c, true).then((yt) => {
         if (loadedIdRef.current !== c.id) return; // moved on meanwhile
@@ -864,7 +875,9 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       + `&art=${encodeURIComponent(current.artworkLarge || current.artwork || '')}&pos=${Math.floor(position * 1000)}&dur=${Math.floor(duration * 1000)}`).catch(() => {});
   }, [duration]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const playQueue = (tracks: Track[], startIndex = 0, source = '') => {
+  /** The list as chosen, for putting it back when shuffle goes off. */
+  const unshuffledRef = useRef<Track[] | null>(null);
+  const startQueue = (tracks: Track[], startIndex: number, source: string, deal: boolean) => {
     // A new selection is a fresh attempt; the previous failure is no longer news.
     setPlaybackError(null);
     if (!tracks.length) return;
@@ -873,8 +886,15 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     setBuffering(true);
     setQueueSource(source);
     extendingRef.current = null;
-    setQueue(tracks);
-    setIndex(Math.max(0, Math.min(startIndex, tracks.length - 1)));
+    const first = Math.max(0, Math.min(startIndex, tracks.length - 1));
+    unshuffledRef.current = deal ? tracks : null;
+    setQueue(deal ? dealQueue(tracks, first) : tracks);
+    setIndex(deal ? 0 : first);
+  };
+  const playQueue = (tracks: Track[], startIndex = 0, source = '') => startQueue(tracks, startIndex, source, shuffle);
+  const playShuffled = (tracks: Track[], source = '') => {
+    setShuffle(true);
+    startQueue(tracks, Math.floor(Math.random() * tracks.length), source, true);
   };
   const addToQueue = (t: Track) => {
     haptics.tap(); setActive(true);
@@ -1016,7 +1036,30 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     try { playerRef.current?.setPlaybackRate?.(n); } catch { /* ignore */ }
     try { const a = audioElRef.current; if (a) a.playbackRate = n; } catch { /* ignore */ }
   };
-  const toggleShuffle = () => { haptics.tap(); setShuffle((s) => !s); };
+  // Only what is still to come is dealt or put back: the song playing carries on.
+  const toggleShuffle = () => {
+    haptics.tap();
+    const on = !shuffle;
+    setShuffle(on);
+    if (on) {
+      unshuffledRef.current = queue;
+      const upcoming = queue.slice(index + 1);
+      const heard = new Set(queue.slice(0, index + 1).map((t) => songKey(t.artist, t.title)));
+      setQueue([...queue.slice(0, index + 1), ...shuffled(onePerPlay(upcoming.filter((t) => !heard.has(songKey(t.artist, t.title)))))]);
+      return;
+    }
+    const was = unshuffledRef.current;
+    unshuffledRef.current = null;
+    const now = queue[index];
+    if (!was || !now) return;
+    const keyOf = (t: Track) => songKey(t.artist, t.title);
+    const pos = was.findIndex((t) => keyOf(t) === keyOf(now));
+    if (pos < 0) return;
+    // Songs radio added while shuffled stay at the end.
+    const original = new Set(was.map(keyOf));
+    setQueue([...was.slice(0, pos), now, ...was.slice(pos + 1), ...queue.filter((t) => !original.has(keyOf(t)))]);
+    setIndex(pos);
+  };
   const toggleAutoplay = () => { haptics.tap(); setAutoplay((s) => !s); };
   const cycleRepeat = () => { haptics.tap(); setRepeat((r) => (r === 'off' ? 'all' : r === 'all' ? 'one' : 'off')); };
 
@@ -1115,7 +1158,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       value={{
         queue, index, current, isPlaying, position, duration, shuffle, repeat, expanded, buffering, active,
         autoplay, toggleAutoplay, queueSource,
-        playQueue, addToQueue, playNext, startRadio, removeFromQueue, jumpTo,
+        playQueue, playShuffled, addToQueue, playNext, startRadio, removeFromQueue, jumpTo,
         toggle, stop, next, prev, seek, setRate, toggleShuffle, cycleRepeat, toggleLike, isLiked,
         likedTracks, setExpanded,
         videoMode, setVideoMode, canShowVideo, setVideoSlot,

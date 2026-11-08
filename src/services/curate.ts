@@ -64,6 +64,37 @@ export function onePerSong<T extends { title: string }>(list: T[]): T[] {
   return out;
 }
 
+/** The same recording, whichever copy of it this is: its title without versions, and its lead artist. */
+const playKey = (t: { title: string; artist?: string }) => `${songBase(t.title)}|${fold(t.artist || '').split(/,|&|\sfeat\.?\s|\sft\.?\s|\sx\s/)[0].replace(/[^a-z0-9]+/g, '')}`;
+
+/** Each song once, the first copy kept. Two songs that merely share a title are both kept. */
+export function onePerPlay<T extends { title: string; artist?: string }>(list: T[]): T[] {
+  const seen = new Set<string>();
+  return list.filter((t) => { const k = playKey(t); if (seen.has(k)) return false; seen.add(k); return true; });
+}
+
+/** Fisher-Yates: every order equally likely. (Sorting on a random number is not.) */
+export function shuffled<T>(list: T[], rng: () => number = Math.random): T[] {
+  const a = [...list];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/**
+ * Shuffle as a deal of the cards: `first` plays now and the rest follow in one
+ * random order, each song exactly once, so fifty songs are fifty plays. Choosing
+ * a random song at every skip played one song four or five times while others
+ * were never reached (owner, 2026-11-08).
+ */
+export function dealQueue<T extends { title: string; artist?: string }>(tracks: T[], first: number, rng: () => number = Math.random): T[] {
+  const lead = tracks[first];
+  if (!lead) return shuffled(onePerPlay(tracks), rng);
+  return [lead, ...shuffled(onePerPlay([lead, ...tracks.filter((_, i) => i !== first)]).slice(1), rng)];
+}
+
 /**
  * An artist's releases as Spotify lists them: each release once (the Deluxe,
  * Extended and Live editions of an album are that album; the best-loved

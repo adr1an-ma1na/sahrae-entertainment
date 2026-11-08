@@ -126,8 +126,13 @@ function getFocusables(): HTMLElement[] {
 /** The remote pointer (TvPointer.tsx) has the keys while it is out. */
 const pointerOut = () => document.documentElement.classList.contains('tv-pointer');
 
+/** Something on screen that Back should put away before the layer itself closes. */
+let backHandler: (() => boolean) | null = null;
+export function setTvBackHandler(fn: (() => boolean) | null) { backHandler = fn; }
+
 function closeTopLayer(): boolean {
   if (pointerOut()) { window.dispatchEvent(new Event('sahrae:pointer-exit')); return true; }
+  if (backHandler && backHandler()) return true;
   const layers = Array.from(document.querySelectorAll<HTMLElement>('[data-tv-layer]')).filter(isElementVisible);
   const top = layers[layers.length - 1];
   if (!top) return false;
@@ -581,6 +586,8 @@ export function initSpatialNavigation() {
         // Nothing further that way: show the rest of the page in that direction
         // (its top, or what sits below the last row), keeping the focus put.
         e.preventDefault();
+        // Unless the page has a use for the press (the players' server strip).
+        if (!window.dispatchEvent(new CustomEvent('sahrae:tv-edge', { detail: dir, cancelable: true }))) return;
         if (vertical) glideTo(current, true, dir === 'up' ? 'top' : 'bottom');
         else glideTo(current, false);
       }

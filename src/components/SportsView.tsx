@@ -15,7 +15,8 @@ import { hostOf } from '../services/sportsStreams';
 import Coachmark from './Coachmark';
 import { suppressPopups } from '../services/popupGuard';
 import { lockLandscape, unlockOrientation } from '../services/fullscreen';
-import { tapCenterOf, canTap, canFrameKick, tellFrame, isFramePlaying } from '../services/nativeTap';
+import { tapCenterOf, canTap, canFrameKick, tellFrame, isFramePlaying, isFrameStalled } from '../services/nativeTap';
+import { TvServerStrip, useTvServerStrip } from './ui/TvServerStrip';
 import TvPointer from './TvPointer';
 import { isTelevision, tvFocus } from '../tv/spatialNavigation';
 import { competitionOf, isTeamSport, knownBadge, findBadge } from '../services/sportBadges';
@@ -137,6 +138,8 @@ function fallbackChannels(sport: string): Channel[] {
 /** How long the titles stay on a full-screen match on a TV, and after an arrow press brings them back. */
 const TV_TITLES_MS = 500;
 const TV_TITLES_BACK_MS = 3500;
+/** A live match with no picture after this long moves to the next feed by itself. */
+const NO_PICTURE_MS = 30_000;
 
 const SPORT_EMOJI: Record<string, string> = {
   football: '⚽', 'american-football': '🏈', basketball: '🏀', baseball: '⚾', hockey: '🏒',
@@ -718,7 +721,7 @@ export default function SportsView() {
 
   // On a TV the title, buttons and "Press OK" leave the picture half a second
   // after it goes full screen. An arrow brings them back for a few seconds; Up
-  // lands on the buttons. OK is left alone: it plays and pauses the match.
+  // brings the servers (TvServerStrip). OK is left alone: it plays and pauses the match.
   const [chromeHidden, setChromeHidden] = useState(false);
   const chromeTimer = useRef(0);
   const chromeBarRef = useRef<HTMLDivElement>(null);
@@ -728,7 +731,7 @@ export default function SportsView() {
       setChromeHidden(true);
       // The buttons are gone: the remote goes back to the picture.
       const frame = sportFrameRef.current;
-      if (frame) tvFocus(frame);
+      if (frame && !document.activeElement?.closest('[data-tv-strip]')) tvFocus(frame);
     }, ms);
   };
   useEffect(() => {
@@ -738,10 +741,6 @@ export default function SportsView() {
       if (!e.key.startsWith('Arrow')) return;
       setChromeHidden(false);
       hideChromeIn(TV_TITLES_BACK_MS);
-      if (e.key === 'ArrowUp' && document.activeElement === sportFrameRef.current) {
-        const first = chromeBarRef.current?.querySelector<HTMLElement>('button');
-        if (first) tvFocus(first);
-      }
     };
     window.addEventListener('keydown', onKey);
     return () => { window.removeEventListener('keydown', onKey); window.clearTimeout(chromeTimer.current); };
@@ -1364,11 +1363,21 @@ export default function SportsView() {
     // itself and says when the picture really moves; Sahrae nudges it too. Only
     // if nothing moves after 15 s does a tap try the play button, once.
     if (canFrameKick()) {
-      const onMsg = (e: MessageEvent) => { if (isFramePlaying(e, frame()) && !playing) { playing = true; goFullRef.current(); } };
+      // A feed that never shows a picture, or stops showing one, gives way to the
+      // next. Not before kick-off: a feed can be up and waiting for the match.
+      const giveWay = () => {
+        const p = playingRef.current;
+        if (p && !p.startsAt && !pointerOut()) failoverFrom('PLAYBACK_STALL', true);
+      };
+      const onMsg = (e: MessageEvent) => {
+        if (isFrameStalled(e, frame())) { giveWay(); return; }
+        if (isFramePlaying(e, frame()) && !playing) { playing = true; goFullRef.current(); }
+      };
       window.addEventListener('message', onMsg);
       const timers = [
         ...[1500, 5000, 9000].map((ms) => setTimeout(() => { if (!playing) tellFrame(frame(), 'play'); }, ms)),
         setTimeout(() => { const el = sportFrameRef.current; if (!playing && el && !pointerOut()) tapCenterOf(el, isTelevision() ? el : null); }, 15000),
+        setTimeout(() => { if (!playing) giveWay(); }, NO_PICTURE_MS),
       ];
       return () => { window.removeEventListener('message', onMsg); timers.forEach(clearTimeout); };
     }
@@ -1385,6 +1394,9 @@ export default function SportsView() {
     timers.push(setTimeout(() => goFullRef.current(), 4500));
     return () => { window.removeEventListener('sahrae:embed-media', onStream); timers.forEach(clearTimeout); };
   }, [activeUrl, isEmbedUrl]);
+
+  // A TV: Up at the top of the picture brings the servers.
+  const strip = useTvServerStrip(!!playing && !!activeUrl && isTelevision(), sportFrameRef);
 
   useEffect(() => {
     document.documentElement.classList.toggle('sports-open', !!playing);
@@ -1416,7 +1428,7 @@ export default function SportsView() {
             <div ref={playerRef} className={isFull
               ? 'fixed inset-0 z-[400] bg-black overflow-hidden'
               : 'w-full aspect-video bg-black rounded-xl shadow-2xl overflow-hidden relative border border-white/10'}>
-              <div ref={chromeBarRef} className={`absolute top-0 left-0 right-0 p-3 md:p-4 bg-gradient-to-b from-black/80 to-transparent z-10 justify-between items-center transition-opacity duration-300 ${isFull ? 'flex' : 'hidden md:flex'} ${chromeHidden ? 'opacity-0 pointer-events-none' : ''}`}>
+              <div ref={chromeBarRef} className={`absolute top-0 left-0 right-0 p-3 md:p-4 bg-gradient-to-b from-black/80 to-transparent z-10 justify-between items-center transition-opacity duration-300 ${isFull ? 'flex' : 'hidden md:flex'} ${chromeHidden ? 'opacity-0 pointer-events-none' : ''} ${strip.open ? 'invisible' : ''}`}>
                 <div className="flex items-center gap-3 min-w-0">
                   {playing.startsAt
                     ? <div className="bg-amber-500 text-amber-950 px-2.5 py-1 rounded-sm shrink-0 text-xs font-bold uppercase tracking-wider">{kickOffLabel(playing.startsAt)}</div>
@@ -1433,6 +1445,17 @@ export default function SportsView() {
                   <button onClick={() => setPlaying(null)} tabIndex={0} data-tv-focusable data-tv-close className="w-10 h-10 rounded-full bg-red-500/80 hover:bg-red-500 text-white flex items-center justify-center"><X className="w-5 h-5" /></button>
                 </div>
               </div>
+              {strip.open && (
+                <TvServerStrip
+                  servers={playing.sources.map((s) => ({ id: s.id, label: s.label, detail: s.quality || undefined, down: s.status === 'offline' }))}
+                  active={playing.idx}
+                  onPick={(i) => { selectSource(i); strip.close(); }}>
+                  {isEmbedUrl && canTap() && (
+                    <button type="button" onClick={() => { strip.close(); setSportPointer(true); }} tabIndex={0} data-tv-focusable
+                      className="shrink-0 h-12 px-5 rounded-full text-base font-bold flex items-center gap-2 bg-white/15 text-white"><MousePointer2 className="w-4 h-4" /> Pointer</button>
+                  )}
+                </TvServerStrip>
+              )}
               {activeUrl && !isEmbedUrl ? (
                 // In the app a feed's playlist plays through the relay with the
                 // headers its own player sent: loaded directly the stream server
@@ -1470,7 +1493,7 @@ export default function SportsView() {
                     // already, without breaking any provider.
                     sandbox={activeSrc?.kind === 'server' ? undefined : playerSandbox(shieldOn, activeUrl)}
                   />
-                  {!chromeHidden && <span aria-hidden className="tv-ok-hint pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 z-20 items-center gap-2 px-4 py-2 rounded-full bg-black/75 text-white text-sm font-bold">Press OK to play</span>}
+                  {!chromeHidden && !strip.open && <span aria-hidden className="tv-ok-hint pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 z-20 items-center gap-2 px-4 py-2 rounded-full bg-black/75 text-white text-sm font-bold">Press OK to play</span>}
                   {sportPointer && <TvPointer area={sportFrameRef.current} onExit={() => setSportPointer(false)} />}
                   {isSandboxed && (
                     <div className="absolute top-0 left-0 w-full z-40 bg-amber-500/95 text-amber-950 text-xs md:text-sm font-bold px-4 py-3 flex flex-col md:flex-row items-center justify-center gap-3 md:gap-4 text-center backdrop-blur shadow-2xl border-b border-amber-400/30 animate-in slide-in-from-top-2">
@@ -1534,13 +1557,13 @@ export default function SportsView() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between">
-                        <h4 className="text-sm font-bold text-red-400">Server marked dead</h4>
+                        <h4 className="text-sm font-bold text-red-400">Moved to the next server</h4>
                         <button onClick={() => setShowServerDeadNotice(false)} className="text-zinc-400 hover:text-white transition-colors ml-2">
                           <X className="w-4 h-4" />
                         </button>
                       </div>
                       <p className="text-xs text-zinc-300 mt-1 leading-relaxed">
-                        We've marked that feed down in your session and successfully switched you to the next available server.
+                        That feed stopped or would not start, so Sahrae switched for you.
                       </p>
                     </div>
                   </div>

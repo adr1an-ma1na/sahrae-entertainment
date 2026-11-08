@@ -1,4 +1,5 @@
 import { t } from '../i18n';
+import TitleLogo from './ui/TitleLogo';
 import { useEffect, useRef, useState } from 'react';
 import { Play, Info, Star, Film, Plus, Check } from 'lucide-react';
 import { MediaItem, getImageUrl } from '../services/tmdb';
@@ -106,9 +107,11 @@ export default function Hero({ items, onPlay, genreName, inList, onToggleList, r
               {rank > 0 ? `No. ${rank} ${rankLabel}` : 'Featured'} · {type === 'movie' ? 'Film' : 'Series'}
             </p>
 
-            <h1 className="tv-hero-title lux-title mb-4 drop-shadow-2xl text-4xl md:text-6xl lg:text-7xl pb-1">
-              {title}
-            </h1>
+            <div className="mb-4">
+              <TitleLogo id={item.id} type={item.media_type === 'tv' ? 'tv' : 'movie'} title={title}
+                textClassName="tv-hero-title lux-title drop-shadow-2xl text-4xl md:text-6xl lg:text-7xl pb-1"
+                imgClassName="max-h-[110px] md:max-h-[150px] lg:max-h-[180px] max-w-[78%] md:max-w-[520px]" />
+            </div>
 
             <div className="flex items-center flex-wrap gap-x-3 gap-y-2 mb-5 text-sm font-semibold text-zinc-200">
               {item.vote_average ? (

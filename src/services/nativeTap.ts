@@ -25,7 +25,7 @@ export function tapCenterOf(el: Element, refocus?: HTMLElement | null): boolean 
   // The tap puts focus inside the provider's frame, where the remote's arrows
   // would be lost: bring it back once the tap has landed.
   if (refocus) {
-    const back = () => { try { refocus.focus({ preventScroll: true }); } catch { /* gone */ } };
+    const back = () => { try { (document.activeElement?.closest('[data-tv-strip]') ? undefined : refocus.focus({ preventScroll: true })); } catch { /* gone */ } };
     setTimeout(back, 350);
     setTimeout(back, 1200);
   }
@@ -51,6 +51,12 @@ export function tellFrame(frame: HTMLIFrameElement | null | undefined, what: 'pl
 }
 
 /** True when `e` is the helper in `frame` saying its picture is moving. */
+/** The picture in this frame was playing and has stopped moving for 15 seconds. */
+export function isFrameStalled(e: MessageEvent, frame: HTMLIFrameElement | null | undefined): boolean {
+  const d = e.data as { sahrae?: string } | null;
+  return !!frame && e.source === frame.contentWindow && !!d && typeof d === 'object' && d.sahrae === 'frame-stalled';
+}
+
 export function isFramePlaying(e: MessageEvent, frame: HTMLIFrameElement | null | undefined): boolean {
   const d = e.data as { sahrae?: unknown } | null;
   return !!frame && e.source === frame.contentWindow && !!d && typeof d === 'object' && d.sahrae === 'frame-playing';

@@ -4,7 +4,7 @@
  *
  * Run: node --experimental-strip-types curate-check.mjs
  */
-import { interleave, buildMix, clusterArtists, mixSubtitle, matchScore, bestMatch, songBase, isVersion, onePerSong, splitReleases } from './src/services/curate.ts';
+import { interleave, buildMix, clusterArtists, mixSubtitle, matchScore, bestMatch, songBase, isVersion, onePerSong, splitReleases, dealQueue, shuffled, onePerPlay } from './src/services/curate.ts';
 
 let pass = 0, fail = 0;
 const eq = (name, got, want) => {
@@ -68,6 +68,22 @@ eq('a film credit is not a version', isVersion('Hand That Feeds (From the Film B
 
 const versions = [{ title: 'Calm Down (Remix)' }, { title: 'Essence' }, { title: 'Calm Down' }, { title: 'Calm Down - Sped Up' }];
 eq('each song once, the song itself in the first place', onePerSong(versions).map((t) => t.title), ['Calm Down', 'Essence']);
+
+console.log('\nshuffle');
+const fifty = Array.from({ length: 50 }, (_, i) => ({ title: `Song ${i}`, artist: 'A' }));
+const dealt = dealQueue(fifty, 7);
+eq('fifty songs are fifty plays', dealt.length, 50);
+eq('each song exactly once', new Set(dealt.map((t) => t.title)).size, 50);
+eq('the chosen song plays first', dealt[0].title, 'Song 7');
+eq('the order really changes', dealt.map((t) => t.title).join() !== fifty.map((t) => t.title).join(), true);
+const copies = [{ title: 'Romeo', artist: 'Darassa' }, { title: 'Romeo (Remix)', artist: 'Darassa' }, { title: 'Essence', artist: 'Wizkid' }];
+eq('two copies of a song are one play', dealQueue(copies, 0).length, 2);
+eq('different songs with one title are both kept', onePerPlay([{ title: 'Hello', artist: 'Adele' }, { title: 'Hello', artist: 'Lionel Richie' }]).length, 2);
+eq('shuffling keeps every item', shuffled([1, 2, 3, 4]).sort(), [1, 2, 3, 4]);
+// Every song is as likely as any other to be dealt first after the lead: a biased sort is not.
+const firsts = Array(5).fill(0);
+for (let i = 0; i < 5000; i++) firsts[shuffled([0, 1, 2, 3, 4])[0]]++;
+eq('a fair deal', firsts.every((n) => n > 850 && n < 1150), true);
 
 console.log('\nan artist\'s releases');
 // Halsey's catalogue, as the catalogue lists it (title, type, fans).

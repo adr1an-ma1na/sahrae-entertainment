@@ -1,7 +1,7 @@
-import { ChevronDown, X, ExternalLink, AlertCircle, Play, RefreshCw, Plus, Check, Maximize, Minimize, MousePointer2, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle, Gauge } from 'lucide-react';
+import { ChevronDown, X, ExternalLink, AlertCircle, Play, RefreshCw, Plus, Check, Maximize, Minimize, MousePointer2, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle, Gauge, Star } from 'lucide-react';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
-import { fetchMediaDetails, MediaDetails, getImageUrl, fetchSimilar, MediaItem, SeasonDetails, fetchSeasonDetails } from '../services/tmdb';
+import { fetchMediaDetails, MediaDetails, getImageUrl, fetchSimilar, MediaItem, SeasonDetails, fetchSeasonDetails, certificationOf } from '../services/tmdb';
 import { useWatchProgress } from '../hooks/useWatchProgress';
 import { resumePoint, withStartAt } from '../services/resume';
 import { useMyList } from '../hooks/useMyList';
@@ -19,6 +19,8 @@ import TvPointer from './TvPointer';
 import { openLegal } from '../services/consent';
 import { canPlayClean, resolveFilmStream, relayUrl, cleanFirst, isCleanOn, setCleanOn } from '../services/cleanStream';
 import { isTelevision } from '../tv/spatialNavigation';
+import TitleLogo from './ui/TitleLogo';
+import { TvServerStrip, useTvServerStrip } from './ui/TvServerStrip';
 import { NO_START_LIMIT_MS, COUNTDOWN_S, isPlaybackEvidence, markWorking, markDown, startServer } from '../services/serverHealth';
 import { reportScreen } from '../services/remote';
 import { t } from '../i18n';
@@ -247,6 +249,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   // Where this title was left: its server, and the second to start from for
   // the episode it was on (services/resume.ts). Set when the title opens.
   const [resumeAt, setResumeAt] = useState<{ s: number; e: number; at: number }>({ s: 1, e: 1, at: 0 });
+  const [playbackOpen, setPlaybackOpen] = useState(false);
   const resumeServerRef = useRef(false);
   const lastPosRef = useRef<{ position: number; duration: number; server?: string; season: number; episode: number } | null>(null);
   const lastSavedRef = useRef(0);
@@ -436,7 +439,9 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   barHiddenRef.current = barHidden;
   useEffect(() => { if (paused === true) setBarHidden(false); }, [paused]);
   useEffect(() => { if (!playerUp) setBarHidden(false); }, [playerUp]);
-  const barVisible = !barHidden && (!fsActive || peek || paused === true || showAudioMenu);
+  // A TV: Up at the top of the picture brings the servers, as on a live match.
+  const strip = useTvServerStrip(isOpen && isPlaying && !playingTrailer && isTelevision(), serverFrameRef);
+  const barVisible = !barHidden && !strip.open && (!fsActive || peek || paused === true || showAudioMenu);
   const showBar = () => { setBarHidden(false); peekBar(5000); };
 
   // When a movie/show starts playing, silence music & radio (claim the speaker).
@@ -1274,8 +1279,14 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                   <ChevronDown className="w-4 h-4" />
                 </button>
               )}
+              {strip.open && (
+                <TvServerStrip
+                  servers={dynamicServers.map((sv, i) => ({ id: sv.id || String(i), label: (sv.name || `Server ${i + 1}`).split(' · ')[0], detail: crowd.good.has(sv.id) ? 'works for others' : undefined, down: failedServers.includes(sv.id) }))}
+                  active={selectedServer}
+                  onPick={(i) => { pickServer(i); strip.close(); }} />
+              )}
               <div className={`flex flex-wrap items-center gap-1.5 px-2 py-2 ${fsActive
-                ? `dark absolute inset-x-0 top-0 z-30 pb-8 bg-gradient-to-b from-black/90 via-black/60 to-transparent transition-opacity duration-300 ${barVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`
+                ? `dark absolute inset-x-0 top-0 z-30 pb-8 bg-gradient-to-b from-black/90 via-black/60 to-transparent transition-opacity duration-300 ${strip.open ? 'invisible' : barVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`
                 : barHidden ? 'hidden' : 'relative bg-zinc-950 border-t border-white/10'}`}>
                 {/* Three controls, as the owner asked (2026-11-01): the server, full
                     screen, and close. The rest (report, hide, together, audio,
@@ -1328,9 +1339,10 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
               </div>
             </div>
           ) : (
-            <div className="relative w-full aspect-video md:aspect-[2.2/1] bg-black">
+            <div className="relative w-full aspect-[4/5] sm:aspect-video md:aspect-[2.2/1] bg-black">
               <>
-                <img loading="lazy" decoding="async" src={getImageUrl(details.backdrop_path, 'original')} className="w-full h-full object-cover opacity-80" />
+                <img decoding="async" src={getImageUrl(details.poster_path || details.backdrop_path, 'w780')} alt="" className="sm:hidden w-full h-full object-cover object-top opacity-90" />
+                <img decoding="async" src={getImageUrl(details.backdrop_path, 'original')} alt="" className="hidden sm:block w-full h-full object-cover opacity-80" />
                 {/* Tint drawn from the artwork itself, so every title feels
                     like its own page instead of the same grey chrome. Fades in
                     only once the colour resolves, and stays absent entirely if
@@ -1350,14 +1362,24 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                 <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 md:via-zinc-950/20 to-transparent" />
                 <div className="absolute inset-0 bg-gradient-to-r from-zinc-950/80 via-zinc-950/40 md:via-transparent to-transparent" />
   
-                <div className="absolute bottom-8 left-8 md:bottom-10 md:left-10 pr-12 flex flex-col gap-4 z-10 w-full max-w-2xl">
-                  <h1 className="text-3xl md:text-5xl lg:text-6xl font-display font-extrabold text-white tracking-tight leading-none drop-shadow-2xl">
-                    {details.title || details.name}
-                  </h1>
-                  <div className="flex gap-3 items-center flex-wrap mt-2">
-                    <button data-tv-autofocus onClick={() => { setIsPlaying(true); }} className="px-6 md:px-8 py-2 md:py-3 bg-white text-black font-bold rounded flex items-center gap-2 hover:bg-white/80 transition-colors shadow-lg text-sm md:text-base whitespace-nowrap">
+                <div className="absolute bottom-5 left-5 md:bottom-10 md:left-10 pr-10 flex flex-col gap-3 z-10 w-full max-w-2xl">
+                  <TitleLogo id={details.id} type={currentMediaType === 'tv' ? 'tv' : 'movie'} title={details.title || details.name || ''}
+                    textClassName="text-3xl md:text-5xl lg:text-6xl font-display font-extrabold text-white tracking-tight leading-none drop-shadow-2xl"
+                    imgClassName="max-h-[84px] md:max-h-[130px] max-w-[80%] md:max-w-[440px]" />
+                  {/* The facts someone decides on, on the picture. */}
+                  <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-sm font-semibold text-zinc-200">
+                    {details.vote_average ? <span className="flex items-center gap-1 text-amber-300 font-bold"><Star className="w-3.5 h-3.5 fill-current" />{details.vote_average.toFixed(1)}</span> : null}
+                    <span>{(details.release_date || details.first_air_date)?.slice(0, 4)}</span>
+                    {details.seasons
+                      ? <span>{details.seasons.filter((s) => s.season_number > 0).length} {details.seasons.filter((s) => s.season_number > 0).length === 1 ? 'Season' : 'Seasons'}</span>
+                      : details.runtime ? <span>{Math.floor(details.runtime / 60) ? `${Math.floor(details.runtime / 60)} h ` : ''}{details.runtime % 60} min</span> : null}
+                    {certificationOf(details) && <span className="px-1.5 border border-zinc-400/70 rounded text-xs leading-5">{certificationOf(details)}</span>}
+                    {details.genres?.length ? <span className="hidden sm:inline text-zinc-300 font-medium">{details.genres.slice(0, 3).map((g) => g.name).join(' · ')}</span> : null}
+                  </div>
+                  <div className="flex gap-2.5 items-center flex-wrap mt-1">
+                    <button data-tv-autofocus onClick={() => { setIsPlaying(true); }} className="lux-btn px-7 md:px-9 py-2.5 md:py-3 font-bold flex items-center gap-2 hover:bg-white/80 transition-colors shadow-lg text-sm md:text-base whitespace-nowrap">
                       <Play className="w-5 h-5 md:w-6 md:h-6 fill-current"/>
-                      {currentMediaType === 'tv' ? `Play S${selectedSeason} E${selectedEpisode}` : 'Play'}
+                      {startAtNow ? 'Resume' : 'Play'}{currentMediaType === 'tv' ? ` S${selectedSeason} E${selectedEpisode}` : ''}
                     </button>
                     {trailer && (
                       <button onClick={() => setPlayingTrailer(trailer.key)} className="px-6 md:px-8 py-2 md:py-3 bg-zinc-900/90 text-white font-semibold rounded flex items-center gap-2 hover:bg-zinc-800 transition-colors border border-zinc-600/60 shadow-lg text-sm md:text-base whitespace-nowrap">
@@ -1373,15 +1395,47 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                     <button onClick={() => setRating(rating === 'down' ? null : 'down')} className={`w-10 h-10 md:w-12 md:h-12 flex items-center justify-center border border-zinc-600/60 bg-zinc-900/90 rounded-full transition-colors shadow-lg shrink-0 ${rating === 'down' ? 'text-red-400 bg-zinc-800 border-red-500/50' : 'text-white hover:bg-white/10 hover:border-white'}`} title="Not for me" aria-label="Not for me">
                       <ThumbsDown className="w-4 h-4 md:w-5 md:h-5"/>
                     </button>
-                    <button
-                      onClick={handleOpenDownload}
-                      className="group px-6 md:px-8 py-2 md:py-3 font-bold flex items-center justify-center gap-2 border rounded transition-colors shadow-lg ml-2 border-zinc-600/60 bg-zinc-900/90 text-white hover:bg-zinc-800"
-                      title="Download this title from VidVault"
-                    >
-                      <Download className="w-5 h-5 group-hover:animate-bounce"/>
-                      <span className="text-sm">Download</span>
+                    <button onClick={handleOpenDownload} title="Download" aria-label="Download"
+                      className="w-10 h-10 md:w-12 md:h-12 flex items-center justify-center border border-zinc-600/60 bg-zinc-900/90 text-white rounded-full hover:bg-zinc-800 transition-colors">
+                      <Download className="w-4 h-4 md:w-5 md:h-5" />
                     </button>
                   </div>
+                </div>
+              </>
+            </div>
+          )}
+
+            <div className="p-8 md:p-10 pb-16">
+              {/* Pick-a-server-before-you-play. Shown for BOTH movies and series
+                  (the old prominent picker was movies-only, and the series one
+                  was a small dropdown that appeared only after playback began).
+                  Chips are far more discoverable than a <select> on TV + touch,
+                  and the choice is made here, before Play is ever pressed. */}
+              <div className="flex flex-col lg:flex-row gap-10">
+                <div className="lg:w-2/3 space-y-5">
+                  {details.tagline && <p className="text-lg italic text-zinc-300">{details.tagline}</p>}
+                  <p className="text-white text-base leading-relaxed font-medium">{details.overview}</p>
+                </div>
+                <div className="lg:w-1/3 text-sm space-y-4">
+                  {details.credits?.cast?.length ? <p className="text-white"><span className="text-zinc-500">Starring: </span>{details.credits.cast.slice(0, 4).map((c) => c.name).join(', ')}</p> : null}
+                  <p className="text-white sm:hidden"><span className="text-zinc-500">Genres: </span>{details.genres?.slice(0, 3).map(g => g.name).join(', ')}</p>
+                  {details.credits?.crew?.find(c => c.job === 'Director')?.name && <p className="text-white"><span className="text-zinc-500">Director: </span>{details.credits.crew.find(c => c.job === 'Director')!.name}</p>}
+                </div>
+              </div>
+
+              {/* The best server is already chosen, and moves on by itself if one fails:
+                  the choice stays one tap away instead of opening the page. */}
+              <div className="mt-8">
+                <button onClick={() => setPlaybackOpen((o) => !o)} data-tv-focusable aria-expanded={playbackOpen}
+                  className="inline-flex items-center gap-2 max-w-full px-4 py-2.5 rounded-full bg-white/[0.07] hover:bg-white/[0.12] text-sm text-zinc-300 transition-colors">
+                  <Server className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span className="truncate">Playing on <b className="text-white font-semibold">{(dynamicServers[selectedServer]?.name || 'the best server').split(' · ')[0]}</b></span>
+                  <span className="font-semibold text-amber-300 shrink-0">Change server</span>
+                  <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${playbackOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {playbackOpen && (
+                  <div className="mt-4 p-4 rounded-2xl bg-white/[0.04] border border-white/[0.08]">
+                    <div className="mb-4">
                   {(() => {
                     const ep = currentMediaType === 'tv' ? seasonDetails?.episodes?.find((x) => x.episode_number === selectedEpisode) : null;
                     const minutes = (currentMediaType === 'tv' ? (ep?.runtime || details.episode_run_time?.[0]) : details.runtime) || 0;
@@ -1398,18 +1452,8 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       </p>
                     );
                   })()}
-                </div>
-              </>
-            </div>
-          )}
-
-            <div className="p-8 md:p-10 pb-16">
-              {/* Pick-a-server-before-you-play. Shown for BOTH movies and series
-                  (the old prominent picker was movies-only, and the series one
-                  was a small dropdown that appeared only after playback began).
-                  Chips are far more discoverable than a <select> on TV + touch,
-                  and the choice is made here, before Play is ever pressed. */}
-              <div className="mb-8">
+                    </div>
+              <div>
                 <div className="flex items-center gap-2 mb-3 flex-wrap">
                   <Server className="w-4 h-4 text-amber-400 shrink-0" />
                   <h4 className="text-white font-bold text-sm">{t('Choose your server')}</h4>
@@ -1506,21 +1550,116 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                   </div>
                 )}
               </div>
-              <div className="flex flex-col lg:flex-row gap-10">
-                <div className="lg:w-2/3 space-y-5">
-                  <div className="flex items-center gap-3 text-sm font-semibold text-zinc-400">
-                    {details.vote_average ? <span className="text-green-500 font-bold">{Math.round(details.vote_average * 10)}% Match</span> : null}
-                    <span className="text-white">{(details.release_date || details.first_air_date)?.slice(0, 4)}</span>
-                    {details.seasons ? <span>{details.seasons.filter(s => s.season_number > 0).length} Seasons</span> : details.runtime ? <span>{details.runtime} min</span> : null}
-                    <span className="px-1 border border-zinc-600 rounded text-xs leading-5 uppercase">HD</span>
                   </div>
-                  <p className="text-white text-base leading-relaxed font-medium">{details.overview}</p>
-                </div>
-                <div className="lg:w-1/3 text-sm space-y-4">
-                  <p className="text-white"><span className="text-zinc-500">Genres: </span>{details.genres?.slice(0, 3).map(g => g.name).join(', ')}</p>
-                  <p className="text-white"><span className="text-zinc-500">Director: </span>{details.credits?.crew?.find(c => c.job === 'Director')?.name || 'N/A'}</p>
-                </div>
+                )}
               </div>
+              {currentMediaType === 'tv' && (
+                <div className="mt-12">
+                  <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">Episodes</h3>
+                    <div className="flex items-center gap-4">
+                      {isPlaying && (
+                        <select value={selectedServer} onChange={e => pickServer(Number(e.target.value))} className="bg-zinc-900 text-white font-bold outline-none cursor-pointer rounded px-3 py-2 border border-zinc-800 text-sm md:max-w-[200px]">
+                          {dynamicServers.map((server, idx) => <option key={server.id} value={idx}>{server.name}</option>)}
+                        </select>
+                      )}
+                    </div>
+                  </div>
+                  {(details.seasons?.filter((s) => s.season_number > 0).length || 0) > 1 && (
+                    <div className="flex gap-2 overflow-x-auto scrollbar-hide -mt-2 mb-5 pb-1" role="group" aria-label="Season">
+                      {details.seasons!.filter((s) => s.season_number > 0).map((s) => (
+                        <button key={s.id} onClick={() => setSelectedSeason(s.season_number)} aria-pressed={selectedSeason === s.season_number} data-tv-focusable className="lux-chip shrink-0">Season {s.season_number}</button>
+                      ))}
+                    </div>
+                  )}
+                  {!seasonDetails ? (
+                    <div className="flex flex-col gap-0 border-t border-zinc-800">
+                      {[1, 2, 3, 4, 5].map(i => (
+                        <div key={i} className="flex flex-col md:flex-row items-center gap-4 py-4 md:py-6 border-b border-zinc-800 animate-pulse">
+                          <div className="w-12 hidden md:block"></div>
+                          <div className="w-full md:w-48 aspect-video shrink-0 bg-zinc-800 rounded"></div>
+                          <div className="flex-1 w-full space-y-3">
+                            <div className="h-5 bg-zinc-800 rounded w-1/3"></div>
+                            <div className="h-4 bg-zinc-800 rounded w-full"></div>
+                            <div className="h-4 bg-zinc-800 rounded w-5/6"></div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : seasonDetails?.episodes && seasonDetails.episodes.length > 0 ? (
+                    <div className="flex flex-col gap-0 border-t border-zinc-800">
+                      {seasonDetails.episodes.map(episode => (
+                        <div key={episode.id} role="button" tabIndex={0} data-tv-focusable onClick={() => { setSelectedEpisode(episode.episode_number); setIsPlaying(true); document.getElementById('player-modal-container')?.scrollTo({top: 0, behavior: 'smooth'}); }} className={`flex flex-col md:flex-row items-center gap-4 py-4 md:py-6 border-b border-zinc-800 cursor-pointer hover:bg-zinc-800/50 transition-colors group ${selectedEpisode === episode.episode_number && isPlaying ? 'bg-zinc-800/30' : ''}`}>
+                          <div className="text-4xl font-light text-zinc-500 w-12 text-center shrink-0 hidden md:block opacity-60">
+                            {episode.episode_number}
+                          </div>
+                          <div className="w-full md:w-48 aspect-video shrink-0 relative rounded overflow-hidden bg-zinc-800">
+                            {episode.still_path ? <img loading="lazy" decoding="async" src={getImageUrl(episode.still_path)} className="w-full h-full object-cover" /> : <div className="absolute inset-0 flex items-center justify-center opacity-50"><Play className="w-8 h-8 text-white"/></div>}
+                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 transition-opacity"><Play className="w-8 h-8 text-white fill-current shadow-lg drop-shadow"/></div>
+                          </div>
+                          <div className="flex-1 min-w-0 md:pr-4">
+                            <div className="flex justify-between items-start mb-1">
+                              <h4 className="text-base font-bold text-white line-clamp-1">
+                                {resumeAt.at > 0 && resumeAt.s === selectedSeason && resumeAt.e === episode.episode_number && <span className="mr-2 align-middle text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-400 text-amber-950">Continue</span>}
+                                <span className="md:hidden">{episode.episode_number}. </span>{episode.name}
+                              </h4>
+                              <span className="text-sm font-bold text-white shrink-0 ml-4 flex items-center gap-2">
+                                {seasonPlayable.has(episode.episode_number) && (
+                                  <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400" title="Someone watched this episode here in the last 48 hours">Plays</span>
+                                )}
+                                {episode.runtime ? `${episode.runtime}m` : ''}
+                              </span>
+                            </div>
+                            <p className="text-sm text-zinc-400 line-clamp-3 md:line-clamp-2 leading-snug w-11/12">{episode.overview || 'No description available for this episode.'}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-zinc-500 py-10 text-center font-semibold">Episodes currently unavailable for this season.</div>
+                  )}
+                </div>
+              )}
+
+              {similar.length > 0 && (
+                <div className="mt-12">
+                  <h3 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight mb-6">More Like This</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {similar.slice(0, 9).map(item => (
+                      <div key={item.id} role="button" tabIndex={0} data-tv-focusable onClick={() => { setDetails(null); setSimilar([]); setCurrentMediaId(item.id); setCurrentMediaType(item.media_type || currentMediaType); setSelectedSeason(1); setSelectedEpisode(1); document.getElementById('player-modal-container')?.scrollTo({top: 0}); }}
+                        className="cursor-pointer group relative rounded overflow-hidden bg-zinc-800 transition-transform duration-300 hover:scale-[1.03] shadow-lg">
+                        <div className="relative w-full aspect-[16/9]">
+                          <img src={getImageUrl(item.backdrop_path || item.poster_path)} className="w-full h-full object-cover" loading="lazy" />
+                          <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors" />
+                        </div>
+                        <div className="p-4">
+                          <div className="flex justify-between items-start mb-2">
+                            <p className="text-white font-bold text-sm leading-tight">{item.title || item.name}</p>
+                            {item.vote_average ? <span className="ml-2 shrink-0 flex items-center gap-0.5 text-xs font-bold text-amber-300"><Star className="w-3 h-3 fill-current" />{item.vote_average.toFixed(1)}</span> : null}
+                          </div>
+                          <p className="text-xs text-zinc-400 line-clamp-3">{item.overview}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {videos.filter(v => v.type === 'Trailer' || v.type === 'Teaser' || v.type === 'Clip').length > 0 && (
+                <div className="mt-12">
+                  <h3 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight mb-6">Trailers & Extras</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {videos.filter(v => v.type === 'Trailer' || v.type === 'Teaser' || v.type === 'Clip').slice(0, 6).map(v => (
+                      <div key={v.id} onClick={() => { setPlayingTrailer(v.key); document.getElementById('player-modal-container')?.scrollTo({top: 0, behavior: 'smooth'}); }} className="cursor-pointer group relative rounded overflow-hidden aspect-video bg-zinc-800">
+                         <img loading="lazy" decoding="async" src={`https://img.youtube.com/vi/${v.key}/maxresdefault.jpg`} onError={(e) => { e.currentTarget.src = `https://img.youtube.com/vi/${v.key}/hqdefault.jpg`; e.currentTarget.onerror = null; }} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105 opacity-80 group-hover:opacity-100" />
+                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 transition-all"><Play className="w-12 h-12 text-white fill-current shadow-lg drop-shadow"/></div>
+                         <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent">
+                           <p className="text-white text-sm font-bold line-clamp-1">{v.name}</p>
+                         </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {details.credits?.cast && details.credits.cast.length > 0 && (
                 <div className="mt-12">
@@ -1546,110 +1685,6 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                 </div>
               )}
 
-              {currentMediaType === 'tv' && (
-                <div className="mt-12">
-                  <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">Episodes</h3>
-                    <div className="flex items-center gap-4">
-                      {isPlaying && (
-                        <select value={selectedServer} onChange={e => pickServer(Number(e.target.value))} className="bg-zinc-900 text-white font-bold outline-none cursor-pointer rounded px-3 py-2 border border-zinc-800 text-sm md:max-w-[200px]">
-                          {dynamicServers.map((server, idx) => <option key={server.id} value={idx}>{server.name}</option>)}
-                        </select>
-                      )}
-                      <div className="bg-zinc-900 rounded px-4 py-2 border border-zinc-800 hover:bg-zinc-800 transition-colors">
-                        <select value={selectedSeason} onChange={e => setSelectedSeason(Number(e.target.value))} className="bg-transparent text-white font-bold outline-none w-full cursor-pointer">
-                          {details.seasons?.filter(s => s.season_number > 0).map( season => (
-                            <option key={season.id} value={season.season_number}>Season {season.season_number}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                  {!seasonDetails ? (
-                    <div className="flex flex-col gap-0 border-t border-zinc-800">
-                      {[1, 2, 3, 4, 5].map(i => (
-                        <div key={i} className="flex flex-col md:flex-row items-center gap-4 py-4 md:py-6 border-b border-zinc-800 animate-pulse">
-                          <div className="w-12 hidden md:block"></div>
-                          <div className="w-full md:w-48 aspect-video shrink-0 bg-zinc-800 rounded"></div>
-                          <div className="flex-1 w-full space-y-3">
-                            <div className="h-5 bg-zinc-800 rounded w-1/3"></div>
-                            <div className="h-4 bg-zinc-800 rounded w-full"></div>
-                            <div className="h-4 bg-zinc-800 rounded w-5/6"></div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : seasonDetails?.episodes && seasonDetails.episodes.length > 0 ? (
-                    <div className="flex flex-col gap-0 border-t border-zinc-800">
-                      {seasonDetails.episodes.map(episode => (
-                        <div key={episode.id} onClick={() => { setSelectedEpisode(episode.episode_number); setIsPlaying(true); document.getElementById('player-modal-container')?.scrollTo({top: 0, behavior: 'smooth'}); }} className={`flex flex-col md:flex-row items-center gap-4 py-4 md:py-6 border-b border-zinc-800 cursor-pointer hover:bg-zinc-800/50 transition-colors group ${selectedEpisode === episode.episode_number && isPlaying ? 'bg-zinc-800/30' : ''}`}>
-                          <div className="text-4xl font-light text-zinc-500 w-12 text-center shrink-0 hidden md:block opacity-60">
-                            {episode.episode_number}
-                          </div>
-                          <div className="w-full md:w-48 aspect-video shrink-0 relative rounded overflow-hidden bg-zinc-800">
-                            {episode.still_path ? <img loading="lazy" decoding="async" src={getImageUrl(episode.still_path)} className="w-full h-full object-cover" /> : <div className="absolute inset-0 flex items-center justify-center opacity-50"><Play className="w-8 h-8 text-white"/></div>}
-                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 transition-opacity"><Play className="w-8 h-8 text-white fill-current shadow-lg drop-shadow"/></div>
-                          </div>
-                          <div className="flex-1 min-w-0 md:pr-4">
-                            <div className="flex justify-between items-start mb-1">
-                              <h4 className="text-base font-bold text-white line-clamp-1">{episode.name}</h4>
-                              <span className="text-sm font-bold text-white shrink-0 ml-4 flex items-center gap-2">
-                                {seasonPlayable.has(episode.episode_number) && (
-                                  <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400" title="Someone watched this episode here in the last 48 hours">Plays</span>
-                                )}
-                                {episode.runtime ? `${episode.runtime}m` : ''}
-                              </span>
-                            </div>
-                            <p className="text-sm text-zinc-400 line-clamp-3 md:line-clamp-2 leading-snug w-11/12">{episode.overview || 'No description available for this episode.'}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-zinc-500 py-10 text-center font-semibold">Episodes currently unavailable for this season.</div>
-                  )}
-                </div>
-              )}
-
-              {videos.filter(v => v.type === 'Trailer' || v.type === 'Teaser' || v.type === 'Clip').length > 0 && (
-                <div className="mt-12">
-                  <h3 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight mb-6">Trailers & Extras</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {videos.filter(v => v.type === 'Trailer' || v.type === 'Teaser' || v.type === 'Clip').slice(0, 6).map(v => (
-                      <div key={v.id} onClick={() => { setPlayingTrailer(v.key); document.getElementById('player-modal-container')?.scrollTo({top: 0, behavior: 'smooth'}); }} className="cursor-pointer group relative rounded overflow-hidden aspect-video bg-zinc-800">
-                         <img loading="lazy" decoding="async" src={`https://img.youtube.com/vi/${v.key}/maxresdefault.jpg`} onError={(e) => { e.currentTarget.src = `https://img.youtube.com/vi/${v.key}/hqdefault.jpg`; e.currentTarget.onerror = null; }} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105 opacity-80 group-hover:opacity-100" />
-                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 transition-all"><Play className="w-12 h-12 text-white fill-current shadow-lg drop-shadow"/></div>
-                         <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent">
-                           <p className="text-white text-sm font-bold line-clamp-1">{v.name}</p>
-                         </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {similar.length > 0 && (
-                <div className="mt-12">
-                  <h3 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight mb-6">More Like This</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {similar.slice(0, 9).map(item => (
-                      <div key={item.id} onClick={() => { setDetails(null); setSimilar([]); setCurrentMediaId(item.id); setCurrentMediaType(item.media_type || currentMediaType); setSelectedSeason(1); setSelectedEpisode(1); document.getElementById('player-modal-container')?.scrollTo({top: 0}); }}
-                        className="cursor-pointer group relative rounded overflow-hidden bg-zinc-800 transition-transform duration-300 hover:scale-[1.03] shadow-lg">
-                        <div className="relative w-full aspect-[16/9]">
-                          <img src={getImageUrl(item.backdrop_path || item.poster_path)} className="w-full h-full object-cover" loading="lazy" />
-                          <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors" />
-                        </div>
-                        <div className="p-4">
-                          <div className="flex justify-between items-start mb-2">
-                            <p className="text-white font-bold text-sm leading-tight">{item.title || item.name}</p>
-                          </div>
-                          <p className="text-xs text-zinc-400 line-clamp-3">{item.overview}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>
