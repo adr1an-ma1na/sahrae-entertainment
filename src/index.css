@@ -883,6 +883,16 @@
   will-change: transform;
   transition: opacity 0.12s ease;
 }
+/* The sign-in page on a TV: no gold box (owner, 2026-11-11). The remote's
+   place shows as a brighter, slightly larger control and a white field edge. */
+html.tv-mode .quiet-focus :focus,
+html.tv-mode .quiet-focus :focus-visible { outline: none !important; box-shadow: none !important; }
+html.tv-mode .quiet-focus input:focus { border-color: rgb(255 255 255 / 0.85) !important; background-color: rgb(39 39 42 / 0.95) !important; }
+html.tv-mode .quiet-focus button:focus,
+html.tv-mode .quiet-focus a:focus { transform: scale(1.05); filter: brightness(1.2); transition: transform 0.12s ease, filter 0.12s ease; }
+/* Room under the sign-in form for the privacy card while it is up (phones). */
+@media (max-width: 767px) { html.consent-open .signin-page { padding-bottom: 9rem; } }
+
 /* A section appearing. No transform: see App.tsx. */
 @keyframes tab-in { from { opacity: 0; } to { opacity: 1; } }
 .tab-in { animation: tab-in 0.14s ease-out; }

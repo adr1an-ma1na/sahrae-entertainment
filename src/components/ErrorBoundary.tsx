@@ -1,4 +1,5 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
+import { clearCaches } from '../services/storageGuard';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 
 interface Props {
@@ -43,8 +44,8 @@ export class ErrorBoundary extends Component<Props, State> {
           <div className="flex gap-4">
             <button
               onClick={() => {
-                // Clear potentially corrupted local storage
-                localStorage.removeItem('sahrae_watch_progress');
+                // Caches only: Continue Watching, My List and playlists stay.
+                try { clearCaches(); } catch { /* storage unavailable */ }
                 window.location.reload();
               }}
               className="flex items-center gap-2 px-6 py-3 bg-amber-500 text-amber-950 font-bold rounded-lg hover:bg-amber-400 transition-colors"

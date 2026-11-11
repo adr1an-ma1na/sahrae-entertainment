@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { MediaItem } from '../services/tmdb';
+import { adoptOrphans } from '../services/orphanLists';
 import { useAuth } from './useAuth';
 
 /**
@@ -56,17 +57,25 @@ export { resumePoint } from '../services/resume';
 
 export function useWatchProgress() {
   const [progress, setProgress] = useState<WatchProgress[]>([]);
-  const { user, activeProfile } = useAuth();
+  const { user, activeProfile, profiles } = useAuth();
   const key = storageKey(scopeKey(user?.uid, activeProfile?.id));
+  const onlyProfile = profiles.length <= 1;
 
   // Read on mount and on user/profile change, and again whenever another part
   // of the app saves progress (the player and Home each hold this hook).
   useEffect(() => {
-    const load = () => setProgress(read(key));
+    const load = () => {
+      const list = read(key);
+      // An empty list on a one-profile account: the same account's list under an older profile id.
+      if (!list.length && onlyProfile && user?.uid && activeProfile?.id) {
+        try { setProgress(adoptOrphans(localStorage, WATCH_PROGRESS_PREFIX, user.uid, key) as WatchProgress[]); return; } catch { /* storage unavailable */ }
+      }
+      setProgress(list);
+    };
     load();
     window.addEventListener(PROGRESS_EVENT, load);
     return () => window.removeEventListener(PROGRESS_EVENT, load);
-  }, [key]);
+  }, [key, onlyProfile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveProgress = (
     mediaId: number,

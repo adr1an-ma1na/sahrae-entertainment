@@ -78,7 +78,7 @@ export default function SignInGate() {
   const cta = mode === 'signin' ? t('Sign in') : mode === 'signup' ? t('Create account') : t('Send reset link');
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white relative overflow-hidden">
+    <div className="signin-page quiet-focus min-h-screen bg-zinc-950 text-white relative overflow-hidden" data-tv-noring>
       <div aria-hidden className="pointer-events-none absolute inset-0"
         style={{ background: 'radial-gradient(70% 55% at 15% 0%, rgba(245,158,11,0.22), transparent 70%), radial-gradient(60% 50% at 90% 100%, rgba(244,63,94,0.16), transparent 70%)' }} />
 

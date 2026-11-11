@@ -137,6 +137,8 @@ export async function pull(): Promise<boolean> {
 }
 
 let pending: number | undefined;
+/** When the scheduled send will happen. */
+let pendingDue = 0;
 
 /**
  * Push local state up.
@@ -146,8 +148,13 @@ let pending: number | undefined;
  */
 export function schedulePush(delayMs = 2500): void {
   if (!supabase || tableMissing || applying) return;
+  // A send already due sooner stands. Progress saves every 30 s used to push the
+  // 60 s send back each time, so a film watched through was never sent.
+  const due = Date.now() + delayMs;
+  if (pending !== undefined && pendingDue <= due) return;
   window.clearTimeout(pending);
-  pending = window.setTimeout(() => { void push(); }, delayMs);
+  pendingDue = due;
+  pending = window.setTimeout(() => { pending = undefined; void push(); }, delayMs);
 }
 
 export async function push(): Promise<boolean> {

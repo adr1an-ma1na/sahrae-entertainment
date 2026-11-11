@@ -268,7 +268,9 @@ export const discoverWith = async (type: 'movie' | 'tv', params: Record<string, 
 
 const DETAILS_KEY_PREFIX = 'sahrae_tmdb_details_';
 /** Hard cap on cached title blobs. Each is ~10-40 KB with credits and videos. */
-const MAX_CACHED_DETAILS = 250;
+const MAX_CACHED_DETAILS = 100;
+/** The keys gained a "v2-" in front, and the clean-up below stopped seeing them: the cache grew without end and filled the device (2026-11-11). */
+const isDetailsKey = (k: string) => k.startsWith(DETAILS_KEY_PREFIX) || k.startsWith('v2-' + DETAILS_KEY_PREFIX);
 
 /**
  * Write a title blob to the details cache, evicting the oldest entries when the
@@ -305,7 +307,7 @@ function evictOldestDetails(keep: number): void {
   const entries: { key: string; timestamp: number }[] = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
-    if (!k || !k.startsWith(DETAILS_KEY_PREFIX)) continue;
+    if (!k || !isDetailsKey(k)) continue;
     let timestamp = 0;
     try {
       timestamp = JSON.parse(localStorage.getItem(k) || '{}').timestamp || 0;

@@ -17,8 +17,7 @@ const CHANGED = 'sahrae:notifications';
 
 export function useNotifications() {
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
-    const saved = localStorage.getItem('sahrae_notifications');
-    return saved ? JSON.parse(saved) : [];
+    try { const saved = JSON.parse(localStorage.getItem('sahrae_notifications') || '[]'); return Array.isArray(saved) ? saved.slice(0, 50) : []; } catch { return []; }
   });
   const [isChecking, setIsChecking] = useState(false);
   const { myList } = useMyList();
@@ -26,13 +25,16 @@ export function useNotifications() {
   // Several parts of the app show these (the phone's bell, Settings, the sidebar's dot): one list.
   useEffect(() => {
     const json = JSON.stringify(notifications);
-    if (localStorage.getItem('sahrae_notifications') === json) return;
-    localStorage.setItem('sahrae_notifications', json);
+    try {
+      if (localStorage.getItem('sahrae_notifications') === json) return;
+      localStorage.setItem('sahrae_notifications', json);
+    } catch { /* storage unavailable: this session still has them */ }
     window.dispatchEvent(new Event(CHANGED));
   }, [notifications]);
   useEffect(() => {
     const reload = () => {
-      const saved = localStorage.getItem('sahrae_notifications') || '[]';
+      let saved = '[]';
+      try { saved = localStorage.getItem('sahrae_notifications') || '[]'; JSON.parse(saved); } catch { return; }
       setNotifications((prev) => (JSON.stringify(prev) === saved ? prev : JSON.parse(saved)));
     };
     window.addEventListener(CHANGED, reload);
@@ -151,7 +153,7 @@ export function useNotifications() {
         setNotifications(prev => [...newNotifications, ...prev].slice(0, 50)); // Keep max 50
       }
       
-      localStorage.setItem('sahrae_last_notification_check', now.toString());
+      try { localStorage.setItem('sahrae_last_notification_check', now.toString()); } catch { /* checked again sooner */ }
     } catch (error) {
       console.error("Failed to check for updates:", error);
     } finally {

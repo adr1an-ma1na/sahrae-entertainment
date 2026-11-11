@@ -1,3 +1,6 @@
+// First, before anything saves: a full storage bucket gives way instead of crashing the app.
+import { installStorageGuard } from './services/storageGuard.ts';
+installStorageGuard();
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';

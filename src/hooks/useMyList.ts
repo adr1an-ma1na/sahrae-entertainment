@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { MediaItem } from '../services/tmdb';
 import { useAuth } from './useAuth';
+import { adoptOrphans } from '../services/orphanLists';
 
 /**
  * "My List" stored on-device, scoped to the signed-in user + active profile
@@ -16,14 +17,21 @@ const storageKey = (scope: string) => `sahrae_my_list_${scope}`;
 
 export function useMyList() {
   const [myList, setMyList] = useState<MediaItem[]>([]);
-  const { user, activeProfile } = useAuth();
+  const { user, activeProfile, profiles } = useAuth();
+  const onlyProfile = profiles.length <= 1;
 
   useEffect(() => {
     const key = storageKey(scopeKey(user?.uid, activeProfile?.id));
     const load = () => {
       try {
         const stored = localStorage.getItem(key);
-        setMyList(stored ? JSON.parse(stored) : []);
+        const list = stored ? JSON.parse(stored) : [];
+        // As Continue Watching: a one-profile account's list under an older profile id.
+        if ((!Array.isArray(list) || !list.length) && onlyProfile && user?.uid && activeProfile?.id) {
+          setMyList(adoptOrphans(localStorage, 'sahrae_my_list_', user.uid, key) as MediaItem[]);
+          return;
+        }
+        setMyList(list);
       } catch {
         setMyList([]);
       }
@@ -32,7 +40,7 @@ export function useMyList() {
     // The account sync announces titles merged in from another device (services/cloudSync.ts).
     window.addEventListener('sahrae:mylist', load);
     return () => window.removeEventListener('sahrae:mylist', load);
-  }, [user, activeProfile]);
+  }, [user, activeProfile, onlyProfile]);
 
   const toggleMyList = (item: MediaItem) => {
     const key = storageKey(scopeKey(user?.uid, activeProfile?.id));
