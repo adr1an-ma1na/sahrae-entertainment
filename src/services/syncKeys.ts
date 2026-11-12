@@ -21,6 +21,8 @@ export const SYNCED_KEYS = [
   'sahrae.eq.v1',
   // The chosen theme, so phone, laptop and the TV app look the same (useTheme).
   'sahrae.theme.v1',
+  // Subtitle and audio language, subtitle size (trackPrefs.ts).
+  'sahrae.tracks.v1',
 ] as const;
 
 /**
@@ -51,7 +53,7 @@ const isProgressKey = (k: string) => k.startsWith('sahrae_watch_progress_');
 export function mergeScoped(key: string, local: unknown, remote: unknown): unknown {
   if (!Array.isArray(remote)) return local;
   if (!Array.isArray(local)) return remote;
-  type Entry = { id?: unknown; mediaId?: unknown; timestamp?: unknown };
+  type Entry = { id?: unknown; mediaId?: unknown; timestamp?: unknown; removed?: unknown };
   const idOf = (x: Entry) => (isProgressKey(key) ? x?.mediaId : x?.id);
   const at = (x: Entry) => Number(x?.timestamp) || 0;
   const best = new Map<unknown, Entry>();
@@ -64,7 +66,24 @@ export function mergeScoped(key: string, local: unknown, remote: unknown): unkno
   }
   const out = order.map((id) => best.get(id) as Entry);
   // Continue watching reads newest first; My List keeps this device's order, the other's additions after.
-  return isProgressKey(key) ? out.sort((a, b) => at(b) - at(a)).slice(0, 30) : out;
+  return isProgressKey(key) ? trimProgress(out.sort((a, b) => at(b) - at(a))) : out;
+}
+
+/**
+ * A title taken off Continue watching stays in the list as a marker
+ * (`removed: true`, stamped when it was removed), so the merge above keeps the
+ * removal instead of bringing the title back from another device's older copy
+ * (owner, 2026-11-12: "remove a show before completing it"). Watching it again
+ * writes a newer entry, which wins. Markers are kept for 120 days.
+ */
+export const MAX_PROGRESS = 30;
+const MARKER_DAYS = 120;
+export function trimProgress<T extends { removed?: unknown; timestamp?: unknown }>(list: T[], now = Date.now()): T[] {
+  let live = 0, gone = 0;
+  return list.filter((x) => {
+    if (x?.removed) return now - (Number(x.timestamp) || 0) < MARKER_DAYS * 86_400_000 && gone++ < MAX_PROGRESS;
+    return live++ < MAX_PROGRESS;
+  });
 }
 
 export const isScopedKey = (k: string): boolean => SCOPED_PREFIXES.some((p) => k.startsWith(p));

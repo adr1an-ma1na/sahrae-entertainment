@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { MediaItem } from '../services/tmdb';
 import { adoptOrphans } from '../services/orphanLists';
 import { useAuth } from './useAuth';
+import { trimProgress } from '../services/syncKeys';
 
 /**
  * Continue watching: what was opened, on which server, and how far in.
@@ -26,6 +27,8 @@ export interface WatchProgress {
   /** Seconds in, and the length, where the player reports its clock. */
   position?: number;
   duration?: number;
+  /** Taken off the list by the viewer: kept as a marker so a synced copy cannot bring it back (syncKeys.trimProgress). */
+  removed?: boolean;
 }
 
 /** Continue-watching history stored on-device, scoped per user + profile. */
@@ -36,7 +39,6 @@ function scopeKey(uid?: string, profileId?: string): string {
 }
 export const WATCH_PROGRESS_PREFIX = 'sahrae_watch_progress_';
 const storageKey = (scope: string) => `${WATCH_PROGRESS_PREFIX}${scope}`;
-const MAX_ENTRIES = 30;
 
 /** Fired after progress is saved, so every holder of this hook re-reads it. */
 const PROGRESS_EVENT = 'sahrae:progress';
@@ -48,6 +50,8 @@ function read(key: string): WatchProgress[] {
     return stored ? (JSON.parse(stored) as WatchProgress[]) : [];
   } catch { return []; }
 }
+/** What the viewer sees: everything but the removal markers. */
+const shown = (list: WatchProgress[]) => list.filter((p) => !p.removed);
 function write(key: string, list: WatchProgress[]) {
   try { localStorage.setItem(key, JSON.stringify(list)); } catch (e) { console.error('Failed to save watch progress', e); }
   setTimeout(announce, 0);
@@ -68,9 +72,9 @@ export function useWatchProgress() {
       const list = read(key);
       // An empty list on a one-profile account: the same account's list under an older profile id.
       if (!list.length && onlyProfile && user?.uid && activeProfile?.id) {
-        try { setProgress(adoptOrphans(localStorage, WATCH_PROGRESS_PREFIX, user.uid, key) as WatchProgress[]); return; } catch { /* storage unavailable */ }
+        try { setProgress(shown(adoptOrphans(localStorage, WATCH_PROGRESS_PREFIX, user.uid, key) as WatchProgress[])); return; } catch { /* storage unavailable */ }
       }
-      setProgress(list);
+      setProgress(shown(list));
     };
     load();
     window.addEventListener(PROGRESS_EVENT, load);
@@ -101,7 +105,7 @@ export function useWatchProgress() {
     } as MediaItem;
 
     const list = read(key);
-    const before = list.find((p) => p.mediaId === mediaId);
+    const before = list.find((p) => p.mediaId === mediaId && !p.removed);
     const sameEpisode = before && (before.season || 1) === (season || 1) && (before.episode || 1) === (episode || 1);
     const entry: WatchProgress = {
       mediaId, mediaType, season, episode, timestamp: Date.now(), item: minimalItem,
@@ -109,15 +113,16 @@ export function useWatchProgress() {
       server: before?.server,
       ...(sameEpisode ? { position: before?.position, duration: before?.duration } : {}),
     };
-    const updated = [entry, ...list.filter((p) => p.mediaId !== mediaId)].slice(0, MAX_ENTRIES);
-    setProgress(updated);
+    const updated = trimProgress([entry, ...list.filter((p) => p.mediaId !== mediaId)]);
+    setProgress(shown(updated));
     write(key, updated);
   };
 
   /** Record the server and the clock for a title already in the list (the player calls this as it plays). */
   const savePosition = (mediaId: number, at: { server?: string; position?: number; duration?: number; season?: number; episode?: number }) => {
     const list = read(key);
-    const i = list.findIndex((p) => p.mediaId === mediaId);
+    // A title the viewer removed is not put back by the player's clock.
+    const i = list.findIndex((p) => p.mediaId === mediaId && !p.removed);
     if (i < 0) return;
     const p = list[i];
     const next: WatchProgress = {
@@ -130,17 +135,24 @@ export function useWatchProgress() {
       timestamp: Date.now(),
     };
     const updated = [next, ...list.filter((_, j) => j !== i)];
-    setProgress(updated);
+    setProgress(shown(updated));
     write(key, updated);
   };
 
+  /** Off the list now, whether or not it was finished; it returns only if it is watched again. */
   const removeProgress = (mediaId: number) => {
-    const updated = read(key).filter((p) => p.mediaId !== mediaId);
-    setProgress(updated);
+    const list = read(key);
+    const was = list.find((p) => p.mediaId === mediaId);
+    if (!was) return;
+    // The entry stays whole (an older app that cannot read the marker still has a title to draw).
+    const marker: WatchProgress = { ...was, removed: true, timestamp: Date.now() };
+    const updated = trimProgress([...list.filter((p) => p.mediaId !== mediaId), marker]
+      .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)));
+    setProgress(shown(updated));
     write(key, updated);
   };
 
-  const getProgress = (mediaId: number) => read(key).find((p) => p.mediaId === mediaId);
+  const getProgress = (mediaId: number) => read(key).find((p) => p.mediaId === mediaId && !p.removed);
 
   return { progress, saveProgress, savePosition, removeProgress, getProgress };
 }

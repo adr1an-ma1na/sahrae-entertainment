@@ -3,7 +3,7 @@ import { canFrameKick } from '../services/nativeTap';
 import { readFrameOptions, type ChoiceLists, type PlayerChoices } from '../services/playerChoices';
 
 /**
- * The quality and sound a server's own player offers. Android apps only: the
+ * The quality, sound and subtitles a server's own player offers. Android apps only: the
  * website has no way into another site's frame, and there the server's own
  * buttons are in reach of a mouse or a finger anyway.
  *
@@ -38,5 +38,6 @@ export function useFrameChoices(getFrame: () => HTMLIFrameElement | null | undef
     ...lists,
     pickQuality: (id) => { setLists((l) => (l ? { ...l, qualityOn: id } : l)); send('set-quality', id); },
     pickAudio: (id) => { setLists((l) => (l ? { ...l, audioOn: id } : l)); send('set-audio', id); },
+    pickSubs: (id) => { setLists((l) => (l ? { ...l, subsOn: id } : l)); send('set-subs', id); },
   };
 }

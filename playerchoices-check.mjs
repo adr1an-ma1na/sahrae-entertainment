@@ -26,11 +26,11 @@ eq('non-number ids are refused', readFrameOptions({ quality: [{ id: 'x', height:
 eq('hasChoices: none', hasChoices(null), false);
 
 // The frame's script, run against a pretend page.
-function frame({ name = '', hls = null, jw = null, parent = 'other', href = 'embed.example' } = {}) {
-  const sent = [], listeners = {}, doc = {}, intervals = [];
+function frame({ name = '', hls = null, jw = null, parent = 'other', href = 'embed.example', vid = {} } = {}) {
+  const sent = [], clocks = [], listeners = {}, doc = {}, intervals = [];
   const proto = { play() { this.playCalls = (this.playCalls || 0) + 1; return Promise.resolve(); } };
-  const video = Object.assign(Object.create(proto), { tagName: 'VIDEO', muted: false, paused: false, duration: Infinity, seekable: { length: 1, end: () => 100 }, currentTime: 10, pause() { this.paused = true; } });
-  const parentWin = { postMessage: (m) => { if (m.sahrae === 'frame-options') sent.push(m); } };
+  const video = Object.assign(Object.create(proto), { tagName: 'VIDEO', muted: false, paused: false, duration: Infinity, seekable: { length: 1, end: () => 100 }, currentTime: 10, pause() { this.paused = true; } }, vid);
+  const parentWin = { postMessage: (m) => { if (m.sahrae === 'frame-options') sent.push(m); else if (m.sahrae === 'frame-clock') clocks.push(m); } };
   const top = parent === 'top' ? parentWin : { };
   const win = {
     name, top, parent: parentWin, location: { hostname: href, ancestorOrigins: ['https://localhost'] },
@@ -49,7 +49,7 @@ function frame({ name = '', hls = null, jw = null, parent = 'other', href = 'emb
   const code = readFileSync('android-overlay/app/src/main/assets/frame-options.js', 'utf8');
   vm.runInNewContext(code, win);
   return {
-    win, video, sent, doc, proto,
+    win, video, sent, clocks, doc, proto,
     tick: () => intervals.forEach((f) => f()),
     fromParent: (d) => listeners.message({ data: d, source: parentWin }),
   };
@@ -85,6 +85,77 @@ console.log('\nthe helper, hls.js');
   eq('auto is current', f.sent[0].o.qOn, -1);
   f.fromParent({ sahrae: 'set-quality', id: 1 });
   eq('changes at the next segment', hls.nextLevel, 1);
+}
+
+console.log('\nsubtitles');
+{
+  const jw = { q: 0, c: 0, getQualityLevels: () => [], getCurrentQuality: () => 0,
+    getCaptionsList: () => [{ id: 'off', label: 'Off' }, { label: 'English' }, { label: 'Español' }],
+    getCurrentCaptions() { return this.c; }, setCurrentCaptions(i) { this.c = i; } };
+  const f = frame({ jw });
+  f.tick();
+  eq('jwplayer: its subtitles, without its Off', f.sent[0].o.subs.map((x) => x.label), ['English', 'Español']);
+  eq('jwplayer: the ids are its own', f.sent[0].o.subs.map((x) => x.id), [1, 2]);
+  eq('jwplayer: off reads as -1', f.sent[0].o.sOn, -1);
+  f.fromParent({ sahrae: 'set-subs', id: 2 });
+  eq('jwplayer: turned on', jw.c, 2);
+  f.fromParent({ sahrae: 'set-subs', id: -1 });
+  eq('jwplayer: turned off', jw.c, 0);
+}
+{
+  const hls = { levels: [], audioTracks: [], subtitleTracks: [{ name: 'English' }, { lang: 'fre' }], subtitleTrack: -1, subtitleDisplay: false, nextLevel: -1, media: {} };
+  const f = frame({ hls });
+  f.tick();
+  eq('hls.js: a list of subtitles is worth reporting alone', f.sent.length, 1);
+  f.fromParent({ sahrae: 'set-subs', id: 1 });
+  eq('hls.js: track and display', [hls.subtitleTrack, hls.subtitleDisplay], [1, true]);
+}
+{
+  const tracks = [{ kind: 'metadata', label: 'x', mode: 'hidden' }, { kind: 'subtitles', label: 'English', mode: 'disabled' }, { kind: 'captions', language: 'de', mode: 'showing' }];
+  const f = frame({ vid: { textTracks: tracks, duration: 1500 } });
+  f.tick();
+  eq('any player: its text tracks, not metadata', f.sent[0].o.subs.map((x) => x.label), ['English', 'de']);
+  eq('any player: the one showing', f.sent[0].o.sOn, 1);
+  f.fromParent({ sahrae: 'set-subs', id: 0 });
+  eq('any player: one on, the rest off', tracks.map((t) => t.mode), ['hidden', 'showing', 'disabled']);
+}
+{
+  const styles = [];
+  const f = frame();
+  f.doc.getElementById = () => null;
+  f.doc.createElement = () => { const el = { textContent: '' }; styles.push(el); return el; };
+  f.doc.head = { appendChild() {} };
+  f.fromParent({ sahrae: 'sub-style', size: 'L' });
+  eq('size reaches the page', /font-size:140%/.test(styles[0]?.textContent || ''), true);
+  f.fromParent({ sahrae: 'sub-style', size: '<script>' });
+  eq('an unknown size is ignored', styles.length, 1);
+}
+
+console.log('\nthe clock and Skip');
+{
+  const f = frame({ vid: { duration: 1440, currentTime: 350 } });
+  f.tick();
+  eq('reports the film playing', f.clocks.map((c) => [c.t, c.d]), [[350, 1440]]);
+  f.tick();
+  eq('quiet while the clock has not moved', f.clocks.length, 1);
+  f.fromParent({ sahrae: 'seek', to: 435 });
+  eq('Skip moves the film', f.video.currentTime, 435);
+  eq('and says where it is', f.clocks.at(-1).t, 435);
+  f.fromParent({ sahrae: 'seek', to: 99999 });
+  eq('never past the end', f.video.currentTime, 1439.5);
+  f.fromParent({ sahrae: 'seek', to: 'x' });
+  eq('a bad second is ignored', f.video.currentTime, 1439.5);
+}
+{
+  const jw = { at: 0, getPosition: () => 0, seek(t) { this.at = t; }, getQualityLevels: () => [], getCurrentQuality: () => 0 };
+  const f = frame({ jw, vid: { duration: 1440 } });
+  f.fromParent({ sahrae: 'seek', to: 90 });
+  eq('jwplayer seeks through its own player', jw.at, 90);
+}
+{
+  const f = frame({ vid: { duration: Infinity, currentTime: 50 } });
+  f.tick();
+  eq('a live picture has no clock to report', f.clocks.length, 0);
 }
 
 console.log('\nno player to ask');

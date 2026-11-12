@@ -145,7 +145,7 @@ export default function App() {
   const [hasMoreSearch, setHasMoreSearch] = useState(true);
   
   const { myList, toggleMyList } = useMyList();
-  const { progress } = useWatchProgress();
+  const { progress, removeProgress } = useWatchProgress();
   const { theme, toggleTheme } = useTheme();
 
   // Player state
@@ -567,6 +567,7 @@ export default function App() {
                   mediaId: p.mediaId, mediaType: p.mediaType, season: p.season, episode: p.episode, item: p.item, position: p.position, duration: p.duration,
                 }))}
                 onPlay={handlePlay}
+                onRemove={removeProgress}
               />
               {/* The page reads in chapters, each with its own title, so a long
                   run of shelves has a shape: tonight, you, home, the collection. */}

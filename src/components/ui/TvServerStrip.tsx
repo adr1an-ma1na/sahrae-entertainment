@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { Server, Gauge, Volume2 } from 'lucide-react';
+import { Server, Gauge, Volume2, Subtitles } from 'lucide-react';
 import { setTvBackHandler, tvFocus } from '../../tv/spatialNavigation';
-import type { Choice, PlayerChoices } from '../../services/playerChoices';
+import { isOriginal, type Choice, type PlayerChoices } from '../../services/playerChoices';
+import type { SubSize } from '../../services/trackPrefs';
 
 /** How long the strip stays with nothing pressed. */
 const IDLE_MS = 7000;
@@ -79,8 +80,8 @@ export interface StripServer { id: string; label: string; detail?: string; down?
 
 const chip = 'shrink-0 h-12 px-5 rounded-full text-base font-bold flex items-center gap-2';
 
-function ChoiceRow({ title, icon, items, on, onPick }: { title: string; icon: ReactNode; items: Choice[]; on: number; onPick: (id: number) => void }) {
-  if (items.length < 2) return null;
+function ChoiceRow({ title, icon, items, on, onPick, min = 2 }: { title: string; icon: ReactNode; items: Choice[]; on: number; onPick: (id: number) => void; min?: number }) {
+  if (items.length < min) return null;
   return (
     <div data-strip-row className="mt-2">
       <p className="flex items-center gap-2 mb-1 text-xs font-bold uppercase tracking-[0.2em] text-zinc-300">{icon} {title}</p>
@@ -94,15 +95,22 @@ function ChoiceRow({ title, icon, items, on, onPick }: { title: string; icon: Re
   );
 }
 
-export function TvServerStrip({ servers, active, onPick, onFocusServer, choices, children }: {
+export function TvServerStrip({ servers, active, onPick, onFocusServer, choices, original, subSize, onSubs, onAudio, onSize, children }: {
   servers: StripServer[];
   /** Index in `servers` of the one playing. */
   active: number;
   onPick: (i: number) => void;
   /** The remote has moved onto this server. */
   onFocusServer?: (i: number) => void;
-  /** The quality and sound the playing server offers. */
+  /** The quality, sound and subtitles the playing server offers. */
   choices?: PlayerChoices | null;
+  /** The title's original language (TMDB), to mark that sound track. */
+  original?: string | null;
+  subSize?: SubSize;
+  /** Picks that are remembered for the next episode (PlayerModal); the plain choice otherwise. */
+  onSubs?: (id: number) => void;
+  onAudio?: (id: number) => void;
+  onSize?: (size: SubSize) => void;
   /** Anything else offered on the strip, after the servers. */
   children?: ReactNode;
 }) {
@@ -129,7 +137,18 @@ export function TvServerStrip({ servers, active, onPick, onFocusServer, choices,
       </div>
       </div>
       {choices && <ChoiceRow title="Quality" icon={<Gauge className="w-4 h-4" />} items={choices.quality} on={choices.qualityOn} onPick={choices.pickQuality} />}
-      {choices && <ChoiceRow title="Sound" icon={<Volume2 className="w-4 h-4" />} items={choices.audio} on={choices.audioOn} onPick={choices.pickAudio} />}
+      {choices && <ChoiceRow title="Sound" icon={<Volume2 className="w-4 h-4" />}
+        items={choices.audio.map((c) => (isOriginal(c.label, original) ? { ...c, label: `${c.label} · Original` } : c))}
+        on={choices.audioOn} onPick={onAudio || choices.pickAudio} />}
+      {choices && choices.subs.length > 0 && (
+        <ChoiceRow title="Subtitles" icon={<Subtitles className="w-4 h-4" />} min={1}
+          items={[{ id: -1, label: 'Off' }, ...choices.subs]} on={choices.subsOn} onPick={onSubs || choices.pickSubs} />
+      )}
+      {choices && choices.subs.length > 0 && choices.subsOn >= 0 && onSize && (
+        <ChoiceRow title="Subtitle size" icon={<Subtitles className="w-4 h-4" />}
+          items={[{ id: 0, label: 'Small' }, { id: 1, label: 'Medium' }, { id: 2, label: 'Large' }]}
+          on={subSize === 'S' ? 0 : subSize === 'L' ? 2 : 1} onPick={(id) => onSize(id === 0 ? 'S' : id === 2 ? 'L' : 'M')} />
+      )}
     </div>
   );
 }

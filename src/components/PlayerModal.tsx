@@ -1,9 +1,12 @@
-import { Volume2, ChevronDown, X, ExternalLink, AlertCircle, Play, RefreshCw, Plus, Check, Maximize, Minimize, MousePointer2, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle, Gauge, Star } from 'lucide-react';
+import { Volume2, ChevronDown, X, ExternalLink, AlertCircle, Play, RefreshCw, Plus, Check, Maximize, Minimize, MousePointer2, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle, Gauge, Star, Subtitles } from 'lucide-react';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { fetchMediaDetails, MediaDetails, getImageUrl, fetchSimilar, MediaItem, SeasonDetails, fetchSeasonDetails, certificationOf } from '../services/tmdb';
 import { useWatchProgress } from '../hooks/useWatchProgress';
-import { resumePoint, withStartAt } from '../services/resume';
+import { resumePoint, withStartAt, START_AT_SERVERS } from '../services/resume';
+import SkipButton, { tellClock } from './SkipButton';
+import { loadSegments, type Segment } from '../services/skipSegments';
+import { readTrackPrefs, saveTrackPrefs, trackFor, applyCueStyle, type SubSize } from '../services/trackPrefs';
 import { useMyList } from '../hooks/useMyList';
 import { loadEq, saveEq, EQ_PRESETS, PRESET_EXTRAS } from '../services/eq';
 import { haptics } from '../services/haptics';
@@ -14,10 +17,10 @@ import { suppressPopups } from '../services/popupGuard';
 import { lockLandscape, unlockOrientation } from '../services/fullscreen';
 import CleanPlayer from './CleanPlayer';
 import { useRemoved, isRemoved } from '../services/removed';
-import { tapCenterOf, canTap, tellFrame } from '../services/nativeTap';
+import { tapCenterOf, canTap, tellFrame, canFrameKick } from '../services/nativeTap';
 import TvPointer from './TvPointer';
 import { useFrameChoices } from '../hooks/useFrameChoices';
-import { hasChoices, type PlayerChoices } from '../services/playerChoices';
+import { hasChoices, hasLanguages, isOriginal, languageKey, type PlayerChoices } from '../services/playerChoices';
 import { openLegal } from '../services/consent';
 import { canPlayClean, resolveFilmStream, relayUrl, cleanFirst, isCleanOn, setCleanOn } from '../services/cleanStream';
 import { isTelevision, tvFocus } from '../tv/spatialNavigation';
@@ -129,6 +132,14 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const [eqPreset, setEqPreset] = useState<string>(() => loadEq().preset);
   const [showAudioMenu, setShowAudioMenu] = useState(false);
   const [showChoices, setShowChoices] = useState(false);
+  // Audio & Subtitles, Netflix's panel (owner, 2026-11-12).
+  const [showLangs, setShowLangs] = useState(false);
+  const [subSize, setSubSize] = useState<SubSize>(() => readTrackPrefs().size);
+  // Skip Intro: the marked parts of what is playing, and how to move past them.
+  const [segments, setSegments] = useState<Segment[]>([]);
+  const cleanSeekRef = useRef<((t: number) => void) | null>(null);
+  // The website, on a server that opens at a given second: Skip reloads it there.
+  const [jumpAt, setJumpAt] = useState(0);
   const [cleanChoices, setCleanChoices] = useState<PlayerChoices | null>(null);
   const [showAdNotice, setShowAdNotice] = useState(false);
   const [failedServers, setFailedServers] = useState<string[]>([]);
@@ -158,11 +169,14 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const manualPickRef = useRef(false);
   const pickServer = (idx: number) => { manualPickRef.current = true; setSelectedServer(idx); };
 
-  // Go fullscreen AFTER the embed has loaded and started playing (fired from the
-  // iframe's onLoad), not the instant Play is tapped. Tapping Play then waiting
-  // for the embed to autostart and only then fullscreening avoids the old
-  // "fullscreen first → tap play → drops out of fullscreen" double-tap mess.
+  // Full screen is the viewer's choice on a phone, a tablet and the website: the
+  // player opens in the page and the full-screen button (or the server's own)
+  // takes it there (owner, 2026-11-12, "I would manually have to put it in full
+  // screen"). A TV still fills the screen by itself once the picture is up:
+  // there is nothing else to look at, and the remote would otherwise have to
+  // find the button first.
   const enterFullscreen = useCallback(() => {
+    if (!isTelevision()) return;
     if (nativeShell) { setMaxed(true); return; }
     if (document.fullscreenElement) return; // already fullscreen — don't re-request
     playerContainerRef.current?.requestFullscreen?.().catch(() => {});
@@ -249,7 +263,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     setFailedServers([]);
   }, [mediaId, mediaType]);
   
-  const { saveProgress, savePosition, getProgress } = useWatchProgress();
+  const { progress, saveProgress, savePosition, getProgress, removeProgress } = useWatchProgress();
   // Where this title was left: its server, and the second to start from for
   // the episode it was on (services/resume.ts). Set when the title opens.
   const [resumeAt, setResumeAt] = useState<{ s: number; e: number; at: number }>({ s: 1, e: 1, at: 0 });
@@ -447,7 +461,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const strip = useTvServerStrip(isOpen && isPlaying && !playingTrailer && isTelevision(), serverFrameRef);
   const frameChoices = useFrameChoices(() => serverFrameRef.current?.querySelector('iframe'),
     isOpen && isPlaying && !playingTrailer ? `${selectedServer}-${selectedSeason}-${selectedEpisode}-${refreshKey}` : null);
-  const barVisible = !barHidden && !strip.open && (!fsActive || peek || paused === true || showAudioMenu || showChoices);
+  const barVisible = !barHidden && !strip.open && (!fsActive || peek || paused === true || showAudioMenu || showChoices || showLangs);
   const showBar = () => { setBarHidden(false); peekBar(5000); };
   // The bar has gone: the remote goes back to the picture, or OK would press a
   // button nobody can see (Sports does the same).
@@ -1026,11 +1040,43 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
       const m = d as { type?: string; data?: { event?: string; currentTime?: number; duration?: number } } | null;
       if (!m || m.type !== 'PLAYER_EVENT' || !m.data) return;
       const { event, currentTime = 0, duration = 0 } = m.data;
-      if (event === 'timeupdate' || event === 'pause' || event === 'seeked') notePositionRef.current(currentTime, duration, event === 'pause');
+      if (event === 'timeupdate' || event === 'pause' || event === 'seeked') {
+        notePositionRef.current(currentTime, duration, event === 'pause');
+        tellClock(currentTime, duration);
+      }
     };
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
   }, [isOpen, isPlaying, playingTrailer, selectedServer, refreshKey]);
+
+  // In the Android apps every server's picture has a clock (frame-options.js),
+  // so Skip Intro and resuming at the minute work beyond the servers that post one.
+  useEffect(() => {
+    if (!isOpen || !isPlaying || playingTrailer || !canFrameKick()) return;
+    const onMsg = (e: MessageEvent) => {
+      const d = e.data as { sahrae?: unknown; t?: unknown; d?: unknown; paused?: unknown } | null;
+      if (!d || typeof d !== 'object' || d.sahrae !== 'frame-clock' || typeof d.t !== 'number') return;
+      if (!fromFrame(iframeRef.current?.contentWindow, e.source)) return;
+      const dur = typeof d.d === 'number' && d.d !== Infinity ? d.d : 0;
+      notePositionRef.current(d.t, dur, d.paused === true);
+      tellClock(d.t, dur);
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, [isOpen, isPlaying, playingTrailer, selectedServer, refreshKey]);
+
+  // The parts to skip, for this film or this episode (services/skipSegments.ts).
+  const hasDetails = !!details;
+  const animeTitle = !!details && details.original_language === 'ja' && !!details.genres?.some((g) => g.id === 16);
+  useEffect(() => {
+    setSegments([]);
+    if (!isOpen || !isPlaying || playingTrailer || !currentMediaId || !currentMediaType || !hasDetails) return;
+    let live = true;
+    loadSegments({ tmdbId: Number(currentMediaId), type: currentMediaType, season: selectedSeason, episode: selectedEpisode, anime: animeTitle })
+      .then((list) => { if (live) setSegments(list); });
+    return () => { live = false; };
+  }, [isOpen, isPlaying, playingTrailer, currentMediaId, currentMediaType, selectedSeason, selectedEpisode, hasDetails, animeTitle]);
+  useEffect(() => { setJumpAt(0); }, [currentMediaId, selectedServer, selectedSeason, selectedEpisode]);
 
   // The server is remembered as soon as it plays, even one that reports no clock.
   useEffect(() => {
@@ -1056,14 +1102,57 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, isPlaying, currentMediaId, selectedSeason, selectedEpisode]);
 
+  const usingClean = clean.state === 'ready' && !!clean.url;
+  const liveChoices = usingClean ? cleanChoices : frameChoices;
+  // The subtitle and audio language picked before, set on each new stream once it says what it has.
+  const streamKey = `${currentMediaId}-${selectedServer}-${selectedSeason}-${selectedEpisode}-${refreshKey}-${usingClean ? 'clean' : 'frame'}`;
+  const appliedRef = useRef('');
+  useEffect(() => {
+    const c = liveChoices;
+    if (!c || appliedRef.current === streamKey) return;
+    appliedRef.current = streamKey;
+    const prefs = readTrackPrefs();
+    const sub = trackFor(c.subs, prefs.subs);
+    if (sub !== null && sub !== c.subsOn) c.pickSubs(sub);
+    const aud = c.audio.length > 1 ? trackFor(c.audio, prefs.audio) : null;
+    if (aud !== null && aud !== c.audioOn) c.pickAudio(aud);
+  }, [liveChoices, streamKey]);
+  useEffect(() => { applyCueStyle(subSize); }, [subSize]);
+  const frameHasChoices = !!frameChoices;
+  useEffect(() => {
+    if (!frameHasChoices) return;
+    try { iframeRef.current?.contentWindow?.postMessage({ sahrae: 'sub-style', size: subSize }, '*'); } catch { /* frame gone */ }
+  }, [frameHasChoices, subSize, streamKey]);
+
   if (!isOpen || !currentMediaId || !currentMediaType || !details) return null;
-  const choices = clean.state === 'ready' && clean.url ? cleanChoices : frameChoices;
+  const choices = liveChoices;
+  // The viewer's pick is remembered for the next stream.
+  const pickSubs = (c: PlayerChoices, id: number) => {
+    c.pickSubs(id);
+    const label = c.subs.find((x) => x.id === id)?.label;
+    saveTrackPrefs({ subs: id >= 0 && label ? languageKey(label) : null });
+  };
+  const pickAudio = (c: PlayerChoices, id: number) => {
+    c.pickAudio(id);
+    const label = c.audio.find((x) => x.id === id)?.label;
+    if (label) saveTrackPrefs({ audio: languageKey(label) });
+  };
+  const pickSize = (size: SubSize) => { setSubSize(size); saveTrackPrefs({ size }); };
+  // Skip: in place for Sahrae's player and, in the apps, any server; on the
+  // website only where the server takes a start time (a reload at that second).
+  const webJump = !nativeShell && START_AT_SERVERS.includes(SERVERS[selectedServer]?.id || '');
+  const canSeek = usingClean || canFrameKick() || webJump;
+  const seekTo = (to: number) => {
+    if (usingClean) { cleanSeekRef.current?.(to); return; }
+    if (canFrameKick()) { try { iframeRef.current?.contentWindow?.postMessage({ sahrae: 'seek', to }, '*'); } catch { /* frame gone */ } return; }
+    if (webJump) { setJumpAt(to); setRefreshKey((k) => k + 1); }
+  };
 
   const dynamicServers = [...SERVERS];
 
   const currentServerObj = dynamicServers[selectedServer] || dynamicServers[0];
   // Servers that take a start time open at the minute it was left (services/resume.ts).
-  const src = withStartAt(currentServerObj.getUrl(currentMediaType, currentMediaId || 0, selectedSeason, selectedEpisode), currentServerObj.id, startAtNow);
+  const src = withStartAt(currentServerObj.getUrl(currentMediaType, currentMediaId || 0, selectedSeason, selectedEpisode), currentServerObj.id, jumpAt || startAtNow);
 
   
   const videos = details?.videos?.results || [];
@@ -1111,6 +1200,8 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                         onPlaying={() => { window.dispatchEvent(new Event('sahrae:embed-media')); setTimeout(enterFullscreen, 300); }}
                         startAt={startAtNow}
                         onProgress={(t, d) => notePosition(t, d)}
+                        onClock={tellClock}
+                        seekRef={cleanSeekRef}
                         onEnded={() => window.dispatchEvent(new Event(CLEAN_ENDED))}
                         onFail={(why) => { console.info('[sahrae-player]', JSON.stringify({ server: cleanServer?.id, playFailed: why })); setClean({ state: 'failed', why }); }}
                         onChoices={setCleanChoices}
@@ -1142,9 +1233,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       // refuse to play when sandboxed, which is why this is a
                       // toggle and why the server picker sits right below.
                       sandbox={playerSandbox(shieldOn, src)}
-                      // Auto-fullscreen once the embed has loaded + autostarted
-                      // (media playback no longer needs a separate gesture), so a
-                      // single Play tap ends up fullscreen and playing.
+                      // On a TV, full screen once the embed has loaded (enterFullscreen).
                       onLoad={() => { setVideoLoaded(true); setLoadPct(100); if (loadTimerRef.current) clearInterval(loadTimerRef.current); if (slowTimerRef.current) clearTimeout(slowTimerRef.current); setTimeout(enterFullscreen, 600); }}
                       className="w-full h-full absolute inset-0 bg-black"
                       title="Video Player"
@@ -1173,6 +1262,10 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                           </div>
                         )}
                       </div>
+                    )}
+                    {videoLoaded && (
+                      <SkipButton segments={segments} hasNext={hasNextEpisode()} canSeek={canSeek} hidden={upNext !== null || strip.open}
+                        onSeek={seekTo} onNext={playNextNow} />
                     )}
                     {upNext !== null && (() => {
                       const sameSeason = details.seasons?.find((x) => x.season_number === selectedSeason);
@@ -1301,6 +1394,11 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                   servers={dynamicServers.map((sv, i) => ({ id: sv.id || String(i), label: (sv.name || `Server ${i + 1}`).split(' · ')[0], detail: crowd.good.has(sv.id) ? 'works for others' : undefined, down: failedServers.includes(sv.id) }))}
                   active={selectedServer}
                   choices={choices}
+                  original={details.original_language}
+                  subSize={subSize}
+                  onSubs={(id) => choices && pickSubs(choices, id)}
+                  onAudio={(id) => choices && pickAudio(choices, id)}
+                  onSize={pickSize}
                   onPick={(i) => { pickServer(i); strip.close(); }}>
                   {pointerOffered && !(clean.state === 'ready' && clean.url) && (
                     <button type="button" onClick={() => { strip.close(); setPointerOn(true); }} tabIndex={0} data-tv-focusable
@@ -1334,8 +1432,14 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       <ChevronDown className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-white/70 pointer-events-none" />
                     </label>
                     <div className="flex-1" />
-                    {hasChoices(choices) && !isTelevision() && (
-                      <button onClick={() => setShowChoices((v) => !v)} aria-expanded={showChoices} title="Quality and sound" aria-label="Quality and sound"
+                    {hasLanguages(choices) && !isTelevision() && (
+                      <button onClick={() => { setShowLangs((v) => !v); setShowChoices(false); }} aria-expanded={showLangs} title="Audio & Subtitles" aria-label="Audio and subtitles"
+                        className={`h-10 px-3 shrink-0 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-colors active:scale-95 ${choices.subsOn >= 0 ? 'bg-white text-black' : 'bg-white/10 hover:bg-white/20 text-white'}`}>
+                        <Subtitles className="w-4 h-4" /> <span className="hidden sm:inline">Audio &amp; Subtitles</span>
+                      </button>
+                    )}
+                    {choices && choices.quality.length > 1 && !isTelevision() && (
+                      <button onClick={() => { setShowChoices((v) => !v); setShowLangs(false); }} aria-expanded={showChoices} title="Quality" aria-label="Quality"
                         className="h-10 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-sm font-semibold flex items-center gap-1.5 transition-colors active:scale-95">
                         <Gauge className="w-4 h-4" /> {choices.quality.find((q) => q.id === choices.qualityOn)?.label || 'Quality'}
                       </button>
@@ -1354,9 +1458,52 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                 )}
                 {pointerOn && <TvPointer area={serverFrameRef.current} onExit={() => setPointerOn(false)} />}
                 <button onClick={() => { if (playingTrailer) { setPlayingTrailer(null); return; } onClose(); }} data-tv-focusable data-tv-close title="Close" aria-label="Close" className="w-10 h-10 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"><X className="w-4 h-4" /></button>
-                {!playingTrailer && showChoices && hasChoices(choices) && (
+                {!playingTrailer && showLangs && hasLanguages(choices) && (
+                  <div role="dialog" aria-label="Audio and subtitles"
+                    className={`absolute ${fsActive ? 'top-full mt-1' : 'bottom-full mb-2'} right-2 z-50 w-[min(34rem,calc(100vw-1rem))] max-h-[70vh] overflow-y-auto bg-zinc-950/95 backdrop-blur rounded-xl border border-white/15 shadow-2xl p-4 animate-in fade-in duration-150`}>
+                    <div className={`grid gap-5 ${choices.audio.length > 1 ? 'sm:grid-cols-2' : ''}`}>
+                      {choices.audio.length > 1 && (
+                        <div>
+                          <p className="text-base font-bold text-white mb-2">Audio</p>
+                          {choices.audio.map((c) => (
+                            <button key={c.id} onClick={() => pickAudio(choices, c.id)} className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors ${c.id === choices.audioOn ? 'text-white font-bold' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}>
+                              <Check className={`w-4 h-4 shrink-0 ${c.id === choices.audioOn ? '' : 'invisible'}`} />
+                              <span className="truncate">{c.label}</span>
+                              {isOriginal(c.label, details.original_language) && <span className="ml-auto text-[10px] font-bold uppercase tracking-wider text-zinc-400 border border-white/20 rounded px-1.5 py-0.5">Original</span>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-base font-bold text-white mb-2">Subtitles</p>
+                        {[{ id: -1, label: 'Off' }, ...choices.subs].map((c) => (
+                          <button key={c.id} onClick={() => pickSubs(choices, c.id)} className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors ${c.id === choices.subsOn ? 'text-white font-bold' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}>
+                            <Check className={`w-4 h-4 shrink-0 ${c.id === choices.subsOn ? '' : 'invisible'}`} />
+                            <span className="truncate">{c.label}</span>
+                          </button>
+                        ))}
+                        {!choices.subs.length && <p className="px-3 pt-1 text-xs text-zinc-500">This server has no subtitles for this title. Another server may.</p>}
+                        {choices.subs.length > 0 && (
+                          <div className="mt-3 px-3">
+                            <p className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">Size</p>
+                            <div className="flex gap-2">
+                              {(['S', 'M', 'L'] as const).map((z) => (
+                                <button key={z} onClick={() => pickSize(z)} aria-pressed={subSize === z}
+                                  className={`h-9 px-3 rounded-full text-sm font-bold transition-colors ${subSize === z ? 'bg-white text-black' : 'bg-white/10 text-white hover:bg-white/20'}`}>
+                                  {z === 'S' ? 'Small' : z === 'M' ? 'Medium' : 'Large'}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-zinc-500 mt-4 leading-snug">What each server offers differs. Your choice carries on to the next episode.</p>
+                  </div>
+                )}
+                {!playingTrailer && showChoices && choices && choices.quality.length > 1 && (
                   <div className={`absolute ${fsActive ? 'top-full mt-1' : 'bottom-full mb-2'} right-2 z-50 w-56 max-h-[60vh] overflow-y-auto bg-zinc-950/95 rounded-xl border border-white/15 shadow-2xl p-2 animate-in fade-in duration-150`}>
-                    {([['Quality', Gauge, choices.quality, choices.qualityOn, choices.pickQuality], ['Sound', Volume2, choices.audio, choices.audioOn, choices.pickAudio]] as const).map(([title, Icon, items, on, pick]) => items.length > 1 && (
+                    {([['Quality', Gauge, choices.quality, choices.qualityOn, choices.pickQuality]] as const).map(([title, Icon, items, on, pick]) => items.length > 1 && (
                       <div key={title}>
                         <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 px-2 pt-1 pb-2 flex items-center gap-1.5"><Icon className="w-3.5 h-3.5" /> {title}</p>
                         {items.map((c) => (
@@ -1432,6 +1579,13 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                     <button onClick={() => toggleMyList(details)} className="w-10 h-10 md:w-12 md:h-12 flex items-center justify-center border border-zinc-600/60 bg-zinc-900/90 text-white rounded-full hover:bg-white/10 hover:border-white transition-colors shadow-lg shrink-0" title="My List" aria-label="My List">
                       {isInMyList(details.id) ? <Check className="w-5 h-5 md:w-6 md:h-6"/> : <Plus className="w-5 h-5 md:w-6 md:h-6"/>}
                     </button>
+                    {/* Lost interest: off Jump back in, finished or not (owner, 2026-11-12). */}
+                    {progress.some((p) => p.mediaId === details.id) && (
+                      <button onClick={() => removeProgress(details.id)} title="Remove from Jump back in" aria-label="Remove from Jump back in"
+                        className="h-10 md:h-12 px-4 flex items-center gap-1.5 border border-zinc-600/60 bg-zinc-900/90 text-white text-sm font-semibold rounded-full hover:bg-white/10 hover:border-white transition-colors shadow-lg shrink-0 whitespace-nowrap">
+                        <X className="w-4 h-4 md:w-5 md:h-5" /> <span className="hidden sm:inline">Remove from Jump back in</span><span className="sm:hidden">Remove</span>
+                      </button>
+                    )}
                     <button onClick={() => setRating(rating === 'up' ? null : 'up')} className={`w-10 h-10 md:w-12 md:h-12 flex items-center justify-center border border-zinc-600/60 bg-zinc-900/90 rounded-full transition-colors shadow-lg shrink-0 ${rating === 'up' ? 'text-green-400 bg-zinc-800 border-green-500/50' : 'text-white hover:bg-white/10 hover:border-white'}`} title="Like" aria-label="Like">
                       <ThumbsUp className="w-4 h-4 md:w-5 md:h-5"/>
                     </button>

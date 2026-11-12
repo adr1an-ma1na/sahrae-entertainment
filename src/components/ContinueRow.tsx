@@ -6,6 +6,7 @@ import { haptics } from '../services/haptics';
 import { timeLeft } from '../services/resume';
 import { RailHeader } from './ui/Lux';
 import { useRail } from '../hooks/useRail';
+import { isTelevision } from '../tv/spatialNavigation';
 
 export interface ContinueEntry {
   mediaId: number;
@@ -26,6 +27,10 @@ export interface ContinueEntry {
  * the web), the second is saved (useWatchProgress.savePosition) and shown as a
  * bar and "x min left". Where it does not, there is no bar: one drawn from
  * nothing would be decoration pretending to be data.
+ *
+ * REMOVING: any title can come off the row, finished or not (owner,
+ * 2026-11-12). A phone shows the ✕ on every card (there is no hover to reveal
+ * it); a TV puts a "Remove" button under each card, where the remote reaches it.
  */
 export default function ContinueRow({
   entries,
@@ -38,6 +43,7 @@ export default function ContinueRow({
 }) {
   const rail = useRail([entries.length]);
   if (!entries.length) return null;
+  const tv = isTelevision();
 
   return (
     <div className="px-4 md:px-12 py-6">
@@ -54,14 +60,14 @@ export default function ContinueRow({
             ? `S${e.season} · E${e.episode}`
             : 'Film';
           return (
+            <div key={`${e.mediaType}-${e.mediaId}`} className="flex-none snap-start flex flex-col gap-2">
             <div
-              key={`${e.mediaType}-${e.mediaId}`}
               role="button"
               tabIndex={0}
               data-tv-focusable
               aria-label={`Resume ${title}`}
               onClick={() => { haptics.press(); onPlay(e.mediaId, e.mediaType, false, false, e.season, e.episode); }}
-              className="lux-card group flex-none w-[230px] md:w-[300px] snap-start cursor-pointer focus:outline-none"
+              className="lux-card group w-[230px] md:w-[300px] cursor-pointer focus:outline-none"
             >
               <div className="relative aspect-video bg-zinc-800">
                 {art ? (
@@ -73,13 +79,15 @@ export default function ContinueRow({
                     <Play className="w-5 h-5 fill-current ml-0.5" />
                   </span>
                 </div>
-                {onRemove && (
+                {onRemove && !tv && (
                   <button
                     onClick={(ev) => { ev.stopPropagation(); haptics.tap(); onRemove(e.mediaId); }}
+                    onKeyDown={(ev) => ev.stopPropagation()}
                     aria-label={`Remove ${title} from Jump back in`}
-                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 text-zinc-300 hover:text-white hover:bg-black/85 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity backdrop-blur"
+                    title="Remove from Jump back in"
+                    className="absolute top-2 right-2 z-10 w-8 h-8 rounded-full bg-black/65 text-white hover:bg-black/90 cw-remove flex items-center justify-center transition-opacity backdrop-blur border border-white/15"
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <X className="w-4 h-4" />
                   </button>
                 )}
                 {e.position && e.duration ? (
@@ -90,6 +98,13 @@ export default function ContinueRow({
                   <p className="mt-1 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-amber-300"><span className="w-1 h-1 rounded-full bg-amber-400" />{where}{timeLeft(e.position, e.duration) ? <span className="normal-case tracking-normal text-zinc-300 font-semibold"> · {timeLeft(e.position, e.duration)}</span> : null}</p>
                 </div>
               </div>
+            </div>
+            {onRemove && tv && (
+              <button type="button" data-tv-focusable onClick={() => onRemove(e.mediaId)} aria-label={`Remove ${title} from Jump back in`}
+                className="self-start h-9 px-4 rounded-full bg-white/10 text-zinc-200 text-sm font-semibold flex items-center gap-1.5 focus:bg-white focus:text-black">
+                <X className="w-4 h-4" /> Remove
+              </button>
+            )}
             </div>
           );
         })}

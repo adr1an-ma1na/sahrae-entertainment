@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type HlsT from 'hls.js';
-import { Loader2, Subtitles, Languages } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useHls } from '../services/hlsLoader';
 import { pictureRule, heightLabel, type PictureSetting } from '../services/cleanStream';
 import { isTvBuild } from '../tv/tvViewport';
-import { qualityList, type PlayerChoices } from '../services/playerChoices';
+import { qualityList, audioList, subsList, type PlayerChoices } from '../services/playerChoices';
 
 /**
  * Sahrae's own film and episode player, used in the Android app (phone,
@@ -27,11 +27,15 @@ export interface CleanPlayerProps {
   onEnded: () => void;
   /** Why it gave up, in a few words. */
   onFail: (why: string) => void;
-  /** The quality and sound this stream offers. */
+  /** The quality, sound and subtitles this stream offers (shown in the player's Audio & Subtitles panel). */
   onChoices?: (c: PlayerChoices | null) => void;
+  /** The clock, about twice a second (Skip Intro). */
+  onClock?: (t: number, d: number) => void;
+  /** Set to a function that moves the picture to a second. */
+  seekRef?: { current: ((t: number) => void) | null };
 }
 
-export default function CleanPlayer({ src, picture, startAt = 0, onPlaying, onProgress, onEnded, onFail, onChoices }: CleanPlayerProps) {
+export default function CleanPlayer({ src, picture, startAt = 0, onPlaying, onProgress, onEnded, onFail, onChoices, onClock, seekRef }: CleanPlayerProps) {
   const Hls = useHls();
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<HlsT | null>(null);
@@ -44,8 +48,16 @@ export default function CleanPlayer({ src, picture, startAt = 0, onPlaying, onPr
   const [levels, setLevels] = useState<{ id: number; label: string; height: number }[]>([]);
   const [pinned, setPinned] = useState(-1);
   const capRef = useRef(-1);
-  const cb = useRef({ onPlaying, onProgress, onEnded, onFail });
-  cb.current = { onPlaying, onProgress, onEnded, onFail };
+  const cb = useRef({ onPlaying, onProgress, onEnded, onFail, onClock });
+  cb.current = { onPlaying, onProgress, onEnded, onFail, onClock };
+  useEffect(() => {
+    if (!seekRef) return;
+    seekRef.current = (t: number) => {
+      const v = videoRef.current;
+      if (v && t >= 0) v.currentTime = Math.min(t, (v.duration || 1e9) - 0.5);
+    };
+    return () => { seekRef.current = null; };
+  }, [seekRef]);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -105,9 +117,11 @@ export default function CleanPlayer({ src, picture, startAt = 0, onPlaying, onPr
     if (!v) return;
     let told = false;
     let last = 0;
+    let ticked = 0;
     const onTime = () => {
       if (!told && v.currentTime > 0.5) { told = true; cb.current.onPlaying(); }
       const now = Date.now();
+      if (now - ticked > 450) { ticked = now; cb.current.onClock?.(v.currentTime, v.duration || 0); }
       if (now - last > 4000) { last = now; cb.current.onProgress(v.currentTime, v.duration || 0); }
     };
     const onRes = () => setHeight(v.videoHeight);
@@ -152,23 +166,25 @@ export default function CleanPlayer({ src, picture, startAt = 0, onPlaying, onPr
     h.audioTrack = id;
     setAud(id);
   };
+  const pickSubs = (id: number) => {
+    const h = hlsRef.current; if (!h) return;
+    h.subtitleTrack = id;
+    h.subtitleDisplay = id >= 0;
+    setSub(id);
+  };
   const choicesRef = useRef(onChoices);
   choicesRef.current = onChoices;
   useEffect(() => {
-    choicesRef.current?.({ quality: qualityList(levels), qualityOn: pinned, audio: audio.map((t) => ({ id: t.id, label: t.name })), audioOn: aud, pickQuality, pickAudio });
+    choicesRef.current?.({
+      quality: qualityList(levels), qualityOn: pinned,
+      audio: audioList(audio.map((t) => ({ id: t.id, label: t.name }))), audioOn: aud,
+      subs: subsList(subs.map((t) => ({ id: t.id, label: t.name }))), subsOn: sub,
+      pickQuality, pickAudio, pickSubs,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [levels, pinned, audio, aud]);
+  }, [levels, pinned, audio, aud, subs, sub]);
   useEffect(() => () => choicesRef.current?.(null), []);
 
-  const cycleSub = () => {
-    const h = hlsRef.current; if (!h) return;
-    const next = sub + 1 >= subs.length ? -1 : sub + 1;
-    h.subtitleTrack = next; h.subtitleDisplay = next >= 0; setSub(next);
-  };
-  const cycleAudio = () => {
-    const h = hlsRef.current; if (!h || audio.length < 2) return;
-    const next = (aud + 1) % audio.length; h.audioTrack = next; setAud(next);
-  };
 
   return (
     <div className="absolute inset-0 bg-black" tabIndex={0} data-tv-focusable data-tv-noring data-tv-seek onKeyDown={onKey}>
@@ -183,16 +199,7 @@ export default function CleanPlayer({ src, picture, startAt = 0, onPlaying, onPr
           // What is actually on screen, read from the picture itself.
           <span className="pointer-events-none text-[11px] font-bold px-2 py-0.5 rounded bg-black/60 text-white border border-white/15">{heightLabel(height)}</span>
         )}
-        {audio.length > 1 && (
-          <button onClick={cycleAudio} aria-label="Change audio language" className="h-7 px-2 rounded bg-black/60 text-white text-[11px] font-bold flex items-center gap-1 border border-white/15">
-            <Languages className="w-3.5 h-3.5" />{audio[aud]?.name}
-          </button>
-        )}
-        {subs.length > 0 && (
-          <button onClick={cycleSub} aria-label="Subtitles" className={`h-7 px-2 rounded text-[11px] font-bold flex items-center gap-1 border border-white/15 ${sub >= 0 ? 'bg-amber-500 text-amber-950' : 'bg-black/60 text-white'}`}>
-            <Subtitles className="w-3.5 h-3.5" />{sub >= 0 ? subs[sub]?.name : 'Off'}
-          </button>
-        )}
+        {/* Sound and subtitles are in the player bar's Audio & Subtitles panel. */}
       </div>
     </div>
   );

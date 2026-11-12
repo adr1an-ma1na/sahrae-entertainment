@@ -1800,3 +1800,11 @@ html.tv-mode.sports-open .aurora-glow,
 html.tv-mode.sports-open .sports-page > :not(.sports-dialog),
 html.low-gfx.sports-open .aurora-glow,
 html.low-gfx.sports-open .sports-page > :not(.sports-dialog) { visibility: hidden !important; }
+
+/* Jump back in: the remove button is always there on a touch screen (no hover
+   to reveal it); with a mouse it shows on hover or keyboard focus. */
+.cw-remove { opacity: 1; }
+@media (hover: hover) and (pointer: fine) {
+  .cw-remove { opacity: 0; }
+  .group:hover .cw-remove, .group:focus-within .cw-remove, .cw-remove:focus-visible { opacity: 1; }
+}

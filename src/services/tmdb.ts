@@ -96,6 +96,8 @@ export interface MediaDetails extends MediaItem {
     results: Video[];
   };
   genres?: Genre[];
+  /** ISO 639-1, e.g. "ja": marks the Original audio track in the player. */
+  original_language?: string;
   runtime?: number;
   episode_run_time?: number[];
   seasons?: Season[];
