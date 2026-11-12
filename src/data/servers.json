@@ -1,6 +1,6 @@
 {
   "version": 10,
-  "updated": "2026-11-08",
+  "updated": "2026-11-11",
   "about": "Movie and series servers. VidFast first (the owner's choice, 2026-11-01), then the 2026-10-26 measured leads (VidZee, VidRock, VixSrc, VidNest, VidLove), then the owner's list in the owner's order (VidLink Pro, VidSrc.to, AutoEmbed, VidSrc.su, VidSrc.sh, 2Embed, VidSrc.io, VidSrc.pm), all kept. A title opens on the first that has not just failed on the device. A server the daily check marks down moves to the back, still offered.",
   "servers": [
     {
@@ -135,8 +135,8 @@
       "coverage": 0.9,
       "events": false,
       "status": "down",
-      "failStreak": 11,
-      "checked": "2026-11-08",
+      "failStreak": 14,
+      "checked": "2026-11-11",
       "audio": {
         "channels": 2,
         "languages": 1
@@ -230,8 +230,8 @@
       "coverage": 1,
       "events": false,
       "status": "down",
-      "failStreak": 12,
-      "checked": "2026-11-08",
+      "failStreak": 15,
+      "checked": "2026-11-11",
       "note": "Kept as a web backup inside Ad Shield; not proven to play (black screen sandboxed on 2026-10-26).",
       "was": "active"
     },
@@ -331,10 +331,11 @@
       },
       "coverage": 1,
       "events": false,
-      "status": "active",
-      "failStreak": 0,
-      "checked": "2026-10-27",
-      "note": "Owner's list; reinstated 2026-10-27 at the owner's request after the 2026-10-26 line-up dropped it. Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished)."
+      "status": "down",
+      "failStreak": 3,
+      "checked": "2026-11-11",
+      "note": "Owner's list; reinstated 2026-10-27 at the owner's request after the 2026-10-26 line-up dropped it. Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished).",
+      "was": "active"
     },
     {
       "id": "vidsrcpm",
