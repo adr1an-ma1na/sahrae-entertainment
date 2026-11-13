@@ -227,11 +227,10 @@
       },
       "coverage": 1,
       "events": false,
-      "status": "down",
-      "failStreak": 16,
-      "checked": "2026-11-12",
-      "note": "Kept as a web backup inside Ad Shield; not proven to play (black screen sandboxed on 2026-10-26).",
-      "was": "active"
+      "status": "active",
+      "failStreak": 0,
+      "checked": "2026-11-13",
+      "note": "Kept as a web backup inside Ad Shield; not proven to play (black screen sandboxed on 2026-10-26)."
     },
     {
       "coverage": 0.9,
