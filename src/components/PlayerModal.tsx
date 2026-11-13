@@ -6,7 +6,7 @@ import { useWatchProgress } from '../hooks/useWatchProgress';
 import { resumePoint, withStartAt, START_AT_SERVERS } from '../services/resume';
 import SkipButton, { tellClock } from './SkipButton';
 import { loadSegments, type Segment } from '../services/skipSegments';
-import { readTrackPrefs, saveTrackPrefs, trackFor, applyCueStyle, type SubSize } from '../services/trackPrefs';
+import { readTrackPrefs, saveTrackPrefs, trackFor, applyCueStyle, subsWanted, langCode, withSubs, type SubSize } from '../services/trackPrefs';
 import { useMyList } from '../hooks/useMyList';
 import { loadEq, saveEq, EQ_PRESETS, PRESET_EXTRAS } from '../services/eq';
 import { haptics } from '../services/haptics';
@@ -30,7 +30,7 @@ import { NO_START_LIMIT_MS, COUNTDOWN_S, isPlaybackEvidence, markWorking, markDo
 import { reportScreen } from '../services/remote';
 import { t } from '../i18n';
 import { reportRoomNow } from '../services/room';
-import { useServerPool, fill as fillTemplate, label as poolLabel, type PoolServer } from '../services/serverPool';
+import { useServerPool, fill as fillTemplate, label as poolLabel, type PoolServer, leadCount } from '../services/serverPool';
 import { useDataSaver, usePicture, announcePlayerSource, canCapVideo, estimateText } from '../services/dataSaver';
 import { NO_CROWD, crowdChoice, fetchProof, fetchSeasonPlayable, nextServerRanked, reportPlay, titleKey, warmUp, type CrowdChoice, type ProofRow } from '../services/playProof';
 
@@ -378,16 +378,19 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     return () => { delete w.__sahraePlayerFullscreen; delete w.__sahraeExitPlayerFs; };
   }, []);
 
-  // In a browser the provider's iframe can take full screen itself; hand it
-  // straight to the whole player so the bar stays with it.
+  // In a browser a server's frame (or a bare <video>) can take full screen
+  // itself, and then nothing of Sahrae's shows: not the bar, not Skip Intro
+  // (owner, 2026-11-13). Hand it straight to the whole player. The press that
+  // asked is still fresh, so the switch is tried in place first; failing that,
+  // out and back in; failing that, the player fills the window.
   useEffect(() => {
     if (nativeShell || !playerUp) return;
     const onFs = () => {
       const el = document.fullscreenElement;
       const shell = playerContainerRef.current;
-      if (!el || !shell || el === shell || el.tagName !== 'IFRAME' || !shell.contains(el)) return;
-      document.exitFullscreen()
-        .then(() => shell.requestFullscreen())
+      if (!el || !shell || el === shell || !shell.contains(el)) return;
+      shell.requestFullscreen()
+        .catch(() => document.exitFullscreen().then(() => shell.requestFullscreen()))
         .catch(() => setMaxed(true));
     };
     document.addEventListener('fullscreenchange', onFs);
@@ -468,7 +471,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   useEffect(() => {
     if (barVisible || !fsActive || !isOpen || !isTelevision()) return;
     const active = document.activeElement as HTMLElement | null;
-    if (!active || active.closest('[data-tv-strip], [data-tv-noring]') || !active.closest('[data-tv-layer]')) return;
+    if (!active || active.closest('[data-tv-strip], [data-tv-noring], [data-tv-priority]') || !active.closest('[data-tv-layer]')) return;
     const picture = active.closest('[data-tv-layer]')!.querySelector<HTMLElement>('[data-tv-noring][data-tv-focusable]');
     if (picture) tvFocus(picture);
   }, [barVisible, fsActive, isOpen]);
@@ -530,18 +533,28 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const poolSnap = useRef<{ key: string; list: PoolServer[] }>({ key: '', list: livePool });
   // In Sahrae's own player every server plays without its adverts, so the
   // clearest picture (highest bitrate, measured) goes first.
-  if (poolSnap.current.key !== poolKey) poolSnap.current = { key: poolKey, list: nativeShell && canPlayClean() && isCleanOn() ? cleanFirst(livePool) : livePool };
+  // The owner's leads keep their places ahead of that (serverPoolRank.OWNER_LEADS).
+  if (poolSnap.current.key !== poolKey) {
+    const leads = leadCount(livePool);
+    poolSnap.current = { key: poolKey, list: nativeShell && canPlayClean() && isCleanOn() ? [...livePool.slice(0, leads), ...cleanFirst(livePool.slice(leads))] : livePool };
+  }
   // Every server in the pool is offered (the owner's list stays whole). With
   // Ad Shield on (web), the servers that play inside it come first; the ones
   // that refuse it follow and load without it (playerSandbox), with a note
   // saying so under the player.
   const refuses = (p: PoolServer) => shieldAppliesHere() && shieldOn && refusesSandbox(p.movie.replace('{id}', '1'));
-  const shielded = poolSnap.current.list
+  const shown = poolSnap.current.list
     // Some servers' own pages are not fit to show on the web; the app hides the page.
-    .filter((p) => nativeShell || p.web !== false)
+    .filter((p) => nativeShell || p.web !== false);
+  const leadsShown = leadCount(shown);
+  const shielded = shown
     .map((p, i) => ({ p, i }))
-    // The list's first (the owner's lead, VidFast) stays first even where it refuses the shield.
-    .sort((a, b) => (a.i === 0 ? -1 : b.i === 0 ? 1 : Number(refuses(a.p)) - Number(refuses(b.p)) || a.i - b.i))
+    // The owner's leads (VidFast, VidLink Pro, VidLove, VidZee) keep their places even where they refuse the shield.
+    .sort((a, b) => {
+      const la = a.i < leadsShown, lb = b.i < leadsShown;
+      if (la || lb) return la && lb ? a.i - b.i : la ? -1 : 1;
+      return Number(refuses(a.p)) - Number(refuses(b.p)) || a.i - b.i;
+    })
     .map((x) => x.p);
   const SERVERS = (shielded.length ? shielded : poolSnap.current.list).map((p) => ({
     id: p.id,
@@ -1112,10 +1125,12 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     if (!c || appliedRef.current === streamKey) return;
     appliedRef.current = streamKey;
     const prefs = readTrackPrefs();
-    const sub = trackFor(c.subs, prefs.subs);
-    if (sub !== null && sub !== c.subsOn) c.pickSubs(sub);
     const aud = c.audio.length > 1 ? trackFor(c.audio, prefs.audio) : null;
     if (aud !== null && aud !== c.audioOn) c.pickAudio(aud);
+    const playing = c.audio.find((x) => x.id === (aud ?? c.audioOn))?.label;
+    const sub = trackFor(c.subs, subsWanted(prefs, details?.original_language, playing ? languageKey(playing) : null));
+    if (sub !== null && sub !== c.subsOn) c.pickSubs(sub);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveChoices, streamKey]);
   useEffect(() => { applyCueStyle(subSize); }, [subSize]);
   const frameHasChoices = !!frameChoices;
@@ -1130,7 +1145,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const pickSubs = (c: PlayerChoices, id: number) => {
     c.pickSubs(id);
     const label = c.subs.find((x) => x.id === id)?.label;
-    saveTrackPrefs({ subs: id >= 0 && label ? languageKey(label) : null });
+    saveTrackPrefs({ subs: id >= 0 && label ? languageKey(label) : null, subsChosen: true });
   };
   const pickAudio = (c: PlayerChoices, id: number) => {
     c.pickAudio(id);
@@ -1152,7 +1167,9 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
 
   const currentServerObj = dynamicServers[selectedServer] || dynamicServers[0];
   // Servers that take a start time open at the minute it was left (services/resume.ts).
-  const src = withStartAt(currentServerObj.getUrl(currentMediaType, currentMediaId || 0, selectedSeason, selectedEpisode), currentServerObj.id, jumpAt || startAtNow);
+  // A server that takes a subtitle language opens with the one this title wants (trackPrefs.subsWanted).
+  const subsCode = langCode(subsWanted(readTrackPrefs(), details.original_language, null));
+  const src = withSubs(withStartAt(currentServerObj.getUrl(currentMediaType, currentMediaId || 0, selectedSeason, selectedEpisode), currentServerObj.id, jumpAt || startAtNow), currentServerObj.id, subsCode);
 
   
   const videos = details?.videos?.results || [];
@@ -1202,6 +1219,8 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                         onProgress={(t, d) => notePosition(t, d)}
                         onClock={tellClock}
                         seekRef={cleanSeekRef}
+                        onFullscreen={isTelevision() ? undefined : toggleFullScreen}
+                        isFull={fsActive}
                         onEnded={() => window.dispatchEvent(new Event(CLEAN_ENDED))}
                         onFail={(why) => { console.info('[sahrae-player]', JSON.stringify({ server: cleanServer?.id, playFailed: why })); setClean({ state: 'failed', why }); }}
                         onChoices={setCleanChoices}

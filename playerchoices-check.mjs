@@ -44,7 +44,7 @@ function frame({ name = '', hls = null, jw = null, parent = 'other', href = 'emb
   };
   win.window = win;
   doc.querySelectorAll = () => [video];
-  doc.addEventListener = (t, f) => { doc['on' + t] = f; };
+  doc.addEventListener = (t, f) => { const was = doc['on' + t]; doc['on' + t] = was ? (e) => { was(e); f(e); } : f; };
   win.document = doc;
   const code = readFileSync('android-overlay/app/src/main/assets/frame-options.js', 'utf8');
   vm.runInNewContext(code, win);
@@ -156,6 +156,32 @@ console.log('\nthe clock and Skip');
   const f = frame({ vid: { duration: Infinity, currentTime: 50 } });
   f.tick();
   eq('a live picture has no clock to report', f.clocks.length, 0);
+}
+
+console.log('\nsound from the start');
+{
+  const f = frame({ vid: { muted: true, duration: 1440 } });
+  f.doc.onplaying({ target: f.video });
+  eq('a film that started muted is given its sound', f.video.muted, false);
+  f.video.muted = true;
+  f.doc.onplaying({ target: f.video });
+  eq('a viewer who mutes it later stays muted', f.video.muted, true);
+}
+{
+  const jw = { m: true, getMute() { return this.m; }, setMute(x) { this.m = x; }, getPosition: () => 0, getQualityLevels: () => [], getCurrentQuality: () => 0 };
+  const f = frame({ jw, vid: { muted: true, duration: 1440 } });
+  f.doc.onplaying({ target: f.video });
+  eq('JW Player is told too, so its button agrees', jw.m, false);
+}
+{
+  const f = frame({ vid: { muted: true, duration: 20 } });
+  f.doc.onplaying({ target: f.video });
+  eq('a short advert is left as it was', f.video.muted, true);
+}
+{
+  const f = frame({ name: 'sahrae-warm', vid: { muted: false, duration: 1440 } });
+  f.doc.onplaying({ target: f.video });
+  eq('a feed waiting out of sight stays silent', f.video.muted, true);
 }
 
 console.log('\nno player to ask');

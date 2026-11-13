@@ -29,8 +29,8 @@ export function timeLeft(position?: number, duration?: number): string | null {
   return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m left` : `${m} min left`;
 }
 
-/** Servers whose own player opens at a given second when asked (?startAt=, seconds; their docs, 2026-10-28). */
-export const START_AT_SERVERS = ['vidlink', 'vidfast'];
+/** Servers whose own player opens at a given second when asked (?startAt=, seconds; their docs, 2026-10-28; VixSrc's 2026-11-13). */
+export const START_AT_SERVERS = ['vidlink', 'vidfast', 'vixsrc'];
 
 /** The server's address with the second to start from, where that server takes one. */
 export function withStartAt(url: string, serverId: string, at: number): string {

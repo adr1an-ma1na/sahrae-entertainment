@@ -358,6 +358,22 @@ function focusElement(el: HTMLElement, vertical = false, end?: 'top' | 'bottom')
 export function tvFocus(el: HTMLElement) { focusElement(el); }
 
 /**
+ * The one thing OK does right now, whatever has the focus, as Netflix's Skip
+ * Intro: it pops up and OK skips (owner, 2026-11-13). Only while the remote is
+ * resting on the picture (or nothing): a viewer who moved to a button on
+ * purpose still presses that button.
+ */
+let priorityAction: (() => void) | null = null;
+export function setTvPriorityAction(fn: (() => void) | null): void { priorityAction = fn; }
+export function clearTvPriorityAction(fn: () => void): void { if (priorityAction === fn) priorityAction = null; }
+/** Would OK, pressed now with `active` focused, go to the priority action? */
+export function okGoesToPriority(active: Element | null): boolean {
+  if (!priorityAction) return false;
+  if (!active || active === document.body || active.tagName === 'IFRAME') return true;
+  return !!active.closest('[data-tv-noring], [data-tv-priority]');
+}
+
+/**
  * Pick the best element in `dir` from `current`.
  *
  * Overlap-first, which is what makes a remote feel predictable. The previous
@@ -558,6 +574,12 @@ export function initSpatialNavigation() {
         // for anyone who searched.
         if (isTypingTarget(active)) return;
         enableTvMode();
+        if (priorityAction && okGoesToPriority(active)) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          priorityAction();
+          return;
+        }
         if (active && active !== document.body && !isTypingTarget(active)) {
           const tag = active.tagName.toLowerCase();
           const isNative = tag === 'button' || tag === 'a' || tag === 'select' || tag === 'textarea' || tag === 'input';

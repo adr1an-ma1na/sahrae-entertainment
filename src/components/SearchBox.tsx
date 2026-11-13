@@ -18,7 +18,13 @@ export default function SearchBox({ value, onSearch }: { value: string; onSearch
   const inputRef = useRef<HTMLInputElement>(null);
   const lastSent = useRef(value);
 
-  useEffect(() => { setText(value); lastSent.current = value; }, [value]);
+  // Only a search from elsewhere (a genre chip, the phone remote) rewrites the
+  // box. The echo of what is being typed must not: "the " came back as "the",
+  // eating the space before the next word.
+  useEffect(() => {
+    lastSent.current = value;
+    setText((now) => (now.trim() === value.trim() ? now : value));
+  }, [value]);
 
   const send = (q: string) => {
     const v = q.trim();

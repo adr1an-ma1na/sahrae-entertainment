@@ -101,6 +101,25 @@ const HOST = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z
  * https on one of that server's own hosts, so a damaged or tampered file can
  * never point the player somewhere else.
  */
+/**
+ * The owner's lead servers, in the owner's order (2026-11-13): "VidFast,
+ * followed by VidLink Pro, VidLove, VidZee". They keep their places ahead of
+ * any other ordering (Sahrae's player putting the sharpest first in the apps,
+ * Ad Shield putting the servers that tolerate it first on the web).
+ */
+export const OWNER_LEADS = ['vidfast', 'vidlink', 'vidlove', 'vidzee'];
+/**
+ * How many of a pickServers list's first entries are working leads. The file
+ * lists the leads first and pickServers keeps the working ones in file order,
+ * moving the failing ones to the back, so the working leads are exactly the
+ * list's opening run of lead ids. A lead that is down sits at the back, not here.
+ */
+export function leadCount(list: { id: string }[]): number {
+  let n = 0;
+  while (n < list.length && OWNER_LEADS.includes(list[n].id)) n++;
+  return n;
+}
+
 export function validPool(x: unknown): x is Pool {
   if (!x || typeof x !== 'object') return false;
   const p = x as Pool;

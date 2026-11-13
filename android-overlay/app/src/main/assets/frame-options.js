@@ -16,6 +16,10 @@
  * any server: up {sahrae:'frame-clock', t, d, paused} each second while the film
  * plays, down {sahrae:'seek', to} (seconds).
  *
+ * Films start with their sound: a player that mutes itself to be allowed to
+ * start (VidLink's JW Player did, owner 2026-11-13) is unmuted once, as it
+ * begins. A viewer who mutes it afterwards stays muted.
+ *
  * It also lets Sahrae open the next feed out of sight so a switch is nearly
  * instant. A frame named 'sahrae-warm', and any frame inside it, loads silently
  * and holds on its first picture until {sahrae:'wake'}.
@@ -244,6 +248,18 @@
       v.__sahraeHeld = true;
       try { v.pause(); } catch (x) {}
     }, true);
+    // ── Sound from the start ──
+    function voice(v) {
+      if (warm || !v || v.__sahraeVoiced) return;
+      // An advert (short) keeps whatever it had; the film or a live feed speaks.
+      if (!(v.duration > 60)) return;
+      v.__sahraeVoiced = true;
+      try { var p = jwAny(); if (p && p.getMute && p.getMute()) p.setMute(false); } catch (x) {}
+      try { if (v.muted) v.muted = false; if (v.volume === 0) v.volume = 1; } catch (x) {}
+    }
+    document.addEventListener('playing', function (e) { if (e.target && e.target.tagName === 'VIDEO') voice(e.target); }, true);
+    document.addEventListener('durationchange', function (e) { var v = e.target; if (v && v.tagName === 'VIDEO' && !v.paused) voice(v); }, true);
+
     function wake() {
       if (!warm) return;
       warm = false;

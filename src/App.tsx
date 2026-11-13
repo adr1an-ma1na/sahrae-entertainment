@@ -134,6 +134,12 @@ export default function App() {
   const [tvGenres, setTvGenres] = useState<Genre[]>([]);
   const [recommendations, setRecommendations] = useState<{ items: MediaItem[], basedOn: string } | null>(null);
   const [loading, setLoading] = useState(true);
+  // The search's own "looking": the catalogue's `loading` swaps a page for a
+  // skeleton, and on Search that unmounted the box being typed in, so every
+  // pause in typing closed the keyboard and threw the viewer out (2026-11-13).
+  const [searchLoading, setSearchLoading] = useState(false);
+  // Answers can come back out of order; only the newest search may fill the page.
+  const searchSeq = useRef(0);
   
   // Search filters
   const [searchCategory, setSearchCategory] = useState<'media' | 'talent'>('media');
@@ -414,21 +420,23 @@ export default function App() {
       setSearchType(actualType);
     }
 
+    const seq = ++searchSeq.current;
     setSearchQuery(actualQuery);
     setActiveTab('search');
     setSearchPage(1);
     setHasMoreSearch(true);
-    setLoading(true);
-    const timeoutId = setTimeout(() => setLoading(false), 10000);
+    setSearchLoading(true);
+    const timeoutId = setTimeout(() => setSearchLoading(false), 10000);
     try {
       const { results, totalPages } = await fetchSearchResults(actualQuery, actualType, actualGenre, searchYear, searchSortBy, 1);
+      if (seq !== searchSeq.current) return;
       setSearchResults(results);
       if (1 >= totalPages || results.length === 0) setHasMoreSearch(false);
     } catch (error) {
       console.error("Search failed:", error);
     } finally {
       clearTimeout(timeoutId);
-      setLoading(false);
+      if (seq === searchSeq.current) setSearchLoading(false);
     }
   };
 
@@ -437,17 +445,19 @@ export default function App() {
     if (activeTab !== 'search') return;
     
     const fetchFiltered = async () => {
+      const seq = ++searchSeq.current;
       setSearchPage(1);
       setHasMoreSearch(true);
-      setLoading(true);
+      setSearchLoading(true);
       try {
         const { results, totalPages } = await fetchSearchResults(searchQuery, searchType, searchGenre, searchYear, searchSortBy, 1);
+        if (seq !== searchSeq.current) return;
         setSearchResults(results);
         if (1 >= totalPages || results.length === 0) setHasMoreSearch(false);
       } catch (error) {
         console.error("Search failed:", error);
       } finally {
-        setLoading(false);
+        if (seq === searchSeq.current) setSearchLoading(false);
       }
     };
     
@@ -458,10 +468,10 @@ export default function App() {
   }, [searchType, searchGenre, searchYear, searchSortBy]);
 
   const loadMoreSearchResults = useCallback(async () => {
-    if (!hasMoreSearch || loading) return;
+    if (!hasMoreSearch || searchLoading) return;
     const nextPage = searchPage + 1;
     setSearchPage(nextPage);
-    setLoading(true);
+    setSearchLoading(true);
     try {
       const { results, totalPages } = await fetchSearchResults(searchQuery, searchType, searchGenre, searchYear, searchSortBy, nextPage);
       if (results.length === 0) {
@@ -476,13 +486,13 @@ export default function App() {
     } catch (error) {
       console.error("Search failed:", error);
     } finally {
-      setLoading(false);
+      setSearchLoading(false);
     }
-  }, [searchPage, searchQuery, searchType, searchGenre, searchYear, searchSortBy, hasMoreSearch, loading]);
+  }, [searchPage, searchQuery, searchType, searchGenre, searchYear, searchSortBy, hasMoreSearch, searchLoading]);
 
   const observer = useRef<IntersectionObserver | null>(null);
   const lastElementRef = useCallback((node: HTMLDivElement | null) => {
-    if (loading) return;
+    if (searchLoading) return;
     if (observer.current) observer.current.disconnect();
     observer.current = new IntersectionObserver(entries => {
       if (entries[0].isIntersecting && hasMoreSearch) {
@@ -490,7 +500,7 @@ export default function App() {
       }
     });
     if (node) observer.current.observe(node);
-  }, [loading, hasMoreSearch, loadMoreSearchResults]);
+  }, [searchLoading, hasMoreSearch, loadMoreSearchResults]);
 
   const filteredSearchResults = searchResults.filter(item => {
     // If we used discover API, it already filtered by type, genre, year.
@@ -520,12 +530,11 @@ export default function App() {
     // `loading` tracks the TMDB catalog fetch. Destinations that don't read TMDB
     // must be listed here or they sit behind a skeleton waiting on data they
     // never use — 'music' was missing, so Sauti stalled on a cold start.
-    const NEEDS_TMDB = !['home', 'radio', 'audio', 'music', 'podcasts', 'tv', 'sports', 'continue', 'settings'].includes(activeTab);
+    const NEEDS_TMDB = !['home', 'radio', 'audio', 'music', 'podcasts', 'tv', 'sports', 'continue', 'settings', 'search'].includes(activeTab);
     if (loading && NEEDS_TMDB) {
       // A skeleton in the shape of the destination, not a spinner over a blank
       // screen: the layout stays still, and the wait reads as "loading this"
       // rather than "loading something".
-      if (activeTab === 'search') return <GridSkeleton />;
       if (activeTab === 'mylist' || activeTab === 'downloads') return <ListSkeleton />;
       return <BrowseSkeleton hero={false} rails={4} />;
     }
@@ -687,8 +696,8 @@ export default function App() {
                   </div>
                 </div>
                 
-                <MediaGrid title="" items={filteredSearchResults} onPlay={handlePlay} />
-                {!loading && filteredSearchResults.length === 0 && (
+                {searchLoading && filteredSearchResults.length === 0 ? <GridSkeleton /> : <MediaGrid title="" items={filteredSearchResults} onPlay={handlePlay} />}
+                {!searchLoading && filteredSearchResults.length === 0 && (
                   <div className="py-16 text-center">
                     <p className="text-white font-semibold">{searchQuery ? `Nothing found for "${searchQuery}"` : 'Search for a film, series or actor'}</p>
                     <p className="text-zinc-400 text-sm mt-1">{searchQuery ? 'Check the spelling, try the original title, or clear the filters.' : 'Or pick a genre, year or order above to browse.'}</p>
@@ -700,10 +709,10 @@ export default function App() {
                     {hasMoreSearch ? (
                       <button
                         onClick={loadMoreSearchResults}
-                        disabled={loading}
+                        disabled={searchLoading}
                         className="lux-btn px-9 py-3.5"
                       >
-                        {loading ? (
+                        {searchLoading ? (
                           <><div className="w-5 h-5 border-2 border-amber-950 border-t-transparent rounded-full animate-spin"></div> Loading…</>
                         ) : 'Load More'}
                       </button>

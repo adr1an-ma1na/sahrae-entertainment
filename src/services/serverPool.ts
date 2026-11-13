@@ -3,7 +3,7 @@ import bundled from '../data/servers.json';
 import { supabase } from '../supabase';
 import { pickServers, validPool, notOlder, type Pool, type PoolServer, type ServerHealth } from './serverPoolRank';
 
-export { fill, label, score, type PoolServer } from './serverPoolRank';
+export { fill, label, score, leadCount, type PoolServer } from './serverPoolRank';
 
 /**
  * The movie and series servers, kept current without an app update.

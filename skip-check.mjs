@@ -2,7 +2,7 @@
 // Skip Intro timings, removing from Jump back in across devices, and carrying a subtitle language over.
 import { parseIntroDb, parseAniSkip, segmentAt, skipTarget, skipLabel, loadSegments } from './src/services/skipSegments.ts';
 import { mergeScoped, trimProgress } from './src/services/syncKeys.ts';
-import { trackFor, readTrackPrefs, saveTrackPrefs } from './src/services/trackPrefs.ts';
+import { trackFor, readTrackPrefs, saveTrackPrefs, subsWanted, langCode, withSubs } from './src/services/trackPrefs.ts';
 import { languageLabel, isOriginal, subsList } from './src/services/playerChoices.ts';
 
 let pass = 0, fail = 0;
@@ -99,12 +99,27 @@ console.log('\nsubtitles and sound carry over');
   eq('an odd label is left alone', languageLabel('Track 2'), 'Track 2');
   const mem = new Map();
   const store = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, v) };
-  eq('nothing saved: off, medium', readTrackPrefs(store), { subs: null, audio: null, size: 'M' });
+  eq('nothing saved: off, medium', readTrackPrefs(store), { subs: null, audio: null, size: 'M', subsChosen: false });
   saveTrackPrefs({ subs: 'english' }, store);
   saveTrackPrefs({ size: 'L' }, store);
-  eq('choices remembered together', readTrackPrefs(store), { subs: 'english', audio: null, size: 'L' });
+  eq('choices remembered together', readTrackPrefs(store), { subs: 'english', audio: null, size: 'L', subsChosen: false });
   mem.set('sahrae.tracks.v1', '{"size":"XXL","subs":5}');
-  eq('a damaged copy is read safely', readTrackPrefs(store), { subs: null, audio: null, size: 'M' });
+  eq('a damaged copy is read safely', readTrackPrefs(store), { subs: null, audio: null, size: 'M', subsChosen: false });
+}
+
+console.log('\nsubtitles for a title in another language');
+{
+  const none = { subs: null, audio: null, size: 'M', subsChosen: false };
+  eq('anime in Japanese: English subtitles', subsWanted(none, 'ja', 'japanese'), 'english');
+  eq('a Korean drama: English subtitles', subsWanted(none, 'ko', null), 'english');
+  eq('an English film: none', subsWanted(none, 'en', null), null);
+  eq('already playing an English dub: none', subsWanted(none, 'ja', 'english'), null);
+  eq('the viewer turned them off: off stays off', subsWanted({ ...none, subsChosen: true }, 'ja', 'japanese'), null);
+  eq('the viewer chose Spanish: Spanish', subsWanted({ ...none, subs: 'spanish', subsChosen: true }, 'ja', null), 'spanish');
+  eq('names to codes', [langCode('english'), langCode('korean'), langCode('klingon'), langCode(null)], ['en', 'ko', null, null]);
+  eq('VidFast is told in its address', withSubs('https://vidfast.vc/tv/1/1/2?autoPlay=true', 'vidfast', 'en'), 'https://vidfast.vc/tv/1/1/2?autoPlay=true&sub=en');
+  eq('other servers are left alone', withSubs('https://vidlink.pro/movie/1', 'vidlink', 'en'), 'https://vidlink.pro/movie/1');
+  eq('no language, no change', withSubs('https://vidfast.vc/movie/1', 'vidfast', null), 'https://vidfast.vc/movie/1');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

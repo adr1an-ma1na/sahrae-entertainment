@@ -1,7 +1,7 @@
 {
-  "version": 10,
-  "updated": "2026-11-12",
-  "about": "Movie and series servers. VidFast first (the owner's choice, 2026-11-01), then the 2026-10-26 measured leads (VidZee, VidRock, VixSrc, VidNest, VidLove), then the owner's list in the owner's order (VidLink Pro, VidSrc.to, AutoEmbed, VidSrc.su, VidSrc.sh, 2Embed, VidSrc.io, VidSrc.pm), all kept. A title opens on the first that has not just failed on the device. A server the daily check marks down moves to the back, still offered.",
+  "version": 11,
+  "updated": "2026-11-13",
+  "about": "Movie and series servers in the owner's order (2026-11-13): VidFast, VidLink Pro, VidLove, VidZee, then VidRock, VixSrc, VidNest, VidSrc.to, AutoEmbed, VidSrc.su, VidSrc.sh, 2Embed, VidSrc.io, VidSrc.pm, all kept. A title opens on the first that has not just failed on the device. A server the daily check marks down moves to the back, still offered, and returns to its place when it plays again.",
   "servers": [
     {
       "coverage": 0.9,
@@ -28,6 +28,58 @@
         "adaptive": true
       },
       "note": "Android emulators 2026-10-26: handed over its stream in 2-4 s; renditions 2160p at 16 Mb/s, 1080p at 6 Mb/s, 720p at 3, 480p at 1.3; played 3840x2160 on Dune: Part Two and Breaking Bad S1E1. No stream for Matlock S1E1. From a Kenyan browser it stayed on Fetching (2026-10-22 and 10-26). Refuses the web sandbox."
+    },
+    {
+      "id": "vidlink",
+      "name": "VidLink Pro · 1080p",
+      "movie": "https://vidlink.pro/movie/{id}?primaryColor=f59e0b",
+      "tv": "https://vidlink.pro/tv/{id}/{s}/{e}?primaryColor=f59e0b",
+      "hosts": [
+        "vidlink.pro"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": 1.6,
+        "codec": "h264",
+        "adaptive": true
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "coverage": 1,
+      "events": false,
+      "status": "active",
+      "failStreak": 0,
+      "checked": "2026-11-05",
+      "note": "Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished). Measured 2026-10-25 on Matlock: 1080p at 1.6 Mb/s, showing 720p after 40 s."
+    },
+    {
+      "coverage": 0.9,
+      "events": false,
+      "status": "down",
+      "failStreak": 15,
+      "checked": "2026-11-12",
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "id": "vidlove",
+      "name": "VidLove · 1080p",
+      "movie": "https://player.vidlove.cc/embed/movie/{id}",
+      "tv": "https://player.vidlove.cc/embed/tv/{id}/{s}/{e}",
+      "hosts": [
+        "vidlove.cc",
+        "111movies.net"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": 1.1,
+        "codec": "h264",
+        "adaptive": false
+      },
+      "note": "Where 111movies.net now forwards. From Kenya 2026-10-26: started by itself, 1920x1080 on Matlock S1E1 (about 1.1 Mb/s), but 1150x480 with a WAFIM.TV watermark on Dune: Part Two. Refuses the web sandbox.",
+      "was": "active"
     },
     {
       "id": "vidzee",
@@ -130,58 +182,6 @@
         "adaptive": true
       },
       "note": "Android emulators 2026-10-26: 1920x1080 on Breaking Bad S1E1 (2.7 Mb/s) and Matlock S1E1, 1920x800 on Dune: Part Two. App only: its own web page carries adult adverts."
-    },
-    {
-      "coverage": 0.9,
-      "events": false,
-      "status": "down",
-      "failStreak": 15,
-      "checked": "2026-11-12",
-      "audio": {
-        "channels": 2,
-        "languages": 1
-      },
-      "id": "vidlove",
-      "name": "VidLove · 1080p",
-      "movie": "https://player.vidlove.cc/embed/movie/{id}",
-      "tv": "https://player.vidlove.cc/embed/tv/{id}/{s}/{e}",
-      "hosts": [
-        "vidlove.cc",
-        "111movies.net"
-      ],
-      "visual": {
-        "maxHeight": 1080,
-        "mbps": 1.1,
-        "codec": "h264",
-        "adaptive": false
-      },
-      "note": "Where 111movies.net now forwards. From Kenya 2026-10-26: started by itself, 1920x1080 on Matlock S1E1 (about 1.1 Mb/s), but 1150x480 with a WAFIM.TV watermark on Dune: Part Two. Refuses the web sandbox.",
-      "was": "active"
-    },
-    {
-      "id": "vidlink",
-      "name": "VidLink Pro · 1080p",
-      "movie": "https://vidlink.pro/movie/{id}?primaryColor=f59e0b",
-      "tv": "https://vidlink.pro/tv/{id}/{s}/{e}?primaryColor=f59e0b",
-      "hosts": [
-        "vidlink.pro"
-      ],
-      "visual": {
-        "maxHeight": 1080,
-        "mbps": 1.6,
-        "codec": "h264",
-        "adaptive": true
-      },
-      "audio": {
-        "channels": 2,
-        "languages": 1
-      },
-      "coverage": 1,
-      "events": false,
-      "status": "active",
-      "failStreak": 0,
-      "checked": "2026-11-05",
-      "note": "Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished). Measured 2026-10-25 on Matlock: 1080p at 1.6 Mb/s, showing 720p after 40 s."
     },
     {
       "id": "vidsrcto",

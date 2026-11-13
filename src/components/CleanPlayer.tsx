@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type HlsT from 'hls.js';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Maximize, Minimize } from 'lucide-react';
 import { useHls } from '../services/hlsLoader';
 import { pictureRule, heightLabel, type PictureSetting } from '../services/cleanStream';
 import { isTvBuild } from '../tv/tvViewport';
@@ -33,9 +33,16 @@ export interface CleanPlayerProps {
   onClock?: (t: number, d: number) => void;
   /** Set to a function that moves the picture to a second. */
   seekRef?: { current: ((t: number) => void) | null };
+  /**
+   * Sahrae's full screen (the whole player, Skip Intro included). The browser's
+   * own button put just the <video> on the screen, and nothing of Sahrae's can
+   * draw over that: Skip Intro vanished in full screen (owner, 2026-11-13).
+   */
+  onFullscreen?: () => void;
+  isFull?: boolean;
 }
 
-export default function CleanPlayer({ src, picture, startAt = 0, onPlaying, onProgress, onEnded, onFail, onChoices, onClock, seekRef }: CleanPlayerProps) {
+export default function CleanPlayer({ src, picture, startAt = 0, onPlaying, onProgress, onEnded, onFail, onChoices, onClock, seekRef, onFullscreen, isFull }: CleanPlayerProps) {
   const Hls = useHls();
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<HlsT | null>(null);
@@ -188,7 +195,9 @@ export default function CleanPlayer({ src, picture, startAt = 0, onPlaying, onPr
 
   return (
     <div className="absolute inset-0 bg-black" tabIndex={0} data-tv-focusable data-tv-noring data-tv-seek onKeyDown={onKey}>
-      <video ref={videoRef} className="w-full h-full bg-black" controls playsInline autoPlay crossOrigin="anonymous" />
+      <video ref={(el) => { videoRef.current = el; if (el && onFullscreen) el.setAttribute('controlslist', 'nofullscreen'); }}
+        className="w-full h-full bg-black" controls playsInline autoPlay crossOrigin="anonymous"
+        onDoubleClick={onFullscreen ? (e) => { e.preventDefault(); onFullscreen(); } : undefined} />
       {waiting && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <Loader2 className="w-10 h-10 animate-spin text-amber-500" />
@@ -200,6 +209,12 @@ export default function CleanPlayer({ src, picture, startAt = 0, onPlaying, onPr
           <span className="pointer-events-none text-[11px] font-bold px-2 py-0.5 rounded bg-black/60 text-white border border-white/15">{heightLabel(height)}</span>
         )}
         {/* Sound and subtitles are in the player bar's Audio & Subtitles panel. */}
+        {onFullscreen && (
+          <button type="button" onClick={onFullscreen} aria-label={isFull ? 'Exit full screen' : 'Full screen'} title={isFull ? 'Exit full screen' : 'Full screen'}
+            className="w-9 h-9 grid place-items-center rounded-full bg-black/55 text-white border border-white/15 hover:bg-black/80">
+            {isFull ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+          </button>
+        )}
       </div>
     </div>
   );

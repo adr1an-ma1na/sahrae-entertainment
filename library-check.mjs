@@ -54,6 +54,7 @@ eq('time left', [timeLeft(2460, 7200), timeLeft(600, 1500), timeLeft(0, 100), ti
 console.log('\nopening at the minute');
 eq('VidLink gets startAt after its own query', withStartAt('https://vidlink.pro/movie/1?primaryColor=f59e0b', 'vidlink', 2460.7), 'https://vidlink.pro/movie/1?primaryColor=f59e0b&startAt=2460');
 eq('VidFast too', withStartAt('https://vidfast.vc/movie/1?autoPlay=true', 'vidfast', 90), 'https://vidfast.vc/movie/1?autoPlay=true&startAt=90');
+eq('VixSrc too', withStartAt('https://vixsrc.to/tv/1/1/2?lang=en', 'vixsrc', 331.2), 'https://vixsrc.to/tv/1/1/2?lang=en&startAt=331');
 eq('a server that does not take one is left alone', withStartAt('https://www.2embed.cc/embedtv/1396&s=1&e=1', '2embed', 90), 'https://www.2embed.cc/embedtv/1396&s=1&e=1');
 eq('no time, no parameter', withStartAt('https://vidlink.pro/movie/1?x=1', 'vidlink', 0), 'https://vidlink.pro/movie/1?x=1');
 
