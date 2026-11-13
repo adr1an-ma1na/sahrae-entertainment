@@ -58,6 +58,9 @@ eq('servers proven on this title come first, most recent first', nextServerRanke
 eq('a proven one already failed here is passed over for the next proven', nextServerRanked(ids, 0, new Set(['vidsrcto']), choice, rows), 4);
 eq('with no proven server left, the crowd-failed one is skipped', nextServerRanked(ids, 0, new Set(['vidsrcto', '2embed']), choice, rows), 2);
 eq('without crowd data it is the usual order', nextServerRanked(ids, 0, new Set(), NO_CROWD), 1);
+eq('without crowd data, a server that plays on this device comes before the usual order', nextServerRanked(ids, 0, new Set(), NO_CROWD, [], [ids[3]]), 3);
+eq('...but this title\'s crowd-proven ones still come first', nextServerRanked(ids, 0, new Set(), choice, rows, [ids[2]]), 3);
+eq('...and one already failed for this title is not chosen again', nextServerRanked(ids, 0, new Set([ids[3]]), NO_CROWD, [], [ids[3]]), 1);
 eq('the crowd-failed server is still tried rather than give up',
   nextServerRanked(['vidlink', 'vidzee'], 0, new Set(), crowdChoice(['vidlink', 'vidzee'], [row('vidzee', { fail_count: 2, last_fail: ago(H) })], NOW)), 1);
 eq('everything failed here: nowhere to go', nextServerRanked(ids, 0, new Set(ids.slice(1)), choice, rows), null);

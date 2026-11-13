@@ -59,16 +59,21 @@ export function crowdChoice(ids: string[], rows: ProofRow[], now = Date.now()): 
 
 /**
  * Pure: the server to fall back to. Servers proven on this title come first,
- * most recent first; then the usual order without the ones the crowd saw fail;
- * then, rather than give up, those too.
+ * most recent first; then the ones that have played on this device lately
+ * (serverHealth.provenHere, in the list's order); then the usual order without
+ * the ones the crowd saw fail; then, rather than give up, those too.
  */
-export function nextServerRanked(ids: string[], from: number, failed: ReadonlySet<string>, choice: CrowdChoice, rows: ProofRow[] = []): number | null {
+export function nextServerRanked(ids: string[], from: number, failed: ReadonlySet<string>, choice: CrowdChoice, rows: ProofRow[] = [], here: readonly string[] = []): number | null {
   const okAt = new Map(rows.map((r) => [r.server_id, t(r.last_ok)]));
   const proven = ids
     .map((id, i) => ({ id, i }))
     .filter(({ id, i }) => i !== from && choice.good.has(id) && !failed.has(id))
     .sort((a, b) => (okAt.get(b.id) || 0) - (okAt.get(a.id) || 0));
   if (proven.length) return proven[0].i;
+  for (const id of here) {
+    const i = ids.indexOf(id);
+    if (i >= 0 && i !== from && !failed.has(id) && !choice.bad.has(id)) return i;
+  }
   const skipBad = nextOutside(ids, from, new Set([...failed, ...choice.bad]));
   if (skipBad !== null) return skipBad;
   return nextOutside(ids, from, failed);

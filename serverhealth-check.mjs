@@ -16,7 +16,7 @@ globalThis.localStorage = {
   removeItem: (k) => store.delete(k),
 };
 
-const { startServer, nextServer, markWorking, markDown, isRecentlyDown, isPlaybackEvidence, DOWN_FOR_MS } =
+const { startServer, nextServer, markWorking, markDown, isRecentlyDown, isPlaybackEvidence, DOWN_FOR_MS, MAX_DOWN_MS, GOOD_FOR_MS, downFor, workedHere, provenHere, speaks } =
   await import('./src/services/serverHealth.ts');
 
 let pass = 0, fail = 0;
@@ -33,7 +33,13 @@ console.log('\nwhere a play starts');
 fresh();
 eq('a new device starts on the first server', startServer(ids, T), 0);
 fresh(); markWorking('vidlink', T - 1000);
-eq('the first server leads even where another worked last (the owner\'s order)', startServer(ids, T), 0);
+eq('a server that played here leads ones never seen to play here', startServer(ids, T), 2);
+fresh(); markWorking('vidlink', T - 1000); markWorking('videasy', T - 5000);
+eq('of two that played here, the list\'s order (the clearer picture) wins, not the latest', startServer(ids, T), 1);
+fresh(); markWorking('vidlink', T - GOOD_FOR_MS - 1);
+eq('a success from weeks ago no longer counts', startServer(ids, T), 0);
+fresh(); markWorking('vidlink', T - 9000); markDown('vidlink', T - 1000);
+eq('one that played here but just failed is passed over', [startServer(ids, T), workedHere('vidlink', T)], [0, false]);
 fresh(); markDown('vidfast', T - 1000);
 eq('a server that just failed is not the starting point', startServer(ids, T), 1);
 fresh(); markDown('vidfast', T - DOWN_FOR_MS - 1);
@@ -42,6 +48,31 @@ fresh(); markDown('vidfast', T - 9000); markWorking('vidfast', T - 1000);
 eq('working again clears the failure', [startServer(ids, T), isRecentlyDown('vidfast', T)], [0, false]);
 fresh(); ids.forEach((id) => markDown(id, T - 1000));
 eq('if every server failed recently, start at the first anyway', startServer(ids, T), 0);
+
+console.log('\nfailing again and again');
+eq('one failure: 6 hours; two: 12; then longer, never past three days', [downFor(1), downFor(2), downFor(3), downFor(20)].map((x) => x / 3600000), [6, 12, 24, 72]);
+fresh(); markDown('vidfast', T - 10 * 3600000); markDown('vidfast', T - 9 * 3600000);
+eq('failed twice: still passed over 9 hours on', isRecentlyDown('vidfast', T), true);
+fresh(); markDown('vidfast', T - 9 * 3600000);
+eq('failed once: forgiven after 6 hours', isRecentlyDown('vidfast', T), false);
+fresh(); markDown('vidfast', T - 3000); markDown('vidfast', T - 2000); markWorking('vidfast', T - 1000); markDown('vidfast', T);
+eq('a success resets the count', downFor(JSON.parse(store.get('sahrae.serverHealth.v1')).vidfast.fails) / 3600000, 6);
+
+console.log('\nwhich players report themselves');
+fresh(); markWorking('vidlink', T);
+eq('seen to play, but it did not say so itself', speaks('vidlink'), false);
+markWorking('vidlink', T, true);
+eq('it reported its own playback', speaks('vidlink'), true);
+markWorking('vidlink', T + 1000);
+eq('...and that is not forgotten by a later quiet success', speaks('vidlink'), true);
+fresh(); markWorking('vidlink', T); markWorking('vidfast', T); markDown('vidfast', T + 1);
+eq('the servers proven here, in list order, without the one that just failed', provenHere(ids, T + 2), ['vidlink']);
+
+console.log('\nolder records (before 2026-11-13) still read');
+store.clear(); store.set('sahrae.serverHealth.v1', JSON.stringify({ vidfast: { down: T - 1000 }, vidlink: { ok: T - 1000 } }));
+eq('an old failure counts as one', [isRecentlyDown('vidfast', T), startServer(ids, T)], [true, 2]);
+store.set('sahrae.serverHealth.v1', 'null');
+eq('a damaged record is ignored', startServer(ids, T), 0);
 
 console.log('\nwhere it goes next');
 eq('the next server in order', nextServer(ids, 0, new Set(['vidfast'])), 1);

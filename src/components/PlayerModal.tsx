@@ -28,7 +28,7 @@ import { canPlayClean, resolveFilmStream, relayUrl, cleanFirst, isCleanOn, setCl
 import { isTelevision, tvFocus } from '../tv/spatialNavigation';
 import TitleLogo from './ui/TitleLogo';
 import { TvServerStrip, useTvServerStrip } from './ui/TvServerStrip';
-import { NO_START_LIMIT_MS, COUNTDOWN_S, isPlaybackEvidence, markWorking, markDown, startServer } from '../services/serverHealth';
+import { NO_START_LIMIT_MS, COUNTDOWN_S, DWELL_MS, QUICK_ABANDON_MS, isPlaybackEvidence, markWorking, markDown, startServer, provenHere, speaks } from '../services/serverHealth';
 import { reportScreen } from '../services/remote';
 import { t } from '../i18n';
 import { reportRoomNow } from '../services/room';
@@ -157,7 +157,8 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const noStartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const keepTryingRef = useRef<() => void>(() => {});
-  const [countdown, setCountdown] = useState<{ from: string; to: string; left: number } | null>(null);
+  // left: seconds to an automatic switch; null = only asking (a player that never reports its playback, on the website).
+  const [countdown, setCountdown] = useState<{ from: string; to: string; left: number | null } | null>(null);
   const failedServersRef = useRef<string[]>([]);
   const [switchNotice, setSwitchNotice] = useState<{ from: string; to: string } | null>(null);
   // What other viewers saw play for this exact title (services/playProof.ts).
@@ -170,7 +171,16 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   // Data this viewing has used, measured by the Android app; null where it cannot be.
   // A server the viewer picked by hand is theirs; the crowd never overrides it.
   const manualPickRef = useRef(false);
-  const pickServer = (idx: number) => { manualPickRef.current = true; setSelectedServer(idx); };
+  // When the server on screen was put there, to tell "left at once" from "watched, then changed".
+  const serverSinceRef = useRef(0);
+  const pickServer = (idx: number) => {
+    manualPickRef.current = true;
+    // Leaving a server soon after it loaded, with no sign it played, says it did not play here.
+    const leaving = SERVERS[selectedServer]?.id;
+    if (leaving && idx !== selectedServer && isPlaying && !playingTrailer && !heardRef.current
+      && serverSinceRef.current && Date.now() - serverSinceRef.current < QUICK_ABANDON_MS) markDown(leaving);
+    setSelectedServer(idx);
+  };
 
   // Full screen is the viewer's choice on a phone, a tablet and the website: the
   // player opens in the page and the full-screen button (or the server's own)
@@ -606,11 +616,29 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     const failed = new Set([...failedServersRef.current, current]);
     failedServersRef.current = [...failed];
     setFailedServers([...failed]);
-    const next = nextServerRanked(ids, selectedServer, failed, crowdRef.current.choice, crowdRef.current.rows);
+    const next = nextServerRanked(ids, selectedServer, failed, crowdRef.current.choice, crowdRef.current.rows, provenHere(ids));
     if (next === null) { setSlowLoad(true); return; }
     setSwitchNotice({ from: SERVERS[selectedServer].name, to: SERVERS[next].name });
     setSelectedServer(next);
   };
+
+  // Watching on a server for a while, without leaving it, says it plays here:
+  // the one sign a website has for players that never report themselves.
+  useEffect(() => {
+    serverSinceRef.current = 0;
+    if (!isOpen || !isPlaying || playingTrailer || !videoLoaded) return;
+    const id = SERVERS[selectedServer]?.id;
+    if (!id) return;
+    serverSinceRef.current = Date.now();
+    let watched = 0;
+    const tick = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      watched += 5000;
+      if (watched >= DWELL_MS) { window.clearInterval(tick); if (!heardRef.current) markWorking(id); }
+    }, 5000);
+    return () => window.clearInterval(tick);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, isPlaying, playingTrailer, videoLoaded, selectedServer, refreshKey, currentMediaId, selectedSeason, selectedEpisode]);
 
   useEffect(() => {
     if (!switchNotice) return;
@@ -648,14 +676,14 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
       stopCountdown();
     };
     const armedAt = Date.now();
-    const proven = () => {
+    const proven = (spoke = false) => {
       // Stragglers from the previous server (a last event or stream request in
       // flight as it was torn down) must not count for this one. No real player
       // loads its page and starts playing within this window.
       if (heardRef.current || Date.now() - armedAt < 1500) return;
       heardRef.current = true;
       clearTimers();
-      if (id) markWorking(id);
+      if (id) markWorking(id, Date.now(), spoke);
       if (id && currentMediaType && currentMediaId) reportPlay(titleKey(currentMediaType, currentMediaId, selectedSeason, selectedEpisode), id, true);
     };
     const fromPlayer = (src: MessageEventSource | null) => {
@@ -671,7 +699,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
       };
       return within(root, 0);
     };
-    const onMessage = (e: MessageEvent) => { if (fromPlayer(e.source) && isPlaybackEvidence(e.data)) proven(); };
+    const onMessage = (e: MessageEvent) => { if (fromPlayer(e.source) && isPlaybackEvidence(e.data)) proven(true); };
     const onStream = () => proven();
     const onNoStart = () => {
       if (heardRef.current) return;
@@ -679,10 +707,18 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
       // tapped into the player they are trusted to judge it themselves.
       if (!canSeeStreams && engagedRef.current) return;
       const ids = SERVERS.map((sv) => sv.id);
-      const next = nextServerRanked(ids, selectedServer, new Set([...failedServersRef.current, ids[selectedServer]]), crowdRef.current.choice, crowdRef.current.rows);
+      const next = nextServerRanked(ids, selectedServer, new Set([...failedServersRef.current, ids[selectedServer]]), crowdRef.current.choice, crowdRef.current.rows, provenHere(ids));
       if (next === null) return;
       // Take focus back, so a later tap inside the player registers as a tap.
       try { iframeRef.current?.blur(); window.focus(); } catch { /* noop */ }
+      // On the website most players never report their playback, so silence
+      // proves nothing: a film playing on VidSrc.to or 2Embed was being
+      // switched away after 25 s (2026-11-13). Unless this player has reported
+      // itself here before, only ask.
+      if (!canSeeStreams && id && !speaks(id)) {
+        setCountdown({ from: SERVERS[selectedServer].name, to: SERVERS[next].name, left: null });
+        return;
+      }
       let left = COUNTDOWN_S;
       setCountdown({ from: SERVERS[selectedServer].name, to: SERVERS[next].name, left });
       countdownTimerRef.current = setInterval(() => {
@@ -803,7 +839,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
       if (manualPickRef.current || resumeServerRef.current || heardRef.current || Date.now() - startedAt > CROWD_FOLLOW_MS) return;
       setSelectedServer((cur) => {
         if (choice.best !== null && !failedServersRef.current.includes(ids[choice.best])) return choice.best;
-        if (choice.bad.has(ids[cur])) return nextServerRanked(ids, cur, new Set(failedServersRef.current), choice, rows) ?? cur;
+        if (choice.bad.has(ids[cur])) return nextServerRanked(ids, cur, new Set(failedServersRef.current), choice, rows, provenHere(ids)) ?? cur;
         return cur;
       });
     });
@@ -870,7 +906,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   useEffect(() => {
     if (!isOpen || !isPlaying || !currentMediaId || !currentMediaType) return;
     const ids = SERVERS.map((sv) => sv.id);
-    const next = nextServerRanked(ids, selectedServer, new Set(failedServers), crowd, crowdRef.current.rows);
+    const next = nextServerRanked(ids, selectedServer, new Set(failedServers), crowd, crowdRef.current.rows, provenHere(ids));
     if (next !== null) warmUp(SERVERS[next].getUrl(currentMediaType, currentMediaId, selectedSeason, selectedEpisode));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, isPlaying, selectedServer, crowd, currentMediaId, currentMediaType, selectedSeason, selectedEpisode]);
@@ -1173,6 +1209,8 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const openStrip = () => { window.dispatchEvent(new CustomEvent('sahrae:tv-edge', { detail: 'up', cancelable: true })); };
 
   const dynamicServers = [...SERVERS];
+  // Servers that have played on this device lately (services/serverHealth.ts).
+  const playsHere = new Set(provenHere(SERVERS.map((sv) => sv.id)));
 
   const currentServerObj = dynamicServers[selectedServer] || dynamicServers[0];
   // Servers that take a start time open at the minute it was left (services/resume.ts).
@@ -1379,13 +1417,18 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                           <Server className="w-5 h-5" />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <h4 className="text-sm font-bold text-amber-300">{countdown.from} isn't starting</h4>
-                          <p className="text-xs text-zinc-300 mt-1 leading-relaxed">Switching to {countdown.to} in {countdown.left}…</p>
+                          <h4 className="text-sm font-bold text-amber-300">{countdown.left === null ? `Is ${countdown.from} playing?` : `${countdown.from} isn't starting`}</h4>
+                          <p className="text-xs text-zinc-300 mt-1 leading-relaxed">{countdown.left === null ? `If not, ${countdown.to} is next.` : `Switching to ${countdown.to} in ${countdown.left}…`}</p>
                           <div className="flex gap-2 mt-3">
                             <button onClick={() => { if (countdownTimerRef.current) clearInterval(countdownTimerRef.current); countdownTimerRef.current = null; setCountdown(null); autoSwitch(); }} data-tv-focusable data-tv-autofocus
-                              className="px-3.5 py-1.5 rounded-full bg-amber-400 text-amber-950 text-xs font-bold active:scale-95">Switch now</button>
-                            <button onClick={() => keepTryingRef.current()} data-tv-focusable
-                              className="px-3.5 py-1.5 rounded-full bg-zinc-800 text-white text-xs font-bold border border-white/15 active:scale-95">Keep trying</button>
+                              className="px-3.5 py-1.5 rounded-full bg-amber-400 text-amber-950 text-xs font-bold active:scale-95">{countdown.left === null ? `Try ${countdown.to}` : 'Switch now'}</button>
+                            {countdown.left === null ? (
+                              <button onClick={() => { const id = SERVERS[selectedServer]?.id; if (id) markWorking(id); heardRef.current = true; setCountdown(null); }} data-tv-focusable
+                                className="px-3.5 py-1.5 rounded-full bg-zinc-800 text-white text-xs font-bold border border-white/15 active:scale-95">It's playing</button>
+                            ) : (
+                              <button onClick={() => keepTryingRef.current()} data-tv-focusable
+                                className="px-3.5 py-1.5 rounded-full bg-zinc-800 text-white text-xs font-bold border border-white/15 active:scale-95">Keep trying</button>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1438,7 +1481,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
               )}
               {strip.open && (
                 <TvServerStrip
-                  servers={dynamicServers.map((sv, i) => ({ id: sv.id || String(i), label: (sv.name || `Server ${i + 1}`).split(' · ')[0], detail: crowd.good.has(sv.id) ? 'works for others' : undefined, down: failedServers.includes(sv.id) }))}
+                  servers={dynamicServers.map((sv, i) => ({ id: sv.id || String(i), label: (sv.name || `Server ${i + 1}`).split(' · ')[0], detail: playsHere.has(sv.id) ? 'plays here' : crowd.good.has(sv.id) ? 'works for others' : undefined, down: failedServers.includes(sv.id) }))}
                   active={selectedServer}
                   choices={choices}
                   original={details.original_language}
@@ -1471,7 +1514,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                           const isDown = failedServers.includes(server.id);
                           return (
                             <option key={server.id} value={idx} className="bg-zinc-900 text-white">
-                              {`${(server.name || `Server ${idx + 1}`).split(' · ')[0]}${isDown ? ' (down)' : crowd.good.has(server.id) ? ' · works for others' : ''}`}
+                              {`${(server.name || `Server ${idx + 1}`).split(' · ')[0]}${isDown ? ' (down)' : playsHere.has(server.id) ? ' · plays here' : crowd.good.has(server.id) ? ' · works for others' : ''}`}
                             </option>
                           );
                         })}
