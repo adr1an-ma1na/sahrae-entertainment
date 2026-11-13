@@ -1,10 +1,12 @@
 import { Volume2, ChevronDown, X, ExternalLink, AlertCircle, Play, RefreshCw, Plus, Check, Maximize, Minimize, MousePointer2, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle, Gauge, Star, Subtitles } from 'lucide-react';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
-import { fetchMediaDetails, MediaDetails, getImageUrl, fetchSimilar, MediaItem, SeasonDetails, fetchSeasonDetails, certificationOf } from '../services/tmdb';
+import { fetchMediaDetails, MediaDetails, getImageUrl, fetchSimilar, MediaItem, SeasonDetails, fetchSeasonDetails, certificationOf, fetchWatchProviders } from '../services/tmdb';
 import { useWatchProgress } from '../hooks/useWatchProgress';
 import { resumePoint, withStartAt, START_AT_SERVERS } from '../services/resume';
 import SkipButton, { tellClock } from './SkipButton';
+import OfficialAnime from './OfficialAnime';
+import { isAnime, loadOfficial, type OfficialOption } from '../services/animeProviders';
 import { loadSegments, type Segment } from '../services/skipSegments';
 import { readTrackPrefs, saveTrackPrefs, trackFor, applyCueStyle, subsWanted, langCode, withSubs, type SubSize } from '../services/trackPrefs';
 import { useMyList } from '../hooks/useMyList';
@@ -1080,7 +1082,17 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
 
   // The parts to skip, for this film or this episode (services/skipSegments.ts).
   const hasDetails = !!details;
-  const animeTitle = !!details && details.original_language === 'ja' && !!details.genres?.some((g) => g.id === 16);
+  const animeTitle = isAnime(details);
+  // Anime only: the official services that carry it here (services/animeProviders.ts).
+  const [official, setOfficial] = useState<OfficialOption[]>([]);
+  useEffect(() => {
+    setOfficial([]);
+    if (!isOpen || !details || !animeTitle || !currentMediaType) return;
+    let live = true;
+    loadOfficial(details, currentMediaType, fetchWatchProviders).then((list) => { if (live) setOfficial(list); });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, details?.id, animeTitle, currentMediaType]);
   useEffect(() => {
     setSegments([]);
     if (!isOpen || !isPlaying || playingTrailer || !currentMediaId || !currentMediaType || !hasDetails) return;
@@ -1323,6 +1335,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
 
               {!playingTrailer && (
                 <div className="flex flex-col gap-2 px-2 pt-2 empty:hidden">
+                  {!fsActive && official.length > 0 && <OfficialAnime options={official} compact />}
                   {showAdNotice && (
                     <div className="bg-zinc-950/95 border border-amber-500/30 text-white rounded-xl p-4 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-4 duration-300">
                       <div className="flex items-start gap-3">
@@ -1616,6 +1629,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       <Download className="w-4 h-4 md:w-5 md:h-5" />
                     </button>
                   </div>
+                  <OfficialAnime options={official} />
                 </div>
               </>
             </div>

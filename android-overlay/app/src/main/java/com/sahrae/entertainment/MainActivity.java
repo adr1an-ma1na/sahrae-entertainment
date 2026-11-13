@@ -426,7 +426,10 @@ public class MainActivity extends BridgeActivity {
     private static final Set<String> DOWNLOAD_HOSTS = new HashSet<>(Arrays.asList(
         "vidvault.ru",
         // Our own sites, e.g. Sahrae Predictor from the Matchday screen.
-        "adr1an-ma1na.github.io"
+        "adr1an-ma1na.github.io",
+        // Anime on official services (src/services/animeProviders.ts OFFICIAL_HOSTS):
+        // a service's search page, or TMDB's where-to-watch page for the title.
+        "crunchyroll.com", "bilibili.tv", "themoviedb.org"
     ));
 
     private static boolean isAllowedDownloadHost(String host) {

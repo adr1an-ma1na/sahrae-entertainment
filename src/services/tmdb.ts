@@ -98,6 +98,9 @@ export interface MediaDetails extends MediaItem {
   genres?: Genre[];
   /** ISO 639-1, e.g. "ja": marks the Original audio track in the player. */
   original_language?: string;
+  origin_country?: string[];
+  /** TMDB keywords (tv: results, movie: keywords); "anime" is 210024 (services/animeProviders.ts). */
+  keywords?: { results?: { id: number; name: string }[]; keywords?: { id: number; name: string }[] };
   runtime?: number;
   episode_run_time?: number[];
   seasons?: Season[];
@@ -344,13 +347,23 @@ export const fetchMediaDetails = async (id: number, type: 'movie' | 'tv' = 'movi
     console.error('Error reading media details cache', e);
   }
 
-  const res = await tmdbFetch(`${BASE_URL}/${type}/${id}?api_key=${API_KEY}&append_to_response=credits,videos,release_dates,content_ratings&language=en-US&include_video_language=en,null`);
+  const res = await tmdbFetch(`${BASE_URL}/${type}/${id}?api_key=${API_KEY}&append_to_response=credits,videos,release_dates,content_ratings,keywords&language=en-US&include_video_language=en,null`);
   const data = await res.json();
   const result = { ...data, media_type: type };
 
   writeDetailsCache(cacheKey, { timestamp: Date.now(), data: result });
 
   return result;
+};
+
+/** Which services carry a title, per country (TMDB's watch providers, JustWatch data). null when it cannot be read. */
+export const fetchWatchProviders = async (type: 'movie' | 'tv', id: number): Promise<Record<string, { link?: string; free?: { provider_id: number }[]; ads?: { provider_id: number }[]; flatrate?: { provider_id: number }[] }> | null> => {
+  try {
+    const res = await tmdbFetch(`${BASE_URL}/${type}/${id}/watch/providers?api_key=${API_KEY}`);
+    if (!res.ok) return null;
+    const j = await res.json();
+    return j && typeof j.results === 'object' ? j.results : null;
+  } catch { return null; }
 };
 
 export const fetchRecommendations = async (id: number, type: 'movie' | 'tv' = 'movie'): Promise<MediaItem[]> => {
