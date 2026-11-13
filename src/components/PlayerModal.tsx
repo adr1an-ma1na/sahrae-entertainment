@@ -25,10 +25,10 @@ import { useFrameChoices } from '../hooks/useFrameChoices';
 import { hasChoices, hasLanguages, isOriginal, languageKey, type PlayerChoices } from '../services/playerChoices';
 import { openLegal } from '../services/consent';
 import { canPlayClean, resolveFilmStream, relayUrl, cleanFirst, isCleanOn, setCleanOn } from '../services/cleanStream';
-import { isTelevision, tvFocus } from '../tv/spatialNavigation';
+import { isTelevision, tvFocus, tvBackFirst } from '../tv/spatialNavigation';
 import TitleLogo from './ui/TitleLogo';
 import { TvServerStrip, useTvServerStrip } from './ui/TvServerStrip';
-import { NO_START_LIMIT_MS, COUNTDOWN_S, DWELL_MS, QUICK_ABANDON_MS, isPlaybackEvidence, markWorking, markDown, startServer, provenHere, speaks } from '../services/serverHealth';
+import { NO_START_LIMIT_MS, COUNTDOWN_S, DWELL_MS, QUICK_ABANDON_MS, isPlaybackEvidence, markWorking, markDown, startServer, provenHere, speaks, workedHere } from '../services/serverHealth';
 import { reportScreen } from '../services/remote';
 import { t } from '../i18n';
 import { reportRoomNow } from '../services/room';
@@ -177,7 +177,8 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     manualPickRef.current = true;
     // Leaving a server soon after it loaded, with no sign it played, says it did not play here.
     const leaving = SERVERS[selectedServer]?.id;
-    if (leaving && idx !== selectedServer && isPlaying && !playingTrailer && !heardRef.current
+    // A server that has played here before is not marked down for one quick change of mind.
+    if (leaving && idx !== selectedServer && isPlaying && !playingTrailer && !heardRef.current && !workedHere(leaving)
       && serverSinceRef.current && Date.now() - serverSinceRef.current < QUICK_ABANDON_MS) markDown(leaving);
     setSelectedServer(idx);
   };
@@ -384,6 +385,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     w.__sahraePlayerFullscreen = (on: boolean) => setMaxed(on);
     // Back leaves full screen before it leaves the player.
     w.__sahraeExitPlayerFs = () => {
+      if (tvBackFirst()) return true;
       if (barHiddenRef.current) { setBarHidden(false); return true; }
       if (maxedRef.current) { setMaxed(false); return true; }
       return false;

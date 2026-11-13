@@ -470,10 +470,12 @@ export default function App() {
   const loadMoreSearchResults = useCallback(async () => {
     if (!hasMoreSearch || searchLoading) return;
     const nextPage = searchPage + 1;
+    const seq = searchSeq.current;
     setSearchPage(nextPage);
     setSearchLoading(true);
     try {
       const { results, totalPages } = await fetchSearchResults(searchQuery, searchType, searchGenre, searchYear, searchSortBy, nextPage);
+      if (seq !== searchSeq.current) return;
       if (results.length === 0) {
         setHasMoreSearch(false);
       } else {
@@ -486,7 +488,7 @@ export default function App() {
     } catch (error) {
       console.error("Search failed:", error);
     } finally {
-      setSearchLoading(false);
+      if (seq === searchSeq.current) setSearchLoading(false);
     }
   }, [searchPage, searchQuery, searchType, searchGenre, searchYear, searchSortBy, hasMoreSearch, searchLoading]);
 

@@ -130,6 +130,18 @@ const pointerOut = () => document.documentElement.classList.contains('tv-pointer
 let backHandler: (() => boolean) | null = null;
 export function setTvBackHandler(fn: (() => boolean) | null) { backHandler = fn; }
 
+/**
+ * Back, for what lies over the picture: the pointer, then whatever registered
+ * a back handler (the TV controls, the server strip). The Android shell asks
+ * the player to leave full screen before anything else, so the player asks
+ * this first; otherwise Back took a TV out of full screen with the controls
+ * still up (2026-11-13).
+ */
+export function tvBackFirst(): boolean {
+  if (pointerOut()) { window.dispatchEvent(new Event('sahrae:pointer-exit')); return true; }
+  return !!(backHandler && backHandler());
+}
+
 function closeTopLayer(): boolean {
   if (pointerOut()) { window.dispatchEvent(new Event('sahrae:pointer-exit')); return true; }
   if (backHandler && backHandler()) return true;
