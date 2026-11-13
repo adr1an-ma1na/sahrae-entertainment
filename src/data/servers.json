@@ -1,7 +1,7 @@
 {
-  "version": 13,
+  "version": 14,
   "updated": "2026-11-13",
-  "about": "Movie and series servers, ordered by what played when tested from Kenya on 2026-11-13: VidZee (1080p, 5.1), VidRock (1080p), VidSrc.su (1080p), VidSrc.to (1080p), 2Embed (1080p), VixSrc, VidLink Pro, AutoEmbed, VidFast (errors on the web; plays in the apps; kept at the owner's request), VidNest (apps only). VidLove, VidSrc.pm, VidSrc.io and VidSrc.sh were not working and were taken out at the owner's request. A server the daily check marks down moves to the back, still offered.",
+  "about": "Movie and series servers, ordered by what played when tested from Kenya on 2026-11-13: VidZee (1080p, 5.1), VidRock (1080p), VidSrc.su (1080p), VidSrc.to (1080p), 2Embed (1080p), VixSrc, VidLink Pro, AutoEmbed, VidFast (errors on the web; plays in the apps; kept at the owner's request), VidNest (adverts over the picture), Mapple (added at the owner's request; not yet proven to play in a frame). VidLove, VidSrc.pm, VidSrc.io and VidSrc.sh were not working and were taken out at the owner's request. A server the daily check marks down moves to the back, still offered.",
   "servers": [
     {
       "id": "vidzee",
@@ -250,14 +250,38 @@
       "hosts": [
         "vidnest.fun"
       ],
-      "web": false,
       "visual": {
         "maxHeight": 1080,
         "mbps": 2.7,
         "codec": "h264",
         "adaptive": true
       },
-      "note": "Android emulators 2026-10-26: 1920x1080 on Breaking Bad S1E1 (2.7 Mb/s) and Matlock S1E1, 1920x800 on Dune: Part Two. App only: its own web page carries adult adverts. Kept at the owner's request (2026-11-13); that day, from Kenya in a plain frame, Oppenheimer and Breaking Bad S1E1 both played, under an advert button laid over the picture."
+      "note": "Android emulators 2026-10-26: 1920x1080 on Breaking Bad S1E1 (2.7 Mb/s) and Matlock S1E1, 1920x800 on Dune: Part Two. Was app only because its own web page carries adult adverts; put on the website too at the owner's request (2026-11-13). That day, from Kenya in a plain frame, Oppenheimer and Breaking Bad S1E1 both played, under an advert button laid over the picture."
+    },
+    {
+      "id": "mapple",
+      "name": "Mapple · 4K",
+      "movie": "https://mappletv.uk/embed/movie/{id}",
+      "tv": "https://mappletv.uk/embed/tv/{id}-{s}-{e}",
+      "hosts": [
+        "mappletv.uk"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": 0,
+        "codec": "h264",
+        "adaptive": true
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "coverage": 1,
+      "events": false,
+      "status": "active",
+      "failStreak": 0,
+      "checked": "2026-11-13",
+      "note": "Added at the owner's request (2026-11-13). Mapple's own site (mapple.tv, now mapple.fun) played Oppenheimer at 3840x2160 with sound, but only lets its own sites frame that page; mappletv.uk/embed is its embed address and may be framed. Tested from Kenya: it opens on a \"confirm to continue\" box, opens an advert tab on taps, and refuses a sandboxed frame. The film and Breaking Bad S1E1 loaded their pages; playback in a frame was not confirmed (the test browser blocks the advert tabs it waits on). Ranked by its measured picture only once proven, so listed last. Episodes use {id}-{s}-{e}: the /{s}/{e} form redirects to mapple.fun, which cannot be framed."
     }
   ],
   "retired": [
@@ -284,10 +308,6 @@
     {
       "id": "vidsrcsu2",
       "why": "2026-10-25: vidsrc.su plays 720x404 with a TV channel logo burnt in"
-    },
-    {
-      "id": "mapple",
-      "why": "2026-10-25: mappletv.uk (\"4K\") asks every viewer to verify they are human before it plays"
     },
     {
       "id": "embedwave",

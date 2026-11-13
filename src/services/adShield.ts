@@ -89,6 +89,8 @@ const SANDBOX_REFUSERS = [
   'vidlove.cc', '111movies.net', 'vidfast.vc', 'vidfast.pro', 'vidnest.fun',
   // 2026-11-13: AutoEmbed (now autoembed.me) shows "Playback blocked ... use iframe without sandbox attribute".
   'autoembed.co', 'autoembed.me',
+  // 2026-11-13: Mapple's embed: "Please remove sandbox ... this player".
+  'mappletv.uk',
 ];
 
 export function refusesSandbox(url: string): boolean {
