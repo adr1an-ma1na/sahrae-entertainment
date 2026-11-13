@@ -1808,3 +1808,6 @@ html.low-gfx.sports-open .sports-page > :not(.sports-dialog) { visibility: hidde
   .cw-remove { opacity: 0; }
   .group:hover .cw-remove, .group:focus-within .cw-remove, .cw-remove:focus-visible { opacity: 1; }
 }
+
+/* TV: Skip Intro sits above the remote's controls while they are up (ui/TvTransport.tsx). */
+.player-frame:has([data-tv-transport]) [data-tv-priority] { bottom: 15rem; }

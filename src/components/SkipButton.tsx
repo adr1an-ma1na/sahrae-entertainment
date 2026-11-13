@@ -9,9 +9,9 @@ import { isTelevision, tvFocus, setTvPriorityAction, clearTvPriorityAction } fro
  * state, so the whole player page does not redraw every second.
  */
 export const CLOCK_EVENT = 'sahrae:clock';
-export function tellClock(t: number, d: number): void {
+export function tellClock(t: number, d: number, paused?: boolean): void {
   if (!(t >= 0)) return;
-  try { window.dispatchEvent(new CustomEvent(CLOCK_EVENT, { detail: { t, d } })); } catch { /* no window */ }
+  try { window.dispatchEvent(new CustomEvent(CLOCK_EVENT, { detail: { t, d, paused } })); } catch { /* no window */ }
 }
 
 /**

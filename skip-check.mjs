@@ -122,5 +122,12 @@ console.log('\nsubtitles for a title in another language');
   eq('no language, no change', withSubs('https://vidfast.vc/movie/1', 'vidfast', null), 'https://vidfast.vc/movie/1');
 }
 
+console.log('\nthe remote over a server player (TV)');
+{
+  const { seekStep, clockText } = await import('./src/services/tvTransportCore.ts');
+  eq('a press is 10 s; held, 30 s, then 60 s', [seekStep(0), seekStep(3), seekStep(4), seekStep(11), seekStep(12), seekStep(40)], [10, 10, 30, 30, 60, 60]);
+  eq('times read as the player shows them', [clockText(5), clockText(339), clockText(6206), clockText(-3), clockText(NaN)], ['0:05', '5:39', '1:43:26', '0:00', '0:00']);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

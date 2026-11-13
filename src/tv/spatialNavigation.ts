@@ -608,6 +608,9 @@ export function initSpatialNavigation() {
       // still move between the buttons.
       if ((dir === 'left' || dir === 'right') && active?.closest('[data-tv-seek]')) return;
 
+      // A server's picture on a TV takes every arrow itself (ui/TvTransport.tsx).
+      if (active?.closest('[data-tv-keys]')) return;
+
       const focusables = getFocusables();
       if (focusables.length === 0) return;
 

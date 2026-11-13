@@ -5,6 +5,7 @@ import { fetchMediaDetails, MediaDetails, getImageUrl, fetchSimilar, MediaItem, 
 import { useWatchProgress } from '../hooks/useWatchProgress';
 import { resumePoint, withStartAt, START_AT_SERVERS } from '../services/resume';
 import SkipButton, { tellClock } from './SkipButton';
+import TvTransport, { type TransportApi } from './ui/TvTransport';
 import { isAnime } from '../services/animeProviders';
 import { loadSegments, type Segment } from '../services/skipSegments';
 import { readTrackPrefs, saveTrackPrefs, trackFor, applyCueStyle, subsWanted, langCode, withSubs, type SubSize } from '../services/trackPrefs';
@@ -138,6 +139,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const [subSize, setSubSize] = useState<SubSize>(() => readTrackPrefs().size);
   // Skip Intro: the marked parts of what is playing, and how to move past them.
   const [segments, setSegments] = useState<Segment[]>([]);
+  const transportRef = useRef<TransportApi | null>(null);
   const cleanSeekRef = useRef<((t: number) => void) | null>(null);
   // The website, on a server that opens at a given second: Skip reloads it there.
   const [jumpAt, setJumpAt] = useState(0);
@@ -723,6 +725,8 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        // Already used by the remote's navigation (the TV controls or the server strip going away).
+        if (e.defaultPrevented) return;
         if (barHiddenRef.current) { setBarHidden(false); return; }
         onClose();
       }
@@ -1073,7 +1077,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
       if (!fromFrame(iframeRef.current?.contentWindow, e.source)) return;
       const dur = typeof d.d === 'number' && d.d !== Infinity ? d.d : 0;
       notePositionRef.current(d.t, dur, d.paused === true);
-      tellClock(d.t, dur);
+      tellClock(d.t, dur, d.paused === true);
     };
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
@@ -1164,6 +1168,10 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     if (webJump) { setJumpAt(to); setRefreshKey((k) => k + 1); }
   };
 
+  // TV, a server's own player: the remote's controls over it (ui/TvTransport.tsx).
+  const tvTransportOn = isTelevision() && canFrameKick() && !usingClean && videoLoaded && !removedNow;
+  const openStrip = () => { window.dispatchEvent(new CustomEvent('sahrae:tv-edge', { detail: 'up', cancelable: true })); };
+
   const dynamicServers = [...SERVERS];
 
   const currentServerObj = dynamicServers[selectedServer] || dynamicServers[0];
@@ -1231,7 +1239,21 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                     <div ref={serverFrameRef} className="absolute inset-0" data-tv-noring
                       {...(canTap() ? {
                         tabIndex: 0, 'data-tv-focusable': true, 'aria-label': 'Play',
-                        onClick: (e: React.MouseEvent<HTMLDivElement>) => { if (e.detail !== 0) return; if (!tellFrame(e.currentTarget.querySelector('iframe'), 'toggle')) tapCenterOf(e.currentTarget, e.currentTarget); },
+                        onClick: (e: React.MouseEvent<HTMLDivElement>) => {
+                          if (e.detail !== 0) return;
+                          if (tvTransportOn && transportRef.current?.key('Enter', false)) return;
+                          if (!tellFrame(e.currentTarget.querySelector('iframe'), 'toggle')) tapCenterOf(e.currentTarget, e.currentTarget);
+                        },
+                      } : {})}
+                      {...(tvTransportOn ? {
+                        'data-tv-keys': true,
+                        onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
+                          if (document.documentElement.classList.contains('tv-pointer')) return;
+                          if (e.key === 'ArrowUp') { e.preventDefault(); openStrip(); return; }
+                          // OK reaches the picture as a click (spatial navigation), handled above.
+                          if (e.key === 'Enter') return;
+                          if (transportRef.current?.key(e.key, e.repeat)) e.preventDefault();
+                        },
                       } : {})}>
                     <iframe
                       key={`player-${refreshKey}-${shieldOn ? 'shield' : 'open'}-${currentServerObj.id}`}
@@ -1282,6 +1304,11 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                           </div>
                         )}
                       </div>
+                    )}
+                    {tvTransportOn && (
+                      <TvTransport apiRef={transportRef} picture={serverFrameRef} onSeek={seekTo}
+                        onToggle={() => { tellFrame(iframeRef.current, 'toggle'); }} onSettings={openStrip}
+                        title={currentMediaType === 'tv' ? `${details.name || details.title || ''} · S${selectedSeason} E${selectedEpisode}` : (details.title || details.name)} />
                     )}
                     {videoLoaded && (
                       <SkipButton segments={segments} hasNext={hasNextEpisode()} canSeek={canSeek} hidden={upNext !== null || strip.open}
