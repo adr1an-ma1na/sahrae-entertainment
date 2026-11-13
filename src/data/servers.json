@@ -1,7 +1,7 @@
 {
-  "version": 12,
+  "version": 13,
   "updated": "2026-11-13",
-  "about": "Movie and series servers, ordered by what played when tested from Kenya on 2026-11-13: VidZee (1080p, 5.1), VidRock (1080p), VidSrc.su (1080p), VidSrc.to (1080p), 2Embed (1080p), VixSrc, VidLink Pro, VidSrc.sh, AutoEmbed, VidFast (errors on the web; plays in the apps), VidNest (apps only). VidLove, VidSrc.pm and VidSrc.io were not working and were taken out at the owner's request. A server the daily check marks down moves to the back, still offered.",
+  "about": "Movie and series servers, ordered by what played when tested from Kenya on 2026-11-13: VidZee (1080p, 5.1), VidRock (1080p), VidSrc.su (1080p), VidSrc.to (1080p), 2Embed (1080p), VixSrc, VidLink Pro, AutoEmbed, VidFast (errors on the web; plays in the apps; kept at the owner's request), VidNest (apps only). VidLove, VidSrc.pm, VidSrc.io and VidSrc.sh were not working and were taken out at the owner's request. A server the daily check marks down moves to the back, still offered.",
   "servers": [
     {
       "id": "vidzee",
@@ -182,31 +182,6 @@
       "note": "Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished). Measured 2026-10-25 on Matlock: 1080p at 1.6 Mb/s, showing 720p after 40 s."
     },
     {
-      "id": "vidsrcsh",
-      "name": "VidSrc.sh",
-      "movie": "https://vidsrc.sh/embed/movie?tmdb={id}",
-      "tv": "https://vidsrc.sh/embed/tv?tmdb={id}&season={s}&episode={e}",
-      "hosts": [
-        "vidsrc.sh"
-      ],
-      "visual": {
-        "maxHeight": 1080,
-        "mbps": 0,
-        "codec": "h264",
-        "adaptive": true
-      },
-      "audio": {
-        "channels": 2,
-        "languages": 1
-      },
-      "coverage": 1,
-      "events": false,
-      "status": "active",
-      "failStreak": 0,
-      "checked": "2026-10-27",
-      "note": "Owner's list; reinstated 2026-10-27 at the owner's request after the 2026-10-26 line-up dropped it. Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished)."
-    },
-    {
       "id": "autoembed",
       "name": "AutoEmbed",
       "movie": "https://autoembed.me/movie/tmdb/{id}",
@@ -263,7 +238,7 @@
       "events": false,
       "status": "active",
       "failStreak": 0,
-      "checked": "2026-10-26",
+      "checked": "2026-11-13",
       "audio": {
         "channels": 2,
         "languages": 1
@@ -282,10 +257,14 @@
         "codec": "h264",
         "adaptive": true
       },
-      "note": "Android emulators 2026-10-26: 1920x1080 on Breaking Bad S1E1 (2.7 Mb/s) and Matlock S1E1, 1920x800 on Dune: Part Two. App only: its own web page carries adult adverts."
+      "note": "Android emulators 2026-10-26: 1920x1080 on Breaking Bad S1E1 (2.7 Mb/s) and Matlock S1E1, 1920x800 on Dune: Part Two. App only: its own web page carries adult adverts. Kept at the owner's request (2026-11-13); that day, from Kenya in a plain frame, Oppenheimer and Breaking Bad S1E1 both played, under an advert button laid over the picture."
     }
   ],
   "retired": [
+    {
+      "id": "vidsrcsh",
+      "why": "2026-11-13: never got past its loading circle, for a film (Oppenheimer) or an episode (Breaking Bad S1E1); taken out at the owner's request (\"replace the ones not working\")"
+    },
     {
       "id": "vidlove",
       "why": "2026-11-13: player.vidlove.cc no longer resolves (DNS), down for 15 days by the daily check"

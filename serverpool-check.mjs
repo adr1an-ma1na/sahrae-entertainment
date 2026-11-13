@@ -22,7 +22,7 @@ const ids = (list) => list.map((s) => s.id);
 const NOW = Date.parse('2026-10-22T12:00:00Z');
 const ago = (h) => new Date(NOW - h * 3600_000).toISOString();
 // What played when tested from Kenya on 2026-11-13 first; VidLove, VidSrc.pm and VidSrc.io taken out (not working).
-const FILE = ['vidzee', 'vidrock', 'vidsrcsu', 'vidsrcto', '2embed', 'vixsrc', 'vidlink', 'vidsrcsh', 'autoembed', 'vidfast', 'vidnest'];
+const FILE = ['vidzee', 'vidrock', 'vidsrcsu', 'vidsrcto', '2embed', 'vixsrc', 'vidlink', 'autoembed', 'vidfast', 'vidnest'];
 // The daily check marks servers down and up again in the shipped file, so the
 // expected order follows their state: the working ones in file order, then the
 // ones marked down (still offered).
@@ -35,9 +35,9 @@ eq("films: the 1080p servers that played first, then the rest", ids(pickServers(
 eq('series: the same order', ids(pickServers(pool, 'tv')), ORDER);
 eq('the order does not change in a browser', ids(pickServers(pool, 'movie', [], Date.now(), undefined, false)), ORDER);
 eq('no server id appears twice', new Set(pool.servers.map((s) => s.id)).size, pool.servers.length);
-eq('eleven servers', pool.servers.length, 11);
+eq('ten servers', pool.servers.length, 10);
 eq("the file keeps the owner's order", ids(pool.servers), FILE);
-eq("the owner's servers that still work are all offered, whatever the daily check says", ['vidlink', 'vidsrcto', 'autoembed', 'vidsrcsu', 'vidsrcsh', '2embed'].every((id) => ids(pickServers(pool, 'tv')).includes(id)), true);
+eq("the owner's servers that still work are all offered, whatever the daily check says", ['vidlink', 'vidsrcto', 'autoembed', 'vidsrcsu', '2embed'].every((id) => ids(pickServers(pool, 'tv')).includes(id)), true);
 eq('the ones taken out are recorded with the reason', ['vidlove', 'vidsrcpm', 'vidsrcio'].every((id) => pool.retired.some((r) => r.id === id && r.why.includes('2026-11-13'))), true);
 eq('every server is listed at up to 1080p', pool.servers.every((s) => s.visual.maxHeight >= 1080), true);
 
@@ -84,7 +84,7 @@ eq('VidLink Pro episode (Matlock S2E16)', fill(by('vidlink').tv, 226174, 2, 16, 
 eq('VidFast film (Dune: Part Two)', fill(by('vidfast').movie, 693134, 1, 1, 'x'), 'https://vidfast.vc/movie/693134?autoPlay=true');
 eq('AutoEmbed episode, at its new address', fill(by('autoembed').tv, 1396, 1, 1, 'x'), 'https://autoembed.me/tv/tmdb/1396-1-1');
 eq('VidNest episode', fill(by('vidnest').tv, 1396, 1, 1, 'x'), 'https://vidnest.fun/tv/1396/1/1');
-eq('names', pool.servers.map(label), ['VidZee · 1080p · 5.1', 'VidRock · 1080p · sharpest', 'VidSrc.su · 1080p', 'VidSrc.to · 1080p', '2Embed · 1080p', 'VixSrc · 1080p · subtitles', 'VidLink Pro · 1080p', 'VidSrc.sh', 'AutoEmbed', 'VidFast · 4K', 'VidNest · 1080p']);
+eq('names', pool.servers.map(label), ['VidZee · 1080p · 5.1', 'VidRock · 1080p · sharpest', 'VidSrc.su · 1080p', 'VidSrc.to · 1080p', '2Embed · 1080p', 'VixSrc · 1080p · subtitles', 'VidLink Pro · 1080p', 'AutoEmbed', 'VidFast · 4K', 'VidNest · 1080p']);
 eq('VidSrc.to film', fill(by('vidsrcto').movie, 693134, 1, 1, 'x'), 'https://vidsrc.to/embed/movie/693134');
 eq('2Embed episode', fill(by('2embed').tv, 1396, 1, 1, 'x'), 'https://www.2embed.cc/embedtv/1396&s=1&e=1');
 eq('VidNest is app only', pool.servers.filter((s) => s.web === false).map((s) => s.id), ['vidnest']);
