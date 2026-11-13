@@ -1,86 +1,8 @@
 {
-  "version": 11,
+  "version": 12,
   "updated": "2026-11-13",
-  "about": "Movie and series servers in the owner's order (2026-11-13): VidFast, VidLink Pro, VidLove, VidZee, then VidRock, VixSrc, VidNest, VidSrc.to, AutoEmbed, VidSrc.su, VidSrc.sh, 2Embed, VidSrc.io, VidSrc.pm, all kept. A title opens on the first that has not just failed on the device. A server the daily check marks down moves to the back, still offered, and returns to its place when it plays again.",
+  "about": "Movie and series servers, ordered by what played when tested from Kenya on 2026-11-13: VidZee (1080p, 5.1), VidRock (1080p), VidSrc.su (1080p), VidSrc.to (1080p), 2Embed (1080p), VixSrc, VidLink Pro, VidSrc.sh, AutoEmbed, VidFast (errors on the web; plays in the apps), VidNest (apps only). VidLove, VidSrc.pm and VidSrc.io were not working and were taken out at the owner's request. A server the daily check marks down moves to the back, still offered.",
   "servers": [
-    {
-      "coverage": 0.9,
-      "events": false,
-      "status": "active",
-      "failStreak": 0,
-      "checked": "2026-10-26",
-      "audio": {
-        "channels": 2,
-        "languages": 1
-      },
-      "id": "vidfast",
-      "name": "VidFast · 4K",
-      "movie": "https://vidfast.vc/movie/{id}?autoPlay=true",
-      "tv": "https://vidfast.vc/tv/{id}/{s}/{e}?autoPlay=true",
-      "hosts": [
-        "vidfast.vc",
-        "vidfast.pro"
-      ],
-      "visual": {
-        "maxHeight": 2160,
-        "mbps": 6,
-        "codec": "h264",
-        "adaptive": true
-      },
-      "note": "Android emulators 2026-10-26: handed over its stream in 2-4 s; renditions 2160p at 16 Mb/s, 1080p at 6 Mb/s, 720p at 3, 480p at 1.3; played 3840x2160 on Dune: Part Two and Breaking Bad S1E1. No stream for Matlock S1E1. From a Kenyan browser it stayed on Fetching (2026-10-22 and 10-26). Refuses the web sandbox."
-    },
-    {
-      "id": "vidlink",
-      "name": "VidLink Pro · 1080p",
-      "movie": "https://vidlink.pro/movie/{id}?primaryColor=f59e0b",
-      "tv": "https://vidlink.pro/tv/{id}/{s}/{e}?primaryColor=f59e0b",
-      "hosts": [
-        "vidlink.pro"
-      ],
-      "visual": {
-        "maxHeight": 1080,
-        "mbps": 1.6,
-        "codec": "h264",
-        "adaptive": true
-      },
-      "audio": {
-        "channels": 2,
-        "languages": 1
-      },
-      "coverage": 1,
-      "events": false,
-      "status": "active",
-      "failStreak": 0,
-      "checked": "2026-11-05",
-      "note": "Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished). Measured 2026-10-25 on Matlock: 1080p at 1.6 Mb/s, showing 720p after 40 s."
-    },
-    {
-      "coverage": 0.9,
-      "events": false,
-      "status": "down",
-      "failStreak": 15,
-      "checked": "2026-11-12",
-      "audio": {
-        "channels": 2,
-        "languages": 1
-      },
-      "id": "vidlove",
-      "name": "VidLove · 1080p",
-      "movie": "https://player.vidlove.cc/embed/movie/{id}",
-      "tv": "https://player.vidlove.cc/embed/tv/{id}/{s}/{e}",
-      "hosts": [
-        "vidlove.cc",
-        "111movies.net"
-      ],
-      "visual": {
-        "maxHeight": 1080,
-        "mbps": 1.1,
-        "codec": "h264",
-        "adaptive": false
-      },
-      "note": "Where 111movies.net now forwards. From Kenya 2026-10-26: started by itself, 1920x1080 on Matlock S1E1 (about 1.1 Mb/s), but 1150x480 with a WAFIM.TV watermark on Dune: Part Two. Refuses the web sandbox.",
-      "was": "active"
-    },
     {
       "id": "vidzee",
       "name": "VidZee · 1080p · 5.1",
@@ -133,6 +55,83 @@
       "note": "Back second on 2026-10-26 (owner). On the Android emulators it handed its stream to Sahrae's player in 2-3 s and played 1920x1080 on Breaking Bad S1E1 and 1920x800 (widescreen 1080p) on Deadpool & Wolverine and The Dark Knight; the sharpest measured (1080p at 5 Mb/s). Refuses the web sandbox, so the web leaves it out while Ad Shield is on."
     },
     {
+      "id": "vidsrcsu",
+      "name": "VidSrc.su · 1080p",
+      "movie": "https://vidsrc.su/embed/movie/{id}",
+      "tv": "https://vidsrc.su/embed/tv/{id}/{s}/{e}",
+      "hosts": [
+        "vidsrc.su"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": 0,
+        "codec": "h264",
+        "adaptive": true
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "coverage": 1,
+      "events": false,
+      "status": "active",
+      "failStreak": 0,
+      "checked": "2026-10-27",
+      "note": "Owner's list; reinstated 2026-10-27 at the owner's request after the 2026-10-26 line-up dropped it. Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished). Seen 2026-10-25 on Matlock: 720x404 with a TV channel logo."
+    },
+    {
+      "id": "vidsrcto",
+      "name": "VidSrc.to · 1080p",
+      "movie": "https://vidsrc.to/embed/movie/{id}",
+      "tv": "https://vidsrc.to/embed/tv/{id}/{s}/{e}",
+      "hosts": [
+        "vidsrc.to",
+        "vsembed.ru"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": 0,
+        "codec": "h264",
+        "adaptive": true
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "coverage": 1,
+      "events": false,
+      "status": "active",
+      "failStreak": 0,
+      "checked": "2026-10-27",
+      "note": "Owner's list; reinstated 2026-10-27 at the owner's request after the 2026-10-26 line-up dropped it. Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished)."
+    },
+    {
+      "id": "2embed",
+      "name": "2Embed · 1080p",
+      "movie": "https://www.2embed.cc/embed/{id}",
+      "tv": "https://www.2embed.cc/embedtv/{id}&s={s}&e={e}",
+      "hosts": [
+        "2embed.cc",
+        "2embed.skin"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": 0,
+        "codec": "h264",
+        "adaptive": true
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "coverage": 1,
+      "events": false,
+      "status": "active",
+      "failStreak": 0,
+      "checked": "2026-10-27",
+      "note": "Owner's list; reinstated 2026-10-27 at the owner's request after the 2026-10-26 line-up dropped it. Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished)."
+    },
+    {
       "coverage": 1,
       "events": false,
       "status": "active",
@@ -158,43 +157,16 @@
       "note": "Hands over its stream in 1-2 s on every title tested; renditions 1080p at 4.5 Mb/s, 720p, 480p; in the emulator test it played 720p after a key error at 1080p. Needs referrer origin; refuses the web sandbox."
     },
     {
-      "coverage": 0.9,
-      "events": false,
-      "status": "active",
-      "failStreak": 0,
-      "checked": "2026-10-26",
-      "audio": {
-        "channels": 2,
-        "languages": 1
-      },
-      "id": "vidnest",
-      "name": "VidNest · 1080p",
-      "movie": "https://vidnest.fun/movie/{id}",
-      "tv": "https://vidnest.fun/tv/{id}/{s}/{e}",
+      "id": "vidlink",
+      "name": "VidLink Pro · 1080p",
+      "movie": "https://vidlink.pro/movie/{id}?primaryColor=f59e0b",
+      "tv": "https://vidlink.pro/tv/{id}/{s}/{e}?primaryColor=f59e0b",
       "hosts": [
-        "vidnest.fun"
-      ],
-      "web": false,
-      "visual": {
-        "maxHeight": 1080,
-        "mbps": 2.7,
-        "codec": "h264",
-        "adaptive": true
-      },
-      "note": "Android emulators 2026-10-26: 1920x1080 on Breaking Bad S1E1 (2.7 Mb/s) and Matlock S1E1, 1920x800 on Dune: Part Two. App only: its own web page carries adult adverts."
-    },
-    {
-      "id": "vidsrcto",
-      "name": "VidSrc.to",
-      "movie": "https://vidsrc.to/embed/movie/{id}",
-      "tv": "https://vidsrc.to/embed/tv/{id}/{s}/{e}",
-      "hosts": [
-        "vidsrc.to",
-        "vsembed.ru"
+        "vidlink.pro"
       ],
       "visual": {
         "maxHeight": 1080,
-        "mbps": 0,
+        "mbps": 1.6,
         "codec": "h264",
         "adaptive": true
       },
@@ -206,59 +178,8 @@
       "events": false,
       "status": "active",
       "failStreak": 0,
-      "checked": "2026-10-27",
-      "note": "Owner's list; reinstated 2026-10-27 at the owner's request after the 2026-10-26 line-up dropped it. Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished)."
-    },
-    {
-      "id": "autoembed",
-      "name": "AutoEmbed",
-      "movie": "https://autoembed.co/movie/tmdb/{id}",
-      "tv": "https://autoembed.co/tv/tmdb/{id}-{s}-{e}",
-      "hosts": [
-        "autoembed.co"
-      ],
-      "visual": {
-        "maxHeight": 1080,
-        "mbps": 0,
-        "codec": "h264",
-        "adaptive": true
-      },
-      "audio": {
-        "channels": 2,
-        "languages": 1
-      },
-      "coverage": 1,
-      "events": false,
-      "status": "down",
-      "failStreak": 16,
-      "checked": "2026-11-12",
-      "note": "Kept as a web backup inside Ad Shield; not proven to play (black screen sandboxed on 2026-10-26).",
-      "was": "active"
-    },
-    {
-      "id": "vidsrcsu",
-      "name": "VidSrc.su",
-      "movie": "https://vidsrc.su/embed/movie/{id}",
-      "tv": "https://vidsrc.su/embed/tv/{id}/{s}/{e}",
-      "hosts": [
-        "vidsrc.su"
-      ],
-      "visual": {
-        "maxHeight": 1080,
-        "mbps": 0,
-        "codec": "h264",
-        "adaptive": true
-      },
-      "audio": {
-        "channels": 2,
-        "languages": 1
-      },
-      "coverage": 1,
-      "events": false,
-      "status": "active",
-      "failStreak": 0,
-      "checked": "2026-10-27",
-      "note": "Owner's list; reinstated 2026-10-27 at the owner's request after the 2026-10-26 line-up dropped it. Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished). Seen 2026-10-25 on Matlock: 720x404 with a TV channel logo."
+      "checked": "2026-11-05",
+      "note": "Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished). Measured 2026-10-25 on Matlock: 1080p at 1.6 Mb/s, showing 720p after 40 s."
     },
     {
       "id": "vidsrcsh",
@@ -286,38 +207,13 @@
       "note": "Owner's list; reinstated 2026-10-27 at the owner's request after the 2026-10-26 line-up dropped it. Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished)."
     },
     {
-      "id": "2embed",
-      "name": "2Embed",
-      "movie": "https://www.2embed.cc/embed/{id}",
-      "tv": "https://www.2embed.cc/embedtv/{id}&s={s}&e={e}",
+      "id": "autoembed",
+      "name": "AutoEmbed",
+      "movie": "https://autoembed.me/movie/tmdb/{id}",
+      "tv": "https://autoembed.me/tv/tmdb/{id}-{s}-{e}",
       "hosts": [
-        "2embed.cc",
-        "2embed.skin"
-      ],
-      "visual": {
-        "maxHeight": 1080,
-        "mbps": 0,
-        "codec": "h264",
-        "adaptive": true
-      },
-      "audio": {
-        "channels": 2,
-        "languages": 1
-      },
-      "coverage": 1,
-      "events": false,
-      "status": "active",
-      "failStreak": 0,
-      "checked": "2026-10-27",
-      "note": "Owner's list; reinstated 2026-10-27 at the owner's request after the 2026-10-26 line-up dropped it. Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished)."
-    },
-    {
-      "id": "vidsrcio",
-      "name": "VidSrc.io",
-      "movie": "https://vidsrc.io/embed/movie/{id}",
-      "tv": "https://vidsrc.io/embed/tv/{id}/{s}/{e}",
-      "hosts": [
-        "vidsrc.io"
+        "autoembed.me",
+        "autoembed.co"
       ],
       "visual": {
         "maxHeight": 1080,
@@ -332,38 +228,77 @@
       "coverage": 1,
       "events": false,
       "status": "down",
-      "failStreak": 3,
-      "checked": "2026-11-11",
-      "note": "Owner's list; reinstated 2026-10-27 at the owner's request after the 2026-10-26 line-up dropped it. Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished).",
+      "failStreak": 16,
+      "checked": "2026-11-12",
+      "note": "Kept as a web backup inside Ad Shield; not proven to play (black screen sandboxed on 2026-10-26).",
       "was": "active"
     },
     {
-      "id": "vidsrcpm",
-      "name": "VidSrc.pm",
-      "movie": "https://vidsrc.pm/embed/movie?tmdb={id}",
-      "tv": "https://vidsrc.pm/embed/tv?tmdb={id}&season={s}&episode={e}",
-      "hosts": [
-        "vidsrc.pm"
-      ],
-      "visual": {
-        "maxHeight": 1080,
-        "mbps": 0,
-        "codec": "h264",
-        "adaptive": true
-      },
+      "coverage": 0.9,
+      "events": false,
+      "status": "active",
+      "failStreak": 0,
+      "checked": "2026-10-26",
       "audio": {
         "channels": 2,
         "languages": 1
       },
-      "coverage": 1,
+      "id": "vidfast",
+      "name": "VidFast · 4K",
+      "movie": "https://vidfast.vc/movie/{id}?autoPlay=true",
+      "tv": "https://vidfast.vc/tv/{id}/{s}/{e}?autoPlay=true",
+      "hosts": [
+        "vidfast.vc",
+        "vidfast.pro"
+      ],
+      "visual": {
+        "maxHeight": 2160,
+        "mbps": 6,
+        "codec": "h264",
+        "adaptive": true
+      },
+      "note": "Android emulators 2026-10-26: handed over its stream in 2-4 s; renditions 2160p at 16 Mb/s, 1080p at 6 Mb/s, 720p at 3, 480p at 1.3; played 3840x2160 on Dune: Part Two and Breaking Bad S1E1. No stream for Matlock S1E1. From a Kenyan browser it stayed on Fetching (2026-10-22 and 10-26). Refuses the web sandbox."
+    },
+    {
+      "coverage": 0.9,
       "events": false,
       "status": "active",
-      "failStreak": 1,
-      "checked": "2026-11-12",
-      "note": "Kept as a web backup inside Ad Shield; \"Not found\" for the film tried on 2026-10-26."
+      "failStreak": 0,
+      "checked": "2026-10-26",
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "id": "vidnest",
+      "name": "VidNest · 1080p",
+      "movie": "https://vidnest.fun/movie/{id}",
+      "tv": "https://vidnest.fun/tv/{id}/{s}/{e}",
+      "hosts": [
+        "vidnest.fun"
+      ],
+      "web": false,
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": 2.7,
+        "codec": "h264",
+        "adaptive": true
+      },
+      "note": "Android emulators 2026-10-26: 1920x1080 on Breaking Bad S1E1 (2.7 Mb/s) and Matlock S1E1, 1920x800 on Dune: Part Two. App only: its own web page carries adult adverts."
     }
   ],
   "retired": [
+    {
+      "id": "vidlove",
+      "why": "2026-11-13: player.vidlove.cc no longer resolves (DNS), down for 15 days by the daily check"
+    },
+    {
+      "id": "vidsrcpm",
+      "why": "2026-11-13: vidsrc.pm answers 520 (its origin is down); black in the player"
+    },
+    {
+      "id": "vidsrcio",
+      "why": "2026-11-13: vidsrc.io answers 429 and stays black in the player; marked down by the daily check"
+    },
     {
       "id": "viduki",
       "why": "2026-10-25: the same stream as VidZee through another front end, so no gain in picture or sound"

@@ -21,8 +21,8 @@ const pool = JSON.parse(fs.readFileSync('src/data/servers.json', 'utf8'));
 const ids = (list) => list.map((s) => s.id);
 const NOW = Date.parse('2026-10-22T12:00:00Z');
 const ago = (h) => new Date(NOW - h * 3600_000).toISOString();
-// The owner's order, 2026-11-13: VidFast, VidLink Pro, VidLove, VidZee, then the rest as they were.
-const FILE = ['vidfast', 'vidlink', 'vidlove', 'vidzee', 'vidrock', 'vixsrc', 'vidnest', 'vidsrcto', 'autoembed', 'vidsrcsu', 'vidsrcsh', '2embed', 'vidsrcio', 'vidsrcpm'];
+// What played when tested from Kenya on 2026-11-13 first; VidLove, VidSrc.pm and VidSrc.io taken out (not working).
+const FILE = ['vidzee', 'vidrock', 'vidsrcsu', 'vidsrcto', '2embed', 'vixsrc', 'vidlink', 'vidsrcsh', 'autoembed', 'vidfast', 'vidnest'];
 // The daily check marks servers down and up again in the shipped file, so the
 // expected order follows their state: the working ones in file order, then the
 // ones marked down (still offered).
@@ -31,13 +31,14 @@ const ORDER = [...FILE.filter((x) => !isDown(x)), ...FILE.filter(isDown)];
 
 console.log('\nthe shipped pool');
 eq('is well formed', validPool(pool), true);
-eq("films: VidFast, VidLink Pro, VidLove, VidZee, then the rest", ids(pickServers(pool, 'movie')), ORDER);
+eq("films: the 1080p servers that played first, then the rest", ids(pickServers(pool, 'movie')), ORDER);
 eq('series: the same order', ids(pickServers(pool, 'tv')), ORDER);
 eq('the order does not change in a browser', ids(pickServers(pool, 'movie', [], Date.now(), undefined, false)), ORDER);
 eq('no server id appears twice', new Set(pool.servers.map((s) => s.id)).size, pool.servers.length);
-eq("fourteen servers: the six measured leads and the owner's eight", pool.servers.length, 14);
+eq('eleven servers', pool.servers.length, 11);
 eq("the file keeps the owner's order", ids(pool.servers), FILE);
-eq("the owner's eight are all offered, whatever the daily check says", ['vidlink', 'vidsrcto', 'autoembed', 'vidsrcsu', 'vidsrcsh', '2embed', 'vidsrcio', 'vidsrcpm'].every((id) => ids(pickServers(pool, 'tv')).includes(id)), true);
+eq("the owner's servers that still work are all offered, whatever the daily check says", ['vidlink', 'vidsrcto', 'autoembed', 'vidsrcsu', 'vidsrcsh', '2embed'].every((id) => ids(pickServers(pool, 'tv')).includes(id)), true);
+eq('the ones taken out are recorded with the reason', ['vidlove', 'vidsrcpm', 'vidsrcio'].every((id) => pool.retired.some((r) => r.id === id && r.why.includes('2026-11-13'))), true);
 eq('every server is listed at up to 1080p', pool.servers.every((s) => s.visual.maxHeight >= 1080), true);
 
 console.log('\nthe quality score (kept for reference; it no longer reorders)');
@@ -51,7 +52,7 @@ const fresh = { ...pool, servers: pool.servers.map((s) => ({ ...s, status: 'acti
 const down = { ...fresh, servers: fresh.servers.map((s) => (s.id === 'vidrock' ? { ...s, status: 'down' } : s)) };
 eq('a server marked down moves to the back, still offered; the rest keep their order', ids(pickServers(down, 'movie')), [...FILE.filter((x) => x !== 'vidrock'), 'vidrock']);
 const failing = [{ server_id: 'vidzee', ok: 1, fail: 20, last_ok: ago(60), last_fail: ago(1) }];
-eq('a server viewers keep failing on moves back too, and the next leads', ids(pickServers(fresh, 'movie', failing, NOW))[0], 'vidfast');
+eq('a server viewers keep failing on moves back too, and the next leads', ids(pickServers(fresh, 'movie', failing, NOW))[0], 'vidrock');
 eq('...still offered, at the back', ids(pickServers(fresh, 'movie', failing, NOW)).slice(-1)[0], 'vidzee');
 eq('...but a success in the last day keeps it', crowdFailing({ server_id: 'x', ok: 1, fail: 20, last_ok: ago(5), last_fail: ago(1) }, NOW), false);
 eq('...and a handful of failures is not enough', crowdFailing({ server_id: 'x', ok: 0, fail: 5, last_ok: null, last_fail: ago(1) }, NOW), false);
@@ -69,22 +70,21 @@ eq('junk is refused', [validPool(null), validPool('x'), validPool({})], [false, 
 console.log("\nthe owner's leads keep their places");
 {
   const all = ids(pickServers(fresh, 'movie'));
-  eq('all four working: four leads', leadCount(pickServers(fresh, 'movie')), 4);
-  eq('...in the owner\'s order', all.slice(0, 4), ['vidfast', 'vidlink', 'vidlove', 'vidzee']);
-  const loveDown = { ...fresh, servers: fresh.servers.map((x) => (x.id === 'vidlove' ? { ...x, status: 'down' } : x)) };
-  const list = pickServers(loveDown, 'movie');
-  eq('VidLove down: the other three lead, VidLove waits at the back', [leadCount(list), ids(list).slice(0, 3), ids(list).slice(-1)[0]], [3, ['vidfast', 'vidlink', 'vidzee'], 'vidlove']);
-  eq('no leads: none kept', leadCount([{ id: 'vidrock' }, { id: 'vidfast' }]), 0);
+  eq('all six working: six leads', leadCount(pickServers(fresh, 'movie')), 6);
+  eq('...in order', all.slice(0, 6), ['vidzee', 'vidrock', 'vidsrcsu', 'vidsrcto', '2embed', 'vixsrc']);
+  const rockDown = { ...fresh, servers: fresh.servers.map((x) => (x.id === 'vidrock' ? { ...x, status: 'down' } : x)) };
+  const list = pickServers(rockDown, 'movie');
+  eq('VidRock down: the other five lead, VidRock waits at the back', [leadCount(list), ids(list).slice(0, 2), ids(list).slice(-1)[0]], [5, ['vidzee', 'vidsrcsu'], 'vidrock']);
+  eq('no leads: none kept', leadCount([{ id: 'vidfast' }, { id: 'vidzee' }]), 0);
 }
 
 console.log('\nurls and names');
 const by = (id) => pool.servers.find((s) => s.id === id);
 eq('VidLink Pro episode (Matlock S2E16)', fill(by('vidlink').tv, 226174, 2, 16, 'x'), 'https://vidlink.pro/tv/226174/2/16?primaryColor=f59e0b');
 eq('VidFast film (Dune: Part Two)', fill(by('vidfast').movie, 693134, 1, 1, 'x'), 'https://vidfast.vc/movie/693134?autoPlay=true');
-eq('AutoEmbed episode', fill(by('autoembed').tv, 1396, 1, 1, 'x'), 'https://autoembed.co/tv/tmdb/1396-1-1');
-eq('VidSrc.pm episode', fill(by('vidsrcpm').tv, 1396, 1, 1, 'x'), 'https://vidsrc.pm/embed/tv?tmdb=1396&season=1&episode=1');
+eq('AutoEmbed episode, at its new address', fill(by('autoembed').tv, 1396, 1, 1, 'x'), 'https://autoembed.me/tv/tmdb/1396-1-1');
 eq('VidNest episode', fill(by('vidnest').tv, 1396, 1, 1, 'x'), 'https://vidnest.fun/tv/1396/1/1');
-eq('names', pool.servers.map(label), ['VidFast · 4K', 'VidLink Pro · 1080p', 'VidLove · 1080p', 'VidZee · 1080p · 5.1', 'VidRock · 1080p · sharpest', 'VixSrc · 1080p · subtitles', 'VidNest · 1080p', 'VidSrc.to', 'AutoEmbed', 'VidSrc.su', 'VidSrc.sh', '2Embed', 'VidSrc.io', 'VidSrc.pm']);
+eq('names', pool.servers.map(label), ['VidZee · 1080p · 5.1', 'VidRock · 1080p · sharpest', 'VidSrc.su · 1080p', 'VidSrc.to · 1080p', '2Embed · 1080p', 'VixSrc · 1080p · subtitles', 'VidLink Pro · 1080p', 'VidSrc.sh', 'AutoEmbed', 'VidFast · 4K', 'VidNest · 1080p']);
 eq('VidSrc.to film', fill(by('vidsrcto').movie, 693134, 1, 1, 'x'), 'https://vidsrc.to/embed/movie/693134');
 eq('2Embed episode', fill(by('2embed').tv, 1396, 1, 1, 'x'), 'https://www.2embed.cc/embedtv/1396&s=1&e=1');
 eq('VidNest is app only', pool.servers.filter((s) => s.web === false).map((s) => s.id), ['vidnest']);

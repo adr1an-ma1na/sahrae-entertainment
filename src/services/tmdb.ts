@@ -356,16 +356,6 @@ export const fetchMediaDetails = async (id: number, type: 'movie' | 'tv' = 'movi
   return result;
 };
 
-/** Which services carry a title, per country (TMDB's watch providers, JustWatch data). null when it cannot be read. */
-export const fetchWatchProviders = async (type: 'movie' | 'tv', id: number): Promise<Record<string, { link?: string; free?: { provider_id: number }[]; ads?: { provider_id: number }[]; flatrate?: { provider_id: number }[] }> | null> => {
-  try {
-    const res = await tmdbFetch(`${BASE_URL}/${type}/${id}/watch/providers?api_key=${API_KEY}`);
-    if (!res.ok) return null;
-    const j = await res.json();
-    return j && typeof j.results === 'object' ? j.results : null;
-  } catch { return null; }
-};
-
 export const fetchRecommendations = async (id: number, type: 'movie' | 'tv' = 'movie'): Promise<MediaItem[]> => {
   const res = await tmdbFetch(`${BASE_URL}/${type}/${id}/recommendations?api_key=${API_KEY}&language=en-US&page=1`);
   const data = await res.json();

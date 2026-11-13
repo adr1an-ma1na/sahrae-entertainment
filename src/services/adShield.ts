@@ -87,6 +87,8 @@ const SANDBOX_REFUSERS = [
   // 2026-10-26: VidLove "This site broke the player"; VidFast and VidNest are
   // listed by their own makers as refusing it.
   'vidlove.cc', '111movies.net', 'vidfast.vc', 'vidfast.pro', 'vidnest.fun',
+  // 2026-11-13: AutoEmbed (now autoembed.me) shows "Playback blocked ... use iframe without sandbox attribute".
+  'autoembed.co', 'autoembed.me',
 ];
 
 export function refusesSandbox(url: string): boolean {

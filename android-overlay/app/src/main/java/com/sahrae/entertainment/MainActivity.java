@@ -112,7 +112,7 @@ public class MainActivity extends BridgeActivity {
         // Added 26 Oct 2026.
         "vidfast.vc","vidfast.pro","vidnest.fun","vidlove.cc","111movies.net",
         // The owner's list of 21 Oct 2026 (src/data/servers.json).
-        "autoembed.co","vidsrc.su","vidsrc.io","vidsrc.pm","multiembed.mov","streamingnow.mov","vidjoy.pro",
+        "autoembed.co","autoembed.me","vidsrc.su","vidsrc.io","vidsrc.pm","multiembed.mov","streamingnow.mov","vidjoy.pro",
         // Download source (behind the Download button, not a stream server)
         "vidvault.ru","vidvault.to",
         "youtube-nocookie.com","youtube.com","ytimg.com",   // trailer player
@@ -426,10 +426,7 @@ public class MainActivity extends BridgeActivity {
     private static final Set<String> DOWNLOAD_HOSTS = new HashSet<>(Arrays.asList(
         "vidvault.ru",
         // Our own sites, e.g. Sahrae Predictor from the Matchday screen.
-        "adr1an-ma1na.github.io",
-        // Anime on official services (src/services/animeProviders.ts OFFICIAL_HOSTS):
-        // a service's search page, or TMDB's where-to-watch page for the title.
-        "crunchyroll.com", "bilibili.tv", "themoviedb.org"
+        "adr1an-ma1na.github.io"
     ));
 
     private static boolean isAllowedDownloadHost(String host) {
