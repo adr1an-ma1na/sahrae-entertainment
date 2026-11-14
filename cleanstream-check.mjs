@@ -39,10 +39,10 @@ eq('4K', heightLabel(2160), '4K');
 console.log('\nserver order in Sahrae\'s player: clearest first');
 const pool = JSON.parse(fs.readFileSync('src/data/servers.json', 'utf8')).servers;
 eq('sharpest first, when nothing else orders them: VidFast, VidRock, VixSrc, VidZee, VidNest', cleanFirst(pool).map((s) => s.id).slice(0, 5), ['vidfast', 'vidrock', 'vixsrc', 'vidzee', 'vidnest']);
-eq('the pool itself is untouched', pool.map((s) => s.id), ['vidzee', 'vidrock', 'vidsrcsu', 'vidsrcto', '2embed', 'vixsrc', 'vidlink', 'autoembed', 'vidfast', 'vidnest', 'mapple']);
+eq('the pool itself is untouched', pool.map((s) => s.id), ['cinemaos', 'vidzee', 'vidrock', 'vidsrcsu', 'vidsrcto', '2embed', 'vixsrc', 'vidlink', 'autoembed', 'vidfast', 'vidcore', 'vidnest', 'mapple']);
 // The app's order (PlayerModal): the owner's leads in the owner's order, then the sharpest.
 const leads = leadCount(pool);
-eq('in the app, the six leads keep their places and the rest go sharpest first', [...pool.slice(0, leads), ...cleanFirst(pool.slice(leads))].map((s) => s.id), ['vidzee', 'vidrock', 'vidsrcsu', 'vidsrcto', '2embed', 'vixsrc', 'vidfast', 'vidnest', 'vidlink', 'autoembed', 'mapple']);
+eq('in the app, the seven leads keep their places and the rest go sharpest first', [...pool.slice(0, leads), ...cleanFirst(pool.slice(leads))].map((s) => s.id), ['cinemaos', 'vidzee', 'vidrock', 'vidsrcsu', 'vidsrcto', '2embed', 'vixsrc', 'vidfast', 'vidnest', 'vidlink', 'autoembed', 'vidcore', 'mapple']);
 
 console.log('\nthe relay address');
 eq('playlist and referer are both carried', relayUrl('https://a.test/x.m3u8?t=1&b=2', 'https://vidrock.to/'),

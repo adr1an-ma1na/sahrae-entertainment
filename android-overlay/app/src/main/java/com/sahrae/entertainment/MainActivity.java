@@ -112,7 +112,7 @@ public class MainActivity extends BridgeActivity {
         // Added 26 Oct 2026.
         "vidfast.vc","vidfast.pro","vidnest.fun","vidlove.cc","111movies.net",
         // The owner's list of 21 Oct 2026 (src/data/servers.json).
-        "autoembed.co","autoembed.me","mappletv.uk","vidsrc.su","vidsrc.io","vidsrc.pm","multiembed.mov","streamingnow.mov","vidjoy.pro",
+        "autoembed.co","autoembed.me","mappletv.uk","cinemaos.tech","vidcore.io","vidcore.net","vidsrc.su","vidsrc.io","vidsrc.pm","multiembed.mov","streamingnow.mov","vidjoy.pro",
         // Download source (behind the Download button, not a stream server)
         "vidvault.ru","vidvault.to",
         "youtube-nocookie.com","youtube.com","ytimg.com",   // trailer player

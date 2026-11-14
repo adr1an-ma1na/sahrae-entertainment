@@ -1,8 +1,33 @@
 {
-  "version": 14,
-  "updated": "2026-11-13",
-  "about": "Movie and series servers, ordered by what played when tested from Kenya on 2026-11-13: VidZee (1080p, 5.1), VidRock (1080p), VidSrc.su (1080p), VidSrc.to (1080p), 2Embed (1080p), VixSrc, VidLink Pro, AutoEmbed, VidFast (errors on the web; plays in the apps; kept at the owner's request), VidNest (adverts over the picture), Mapple (added at the owner's request; not yet proven to play in a frame). VidLove, VidSrc.pm, VidSrc.io and VidSrc.sh were not working and were taken out at the owner's request. A server the daily check marks down moves to the back, still offered.",
+  "version": 15,
+  "updated": "2026-11-14",
+  "about": "Movie and series servers. CinemaOS leads (2026-11-14, owner's request; started on its own with sound and reports its playback). Then, ordered by what played when tested from Kenya on 2026-11-13: VidZee (1080p, 5.1), VidRock (1080p), VidSrc.su (1080p), VidSrc.to (1080p), 2Embed (1080p), VixSrc, VidLink Pro, AutoEmbed, VidFast and VidCore (did not start from Kenya on the web; VidFast plays in the apps; kept at the owner's request), VidNest (adverts over the picture), Mapple (added at the owner's request; not yet proven to play in a frame). VidLove, VidSrc.pm, VidSrc.io and VidSrc.sh were not working and were taken out at the owner's request. A server the daily check marks down moves to the back, still offered.",
   "servers": [
+    {
+      "id": "cinemaos",
+      "name": "CinemaOS · plays at once",
+      "movie": "https://cinemaos.tech/player/{id}",
+      "tv": "https://cinemaos.tech/player/{id}/{s}/{e}",
+      "hosts": [
+        "cinemaos.tech"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": 0,
+        "codec": "h264",
+        "adaptive": true
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "coverage": 1,
+      "events": true,
+      "status": "active",
+      "failStreak": 0,
+      "checked": "2026-11-14",
+      "note": "Added first at the owner's request (2026-11-14). Tested from Kenya in a plain frame: Oppenheimer and Breaking Bad S1E1 both started by themselves within 10 s, with sound, no advert over the picture, and the player reported its playback (PLAYER_EVENT timeupdate with currentTime and duration), so Sahrae knows at once that it plays. Refuses a sandboxed frame (\"Iframe Sandbox Detected\"). Picture size not measured (the frame is another site's). Its own site (cinemaos.tech/) sits behind a Cloudflare check; the /player/ address does not."
+    },
     {
       "id": "vidzee",
       "name": "VidZee · 1080p · 5.1",
@@ -232,6 +257,32 @@
         "adaptive": true
       },
       "note": "Android emulators 2026-10-26: handed over its stream in 2-4 s; renditions 2160p at 16 Mb/s, 1080p at 6 Mb/s, 720p at 3, 480p at 1.3; played 3840x2160 on Dune: Part Two and Breaking Bad S1E1. No stream for Matlock S1E1. From a Kenyan browser it stayed on Fetching (2026-10-22 and 10-26). Refuses the web sandbox."
+    },
+    {
+      "id": "vidcore",
+      "name": "VidCore",
+      "movie": "https://vidcore.io/movie/{id}",
+      "tv": "https://vidcore.io/tv/{id}/{s}/{e}",
+      "hosts": [
+        "vidcore.io",
+        "vidcore.net"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": 0,
+        "codec": "h264",
+        "adaptive": true
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "coverage": 1,
+      "events": false,
+      "status": "active",
+      "failStreak": 0,
+      "checked": "2026-11-14",
+      "note": "Added at the owner's request (2026-11-14). The same kind of player as VidFast. From Kenya it stayed on \"Fetching your content...\" for a film and an episode, framed or opened on its own, in the app's test browser and in Chrome, then showed \"(500) Oops! Something went wrong\": its source did not answer from this network, as with VidFast on the web. VidFast plays in the Android apps, so VidCore may too; Sahrae moves past it if it does not."
     },
     {
       "coverage": 0.9,

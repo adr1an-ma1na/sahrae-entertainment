@@ -91,6 +91,8 @@ const SANDBOX_REFUSERS = [
   'autoembed.co', 'autoembed.me',
   // 2026-11-13: Mapple's embed: "Please remove sandbox ... this player".
   'mappletv.uk',
+  // 2026-11-14: CinemaOS "Iframe Sandbox Detected"; VidCore is VidFast's kind of player.
+  'cinemaos.tech', 'vidcore.io', 'vidcore.net',
 ];
 
 export function refusesSandbox(url: string): boolean {
@@ -106,8 +108,11 @@ export function refusesSandbox(url: string): boolean {
  * Players that refuse to play without knowing which site embeds them. The
  * others get no referrer at all; these get only the site's origin, never the
  * page address. VixSrc shows "use referrerpolicy=origin" otherwise (2026-10-25).
+ * CinemaOS plays without it but then never reports its playback (measured
+ * 2026-11-14: 66 timeupdate messages in 20 s with the origin, none without),
+ * so Sahrae could not tell it was playing.
  */
-const NEEDS_ORIGIN = ['vixsrc.to'];
+const NEEDS_ORIGIN = ['vixsrc.to', 'cinemaos.tech'];
 
 export function playerReferrer(url: string): 'origin' | 'no-referrer' {
   try {

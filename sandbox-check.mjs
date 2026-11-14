@@ -40,6 +40,7 @@ eq('VixSrc', playerSandbox(true, 'https://vixsrc.to/tv/226174/1/1?lang=en'), und
 
 console.log('\nreferrer: only to players that refuse to play without it');
 eq('VixSrc gets the site origin', playerReferrer('https://vixsrc.to/movie/1?lang=en'), 'origin');
+eq('CinemaOS gets the site origin (it reports its playback only then)', playerReferrer('https://cinemaos.tech/player/872585'), 'origin');
 eq('the others get none', playerReferrer('https://player.vidzee.wtf/embed/movie/1'), 'no-referrer');
 eq('junk gets none', playerReferrer('nope'), 'no-referrer');
 
