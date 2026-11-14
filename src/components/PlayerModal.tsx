@@ -1842,6 +1842,30 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                   </div>
                 )}
               </div>
+              {/* Cast first, above the episodes and suggestions (owner's request, 2026-11-14). */}
+              {details.credits?.cast && details.credits.cast.length > 0 && (
+                <div className="mt-12">
+                  <h3 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight mb-6">Cast</h3>
+                  <div className="flex overflow-x-auto gap-4 pb-4 custom-scrollbar snap-x">
+                    {details.credits.cast.slice(0, 15).map(actor => (
+                      <div key={actor.id} className="flex-shrink-0 w-28 md:w-32 snap-start group cursor-pointer">
+                        <div className="aspect-[2/3] w-full rounded-lg overflow-hidden bg-zinc-800 mb-2 relative">
+                          {actor.profile_path ? (
+                            <img src={getImageUrl(actor.profile_path, 'w185')} alt={actor.name} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" loading="lazy" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-zinc-900 border border-zinc-700/50">
+                              <span className="text-zinc-500 text-xs">No Image</span>
+                            </div>
+                          )}
+                          <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors" />
+                        </div>
+                        <p className="text-white text-sm font-bold truncate">{actor.name}</p>
+                        <p className="text-zinc-500 text-xs truncate">{actor.character}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {currentMediaType === 'tv' && (
                 <div className="mt-12">
                   <div className="flex justify-between items-center mb-6">
@@ -1943,29 +1967,6 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                 </div>
               )}
 
-              {details.credits?.cast && details.credits.cast.length > 0 && (
-                <div className="mt-12">
-                  <h3 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight mb-6">Cast</h3>
-                  <div className="flex overflow-x-auto gap-4 pb-4 custom-scrollbar snap-x">
-                    {details.credits.cast.slice(0, 15).map(actor => (
-                      <div key={actor.id} className="flex-shrink-0 w-28 md:w-32 snap-start group cursor-pointer">
-                        <div className="aspect-[2/3] w-full rounded-lg overflow-hidden bg-zinc-800 mb-2 relative">
-                          {actor.profile_path ? (
-                            <img src={getImageUrl(actor.profile_path, 'w185')} alt={actor.name} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" loading="lazy" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center bg-zinc-900 border border-zinc-700/50">
-                              <span className="text-zinc-500 text-xs">No Image</span>
-                            </div>
-                          )}
-                          <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors" />
-                        </div>
-                        <p className="text-white text-sm font-bold truncate">{actor.name}</p>
-                        <p className="text-zinc-500 text-xs truncate">{actor.character}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
 
             </div>
           </div>
