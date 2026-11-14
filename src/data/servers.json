@@ -1,7 +1,7 @@
 {
   "version": 15,
   "updated": "2026-11-14",
-  "about": "Movie and series servers. CinemaOS leads (2026-11-14, owner's request; started on its own with sound and reports its playback). Then, ordered by what played when tested from Kenya on 2026-11-13: VidZee (1080p, 5.1), VidRock (1080p), VidSrc.su (1080p), VidSrc.to (1080p), 2Embed (1080p), VixSrc, VidLink Pro, AutoEmbed, VidFast and VidCore (did not start from Kenya on the web; VidFast plays in the apps; kept at the owner's request), VidNest (adverts over the picture), Mapple (added at the owner's request; not yet proven to play in a frame). VidLove, VidSrc.pm, VidSrc.io and VidSrc.sh were not working and were taken out at the owner's request. A server the daily check marks down moves to the back, still offered.",
+  "about": "Movie and series servers. CinemaOS leads (2026-11-14, owner's request; started on its own with sound and reports its playback). Then, ordered by what played when tested from Kenya on 2026-11-13: VidZee (1080p, 5.1), VidRock (1080p), VidSrc.su (1080p), VidSrc.to (1080p), 2Embed (1080p), VixSrc, VidLink Pro, AutoEmbed, VidFast and VidCore (play in an ordinary browser, per the owner; they refuse Claude's test browsers), VidNest (adverts over the picture), Mapple (added at the owner's request; not yet proven to play in a frame). VidLove, VidSrc.pm, VidSrc.io and VidSrc.sh were not working and were taken out at the owner's request. A server the daily check marks down moves to the back, still offered.",
   "servers": [
     {
       "id": "cinemaos",
@@ -256,7 +256,7 @@
         "codec": "h264",
         "adaptive": true
       },
-      "note": "Android emulators 2026-10-26: handed over its stream in 2-4 s; renditions 2160p at 16 Mb/s, 1080p at 6 Mb/s, 720p at 3, 480p at 1.3; played 3840x2160 on Dune: Part Two and Breaking Bad S1E1. No stream for Matlock S1E1. From a Kenyan browser it stayed on Fetching (2026-10-22 and 10-26). Refuses the web sandbox."
+      "note": "Android emulators 2026-10-26: handed over its stream in 2-4 s; renditions 2160p at 16 Mb/s, 1080p at 6 Mb/s, 720p at 3, 480p at 1.3; played 3840x2160 on Dune: Part Two and Breaking Bad S1E1. No stream for Matlock S1E1. From a Kenyan browser it stayed on Fetching (2026-10-22 and 10-26). Refuses the web sandbox. 2026-11-14: the \"(556) Oops\" seen on the website was in Claude's test browser only; VidCore, the same kind of player, failed there the same way but played in the owner's own browser, so VidFast likely plays for real viewers on the web too."
     },
     {
       "id": "vidcore",
@@ -282,7 +282,7 @@
       "status": "active",
       "failStreak": 0,
       "checked": "2026-11-14",
-      "note": "Added at the owner's request (2026-11-14). The same kind of player as VidFast. From Kenya it stayed on \"Fetching your content...\" for a film and an episode, framed or opened on its own, in the app's test browser and in Chrome, then showed \"(500) Oops! Something went wrong\": its source did not answer from this network, as with VidFast on the web. VidFast plays in the Android apps, so VidCore may too; Sahrae moves past it if it does not."
+      "note": "Added at the owner's request (2026-11-14). The same kind of player as VidFast. The owner opened it in an ordinary browser that day and it played perfectly, with no challenge. In Claude's test browsers (the desktop app's pane, and Chrome driven by an automation tool) it stayed on \"Fetching your content...\" and then showed \"(500) Oops\", as VidFast does there: those players appear to refuse automated or unusual browsers, so that result says nothing about viewers. Not yet seen playing inside Sahrae's player."
     },
     {
       "coverage": 0.9,
