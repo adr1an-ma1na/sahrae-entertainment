@@ -360,9 +360,9 @@ function focusElement(el: HTMLElement, vertical = false, end?: 'top' | 'bottom')
     el.focus();
   }
   highlight(el);
-  // Tactile tick as focus lands on a new tile — the remote/gamepad equivalent of
-  // the touch "selection" haptic. No-ops on devices without a rumble motor.
-  haptics.select();
+  // Tactile tick as focus lands on a new tile, for a gamepad. Not on a TV: it
+  // has no motor, and each tick was a call into the native layer on every press.
+  if (!onTelevision()) haptics.select();
   glideTo(el, vertical, end);
 }
 
@@ -497,6 +497,9 @@ const KEY_TO_DIR: Record<string, Dir> = {
   ArrowLeft: 'left',
   ArrowRight: 'right',
 };
+
+let tvCached: boolean | null = null;
+const onTelevision = () => (tvCached ??= looksLikeTv());
 
 /** Is this a television (the TV app, or a TV browser)? Same test the TV layout uses. */
 export function isTelevision(): boolean { return looksLikeTv(); }

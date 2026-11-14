@@ -142,5 +142,22 @@ same('zoom in stops at 150%', stepZoom(150, 1), 150);
 same('zoom out stops at 75%', stepZoom(75, -1), 75);
 same('an old size (70%) steps from the standard', stepZoom(70, 1), 110);
 
+
+// Smoothness on a TV (owner, 2026-11-14: "draggy"). The remote scrolls rows and
+// the details page a step each frame; a browser smooth scroll on top made the
+// posters trail the ring by 150 px. Blur behind badges re-blurred every frame.
+{
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync(new URL('./src/index.css', import.meta.url), 'utf8');
+  same('TV: no element eases its own scroll', css.includes('html.tv-mode * { scroll-behavior: auto !important; }'), true);
+  same('TV: no blur behind anything', /html\.tv-mode \[class\*="backdrop-blur"\] \{[^}]*backdrop-filter: none !important/.test(css), true);
+  const nav = readFileSync(new URL('./src/tv/spatialNavigation.ts', import.meta.url), 'utf8');
+  same('TV: no vibration call on each press', nav.includes('if (!onTelevision()) haptics.select();'), true);
+  const pm = readFileSync(new URL('./src/components/PlayerModal.tsx', import.meta.url), 'utf8');
+  same('details: the cast can be walked through by remote', /key=\{actor\.id\} tabIndex=\{0\} data-tv-focusable/.test(pm), true);
+  same('details: trailers can be opened by remote', /key=\{v\.id\} role="button" tabIndex=\{0\} data-tv-focusable/.test(pm), true);
+  same('details: no eased scroll back to the picture on a TV', pm.includes("behavior: tv ? 'auto' : 'smooth'") && !pm.includes("scrollTo({top: 0, behavior: 'smooth'})"), true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

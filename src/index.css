@@ -905,6 +905,17 @@ html.tv-mode .tab-in { animation: none; }
 }
 /* A rail scrolled a little each frame must not be pulled back to a snap point. */
 .tv-mode .snap-x { scroll-snap-type: none !important; }
+/* Nor eased by the browser on top of that. The remote moves rows and the
+   details page itself, a step each frame, with the ring in the same frames.
+   Rails and the details page carried `scroll-smooth`, so every step started
+   a smooth scroll of its own and the posters trailed the ring: 150 px behind
+   it halfway through a move (measured 2026-11-14), the drag the owner felt on
+   the TV. `scroll-behavior` is not inherited, hence every element. */
+html.tv-mode * { scroll-behavior: auto !important; }
+/* No blur behind anything on a TV. Each poster's rating badge blurred what lay
+   behind it, so a moving row re-blurred dozens of patches every frame, on the
+   GPU that also has to move the row. The tinted fill reads the same. */
+html.tv-mode [class*="backdrop-blur"] { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
 /* Keyboard focus everywhere else (laptop / TV) gets a visible ring too. */
 button:focus-visible,
 a:focus-visible,

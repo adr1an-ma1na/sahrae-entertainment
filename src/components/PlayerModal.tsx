@@ -56,6 +56,12 @@ interface PlayerModalProps {
   playTrailer?: boolean;
 }
 
+/** Back up to the picture: at once with a remote (a TV redraws a long eased scroll slowly), eased by touch and mouse. */
+function toPictureTop() {
+  const tv = document.documentElement.classList.contains('tv-mode');
+  document.getElementById('player-modal-container')?.scrollTo({ top: 0, behavior: tv ? 'auto' : 'smooth' });
+}
+
 /** True when `src` is the provider's frame or a frame inside it. */
 function fromFrame(root: Window | null | undefined, src: MessageEventSource | null): boolean {
   if (!root || !src) return false;
@@ -1848,7 +1854,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                   <h3 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight mb-6">Cast</h3>
                   <div className="flex overflow-x-auto gap-4 pb-4 custom-scrollbar snap-x">
                     {details.credits.cast.slice(0, 15).map(actor => (
-                      <div key={actor.id} className="flex-shrink-0 w-28 md:w-32 snap-start group cursor-pointer">
+                      <div key={actor.id} tabIndex={0} data-tv-focusable aria-label={actor.character ? `${actor.name} as ${actor.character}` : actor.name} className="flex-shrink-0 w-28 md:w-32 snap-start group cursor-pointer rounded-lg">
                         <div className="aspect-[2/3] w-full rounded-lg overflow-hidden bg-zinc-800 mb-2 relative">
                           {actor.profile_path ? (
                             <img src={getImageUrl(actor.profile_path, 'w185')} alt={actor.name} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" loading="lazy" />
@@ -1895,7 +1901,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                   ) : seasonDetails?.episodes && seasonDetails.episodes.length > 0 ? (
                     <div className="flex flex-col gap-0 border-t border-zinc-800">
                       {seasonDetails.episodes.map(episode => (
-                        <div key={episode.id} role="button" tabIndex={0} data-tv-focusable onClick={() => { setSelectedEpisode(episode.episode_number); setIsPlaying(true); document.getElementById('player-modal-container')?.scrollTo({top: 0, behavior: 'smooth'}); }} className={`flex flex-col md:flex-row items-center gap-4 py-4 md:py-6 border-b border-zinc-800 cursor-pointer hover:bg-zinc-800/50 transition-colors group ${selectedEpisode === episode.episode_number && isPlaying ? 'bg-zinc-800/30' : ''}`}>
+                        <div key={episode.id} role="button" tabIndex={0} data-tv-focusable onClick={() => { setSelectedEpisode(episode.episode_number); setIsPlaying(true); toPictureTop(); }} className={`flex flex-col md:flex-row items-center gap-4 py-4 md:py-6 border-b border-zinc-800 cursor-pointer hover:bg-zinc-800/50 transition-colors group ${selectedEpisode === episode.episode_number && isPlaying ? 'bg-zinc-800/30' : ''}`}>
                           <div className="text-4xl font-light text-zinc-500 w-12 text-center shrink-0 hidden md:block opacity-60">
                             {episode.episode_number}
                           </div>
@@ -1955,7 +1961,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                   <h3 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight mb-6">Trailers & Extras</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {videos.filter(v => v.type === 'Trailer' || v.type === 'Teaser' || v.type === 'Clip').slice(0, 6).map(v => (
-                      <div key={v.id} onClick={() => { setPlayingTrailer(v.key); document.getElementById('player-modal-container')?.scrollTo({top: 0, behavior: 'smooth'}); }} className="cursor-pointer group relative rounded overflow-hidden aspect-video bg-zinc-800">
+                      <div key={v.id} role="button" tabIndex={0} data-tv-focusable aria-label={`Play ${v.name}`} onClick={() => { setPlayingTrailer(v.key); toPictureTop(); }} className="cursor-pointer group relative rounded overflow-hidden aspect-video bg-zinc-800">
                          <img loading="lazy" decoding="async" src={`https://img.youtube.com/vi/${v.key}/maxresdefault.jpg`} onError={(e) => { e.currentTarget.src = `https://img.youtube.com/vi/${v.key}/hqdefault.jpg`; e.currentTarget.onerror = null; }} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105 opacity-80 group-hover:opacity-100" />
                          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 transition-all"><Play className="w-12 h-12 text-white fill-current shadow-lg drop-shadow"/></div>
                          <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent">
