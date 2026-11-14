@@ -108,7 +108,8 @@ const HOST = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z
  * putting the sharpest first in the apps, Ad Shield putting the servers that
  * tolerate it first on the web).
  */
-export const OWNER_LEADS = ['cinemaos', 'vidzee', 'vidrock', 'vidsrcsu', 'vidsrcto', '2embed', 'vixsrc'];
+// The owner's five newest picks first (2026-11-14), then the 1080p servers measured on 2026-11-13.
+export const OWNER_LEADS = ['cinemaos', 'vidfast', 'vidlink', 'vidcore', 'mapple', 'vidzee', 'vidrock', 'vidsrcsu', 'vidsrcto', '2embed', 'vixsrc'];
 /**
  * How many of a pickServers list's first entries are working leads. The file
  * lists the leads first and pickServers keeps the working ones in file order,

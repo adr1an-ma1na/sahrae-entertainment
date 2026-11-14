@@ -1,7 +1,7 @@
 {
-  "version": 15,
+  "version": 16,
   "updated": "2026-11-14",
-  "about": "Movie and series servers. CinemaOS leads (2026-11-14, owner's request; started on its own with sound and reports its playback). Then, ordered by what played when tested from Kenya on 2026-11-13: VidZee (1080p, 5.1), VidRock (1080p), VidSrc.su (1080p), VidSrc.to (1080p), 2Embed (1080p), VixSrc, VidLink Pro, AutoEmbed, VidFast and VidCore (play in an ordinary browser, per the owner; they refuse Claude's test browsers), VidNest (adverts over the picture), Mapple (added at the owner's request; not yet proven to play in a frame). VidLove, VidSrc.pm, VidSrc.io and VidSrc.sh were not working and were taken out at the owner's request. A server the daily check marks down moves to the back, still offered.",
+  "about": "Movie and series servers. First, in the owner's order (2026-11-14): CinemaOS (starts on its own with sound and reports its playback), VidFast, VidLink Pro, VidCore (VidFast and VidCore play in an ordinary browser, per the owner; they refuse Claude's test browsers), Mapple (not yet proven to play in a frame). Then, by what played when tested from Kenya on 2026-11-13: VidZee (1080p, 5.1), VidRock (1080p), VidSrc.su (1080p), VidSrc.to (1080p), 2Embed (1080p), VixSrc, AutoEmbed, VidNest (adverts over the picture). VidLove, VidSrc.pm, VidSrc.io and VidSrc.sh were not working and were taken out at the owner's request. A server the daily check marks down moves to the back, still offered.",
   "servers": [
     {
       "id": "cinemaos",
@@ -27,6 +27,108 @@
       "failStreak": 0,
       "checked": "2026-11-14",
       "note": "Added first at the owner's request (2026-11-14). Tested from Kenya in a plain frame: Oppenheimer and Breaking Bad S1E1 both started by themselves within 10 s, with sound, no advert over the picture, and the player reported its playback (PLAYER_EVENT timeupdate with currentTime and duration), so Sahrae knows at once that it plays. Refuses a sandboxed frame (\"Iframe Sandbox Detected\"). Picture size not measured (the frame is another site's). Its own site (cinemaos.tech/) sits behind a Cloudflare check; the /player/ address does not."
+    },
+    {
+      "coverage": 0.9,
+      "events": false,
+      "status": "active",
+      "failStreak": 0,
+      "checked": "2026-10-26",
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "id": "vidfast",
+      "name": "VidFast · 4K",
+      "movie": "https://vidfast.vc/movie/{id}?autoPlay=true",
+      "tv": "https://vidfast.vc/tv/{id}/{s}/{e}?autoPlay=true",
+      "hosts": [
+        "vidfast.vc",
+        "vidfast.pro"
+      ],
+      "visual": {
+        "maxHeight": 2160,
+        "mbps": 6,
+        "codec": "h264",
+        "adaptive": true
+      },
+      "note": "Android emulators 2026-10-26: handed over its stream in 2-4 s; renditions 2160p at 16 Mb/s, 1080p at 6 Mb/s, 720p at 3, 480p at 1.3; played 3840x2160 on Dune: Part Two and Breaking Bad S1E1. No stream for Matlock S1E1. From a Kenyan browser it stayed on Fetching (2026-10-22 and 10-26). Refuses the web sandbox. 2026-11-14: the \"(556) Oops\" seen on the website was in Claude's test browser only; VidCore, the same kind of player, failed there the same way but played in the owner's own browser, so VidFast likely plays for real viewers on the web too."
+    },
+    {
+      "id": "vidlink",
+      "name": "VidLink Pro · 1080p",
+      "movie": "https://vidlink.pro/movie/{id}?primaryColor=f59e0b",
+      "tv": "https://vidlink.pro/tv/{id}/{s}/{e}?primaryColor=f59e0b",
+      "hosts": [
+        "vidlink.pro"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": 1.6,
+        "codec": "h264",
+        "adaptive": true
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "coverage": 1,
+      "events": false,
+      "status": "active",
+      "failStreak": 0,
+      "checked": "2026-11-05",
+      "note": "Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished). Measured 2026-10-25 on Matlock: 1080p at 1.6 Mb/s, showing 720p after 40 s."
+    },
+    {
+      "id": "vidcore",
+      "name": "VidCore",
+      "movie": "https://vidcore.io/movie/{id}",
+      "tv": "https://vidcore.io/tv/{id}/{s}/{e}",
+      "hosts": [
+        "vidcore.io",
+        "vidcore.net"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": 0,
+        "codec": "h264",
+        "adaptive": true
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "coverage": 1,
+      "events": false,
+      "status": "active",
+      "failStreak": 0,
+      "checked": "2026-11-14",
+      "note": "Added at the owner's request (2026-11-14). The same kind of player as VidFast. The owner opened it in an ordinary browser that day and it played perfectly, with no challenge. In Claude's test browsers (the desktop app's pane, and Chrome driven by an automation tool) it stayed on \"Fetching your content...\" and then showed \"(500) Oops\", as VidFast does there: those players appear to refuse automated or unusual browsers, so that result says nothing about viewers. Not yet seen playing inside Sahrae's player."
+    },
+    {
+      "id": "mapple",
+      "name": "Mapple · 4K",
+      "movie": "https://mappletv.uk/embed/movie/{id}",
+      "tv": "https://mappletv.uk/embed/tv/{id}-{s}-{e}",
+      "hosts": [
+        "mappletv.uk"
+      ],
+      "visual": {
+        "maxHeight": 1080,
+        "mbps": 0,
+        "codec": "h264",
+        "adaptive": true
+      },
+      "audio": {
+        "channels": 2,
+        "languages": 1
+      },
+      "coverage": 1,
+      "events": false,
+      "status": "active",
+      "failStreak": 0,
+      "checked": "2026-11-13",
+      "note": "Added at the owner's request (2026-11-13). Mapple's own site (mapple.tv, now mapple.fun) played Oppenheimer at 3840x2160 with sound, but only lets its own sites frame that page; mappletv.uk/embed is its embed address and may be framed. Tested from Kenya: it opens on a \"confirm to continue\" box, opens an advert tab on taps, and refuses a sandboxed frame. The film and Breaking Bad S1E1 loaded their pages; playback in a frame was not confirmed (the test browser blocks the advert tabs it waits on). Ranked by its measured picture only once proven, so listed last. Episodes use {id}-{s}-{e}: the /{s}/{e} form redirects to mapple.fun, which cannot be framed."
     },
     {
       "id": "vidzee",
@@ -182,31 +284,6 @@
       "note": "Hands over its stream in 1-2 s on every title tested; renditions 1080p at 4.5 Mb/s, 720p, 480p; in the emulator test it played 720p after a key error at 1080p. Needs referrer origin; refuses the web sandbox."
     },
     {
-      "id": "vidlink",
-      "name": "VidLink Pro · 1080p",
-      "movie": "https://vidlink.pro/movie/{id}?primaryColor=f59e0b",
-      "tv": "https://vidlink.pro/tv/{id}/{s}/{e}?primaryColor=f59e0b",
-      "hosts": [
-        "vidlink.pro"
-      ],
-      "visual": {
-        "maxHeight": 1080,
-        "mbps": 1.6,
-        "codec": "h264",
-        "adaptive": true
-      },
-      "audio": {
-        "channels": 2,
-        "languages": 1
-      },
-      "coverage": 1,
-      "events": false,
-      "status": "active",
-      "failStreak": 0,
-      "checked": "2026-11-05",
-      "note": "Owner's list of 2026-10-26, in the owner's order. Picture and sound not measured (the device test was stopped before it finished). Measured 2026-10-25 on Matlock: 1080p at 1.6 Mb/s, showing 720p after 40 s."
-    },
-    {
       "id": "autoembed",
       "name": "AutoEmbed",
       "movie": "https://autoembed.me/movie/tmdb/{id}",
@@ -237,58 +314,6 @@
       "events": false,
       "status": "active",
       "failStreak": 0,
-      "checked": "2026-10-26",
-      "audio": {
-        "channels": 2,
-        "languages": 1
-      },
-      "id": "vidfast",
-      "name": "VidFast · 4K",
-      "movie": "https://vidfast.vc/movie/{id}?autoPlay=true",
-      "tv": "https://vidfast.vc/tv/{id}/{s}/{e}?autoPlay=true",
-      "hosts": [
-        "vidfast.vc",
-        "vidfast.pro"
-      ],
-      "visual": {
-        "maxHeight": 2160,
-        "mbps": 6,
-        "codec": "h264",
-        "adaptive": true
-      },
-      "note": "Android emulators 2026-10-26: handed over its stream in 2-4 s; renditions 2160p at 16 Mb/s, 1080p at 6 Mb/s, 720p at 3, 480p at 1.3; played 3840x2160 on Dune: Part Two and Breaking Bad S1E1. No stream for Matlock S1E1. From a Kenyan browser it stayed on Fetching (2026-10-22 and 10-26). Refuses the web sandbox. 2026-11-14: the \"(556) Oops\" seen on the website was in Claude's test browser only; VidCore, the same kind of player, failed there the same way but played in the owner's own browser, so VidFast likely plays for real viewers on the web too."
-    },
-    {
-      "id": "vidcore",
-      "name": "VidCore",
-      "movie": "https://vidcore.io/movie/{id}",
-      "tv": "https://vidcore.io/tv/{id}/{s}/{e}",
-      "hosts": [
-        "vidcore.io",
-        "vidcore.net"
-      ],
-      "visual": {
-        "maxHeight": 1080,
-        "mbps": 0,
-        "codec": "h264",
-        "adaptive": true
-      },
-      "audio": {
-        "channels": 2,
-        "languages": 1
-      },
-      "coverage": 1,
-      "events": false,
-      "status": "active",
-      "failStreak": 0,
-      "checked": "2026-11-14",
-      "note": "Added at the owner's request (2026-11-14). The same kind of player as VidFast. The owner opened it in an ordinary browser that day and it played perfectly, with no challenge. In Claude's test browsers (the desktop app's pane, and Chrome driven by an automation tool) it stayed on \"Fetching your content...\" and then showed \"(500) Oops\", as VidFast does there: those players appear to refuse automated or unusual browsers, so that result says nothing about viewers. Not yet seen playing inside Sahrae's player."
-    },
-    {
-      "coverage": 0.9,
-      "events": false,
-      "status": "active",
-      "failStreak": 0,
       "checked": "2026-11-13",
       "audio": {
         "channels": 2,
@@ -308,31 +333,6 @@
         "adaptive": true
       },
       "note": "Android emulators 2026-10-26: 1920x1080 on Breaking Bad S1E1 (2.7 Mb/s) and Matlock S1E1, 1920x800 on Dune: Part Two. Was app only because its own web page carries adult adverts; put on the website too at the owner's request (2026-11-13). That day, from Kenya in a plain frame, Oppenheimer and Breaking Bad S1E1 both played, under an advert button laid over the picture."
-    },
-    {
-      "id": "mapple",
-      "name": "Mapple · 4K",
-      "movie": "https://mappletv.uk/embed/movie/{id}",
-      "tv": "https://mappletv.uk/embed/tv/{id}-{s}-{e}",
-      "hosts": [
-        "mappletv.uk"
-      ],
-      "visual": {
-        "maxHeight": 1080,
-        "mbps": 0,
-        "codec": "h264",
-        "adaptive": true
-      },
-      "audio": {
-        "channels": 2,
-        "languages": 1
-      },
-      "coverage": 1,
-      "events": false,
-      "status": "active",
-      "failStreak": 0,
-      "checked": "2026-11-13",
-      "note": "Added at the owner's request (2026-11-13). Mapple's own site (mapple.tv, now mapple.fun) played Oppenheimer at 3840x2160 with sound, but only lets its own sites frame that page; mappletv.uk/embed is its embed address and may be framed. Tested from Kenya: it opens on a \"confirm to continue\" box, opens an advert tab on taps, and refuses a sandboxed frame. The film and Breaking Bad S1E1 loaded their pages; playback in a frame was not confirmed (the test browser blocks the advert tabs it waits on). Ranked by its measured picture only once proven, so listed last. Episodes use {id}-{s}-{e}: the /{s}/{e} form redirects to mapple.fun, which cannot be framed."
     }
   ],
   "retired": [
