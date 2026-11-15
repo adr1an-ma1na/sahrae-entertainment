@@ -360,10 +360,68 @@ function focusElement(el: HTMLElement, vertical = false, end?: 'top' | 'bottom')
     el.focus();
   }
   highlight(el);
+  // Not left to the focus event alone: a page that is not the active window gets none.
+  rememberPlace(el);
   // Tactile tick as focus lands on a new tile, for a gamepad. Not on a TV: it
   // has no motor, and each tick was a call into the native layer on every press.
   if (!onTelevision()) haptics.select();
   glideTo(el, vertical, end);
+}
+
+// ── Where the remote was ─────────────────────────────────────────────────────
+// Closing a film, a match or any sheet removes the control that had the focus,
+// and the browser then has nothing focused: the next press started again from
+// the top-left corner, the sidebar, instead of the poster the viewer had opened
+// (owner, TV and phone remote, 2026-11-15). Each layer remembers its last
+// control, and the page under a closed layer gets its own back.
+interface Place { el: HTMLElement; x: number; y: number }
+const lastPlace = new WeakMap<ParentNode, Place>();
+let lastInputWasKey = false;
+let restoreTries = 0;
+
+function scopeOf(el: Element): ParentNode {
+  return el.closest<HTMLElement>('[role="dialog"], [data-tv-layer]') ?? document;
+}
+
+function rememberPlace(el: HTMLElement) {
+  if (el === document.body || el.matches('iframe')) return;
+  const r = el.getBoundingClientRect();
+  if (r.width <= 1 || r.height <= 1) return;
+  lastPlace.set(scopeOf(el), { el, x: r.left + r.width / 2, y: r.top + r.height / 2 });
+}
+
+/** The control to return to in the layer now on top: the one left, or whatever stands where it stood. */
+function placeToReturnTo(): HTMLElement | null {
+  const place = lastPlace.get(topLayerRoot() ?? document);
+  if (!place) return null;
+  const focusables = getFocusables();
+  if (place.el.isConnected && focusables.includes(place.el)) return place.el;
+  let best: HTMLElement | null = null;
+  let bestD = Infinity;
+  for (const el of focusables) {
+    const r = el.getBoundingClientRect();
+    const d = Math.hypot(r.left + r.width / 2 - place.x, r.top + r.height / 2 - place.y);
+    if (d < bestD) { bestD = d; best = el; }
+  }
+  return best;
+}
+
+/**
+ * Nothing has the focus (the layer that had it closed): go back to where the
+ * remote was. Tried again over a few frames, because the page under a player
+ * is still hidden for a moment after the player goes and cannot take focus yet.
+ */
+function restorePlace() {
+  if (!tvMode || !lastInputWasKey || pointerOut()) return;
+  const a = document.activeElement;
+  if (a && a !== document.body) { restoreTries = 0; return; }
+  const el = placeToReturnTo();
+  if (el) focusElement(el);
+  const now = document.activeElement;
+  if ((!now || now === document.body) && restoreTries < 8) {
+    restoreTries += 1;
+    window.setTimeout(restorePlace, restoreTries < 4 ? 60 : 250);
+  } else restoreTries = 0;
 }
 
 /** Give a control the remote's focus from the page (the Sports player's title bar and picture). */
@@ -536,6 +594,10 @@ export function initSpatialNavigation() {
   // sessions don't show a stale selection.
   window.addEventListener('mousedown', clearHighlight, true);
   window.addEventListener('touchstart', clearHighlight, true);
+  window.addEventListener('mousedown', () => { lastInputWasKey = false; }, true);
+  window.addEventListener('touchstart', () => { lastInputWasKey = false; }, true);
+  window.addEventListener('keydown', () => { lastInputWasKey = true; }, true);
+  document.addEventListener('focusin', (e) => { if (e.target instanceof HTMLElement) rememberPlace(e.target); }, true);
 
   // When a dialog (modal / sign-in / player) appears, jump focus to its primary
   // action so "press OK to play / sign in" is a single click. Each element is
@@ -549,6 +611,11 @@ export function initSpatialNavigation() {
       autoFocused.add(target);
       // Defer so the element is laid out before we scroll to it.
       requestAnimationFrame(() => focusElement(target));
+      return;
+    }
+    if (!document.activeElement || document.activeElement === document.body) {
+      restoreTries = 0;
+      requestAnimationFrame(restorePlace);
     }
   });
   observer.observe(document.body, { childList: true, subtree: true });
