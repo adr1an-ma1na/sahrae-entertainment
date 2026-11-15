@@ -80,7 +80,7 @@ const privacy: LegalDoc = {
       'Watch together and the phone remote. While you use them, your display name, what is playing and any chat messages are passed between the devices in that session. They are not kept after the session ends.',
       'YouTube connection (optional). If you connect YouTube, Google gives Sahrae read-only access to your YouTube account so it can show your playlists, liked music and subscriptions. The access key stays on your device; Sahrae does not copy your YouTube data to its servers. You can disconnect at any time.',
       'Server reports (optional, your choice). If you allow it, when a film or episode starts or fails on a server, Sahrae records the title, the server and whether it played, without your name or account, so other viewers are sent to a server that works.',
-      'Kick-off reminders (Android). A reminder you set is scheduled on your phone; nothing is sent to us.',
+      'Notifications. To tell you about matches and new episodes, Sahrae keeps a record of the matches you open (the sport and the teams) and works out from it, and from the series you watch, what to tell you about. It is kept on your device and, when you are signed in, copied to your account with the rest of your library, so your phone knows what you watch on your TV. Notifications on a phone are scheduled on the phone itself; Sahrae has no server that sends them. You can stop any team or sport, and turn device notifications off, in Settings.',
       'Problem reports (Android). If the app closes unexpectedly it keeps a short note on your device. It is only sent anywhere if you choose to share it.',
     ] },
     { h: '3. Our legal bases', p: [

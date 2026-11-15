@@ -451,3 +451,18 @@ export const fetchPersonDetails = async (id: number): Promise<any> => {
   return await res.json();
 };
 
+
+/**
+ * A series' last and next episode, for the notifications (services/notify.ts).
+ * Its own light request: the details above are kept for three days, far too
+ * long to notice an episode that came out yesterday.
+ */
+export interface Airing { name: string; poster_path: string | null; last: Episode | null; next: Episode | null }
+export async function fetchAiring(id: number): Promise<Airing | null> {
+  try {
+    const res = await tmdbFetch(`${BASE_URL}/tv/${id}?api_key=${API_KEY}&language=en-US`);
+    if (!res.ok) return null;
+    const d = await res.json();
+    return { name: d.name || '', poster_path: d.poster_path ?? null, last: d.last_episode_to_air ?? null, next: d.next_episode_to_air ?? null };
+  } catch { return null; }
+}

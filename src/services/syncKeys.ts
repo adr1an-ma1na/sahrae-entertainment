@@ -23,6 +23,9 @@ export const SYNCED_KEYS = [
   'sahrae.theme.v1',
   // Subtitle and audio language, subtitle size (trackPrefs.ts).
   'sahrae.tracks.v1',
+  // The matches opened and the follows switched off (notify.ts): watched on the TV, announced on the phone.
+  'sahrae.sports.watched.v1',
+  'sahrae.sports.muted.v1',
 ] as const;
 
 /**

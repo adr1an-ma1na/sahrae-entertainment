@@ -51,6 +51,8 @@ import ContinueRow from './components/ContinueRow';
 import { RefreshCw, Heart, Search, Film, Users } from 'lucide-react';
 import { fetchTrending, fetchDiscover, searchMedia, fetchGenres, fetchRecommendations, MediaItem, Genre } from './services/tmdb';
 import { useMyList } from './hooks/useMyList';
+import { runNotifications, askForMatch, FOLLOWS_CHANGED, type RunInput } from './services/notify';
+import { OPEN_EVENT } from './services/deviceNotify';
 import { useWatchProgress } from './hooks/useWatchProgress';
 import { useTheme } from './hooks/useTheme';
 import { useAuth } from './hooks/useAuth';
@@ -745,6 +747,29 @@ export default function App() {
         return null;
     }
   };
+
+  // The notifications (services/notify.ts): checked a little after opening,
+  // every quarter of an hour, and when the app comes back to the front.
+  const notifyInput = useRef({ myList, progress });
+  notifyInput.current = { myList, progress };
+  useEffect(() => {
+    const run = () => { if (!document.hidden) void runNotifications(notifyInput.current as unknown as RunInput); };
+    const first = window.setTimeout(run, 12_000);
+    const every = window.setInterval(run, 15 * 60_000);
+    document.addEventListener('visibilitychange', run);
+    window.addEventListener(FOLLOWS_CHANGED, run);
+    return () => { window.clearTimeout(first); window.clearInterval(every); document.removeEventListener('visibilitychange', run); window.removeEventListener(FOLLOWS_CHANGED, run); };
+  }, []);
+  // A notification was chosen, in the bell or on the device: go to what it is about.
+  useEffect(() => {
+    const open = (e: Event) => {
+      const n = ((e as CustomEvent).detail || {}) as { kind?: string; mediaId?: number; mediaType?: 'movie' | 'tv'; eventId?: string; title?: string };
+      if (n.kind === 'sport') { askForMatch(n.eventId, n.title || ''); setActiveTab('sports'); return; }
+      if (n.mediaId && n.mediaId > 0) handlePlay(n.mediaId, n.mediaType === 'tv' ? 'tv' : 'movie', true);
+    };
+    window.addEventListener(OPEN_EVENT, open);
+    return () => window.removeEventListener(OPEN_EVENT, open);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Shared navigation handler for the sidebar, bottom tabs, and top bar.
   const navigate = (tab: string) => {

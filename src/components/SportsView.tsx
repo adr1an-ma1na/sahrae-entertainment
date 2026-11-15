@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { noteSportsWatch, takePendingMatch, MATCH_PENDING } from '../services/notify';
 import { Trophy, Play, X, Maximize, Loader2, Radio, Tv, Clapperboard, Search, ShieldCheck, AlertCircle, ExternalLink, AlertTriangle, MousePointer2, Shield } from 'lucide-react';
 import type HlsT from 'hls.js';
 import { useHls } from '../services/hlsLoader';
@@ -875,6 +876,8 @@ export default function SportsView() {
 
   const openEvent = (m: FeedEvent, initialServerIdx?: number) => {
     const tokens = eventTokens(m);
+    // How Sahrae learns the teams and sports to tell this viewer about (services/notify.ts).
+    noteSportsWatch(m);
     
     // ONLY the embeds the feed actually published.
     //
@@ -988,6 +991,16 @@ export default function SportsView() {
 
   // Tap a server → switch to it, and (re)validate on demand if its health is
   // stale or it previously failed. The list itself never reorders under the user.
+  // A notification about a match was tapped: open that match once the schedule is in.
+  const openEventRef = useRef(openEvent);
+  openEventRef.current = openEvent;
+  useEffect(() => {
+    const tryOpen = () => { const m = takePendingMatch(feed?.events || []); if (m) openEventRef.current(m); };
+    tryOpen();
+    window.addEventListener(MATCH_PENDING, tryOpen);
+    return () => window.removeEventListener(MATCH_PENDING, tryOpen);
+  }, [feed]);
+
   const selectSource = (i: number) => {
     haptics.tap();
     setPlaying((p) => (p ? { ...p, idx: i } : p));

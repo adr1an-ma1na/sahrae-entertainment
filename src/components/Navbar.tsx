@@ -6,6 +6,7 @@ import { currentLang, setLang } from '../i18n';
 import { isTelevision } from '../tv/spatialNavigation';
 import { useTheme } from '../hooks/useTheme';
 import { useNotifications } from '../hooks/useNotifications';
+import { OPEN_EVENT } from '../services/deviceNotify';
 import { getImageUrl } from '../services/tmdb';
 import { useAuth } from '../hooks/useAuth';
 import AuthModal from './AuthModal';
@@ -26,7 +27,7 @@ export default function Navbar({ activeTab, setActiveTab, onPlay }: NavbarProps)
   const { theme, pick } = useTheme();
   const [isThemeOpen, setIsThemeOpen] = useState(false);
   const themeRef = useRef<HTMLDivElement>(null);
-  const { notifications, unreadCount, markAsRead, markAllAsRead, clearNotifications, checkUpdates } = useNotifications();
+  const { notifications, unreadCount, markAsRead, markAllAsRead, clearNotifications } = useNotifications();
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -39,10 +40,6 @@ export default function Navbar({ activeTab, setActiveTab, onPlay }: NavbarProps)
     };
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  useEffect(() => {
-    checkUpdates();
   }, []);
 
   useEffect(() => {
@@ -144,7 +141,7 @@ export default function Navbar({ activeTab, setActiveTab, onPlay }: NavbarProps)
                 <div className="max-h-[60vh] overflow-y-auto scrollbar-hide">
                   {notifications.length === 0 ? (
                     <div className="p-8 text-center text-zinc-500 text-sm">
-                      No new notifications
+                      Nothing yet. Matches of the teams and sports you watch, and new episodes of your series, will show here.
                     </div>
                   ) : (
                     notifications.map(notif => (
@@ -153,14 +150,14 @@ export default function Navbar({ activeTab, setActiveTab, onPlay }: NavbarProps)
                         className={`p-4 border-b border-white/5 flex gap-4 transition-colors hover:bg-white/5 cursor-pointer ${notif.read ? 'opacity-70' : 'bg-amber-500/5'}`}
                         onClick={() => {
                           markAsRead(notif.id);
-                          if (notif.mediaId > 0) {
-                            onPlay(notif.mediaId, notif.mediaType, true);
-                          }
+                          window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: notif }));
                           setIsNotificationsOpen(false);
                         }}
                       >
                         {notif.posterPath ? (
                           <img loading="lazy" decoding="async" src={getImageUrl(notif.posterPath, 'w500')} alt="" className="w-12 h-16 object-cover rounded bg-zinc-800 shrink-0" />
+                        ) : notif.image ? (
+                          <img loading="lazy" decoding="async" src={notif.image} alt="" className="w-12 h-16 object-contain rounded bg-zinc-800 shrink-0 p-1" onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} />
                         ) : (
                           <div className="w-12 h-16 bg-zinc-800 rounded shrink-0 flex items-center justify-center">
                             <Bell className="w-5 h-5 text-zinc-500" />

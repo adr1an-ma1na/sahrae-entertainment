@@ -1,5 +1,7 @@
-import { Bell, MonitorSmartphone, Settings, User, Users } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { Bell, BellRing, MonitorSmartphone, Settings, User, Users, X } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { OPEN_EVENT, deviceCanNotify, deviceNotifyOn, turnDeviceNotifyOff, turnDeviceNotifyOn } from '../services/deviceNotify';
+import { FOLLOWS_CHANGED, follows, muteFollow } from '../services/notify';
 import { currentLang, setLang } from '../i18n';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
@@ -34,6 +36,21 @@ export default function SettingsView({ onPlay }: { onPlay: (id: number, type: 'm
   const avatar = activeProfile?.avatar || user?.photoURL;
   const tv = isTelevision();
   const button = 'lux-chip inline-flex items-center gap-2';
+  // Notifications on the device itself, and what Sahrae has learned to announce.
+  const [deviceOn, setDeviceOn] = useState(deviceNotifyOn);
+  const [deviceRefused, setDeviceRefused] = useState(false);
+  const [followed, setFollowed] = useState(() => follows());
+  useEffect(() => {
+    const on = () => setFollowed(follows());
+    window.addEventListener(FOLLOWS_CHANGED, on);
+    return () => window.removeEventListener(FOLLOWS_CHANGED, on);
+  }, []);
+  const toggleDevice = async () => {
+    if (deviceOn) { await turnDeviceNotifyOff(); setDeviceOn(false); return; }
+    const ok = await turnDeviceNotifyOn();
+    setDeviceOn(ok);
+    setDeviceRefused(!ok);
+  };
 
   return (
     <div className="pt-[calc(env(safe-area-inset-top)+6rem)] md:pt-12 px-4 md:px-12 pb-16 max-w-4xl mx-auto min-h-screen relative">
@@ -75,8 +92,29 @@ export default function SettingsView({ onPlay }: { onPlay: (id: number, type: 'm
         </Section>
 
         <Section title={unreadCount ? `Notifications (${unreadCount} new)` : 'Notifications'}>
+          <p className="text-sm text-zinc-400 mb-3">Sahrae tells you about matches of the teams and sports you watch, new episodes of your series, and films on your list.</p>
+          {deviceCanNotify() && (
+            <div className="mb-4">
+              <button onClick={toggleDevice} aria-pressed={deviceOn} data-tv-focusable className={button}>
+                <BellRing className="w-4 h-4" /> {deviceOn ? 'On this device: on' : 'Notify me on this device'}
+              </button>
+              {deviceRefused && <p className="text-xs text-amber-300 mt-2">Notifications are blocked for Sahrae in this device's settings. Allow them there, then try again.</p>}
+            </div>
+          )}
+          {followed.length > 0 && (
+            <div className="mb-4">
+              <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">You follow</p>
+              <div className="flex gap-2 flex-wrap">
+                {followed.map((f) => (
+                  <button key={f.key} onClick={() => muteFollow(f.key)} data-tv-focusable title="Stop notifications for this" aria-label={`Stop notifications for ${f.name}`} className={button}>
+                    {f.name} <X className="w-3.5 h-3.5 opacity-60" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {notifications.length === 0 ? (
-            <p className="text-sm text-zinc-400 flex items-center gap-2"><Bell className="w-4 h-4" /> Nothing new.</p>
+            <p className="text-sm text-zinc-400 flex items-center gap-2"><Bell className="w-4 h-4" /> Nothing new yet.</p>
           ) : (
             <>
               <div className="flex gap-2 mb-3">
@@ -86,10 +124,11 @@ export default function SettingsView({ onPlay }: { onPlay: (id: number, type: 'm
               <div className="divide-y divide-white/5">
                 {notifications.map((n) => (
                   <div key={n.id} role="button" tabIndex={0} data-tv-focusable
-                    onClick={() => { markAsRead(n.id); if (n.mediaId > 0) onPlay(n.mediaId, n.mediaType, true); }}
+                    onClick={() => { markAsRead(n.id); window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: n })); }}
                     className={`flex gap-4 p-3 rounded-lg cursor-pointer hover:bg-white/5 focus:outline-none ${n.read ? 'opacity-70' : ''}`}>
                     {n.posterPath
                       ? <img loading="lazy" decoding="async" src={getImageUrl(n.posterPath, 'w500')} alt="" className="w-12 h-16 object-cover rounded bg-zinc-800 shrink-0" />
+                      : n.image ? <img loading="lazy" decoding="async" src={n.image} alt="" className="w-12 h-16 object-contain rounded bg-zinc-800 shrink-0 p-1" onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} />
                       : <span className="w-12 h-16 bg-zinc-800 rounded shrink-0 flex items-center justify-center"><Bell className="w-5 h-5 text-zinc-500" /></span>}
                     <div className="min-w-0 flex-1">
                       <p className={`text-sm font-bold truncate ${n.read ? 'text-zinc-300' : 'text-white'}`}>{n.title}</p>
