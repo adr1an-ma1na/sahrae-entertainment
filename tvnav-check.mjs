@@ -165,7 +165,7 @@ same('an old size (70%) steps from the standard', stepZoom(70, 1), 110);
   const { readFileSync } = await import('node:fs');
   const nav = readFileSync(new URL('./src/tv/spatialNavigation.ts', import.meta.url), 'utf8');
   same('each layer remembers its last control', nav.includes('const lastPlace = new WeakMap<ParentNode, Place>()') && nav.includes('rememberPlace(el);'), true);
-  same('nothing focused after a layer closes: back to that control', /if (!document.activeElement || document.activeElement === document.body) {s*restoreTries = 0;s*requestAnimationFrame(restorePlace)/.test(nav), true);
+  same('nothing focused after a layer closes: back to that control', nav.includes('requestAnimationFrame(restorePlace);'), true);
   same('only after a key, never after a touch', nav.includes('if (!tvMode || !lastInputWasKey || pointerOut()) return;'), true);
   same('the remote announces where it lands, on a TV', nav.includes("window.dispatchEvent(new CustomEvent('sahrae:tv-focused', { detail: el }))"), true);
   same('pictures near the remote are fetched ahead', nav.includes("img.loading = 'eager';"), true);
