@@ -1,4 +1,5 @@
 import { t } from '../i18n';
+import { registerPreview } from '../tv/focusPreview';
 import { Play, Star } from 'lucide-react';
 import { MediaItem, getImageUrl } from '../services/tmdb';
 import { RailHeader } from './ui/Lux';
@@ -38,6 +39,8 @@ export default function Top10Row({ items, onPlay, title = "Top 10 Trending Today
               aria-label={`${index + 1}. ${item.title || item.name}`}
               className="relative flex-none w-[130px] md:w-[160px] lg:w-[200px] aspect-[2/3] rounded-xl group cursor-pointer snap-start flex items-center focus:outline-none"
               onClick={() => onPlay(item.id, type, true)}
+              ref={(el) => { if (el) registerPreview(el, item, type); }}
+              data-tv-preview
             >
               {/* The rank, engraved: an accent outline over a dark fill, so it
                   reads as metal in every theme. */}

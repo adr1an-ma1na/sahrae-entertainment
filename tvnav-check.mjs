@@ -159,5 +159,21 @@ same('an old size (70%) steps from the standard', stepZoom(70, 1), 110);
   same('details: no eased scroll back to the picture on a TV', pm.includes("behavior: tv ? 'auto' : 'smooth'") && !pm.includes("scrollTo({top: 0, behavior: 'smooth'})"), true);
 }
 
+
+// Back returns to where the remote was; the TV shows what the remote is on.
+{
+  const { readFileSync } = await import('node:fs');
+  const nav = readFileSync(new URL('./src/tv/spatialNavigation.ts', import.meta.url), 'utf8');
+  same('each layer remembers its last control', nav.includes('const lastPlace = new WeakMap<ParentNode, Place>()') && nav.includes('rememberPlace(el);'), true);
+  same('nothing focused after a layer closes: back to that control', /if (!document.activeElement || document.activeElement === document.body) {s*restoreTries = 0;s*requestAnimationFrame(restorePlace)/.test(nav), true);
+  same('only after a key, never after a touch', nav.includes('if (!tvMode || !lastInputWasKey || pointerOut()) return;'), true);
+  same('the remote announces where it lands, on a TV', nav.includes("window.dispatchEvent(new CustomEvent('sahrae:tv-focused', { detail: el }))"), true);
+  same('pictures near the remote are fetched ahead', nav.includes("img.loading = 'eager';"), true);
+  const card = readFileSync(new URL('./src/components/PosterCard.tsx', import.meta.url), 'utf8');
+  same('a poster has a preview and a name while its picture loads', card.includes('data-tv-preview') && card.includes('poster-card-ph'), true);
+  const app = readFileSync(new URL('./src/App.tsx', import.meta.url), 'utf8');
+  same('the large preview is for televisions only', app.includes('{isTelevision() && <TvFocusPreview />}'), true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

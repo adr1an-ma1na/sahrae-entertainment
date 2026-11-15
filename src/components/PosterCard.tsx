@@ -1,5 +1,6 @@
 import { Play, Star, Trash2 } from 'lucide-react';
 import { MediaItem, getImageUrl } from '../services/tmdb';
+import { usePreviewRef } from '../tv/focusPreview';
 
 /**
  * Single shared movie/series poster card — used by every shelf and grid (Home,
@@ -14,10 +15,13 @@ export default function PosterCard({ item, type, onPlay, onRemove }: {
   onRemove?: () => void;
 }) {
   const year = (item.release_date || item.first_air_date || '').slice(0, 4);
+  const previewRef = usePreviewRef(item, type);
   return (
     <div
+      ref={previewRef}
       tabIndex={0}
       data-tv-focusable
+      data-tv-preview
       data-media-type={type}
       role="button"
       aria-label={item.title || item.name}
@@ -28,12 +32,14 @@ export default function PosterCard({ item, type, onPlay, onRemove }: {
           physical, and the shadow separates it from the poster behind it in a
           dense rail. The easing matches the app's --ease-premium curve. */}
       <div className="relative w-full aspect-[2/3] rounded-lg overflow-hidden bg-zinc-900 border border-white/10 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.06] group-hover:-translate-y-1 group-hover:border-amber-400/60 group-hover:shadow-[0_18px_38px_rgba(0,0,0,0.6)] group-focus-visible:scale-[1.06] group-focus-visible:-translate-y-1 group-focus-visible:ring-2 group-focus-visible:ring-amber-400">
+        {/* Never a blank card: the title holds the place until the picture is in. */}
+        <span aria-hidden="true" className="poster-card-ph">{item.title || item.name}</span>
         <img
           src={getImageUrl(item.poster_path)}
           alt={item.title || item.name}
           // Fade in once decoded. Posters used to pop in one by one as they
           // arrived, which makes a scrolling rail feel jumpy.
-          className="w-full h-full object-cover opacity-0 transition-opacity duration-500"
+          className="relative w-full h-full object-cover opacity-0 transition-opacity duration-500"
           loading="lazy"
           onLoad={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = '1'; }}
           onError={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = '1'; }}

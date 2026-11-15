@@ -280,6 +280,34 @@ function railParent(el: HTMLElement): HTMLElement | null {
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
+/** Where the top of a previewed poster rests, as a share of the screen's height (the panel takes the top half). */
+const PREVIEW_ROW_AT = 0.58;
+/** Is this a poster on the page itself while the TV's large preview is in use (tv/focusPreview.ts)? */
+function underPreview(el: HTMLElement, dialog: HTMLElement | null): boolean {
+  return !dialog && el.hasAttribute('data-tv-preview') && document.documentElement.classList.contains('tv-preview');
+}
+
+// Pictures near the remote are fetched before it reaches them. The browser
+// only starts on a picture once it is nearly on screen, so a row arrived at
+// by remote showed grey cards for a moment (owner, 2026-11-15: "so you can
+// see"). After each move, once the remote rests: everything within two
+// screens down, one up, and a screen to the side.
+let warmTimer = 0;
+function warmPictures() {
+  window.clearTimeout(warmTimer);
+  warmTimer = window.setTimeout(() => {
+    const vh = window.innerHeight, vw = window.innerWidth;
+    let n = 0;
+    for (const img of document.querySelectorAll<HTMLImageElement>('img[loading="lazy"]')) {
+      if (img.complete) continue;
+      const r = img.getBoundingClientRect();
+      if (r.width < 1 || r.bottom < -vh || r.top > vh * 3 || r.right < -vw * 0.5 || r.left > vw * 2) continue;
+      img.loading = 'eager';
+      if (++n >= 48) break;
+    }
+  }, 160);
+}
+
 /**
  * Bring `el` into place and move the ring onto it, together. Up and down settle
  * the new row near the middle of the screen, the way a TV app scrolls a page;
@@ -313,6 +341,9 @@ function glideTo(el: HTMLElement, vertical: boolean, end?: 'top' | 'bottom') {
   let dy = 0;
   if (end === 'top') dy = -scroller.scrollTop;
   else if (end === 'bottom') dy = scroller.scrollHeight;
+  // A poster with a preview (TvFocusPreview): its row sits under the large
+  // picture, not in the middle of the screen behind it.
+  else if (underPreview(el, sp) && (vertical || r.top < window.innerHeight * PREVIEW_ROW_AT - 4)) dy = r.top - window.innerHeight * PREVIEW_ROW_AT;
   else if (vertical) dy = (r.top + r.height / 2) - (view.top + view.bottom) / 2;
   else if (r.top < view.top + padTop) dy = r.top - (view.top + padTop);
   else if (r.bottom > view.bottom - padBottom) dy = r.bottom - (view.bottom - padBottom);
@@ -366,6 +397,11 @@ function focusElement(el: HTMLElement, vertical = false, end?: 'top' | 'bottom')
   // has no motor, and each tick was a call into the native layer on every press.
   if (!onTelevision()) haptics.select();
   glideTo(el, vertical, end);
+  if (onTelevision()) {
+    // For the large preview of what the remote is on (components/TvFocusPreview.tsx).
+    window.dispatchEvent(new CustomEvent('sahrae:tv-focused', { detail: el }));
+    warmPictures();
+  }
 }
 
 // ── Where the remote was ─────────────────────────────────────────────────────

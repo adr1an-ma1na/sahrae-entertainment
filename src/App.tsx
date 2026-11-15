@@ -51,6 +51,7 @@ import ContinueRow from './components/ContinueRow';
 import { RefreshCw, Heart, Search, Film, Users } from 'lucide-react';
 import { fetchTrending, fetchDiscover, searchMedia, fetchGenres, fetchRecommendations, MediaItem, Genre } from './services/tmdb';
 import { useMyList } from './hooks/useMyList';
+import TvFocusPreview from './components/TvFocusPreview';
 import { runNotifications, askForMatch, FOLLOWS_CHANGED, type RunInput } from './services/notify';
 import { OPEN_EVENT } from './services/deviceNotify';
 import { useWatchProgress } from './hooks/useWatchProgress';
@@ -863,6 +864,7 @@ export default function App() {
           onClose={handleClosePlayer}
         /></Suspense>}
         
+        {isTelevision() && <TvFocusPreview />}
         <GlobalAudioPlayer />
         <MusicPlayer />
         <PodcastProgressTracker />
