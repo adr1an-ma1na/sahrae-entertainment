@@ -70,8 +70,8 @@
      again wherever a theme class appears, including on a nested element. */
   /* The page colour as the theme sets it, for art that must fade into the page
      from inside a .lux-stage (which redefines --zinc-950 for its own ground). */
-  :root, .light, .dark, .midnight, .royal, .emerald, .rose { --page-ground: var(--zinc-950); }
-  :root, .light, .dark, .midnight, .royal, .emerald, .rose, .lux-stage {
+  :root, .light, .dark, .midnight, .royal, .emerald, .rose, .powder, .roastery, .orchid, .citrus, .electric, .visionary, .racing, .acid, .sweet { --page-ground: var(--zinc-950); }
+  :root, .light, .dark, .midnight, .royal, .emerald, .rose, .powder, .roastery, .orchid, .citrus, .electric, .visionary, .racing, .acid, .sweet, .lux-stage {
     --color-zinc-950: var(--zinc-950);
     --color-zinc-900: var(--zinc-900);
     --color-zinc-800: var(--zinc-800);
@@ -436,6 +436,443 @@
     --glare-1: rgba(248, 205, 188, 0.55);
     --glare-2: rgba(220, 80, 140, 0.12);
   }
+
+  /* ── Nine themes from the owner's reels (2026-11-17) ─────────────────────
+     Two colours set the mood (the page and the room light); the third is the
+     accent, the "gold" of each theme. Generated, then every pair the app puts
+     on screen checked to WCAG AA (theme-check.mjs). */
+  .powder {
+    /* POWDER: Glacier Blue · Navy · Lemon. Dark ground. */
+    --zinc-950: #071530;
+    --zinc-900: #101E38;
+    --zinc-800: #1A2841;
+    --zinc-700: #323F57;
+    --zinc-600: #546075;
+    --zinc-500: #8F9AAA;
+    --zinc-400: #B4BECB;
+    --zinc-300: #CAD4DF;
+    --zinc-200: #D8E1EC;
+    --zinc-100: #E3ECF6;
+    --zinc-50: #FFFFFF;
+    --white: #ffffff;
+    --black: #000000;
+    --acc-50: #FFFDEF;
+    --acc-100: #FFF9D4;
+    --acc-200: #FFF3A7;
+    --acc-300: #FFED76;
+    --acc-400: #FFE53B;
+    --acc-500: #FFE53B;
+    --acc-600: #CCB72F;
+    --acc-700: #4C4F33;
+    --acc-800: #393F32;
+    --acc-900: #2A3232;
+    --acc-950: #242008;
+    --acc-rgb: 255 229 59;
+    --acc2-rgb: 141 195 240;
+    --logo-1: #FFF193;
+    --logo-2: #FFE53B;
+    --logo-3: #D9C332;
+    --logo-hi: #FFFBE2;
+    --logo-deep: #515333;
+    --gold-100: #FFF9D4;
+    --gold-300: var(--acc-300);
+    --gold-400: var(--acc-400);
+    --gold-500: var(--acc-500);
+    --on-gold: var(--acc-950);
+    --glass-alpha: 58%;
+    --glass-alpha-strong: 40%;
+    --glass-edge: rgba(206, 229, 248, 0.14);
+    --glass-rim: rgba(206, 229, 248, 0.24);
+    --glass-shadow: 0 16px 44px rgba(3, 8, 19, 0.60);
+    --glass-sheen: rgba(206, 229, 248, 0.10);
+    --glare-1: rgba(255, 237, 118, 0.50);
+    --glare-2: rgba(141, 195, 240, 0.16);
+  }
+
+  .roastery {
+    /* ROASTERY: Deep Teal · Cream · Orange. Dark ground. */
+    --zinc-950: #052522;
+    --zinc-900: #0E2D29;
+    --zinc-800: #193631;
+    --zinc-700: #324A45;
+    --zinc-600: #566860;
+    --zinc-500: #939B8F;
+    --zinc-400: #B9BBAC;
+    --zinc-300: #D1CEBF;
+    --zinc-200: #DFDAC9;
+    --zinc-100: #EBE4D3;
+    --zinc-50: #FFFFFF;
+    --white: #ffffff;
+    --black: #000000;
+    --acc-50: #FEF3ED;
+    --acc-100: #FCDECD;
+    --acc-200: #F9BC99;
+    --acc-300: #F69760;
+    --acc-400: #F47B37;
+    --acc-500: #F26A1C;
+    --acc-600: #C25516;
+    --acc-700: #473820;
+    --acc-800: #343321;
+    --acc-900: #262F21;
+    --acc-950: #220F04;
+    --acc-rgb: 242 106 28;
+    --acc2-rgb: 13 74 68;
+    --logo-1: #F8AD82;
+    --logo-2: #F26A1C;
+    --logo-3: #CE5A18;
+    --logo-hi: #FDE9DD;
+    --logo-deep: #4C3A20;
+    --gold-100: #FCDECD;
+    --gold-300: var(--acc-300);
+    --gold-400: var(--acc-400);
+    --gold-500: var(--acc-500);
+    --on-gold: var(--acc-950);
+    --glass-alpha: 58%;
+    --glass-alpha-strong: 40%;
+    --glass-edge: rgba(173, 186, 172, 0.14);
+    --glass-rim: rgba(173, 186, 172, 0.24);
+    --glass-shadow: 0 16px 44px rgba(2, 15, 14, 0.60);
+    --glass-sheen: rgba(173, 186, 172, 0.10);
+    --glare-1: rgba(246, 151, 96, 0.50);
+    --glare-2: rgba(13, 74, 68, 0.16);
+  }
+
+  .orchid {
+    /* ORCHID: Cream · Ink · Orchid Pink. A light theme (950 is the page, --white the ink). */
+    --zinc-950: #F3EEE4;
+    --zinc-900: #EBE6DD;
+    --zinc-800: #E1DDD3;
+    --zinc-700: #CFCBC3;
+    --zinc-600: #ACA8A1;
+    --zinc-500: #696763;
+    --zinc-400: #52514E;
+    --zinc-300: #41403E;
+    --zinc-200: #2F2E2D;
+    --zinc-100: #141414;
+    --zinc-50: #0E0E0E;
+    --white: #141414;
+    --black: #F3EEE4;
+    --acc-50: #FCEFFB;
+    --acc-100: #791A74;
+    --acc-200: #891E83;
+    --acc-300: #E277DA;
+    --acc-400: #A1239A;
+    --acc-500: #DD5FD3;
+    --acc-600: #B93BB1;
+    --acc-700: #EECAE0;
+    --acc-800: #EAB5DD;
+    --acc-900: #F0D9E1;
+    --acc-950: #481045;
+    --acc-rgb: 161 35 154;
+    --acc2-rgb: 221 95 211;
+    --logo-1: #E47FDC;
+    --logo-2: #A1239A;
+    --logo-3: #811C7B;
+    --logo-hi: #F8DFF6;
+    --logo-deep: #691764;
+    --gold-100: #FAE7F8;
+    --gold-300: var(--acc-300);
+    --gold-400: var(--acc-400);
+    --gold-500: var(--acc-500);
+    --on-gold: var(--acc-950);
+    --glass-alpha: 62%;
+    --glass-alpha-strong: 46%;
+    --glass-edge: rgba(255, 255, 255, 0.66);
+    --glass-rim: rgba(249, 247, 242, 0.90);
+    --glass-shadow: 0 16px 44px rgba(20, 20, 20, 0.20);
+    --glass-sheen: rgba(255, 255, 255, 0.55);
+    --glare-1: rgba(235, 159, 229, 0.70);
+    --glare-2: rgba(221, 95, 211, 0.24);
+  }
+
+  .citrus {
+    /* CITRUS: Mandarin Orange #FD550A · Forest Green #015D47 · Crest Yellow #E0F354. Dark ground. */
+    --zinc-950: #012A20;
+    --zinc-900: #0B3228;
+    --zinc-800: #163B31;
+    --zinc-700: #2F5146;
+    --zinc-600: #547063;
+    --zinc-500: #93A597;
+    --zinc-400: #BAC6B6;
+    --zinc-300: #D2DACA;
+    --zinc-200: #E1E7D6;
+    --zinc-100: #EDF1E0;
+    --zinc-50: #FFFFFF;
+    --white: #ffffff;
+    --black: #000000;
+    --acc-50: #FDFEF1;
+    --acc-100: #F8FCD9;
+    --acc-200: #F1FAB2;
+    --acc-300: #E9F787;
+    --acc-400: #E0F354;
+    --acc-500: #E0F354;
+    --acc-600: #B3C243;
+    --acc-700: #3F622F;
+    --acc-800: #2E522A;
+    --acc-900: #204627;
+    --acc-950: #1F220C;
+    --acc-rgb: 224 243 84;
+    --acc2-rgb: 253 85 10;
+    --logo-1: #EEF8A1;
+    --logo-2: #E0F354;
+    --logo-3: #BECF47;
+    --logo-hi: #FAFDE5;
+    --logo-deep: #446630;
+    --gold-100: #F8FCD9;
+    --gold-300: var(--acc-300);
+    --gold-400: var(--acc-400);
+    --gold-500: var(--acc-500);
+    --on-gold: var(--acc-950);
+    --glass-alpha: 58%;
+    --glass-alpha-strong: 40%;
+    --glass-edge: rgba(247, 198, 164, 0.14);
+    --glass-rim: rgba(247, 198, 164, 0.24);
+    --glass-shadow: 0 16px 44px rgba(0, 17, 13, 0.60);
+    --glass-sheen: rgba(247, 198, 164, 0.10);
+    --glare-1: rgba(233, 247, 135, 0.50);
+    --glare-2: rgba(253, 85, 10, 0.16);
+  }
+
+  .electric {
+    /* ELECTRIC: Onyx Black #01010D · Electric Indigo #6331FB · Tropical Mint #88F9C0. Dark ground. */
+    --zinc-950: #01010D;
+    --zinc-900: #0A0A17;
+    --zinc-800: #151522;
+    --zinc-700: #2E2D3B;
+    --zinc-600: #51515F;
+    --zinc-500: #8E8D9E;
+    --zinc-400: #B4B3C5;
+    --zinc-300: #CBCADD;
+    --zinc-200: #D9D8EC;
+    --zinc-100: #E5E4F8;
+    --zinc-50: #FFFFFF;
+    --white: #ffffff;
+    --black: #000000;
+    --acc-50: #F5FFFA;
+    --acc-100: #E5FEF1;
+    --acc-200: #C9FCE3;
+    --acc-300: #ACFBD3;
+    --acc-400: #88F9C0;
+    --acc-500: #88F9C0;
+    --acc-600: #6DC79A;
+    --acc-700: #27463F;
+    --acc-800: #1C3331;
+    --acc-900: #142426;
+    --acc-950: #13231B;
+    --acc-rgb: 136 249 192;
+    --acc2-rgb: 99 49 251;
+    --logo-1: #BEFCDC;
+    --logo-2: #88F9C0;
+    --logo-3: #74D4A3;
+    --logo-hi: #EDFEF6;
+    --logo-deep: #2A4B43;
+    --gold-100: #E5FEF1;
+    --gold-300: var(--acc-300);
+    --gold-400: var(--acc-400);
+    --gold-500: var(--acc-500);
+    --on-gold: var(--acc-950);
+    --glass-alpha: 58%;
+    --glass-alpha-strong: 40%;
+    --glass-edge: rgba(195, 179, 254, 0.14);
+    --glass-rim: rgba(195, 179, 254, 0.24);
+    --glass-shadow: 0 16px 44px rgba(0, 0, 5, 0.60);
+    --glass-sheen: rgba(195, 179, 254, 0.10);
+    --glare-1: rgba(172, 251, 211, 0.50);
+    --glare-2: rgba(99, 49, 251, 0.16);
+  }
+
+  .visionary {
+    /* VISIONARY: Seal Blue #DBF2FC · Navy Blue #072D59 · Crimson Pink #FD6E88. A light theme (950 is the page, --white the ink). */
+    --zinc-950: #DBF2FC;
+    --zinc-900: #D4EBF6;
+    --zinc-800: #CAE2EF;
+    --zinc-700: #B9D2E2;
+    --zinc-600: #97B3C8;
+    --zinc-500: #4A6C8D;
+    --zinc-400: #426487;
+    --zinc-300: #31547A;
+    --zinc-200: #20456D;
+    --zinc-100: #072D59;
+    --zinc-50: #05203E;
+    --white: #072D59;
+    --black: #DBF2FC;
+    --acc-50: #FFF1F3;
+    --acc-100: #8A1B2F;
+    --acc-200: #9C1F36;
+    --acc-300: #FD849A;
+    --acc-400: #B8243F;
+    --acc-500: #FD6E88;
+    --acc-600: #D4425C;
+    --acc-700: #E4D1DF;
+    --acc-800: #E9BDCE;
+    --acc-900: #E0DEEB;
+    --acc-950: #53101C;
+    --acc-rgb: 184 36 63;
+    --acc2-rgb: 7 45 89;
+    --logo-1: #FD8BA0;
+    --logo-2: #B8243F;
+    --logo-3: #931D32;
+    --logo-hi: #FFE2E7;
+    --logo-deep: #781729;
+    --gold-100: #FFE9ED;
+    --gold-300: var(--acc-300);
+    --gold-400: var(--acc-400);
+    --gold-500: var(--acc-500);
+    --on-gold: var(--acc-950);
+    --glass-alpha: 62%;
+    --glass-alpha-strong: 46%;
+    --glass-edge: rgba(255, 255, 255, 0.66);
+    --glass-rim: rgba(237, 249, 254, 0.90);
+    --glass-shadow: 0 16px 44px rgba(7, 45, 89, 0.20);
+    --glass-sheen: rgba(255, 255, 255, 0.55);
+    --glare-1: rgba(254, 168, 184, 0.70);
+    --glare-2: rgba(7, 45, 89, 0.24);
+  }
+
+  .racing {
+    /* RACING: Obsidian Black #111217 · Ice Grey #DFE5EB · Racing Red #EF233C. Dark ground. */
+    --zinc-950: #111217;
+    --zinc-900: #191A1F;
+    --zinc-800: #232429;
+    --zinc-700: #383A3F;
+    --zinc-600: #575A5F;
+    --zinc-500: #8D9196;
+    --zinc-400: #AEB2B8;
+    --zinc-300: #C2C7CD;
+    --zinc-200: #CFD4DA;
+    --zinc-100: #D9DFE5;
+    --zinc-50: #FFFFFF;
+    --white: #ffffff;
+    --black: #000000;
+    --acc-50: #FEEDEF;
+    --acc-100: #FBCFD4;
+    --acc-200: #F89CA7;
+    --acc-300: #F46577;
+    --acc-400: #F35367;
+    --acc-500: #EF233C;
+    --acc-600: #BF1C30;
+    --acc-700: #4F1721;
+    --acc-800: #3D151E;
+    --acc-900: #30141C;
+    --acc-950: #1D0508;
+    --acc-rgb: 239 35 60;
+    --acc2-rgb: 223 229 235;
+    --logo-1: #F68694;
+    --logo-2: #EF233C;
+    --logo-3: #CB1E33;
+    --logo-hi: #FDDEE2;
+    --logo-deep: #541722;
+    --gold-100: #FBCFD4;
+    --gold-300: var(--acc-300);
+    --gold-400: var(--acc-400);
+    --gold-500: var(--acc-500);
+    --on-gold: var(--acc-950);
+    --glass-alpha: 58%;
+    --glass-alpha-strong: 40%;
+    --glass-edge: rgba(223, 229, 235, 0.14);
+    --glass-rim: rgba(223, 229, 235, 0.24);
+    --glass-shadow: 0 16px 44px rgba(7, 7, 9, 0.60);
+    --glass-sheen: rgba(223, 229, 235, 0.10);
+    --glare-1: rgba(244, 101, 119, 0.50);
+    --glare-2: rgba(223, 229, 235, 0.16);
+  }
+
+  .acid {
+    /* ACID: Deep Charcoal #18181C · Electric Violet #723BFA · Acid Lime #B9F500. Dark ground. */
+    --zinc-950: #18181C;
+    --zinc-900: #212125;
+    --zinc-800: #2A2A2E;
+    --zinc-700: #414145;
+    --zinc-600: #626166;
+    --zinc-500: #9A9A9E;
+    --zinc-400: #BDBCC1;
+    --zinc-300: #D3D2D7;
+    --zinc-200: #E0DFE4;
+    --zinc-100: #EAEAEE;
+    --zinc-50: #FFFFFF;
+    --white: #ffffff;
+    --black: #000000;
+    --acc-50: #F9FEEB;
+    --acc-100: #F0FDC7;
+    --acc-200: #E0FB8C;
+    --acc-300: #CEF84D;
+    --acc-400: #B9F500;
+    --acc-500: #B9F500;
+    --acc-600: #94C400;
+    --acc-700: #455614;
+    --acc-800: #384416;
+    --acc-900: #2F3718;
+    --acc-950: #1A2200;
+    --acc-rgb: 185 245 0;
+    --acc2-rgb: 114 59 250;
+    --logo-1: #D9FA73;
+    --logo-2: #B9F500;
+    --logo-3: #9DD000;
+    --logo-hi: #F5FED9;
+    --logo-deep: #485A14;
+    --gold-100: #F0FDC7;
+    --gold-300: var(--acc-300);
+    --gold-400: var(--acc-400);
+    --gold-500: var(--acc-500);
+    --on-gold: var(--acc-950);
+    --glass-alpha: 58%;
+    --glass-alpha-strong: 40%;
+    --glass-edge: rgba(203, 186, 247, 0.14);
+    --glass-rim: rgba(203, 186, 247, 0.24);
+    --glass-shadow: 0 16px 44px rgba(10, 10, 11, 0.60);
+    --glass-sheen: rgba(203, 186, 247, 0.10);
+    --glare-1: rgba(206, 248, 77, 0.50);
+    --glare-2: rgba(114, 59, 250, 0.16);
+  }
+
+  .sweet {
+    /* SWEET: Raspberry Pink #BC164D · Pale Pink #FFD0DF · Butter Yellow #FFE164. A light theme (950 is the page, --white the ink). */
+    --zinc-950: #FFE6EE;
+    --zinc-900: #F8DEE6;
+    --zinc-800: #EFD4DD;
+    --zinc-700: #DFC2CB;
+    --zinc-600: #C09FA9;
+    --zinc-500: #855C68;
+    --zinc-400: #714552;
+    --zinc-300: #613441;
+    --zinc-200: #522230;
+    --zinc-100: #3A0716;
+    --zinc-50: #29050F;
+    --white: #3A0716;
+    --black: #FFE6EE;
+    --acc-50: #FFFCF0;
+    --acc-100: #851036;
+    --acc-200: #96123D;
+    --acc-300: #FFE67B;
+    --acc-400: #B11548;
+    --acc-500: #FFE164;
+    --acc-600: #D06753;
+    --acc-700: #FFE5CC;
+    --acc-800: #FFE4B7;
+    --acc-900: #FFE5D9;
+    --acc-950: #550A23;
+    --acc-rgb: 177 21 72;
+    --acc2-rgb: 188 22 77;
+    --logo-1: #FFE783;
+    --logo-2: #BC164D;
+    --logo-3: #8E113A;
+    --logo-hi: #FFF9E0;
+    --logo-deep: #730E2F;
+    --gold-100: #FFFBE8;
+    --gold-300: var(--acc-300);
+    --gold-400: var(--acc-400);
+    --gold-500: var(--acc-500);
+    --on-gold: var(--acc-950);
+    --glass-alpha: 62%;
+    --glass-alpha-strong: 46%;
+    --glass-edge: rgba(255, 255, 255, 0.66);
+    --glass-rim: rgba(255, 243, 247, 0.90);
+    --glass-shadow: 0 16px 44px rgba(58, 7, 22, 0.20);
+    --glass-sheen: rgba(255, 255, 255, 0.55);
+    --glare-1: rgba(255, 237, 162, 0.70);
+    --glare-2: rgba(188, 22, 77, 0.24);
+  }
+
 }
 
 @layer base {
@@ -1580,8 +2017,11 @@ html.lite section { content-visibility: auto; contain-intrinsic-size: auto 320px
   /* Hairlines that read on every ground: light rules on the dark themes,
      warm ink on Sand, royal blue on Cosmic. */
   :root { --lux-line: rgba(61, 44, 20, 0.14); --lux-line-2: rgba(61, 44, 20, 0.26); --lux-live: #B42318; }
-  .dark, .royal, .emerald, .rose { --lux-line: rgba(255, 255, 255, 0.10); --lux-line-2: rgba(255, 255, 255, 0.18); --lux-live: #FCA5A5; }
+  .dark, .royal, .emerald, .rose, .powder, .roastery, .citrus, .electric, .racing, .acid { --lux-line: rgba(255, 255, 255, 0.10); --lux-line-2: rgba(255, 255, 255, 0.18); --lux-live: #FCA5A5; }
   .midnight { --lux-line: rgba(30, 58, 138, 0.16); --lux-line-2: rgba(30, 58, 138, 0.28); --lux-live: #B42318; }
+  .orchid { --lux-line: rgba(20, 20, 20, 0.14); --lux-line-2: rgba(20, 20, 20, 0.26); --lux-live: #B42318; }
+  .visionary { --lux-line: rgba(7, 45, 89, 0.14); --lux-line-2: rgba(7, 45, 89, 0.26); --lux-live: #B42318; }
+  .sweet { --lux-line: rgba(58, 7, 22, 0.14); --lux-line-2: rgba(58, 7, 22, 0.26); --lux-live: #B42318; }
 
   /* The room: two soft lights in the accent and the theme's own colour, and a
      whisper of film grain so large dark areas read as material, not as #000. */

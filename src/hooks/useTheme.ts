@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-export type Theme = 'light' | 'dark' | 'midnight' | 'royal' | 'emerald' | 'rose';
+export type Theme = 'light' | 'dark' | 'midnight' | 'royal' | 'emerald' | 'rose' | 'powder' | 'roastery' | 'orchid' | 'citrus' | 'electric' | 'visionary' | 'racing' | 'acid' | 'sweet';
 
 /** Every theme, in picker order, with the swatch the picker paints for it. */
 export const THEMES: { id: Theme; name: string; note: string; page: string; metal: string; glow: string }[] = [
@@ -10,6 +10,16 @@ export const THEMES: { id: Theme; name: string; note: string; page: string; meta
   { id: 'rose', name: 'Rosé', note: 'Onyx and rose gold', page: '#0D0A0B', metal: '#EDA58B', glow: '#AA1E5A' },
   { id: 'light', name: 'Sand', note: 'Warm daylight', page: '#FFFCF7', metal: '#A9600A', glow: '#C98532' },
   { id: 'midnight', name: 'Cosmic', note: 'Baby blue and lavender', page: '#EAF2FF', metal: '#3D57D9', glow: '#8B5CF6' },
+  // From the owner's reels (2026-11-17): two colours set the mood, the third is the accent.
+  { id: 'powder', name: 'Powder', note: 'Glacier blue, navy, lemon', page: '#071530', metal: '#FFE53B', glow: '#8DC3F0' },
+  { id: 'roastery', name: 'Roastery', note: 'Deep teal, cream, orange', page: '#052522', metal: '#F26A1C', glow: '#0D4A44' },
+  { id: 'orchid', name: 'Orchid', note: 'Cream, ink, orchid pink', page: '#F3EEE4', metal: '#DD5FD3', glow: '#DD5FD3' },
+  { id: 'citrus', name: 'Citrus', note: 'Forest green, mandarin, crest yellow', page: '#012A20', metal: '#E0F354', glow: '#FD550A' },
+  { id: 'electric', name: 'Electric', note: 'Onyx, electric indigo, tropical mint', page: '#01010D', metal: '#88F9C0', glow: '#6331FB' },
+  { id: 'visionary', name: 'Visionary', note: 'Seal blue, navy, crimson pink', page: '#DBF2FC', metal: '#FD6E88', glow: '#072D59' },
+  { id: 'racing', name: 'Racing', note: 'Obsidian, ice grey, racing red', page: '#111217', metal: '#EF233C', glow: '#DFE5EB' },
+  { id: 'acid', name: 'Acid', note: 'Deep charcoal, electric violet, acid lime', page: '#18181C', metal: '#B9F500', glow: '#723BFA' },
+  { id: 'sweet', name: 'Sweet', note: 'Raspberry, pale pink, butter yellow', page: '#FFE6EE', metal: '#FFE164', glow: '#BC164D' },
 ];
 
 /**

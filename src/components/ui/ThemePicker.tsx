@@ -2,7 +2,7 @@ import { Check } from 'lucide-react';
 import { THEMES, type Theme } from '../../hooks/useTheme';
 
 /**
- * The six themes as swatches: each tile is painted in that theme's own page
+ * The themes as swatches (fifteen since 2026-11-17, nine from the owner's reels): each tile is painted in that theme's own page
  * colour, metal and room light, so the choice is made by eye rather than by
  * name. Used in the top-bar popover and in Profile settings.
  */

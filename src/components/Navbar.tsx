@@ -215,7 +215,7 @@ export default function Navbar({ activeTab, setActiveTab, onPlay }: NavbarProps)
             {isThemeOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setIsThemeOpen(false)} aria-hidden />
-                <div className="absolute right-0 mt-3 w-[22rem] z-50 glass rounded-3xl p-4 shadow-2xl lux-enter">
+                <div className="absolute right-0 mt-3 w-[22rem] max-w-[calc(100vw-1rem)] max-h-[calc(100dvh-6rem)] overflow-y-auto z-50 glass rounded-3xl p-4 shadow-2xl lux-enter">
                   <p className="lux-kicker mb-1">Appearance</p>
                   <p className="text-lg font-display font-extrabold text-white mb-3">Choose your room</p>
                   <ThemePicker theme={theme} onPick={(t) => { pick(t); }} />

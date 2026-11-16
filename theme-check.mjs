@@ -37,6 +37,15 @@ const themes = {
   Royal: block('.royal'),
   Emerald: block('.emerald'),
   'Rosé': block('.rose'),
+  Powder: block('.powder'),
+  Roastery: block('.roastery'),
+  Orchid: block('.orchid'),
+  Citrus: block('.citrus'),
+  Electric: block('.electric'),
+  Visionary: block('.visionary'),
+  Racing: block('.racing'),
+  Acid: block('.acid'),
+  Sweet: block('.sweet'),
 };
 /** Follow var(--x) references inside one theme block to the colour they name. */
 const resolve = (t, v) => {
