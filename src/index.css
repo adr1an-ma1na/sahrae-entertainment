@@ -545,13 +545,24 @@
      (Hero's Play uses this one; .btn-sauti is the other). Kept identical to
      .btn-sauti so there is one filled button, not two that drift apart. */
   :where(.btn-gold) { position: relative; }
+  /* Reserve (owner, 2026-11-16): polished metal. Lighter on the upper edge,
+     deeper below, a lit top line and a warm shadow; a slow gleam crosses it
+     now and then. Built from the theme's own golds, so every theme has it. */
   .btn-gold {
     background-color: var(--gold-500);
+    background-image: linear-gradient(180deg, var(--logo-hi) 0%, var(--gold-300) 34%, var(--gold-500) 62%, color-mix(in srgb, var(--gold-500) 68%, var(--logo-deep)) 100%);
     color: var(--on-gold);
     border-radius: 9999px;
-    box-shadow: none;
-    transition: box-shadow .2s var(--ease-premium);
+    overflow: hidden; isolation: isolate;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.55), inset 0 -1px 0 rgba(60,30,0,.35), 0 8px 22px -10px rgb(var(--acc-rgb) / .7);
+    transition: box-shadow .2s var(--ease-premium), transform .2s var(--ease-premium);
   }
+  .btn-gold::before {
+    content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: -1;
+    background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,.5) 50%, transparent 65%);
+    transform: translateX(-130%); animation: reserve-gleam 7s ease-in-out 2.5s infinite;
+  }
+  .btn-gold:active { transform: scale(.97); }
   .btn-gold::after {
     content: ''; position: absolute; inset: 0; border-radius: inherit;
     background: currentColor; opacity: 0; pointer-events: none;
@@ -559,7 +570,7 @@
   }
   .btn-gold:hover::after  { opacity: .08; }
   .btn-gold:active::after { opacity: .10; }
-  .btn-gold:hover { box-shadow: var(--e1); }
+  .btn-gold:hover { box-shadow: inset 0 1px 0 rgba(255,255,255,.6), inset 0 -1px 0 rgba(60,30,0,.35), 0 12px 28px -10px rgb(var(--acc-rgb) / .85); }
   .btn-gold:focus-visible { outline: 2px solid var(--gold-400); outline-offset: 2px; }
 
   /* The repeating poster-card motion: float up + gold rim + depth on hover/focus */
@@ -925,6 +936,17 @@ html.tv-mode [class*="backdrop-blur"] { -webkit-backdrop-filter: none !important
 html.tv-mode .poster-card-ph { font-size: 0.8rem; }
 /* On a TV a picture that has arrived is shown at once, not faded up over half a second. */
 html.tv-mode .poster-card img { transition-duration: 0.12s; }
+/* Reserve: a fine gold edge on every poster, and a warm glow under the one in
+   hand. Plain shadows, no blur filters; the TV keeps its own ring and no glow. */
+.poster-card > div:first-child { border-color: rgb(var(--acc-rgb) / .16); box-shadow: 0 6px 16px -10px rgba(0,0,0,.7); }
+.poster-card:hover > div:first-child, .poster-card:focus-visible > div:first-child {
+  border-color: rgb(var(--acc-rgb) / .7);
+  box-shadow: 0 18px 38px -14px rgba(0,0,0,.75), 0 0 34px -8px rgb(var(--acc-rgb) / .45);
+}
+html.tv-mode .poster-card > div:first-child, html.low-gfx .poster-card > div:first-child { box-shadow: none !important; }
+@keyframes reserve-gleam { 0%, 78% { transform: translateX(-130%); } 100% { transform: translateX(130%); } }
+html.tv-mode .btn-gold::before, html.low-gfx .btn-gold::before { animation: none; display: none; }
+@media (prefers-reduced-motion: reduce) { .btn-gold::before { animation: none; display: none; } }
 
 /* ─────────────────────────────────────────────────────────────
    The TV's large preview of the poster the remote is on
@@ -1629,8 +1651,8 @@ html.lite section { content-visibility: auto; contain-intrinsic-size: auto 320px
   }
   .lux-chip:hover { color: var(--white); box-shadow: inset 0 0 0 1px var(--lux-line-2); }
   .lux-chip[aria-pressed="true"] {
-    color: var(--on-gold); background: linear-gradient(180deg, var(--gold-300), var(--gold-500));
-    box-shadow: 0 4px 14px -6px rgb(var(--acc-rgb) / .7);
+    color: var(--on-gold); background: linear-gradient(180deg, var(--logo-hi) 0%, var(--gold-300) 38%, var(--gold-500) 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 4px 14px -6px rgb(var(--acc-rgb) / .7);
   }
 
   /* The card: a top-lit surface with a hairline that warms to gold on hover,
@@ -1676,14 +1698,16 @@ html.lite section { content-visibility: auto; contain-intrinsic-size: auto 320px
   .lux-btn {
     position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
     border-radius: 9999px; font-weight: 800; color: var(--on-gold);
-    background: linear-gradient(180deg, var(--gold-300), var(--gold-500));
-    box-shadow: 0 10px 24px -10px rgb(var(--acc-rgb) / .8), inset 0 1px 0 rgba(255,255,255,.4);
+    /* Reserve: polished metal, as .btn-gold. */
+    background: linear-gradient(180deg, var(--logo-hi) 0%, var(--gold-300) 34%, var(--gold-500) 62%, color-mix(in srgb, var(--gold-500) 68%, var(--logo-deep)) 100%);
+    box-shadow: 0 10px 24px -10px rgb(var(--acc-rgb) / .8), inset 0 1px 0 rgba(255,255,255,.55), inset 0 -1px 0 rgba(60,30,0,.35);
     transition: transform .2s var(--ease-premium), box-shadow .2s var(--ease-premium);
   }
+  .lux-btn:active { transform: scale(.97); }
   .lux-btn::after {
-    content: ''; position: absolute; top: 0; bottom: 0; width: 40%; left: -60%;
+    content: ''; position: absolute; top: 0; bottom: 0; width: 40%; left: 0;
     background: linear-gradient(100deg, transparent, rgba(255,255,255,.45), transparent);
-    transform: skewX(-20deg); animation: lux-glint 4.5s ease-in-out infinite; pointer-events: none;
+    transform: translateX(-150%) skewX(-20deg); animation: lux-glint 7s ease-in-out infinite; pointer-events: none;
   }
   .lux-btn:hover { transform: translateY(-1px); box-shadow: 0 14px 30px -10px rgb(var(--acc-rgb) / .9), inset 0 1px 0 rgba(255,255,255,.45); }
   .lux-btn:focus-visible { outline: 2px solid var(--gold-400); outline-offset: 3px; }
@@ -1708,7 +1732,8 @@ html.lite section { content-visibility: auto; contain-intrinsic-size: auto 320px
   .lux-enter { animation: lux-rise .55s var(--ease-premium) both; }
 }
 
-@keyframes lux-glint { 0%, 70% { left: -60%; } 100% { left: 130%; } }
+/* Moved, not re-placed: the old version changed `left`, laid out again every frame. */
+@keyframes lux-glint { 0%, 70% { transform: translateX(-150%) skewX(-20deg); } 100% { transform: translateX(325%) skewX(-20deg); } }
 /* Movement only, never opacity: a stalled animation (a backgrounded page, a busy phone) must not leave a title invisible. */
 @keyframes lux-rise { from { transform: translateY(12px); } to { transform: none; } }
 
