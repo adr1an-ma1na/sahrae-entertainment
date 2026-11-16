@@ -11,7 +11,7 @@
    Loaded as one stylesheet request (two families, one URL) with display=swap,
    so text paints in the fallback immediately and re-renders when the faces
    land rather than holding the first paint. */
-@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@400..700&family=Outfit:wght@400..800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@400..700&family=Outfit:wght@200..800&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -1157,69 +1157,103 @@ a:focus-visible {
 @keyframes splash-fade { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.06); visibility: hidden; } }
 
 /* ─────────────────────────────────────────────────────────────
-   SAHRAE launch: a desert dawn (SplashIntro.tsx). Theme colours via
-   the --logo-* tokens; transforms and opacity only, so it stays smooth.
+   SAHRAE launch: Horizon (SplashIntro.tsx; owner's choice 2026-11-16).
+   --s is one scene unit (a hundredth of the largest 16:9 frame across the
+   screen); --hz is where the horizon sits. Theme colours via --logo-* and
+   --acc-*. Transforms and opacity only, except where html.tv-mode / low-gfx
+   leave a part out (.hz-plain).
    ───────────────────────────────────────────────────────────── */
-.dawn { background: #050302; transform-origin: 50% 60%; will-change: opacity, transform; }
-.dawn-sky {
-  position: absolute; inset: 0;
+.hz { --hz: 62%; background: #040306; }
+@media (orientation: portrait) { .hz { --hz: 54%; } }
+.hz-scene { position: absolute; inset: 0; transform-origin: 50% var(--hz); background: radial-gradient(140% 90% at 50% var(--hz), #120B10 0%, #040306 60%); animation: hz-push 5.2s cubic-bezier(.33, 0, .2, 1) both; }
+.hz-stars { position: absolute; left: 0; top: 0; width: 1px; height: 1px; border-radius: 50%; opacity: .55; animation: hz-starsout 2.6s ease .6s forwards; }
+.hz-dawn { position: absolute; left: -20%; right: -20%; top: 0; height: var(--hz); transform-origin: 50% 100%; transform: scaleY(.15); opacity: 0;
   background:
-    radial-gradient(70% 55% at 50% 78%, rgb(var(--acc-rgb) / .55), transparent 70%),
-    radial-gradient(90% 70% at 50% 100%, rgb(var(--acc2-rgb) / .45), transparent 75%),
-    linear-gradient(180deg, #050302 0%, #120b05 55%, #2b1a09 100%);
-  opacity: 0; will-change: opacity;
-  animation: dawn-sky 1.6s var(--ease-premium) .1s forwards;
+    radial-gradient(50% 70% at 50% 100%, rgb(var(--acc-rgb) / .55) 0%, rgb(var(--acc2-rgb) / .38) 28%, rgb(var(--acc2-rgb) / .14) 55%, transparent 80%),
+    radial-gradient(90% 100% at 50% 100%, rgba(90, 30, 40, .35) 0%, transparent 70%);
+  animation: hz-dawn 2.6s cubic-bezier(.22, 1, .36, 1) .8s forwards; }
+.hz-sunmask { position: absolute; left: 0; right: 0; top: 0; height: var(--hz); overflow: hidden; }
+.hz-halo { position: absolute; left: 50%; bottom: calc(-26 * var(--s)); width: calc(52 * var(--s)); height: calc(52 * var(--s)); margin-left: calc(-26 * var(--s)); border-radius: 50%;
+  background: radial-gradient(circle, rgb(var(--acc-rgb) / .45) 0%, rgb(var(--acc2-rgb) / .18) 35%, transparent 65%);
+  transform: translateY(27%); opacity: 0; animation: hz-halo 2.6s cubic-bezier(.22, 1, .36, 1) 1.1s forwards; }
+.hz-sun { position: absolute; left: 50%; bottom: calc(-13 * var(--s)); width: calc(13 * var(--s)); height: calc(13 * var(--s)); margin-left: calc(-6.5 * var(--s)); border-radius: 50%;
+  /* A soft edge and a darker rim, as a real low sun has: a flat bright disc read as clip-art. */
+  background: radial-gradient(circle at 50% 58%, #FFF4DC 0%, var(--logo-hi) 24%, var(--logo-1) 54%, var(--logo-2) 76%, rgb(var(--acc2-rgb) / .55) 90%, rgb(var(--acc2-rgb) / 0) 100%);
+  box-shadow: 0 0 calc(4 * var(--s)) rgb(var(--acc-rgb) / .35), 0 0 calc(14 * var(--s)) rgb(var(--acc2-rgb) / .22);
+  transform: translateY(15%); animation: hz-sun 2.6s cubic-bezier(.22, 1, .36, 1) 1.15s forwards; }
+.hz-ground { position: absolute; left: 0; right: 0; top: var(--hz); bottom: 0; background: linear-gradient(180deg, #170D08 0%, #0A0605 30%, #040306 100%); }
+.hz-spill { position: absolute; left: 50%; top: var(--hz); width: calc(110 * var(--s)); height: calc(26 * var(--s)); margin-left: calc(-55 * var(--s));
+  background: radial-gradient(50% 60% at 50% 0%, rgb(var(--acc-rgb) / .30), rgb(var(--acc2-rgb) / .12) 45%, transparent 75%);
+  opacity: 0; transform: scaleX(.3); animation: hz-spill 2.4s cubic-bezier(.22, 1, .36, 1) 1s forwards; }
+.hz-line { position: absolute; left: 0; right: 0; top: var(--hz); height: 1px; margin-top: -.5px; transform: scaleX(0);
+  background: linear-gradient(90deg, transparent 0%, rgb(var(--acc-rgb) / .25) 12%, var(--logo-1) 34%, var(--logo-hi) 50%, var(--logo-1) 66%, rgb(var(--acc-rgb) / .25) 88%, transparent 100%);
+  animation: hz-draw 1.5s cubic-bezier(.65, 0, .25, 1) .45s forwards; }
+.hz-bloom { position: absolute; left: 0; right: 0; top: var(--hz); height: calc(3.6 * var(--s)); margin-top: calc(-1.8 * var(--s)); transform: scaleX(0); opacity: 0;
+  background: radial-gradient(50% 50% at 50% 50%, rgb(var(--acc-rgb) / .55), rgb(var(--acc2-rgb) / .16) 45%, transparent 75%);
+  animation: hz-bloom 2.2s cubic-bezier(.16, 1, .3, 1) .55s forwards; }
+.hz-spark { position: absolute; left: 50%; top: var(--hz); width: calc(.5 * var(--s)); height: calc(.5 * var(--s)); margin: calc(-.25 * var(--s)) 0 0 calc(-.25 * var(--s)); border-radius: 50%;
+  background: #FFF8E6; box-shadow: 0 0 calc(1.5 * var(--s)) calc(.5 * var(--s)) rgba(255, 230, 180, .9), 0 0 calc(5 * var(--s)) calc(1.5 * var(--s)) rgb(var(--acc-rgb) / .5);
+  transform: scale(0); animation: hz-spark 1.1s cubic-bezier(.16, 1, .3, 1) .25s forwards; }
+.hz-streak { position: absolute; left: 50%; top: var(--hz); width: calc(70 * var(--s)); height: max(1px, calc(.18 * var(--s))); margin-left: calc(-35 * var(--s)); margin-top: calc(-.09 * var(--s));
+  background: linear-gradient(90deg, transparent, rgba(255, 236, 200, .9) 50%, transparent); opacity: 0; transform: scaleX(.2);
+  animation: hz-streak 2.4s cubic-bezier(.16, 1, .3, 1) 1.5s forwards; }
+.hz-title { position: absolute; left: 0; right: 0; top: calc(var(--hz) + 5 * var(--s)); display: grid; justify-items: center; gap: calc(1.5 * var(--s)); }
+.hz-word { position: relative; margin: 0; font-family: var(--font-display, 'Outfit'), system-ui, sans-serif; font-weight: 200; line-height: 1; white-space: nowrap;
+  font-size: clamp(2rem, calc(7.2 * var(--s)), 9rem); letter-spacing: .62em; text-indent: .62em;
+  background: linear-gradient(180deg, var(--logo-hi) 0%, var(--logo-1) 48%, var(--logo-deep) 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;
+  -webkit-mask-image: linear-gradient(0deg, #000 40%, transparent 60%); mask-image: linear-gradient(0deg, #000 40%, transparent 60%);
+  -webkit-mask-size: 100% 300%; mask-size: 100% 300%; -webkit-mask-position: 0 0; mask-position: 0 0;
+  animation: hz-reveal 1.5s cubic-bezier(.22, 1, .36, 1) 2s forwards, hz-track 3s cubic-bezier(.22, 1, .36, 1) 2s forwards; }
+/* A phone held upright: the sun and its light sized by the screen's width, the name further below. */
+@media (orientation: portrait) {
+  .hz-word { font-size: 10.5vw; }
+  .hz-sun { width: 30vw; height: 30vw; bottom: -30vw; margin-left: -15vw; }
+  .hz-halo { width: 120vw; height: 120vw; bottom: -60vw; margin-left: -60vw; }
+  .hz-title { top: calc(var(--hz) + 9vw); gap: 3vw; }
+  .hz-rule { width: 50vw; }
+  .hz-sub { font-size: 2.6vw; }
 }
-/* Every moving part is its own layer, moved whole (see SplashIntro box()). */
-.dawn-layer { position: absolute; overflow: visible; will-change: transform, opacity; }
-.dawn-sun { opacity: 0; transform: translateY(calc(170 * var(--u))) scale(.88);
-  animation: dawn-sun 1.5s var(--ease-premium) .2s forwards; }
-.dawn-halo { opacity: 0; transform: translateY(calc(150 * var(--u))) scale(.7);
-  animation: dawn-halo 1.9s var(--ease-premium) .25s forwards; }
-.dawn-dune { transform: translateY(calc(40 * var(--u))); opacity: 0; animation: dawn-dune 1.2s var(--ease-premium) forwards; }
-.dawn-dune-front { animation-delay: .12s; }
-.dawn-wipe { overflow: hidden; transform: translateX(-100%); animation: dawn-wipe 1.4s var(--ease-premium) .55s forwards; }
-.dawn-wipe-in { display: block; width: 100%; height: 100%; overflow: visible; transform: translateX(100%); will-change: transform;
-  animation: dawn-wipe 1.4s var(--ease-premium) .55s forwards; }
-.dawn-crest { opacity: .9; filter: drop-shadow(0 0 6px rgb(var(--acc-rgb) / .9)); }
-.dawn-word { display: flex; filter: drop-shadow(0 8px 40px rgb(var(--acc-rgb) / .40)); }
-.dawn-word > span {
-  display: inline-block;
-  background-image: linear-gradient(105deg, var(--logo-deep) 0%, var(--logo-1) 30%, var(--logo-hi) 50%, var(--logo-2) 70%, var(--logo-deep) 100%);
-  background-size: 600% 100%;
-  -webkit-background-clip: text; background-clip: text;
-  -webkit-text-fill-color: transparent; color: transparent;
-  opacity: 0; transform: translateY(22px); filter: blur(10px); will-change: transform, opacity;
-  animation: dawn-letter .8s var(--ease-premium) forwards;
-}
-.dawn-sub { color: rgba(255,255,255,.72); letter-spacing: .9em; opacity: 0;
-  animation: dawn-sub 1s var(--ease-premium) 1.25s forwards; }
-.dawn-out { animation: dawn-out .75s cubic-bezier(.7,0,.84,0) forwards; }
+.hz-sheen { position: absolute; inset: 0; text-indent: inherit; letter-spacing: inherit;
+  background: linear-gradient(100deg, transparent 44%, rgba(255, 255, 255, .95) 50%, transparent 56%); background-size: 300% 100%; background-position: 140% 0;
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;
+  animation: hz-sheen 1.6s cubic-bezier(.4, 0, .2, 1) 3.3s forwards; }
+.hz-rule { width: calc(26 * var(--s)); height: 1px; transform: scaleX(0); background: linear-gradient(90deg, transparent, rgb(var(--acc-rgb) / .7), transparent);
+  animation: hz-rule 1.4s cubic-bezier(.22, 1, .36, 1) 2.7s forwards; }
+.hz-sub { font-family: var(--font-display, 'Outfit'), system-ui, sans-serif; font-weight: 400; text-transform: uppercase; font-size: max(.62rem, calc(1.15 * var(--s)));
+  letter-spacing: .9em; text-indent: .9em; color: rgba(243, 237, 228, .72); opacity: 0; animation: hz-sub 1.4s cubic-bezier(.22, 1, .36, 1) 2.9s forwards; }
+.hz-grain { position: absolute; inset: -50%; opacity: .07; mix-blend-mode: overlay; pointer-events: none; animation: hz-grain .9s steps(5) infinite; }
+.hz-vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 95% at 50% 55%, transparent 55%, rgba(0, 0, 0, .55) 100%); }
+.hz-out { animation: hz-out .8s cubic-bezier(.4, 0, .2, 1) forwards; }
 
-@keyframes dawn-sky { to { opacity: 1; } }
-@keyframes dawn-sun { to { opacity: 1; transform: translateY(0) scale(1); } }
-@keyframes dawn-halo { 60% { opacity: .9; } to { opacity: .75; transform: translateY(0) scale(1.15); } }
-@keyframes dawn-dune { to { opacity: 1; transform: translateY(0); } }
-@keyframes dawn-wipe { to { transform: translateX(0); } }
-@keyframes dawn-letter { to { opacity: 1; transform: translateY(0); filter: blur(0); } }
-@keyframes dawn-sub { to { opacity: 1; letter-spacing: .55em; } }
-@keyframes dawn-out { to { opacity: 0; transform: scale(1.08); filter: blur(6px); visibility: hidden; } }
+@keyframes hz-push { from { transform: scale(1); } to { transform: scale(1.045); } }
+@keyframes hz-starsout { to { opacity: 0; } }
+@keyframes hz-spark { 0% { transform: scale(0); } 45% { transform: scale(1.4); } 100% { transform: scale(.6); } }
+@keyframes hz-draw { to { transform: scaleX(1); } }
+@keyframes hz-bloom { 30% { opacity: 1; } to { opacity: .7; transform: scaleX(1); } }
+@keyframes hz-streak { 30% { opacity: .9; transform: scaleX(1); } to { opacity: .25; transform: scaleX(1.3); } }
+@keyframes hz-dawn { to { opacity: 1; transform: scaleY(1); } }
+@keyframes hz-spill { to { opacity: 1; transform: scaleX(1); } }
+@keyframes hz-halo { to { opacity: 1; transform: translateY(0); } }
+@keyframes hz-sun { to { transform: translateY(-35%); } }
+@keyframes hz-reveal { to { -webkit-mask-position: 0 100%; mask-position: 0 100%; } }
+@keyframes hz-track { to { letter-spacing: .5em; text-indent: .5em; } }
+@keyframes hz-sheen { to { background-position: -40% 0; } }
+@keyframes hz-rule { to { transform: scaleX(1); } }
+@keyframes hz-sub { to { opacity: 1; letter-spacing: .7em; text-indent: .7em; } }
+@keyframes hz-grain { 0% { transform: translate(0, 0); } 20% { transform: translate(-3%, 2%); } 40% { transform: translate(2%, -4%); } 60% { transform: translate(-4%, -1%); } 80% { transform: translate(3%, 3%); } 100% { transform: translate(0, 0); } }
+@keyframes hz-out { to { opacity: 0; transform: scale(1.03); visibility: hidden; } }
+@keyframes hz-fadein { from { opacity: 0; } to { opacity: 1; } }
+@keyframes hz-fade { to { opacity: 0; visibility: hidden; } }
 
+/* A TV and weak phones: the same scene without what is redrawn every frame.
+   The name fades in at its final spacing; the subtitle fades; no push. */
+.hz-plain .hz-scene { animation: none; }
+.hz-plain .hz-word { -webkit-mask-image: none; mask-image: none; letter-spacing: .5em; text-indent: .5em; opacity: 0; animation: hz-fadein 1.2s cubic-bezier(.22, 1, .36, 1) 2s forwards; }
+.hz-plain .hz-sub { letter-spacing: .7em; text-indent: .7em; animation-name: hz-fadein; }
+.hz-plain.hz-out { animation-name: hz-fade; }
 /* Less motion asked for: the finished scene, then a quick fade. */
-.dawn-still *, .dawn-still { animation-duration: 1ms !important; animation-delay: 0s !important; }
-.dawn-still.dawn-out { animation: dawn-fade .3s ease forwards !important; }
-@keyframes dawn-fade { to { opacity: 0; visibility: hidden; } }
-/* The apps: glows that would be redrawn on every frame, off, as on a TV. */
-.dawn-lite .dawn-word, .dawn-lite .dawn-crest { filter: none; }
-.dawn-lite.dawn-out { animation-name: dawn-fade; }
-.dawn-lite .dawn-sub { letter-spacing: .55em; animation-name: dawn-sub-still; }
-html.tv-mode .dawn-word > span, html.low-gfx .dawn-word > span { filter: none; }
-html.tv-mode .dawn-crest, html.low-gfx .dawn-crest, html.tv-mode .dawn-word, html.low-gfx .dawn-word { filter: none; }
-html.tv-mode .dawn-out, html.low-gfx .dawn-out { animation-name: dawn-fade; }
-/* On a TV the subtitle settles by fading, not by re-spacing its letters
-   (spacing is laid out again every frame). */
-html.tv-mode .dawn-sub, html.low-gfx .dawn-sub { letter-spacing: .55em; animation-name: dawn-sub-still; }
-@keyframes dawn-sub-still { to { opacity: 1; } }
+.hz-still *, .hz-still { animation-duration: 1ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; }
+.hz-still.hz-out { animation: hz-fade .3s ease forwards !important; }
 
 
 
