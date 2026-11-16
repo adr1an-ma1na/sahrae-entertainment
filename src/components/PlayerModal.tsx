@@ -1,4 +1,4 @@
-import { Volume2, ChevronDown, X, ExternalLink, AlertCircle, Play, RefreshCw, Plus, Check, Maximize, Minimize, MousePointer2, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle, Gauge, Star, Subtitles } from 'lucide-react';
+import { Volume2, ChevronDown, X, ExternalLink, AlertCircle, Play, RefreshCw, Plus, Check, Maximize, Minimize, MousePointer2, ThumbsUp, ThumbsDown, Download, Server, Waves, ShieldCheck, AlertTriangle, Gauge, Star, Subtitles, RotateCcw, RotateCw } from 'lucide-react';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { fetchMediaDetails, MediaDetails, getImageUrl, fetchSimilar, MediaItem, SeasonDetails, fetchSeasonDetails, certificationOf } from '../services/tmdb';
@@ -1212,6 +1212,19 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     if (webJump) { setJumpAt(to); setRefreshKey((k) => k + 1); }
   };
 
+  // The phone and tablet apps: the player's own controls for every server
+  // (±10 s, subtitles, quality), through Sahrae's player or the frame helper.
+  // The website cannot reach into another site's player; there its own bar is in reach.
+  const appControls = !isTelevision() && !playingTrailer && (usingClean || canFrameKick()) && !removedNow;
+  const nudge = (by: number) => {
+    const at = lastPosRef.current;
+    if (!at || !(at.position > 0)) return;
+    const to = Math.max(0, at.duration > 0 ? Math.min(at.duration - 2, at.position + by) : at.position + by);
+    lastPosRef.current = { ...at, position: to };
+    seekTo(to);
+    haptics.tap();
+  };
+
   // TV, a server's own player: the remote's controls over it (ui/TvTransport.tsx).
   const tvTransportOn = isTelevision() && canFrameKick() && !usingClean && videoLoaded && !removedNow;
   const openStrip = () => { window.dispatchEvent(new CustomEvent('sahrae:tv-edge', { detail: 'up', cancelable: true })); };
@@ -1529,7 +1542,33 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       </select>
                       <ChevronDown className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-white/70 pointer-events-none" />
                     </label>
+                    {/* Back and ahead 10 s, on every server the app can reach into
+                        (owner, 2026-11-15). The TV has its own (ui/TvTransport.tsx). */}
+                    {appControls && (
+                      <>
+                        <button onClick={() => nudge(-10)} title="Back 10 seconds" aria-label="Back 10 seconds"
+                          className="h-10 px-2.5 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1 transition-colors active:scale-95">
+                          <RotateCcw className="w-4 h-4" /> 10
+                        </button>
+                        <button onClick={() => nudge(10)} title="Ahead 10 seconds" aria-label="Ahead 10 seconds"
+                          className="h-10 px-2.5 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1 transition-colors active:scale-95">
+                          10 <RotateCw className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
                     <div className="flex-1" />
+                    {appControls && !hasLanguages(choices) && (
+                      <button onClick={() => { setShowLangs((v) => !v); setShowChoices(false); }} aria-expanded={showLangs} title="Audio & Subtitles" aria-label="Audio and subtitles"
+                        className="h-10 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-sm font-semibold flex items-center gap-1.5 transition-colors active:scale-95">
+                        <Subtitles className="w-4 h-4" /> <span className="hidden sm:inline">Audio &amp; Subtitles</span>
+                      </button>
+                    )}
+                    {appControls && !(choices && choices.quality.length > 1) && (
+                      <button onClick={() => { setShowChoices((v) => !v); setShowLangs(false); }} aria-expanded={showChoices} title="Quality" aria-label="Quality"
+                        className="h-10 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-sm font-semibold flex items-center gap-1.5 transition-colors active:scale-95">
+                        <Gauge className="w-4 h-4" /> Quality
+                      </button>
+                    )}
                     {hasLanguages(choices) && !isTelevision() && (
                       <button onClick={() => { setShowLangs((v) => !v); setShowChoices(false); }} aria-expanded={showLangs} title="Audio & Subtitles" aria-label="Audio and subtitles"
                         className={`h-10 px-3 shrink-0 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-colors active:scale-95 ${choices.subsOn >= 0 ? 'bg-white text-black' : 'bg-white/10 hover:bg-white/20 text-white'}`}>
@@ -1597,6 +1636,21 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       </div>
                     </div>
                     <p className="text-[11px] text-zinc-500 mt-4 leading-snug">What each server offers differs. Your choice carries on to the next episode.</p>
+                  </div>
+                )}
+                {!playingTrailer && appControls && ((showLangs && !hasLanguages(choices)) || (showChoices && !(choices && choices.quality.length > 1))) && (
+                  <div role="dialog" aria-label={showLangs ? 'Audio and subtitles' : 'Quality'}
+                    className={`absolute ${fsActive ? 'top-full mt-1' : 'bottom-full mb-2'} right-2 z-50 w-[min(22rem,calc(100vw-1rem))] bg-zinc-950/95 rounded-xl border border-white/15 shadow-2xl p-4`}>
+                    <p className="text-sm font-bold text-white mb-1">{showLangs ? 'No subtitles offered' : 'No other sizes offered'}</p>
+                    <p className="text-xs text-zinc-400 leading-snug mb-3">{showLangs
+                      ? (videoLoaded ? 'This server offers no subtitles or other languages for this title. Another server may.' : 'The choices appear once the film starts.')
+                      : (videoLoaded ? 'This server offers this title at one picture size. Another server may offer more.' : 'The choices appear once the film starts.')}</p>
+                    {videoLoaded && dynamicServers.length > 1 && (
+                      <button onClick={() => { setShowLangs(false); setShowChoices(false); pickServer((selectedServer + 1) % dynamicServers.length); }}
+                        className="h-9 px-4 rounded-full bg-white text-black text-sm font-bold active:scale-95">
+                        Try {(dynamicServers[(selectedServer + 1) % dynamicServers.length]?.name || 'the next server').split(' · ')[0]}
+                      </button>
+                    )}
                   </div>
                 )}
                 {!playingTrailer && showChoices && choices && choices.quality.length > 1 && (
