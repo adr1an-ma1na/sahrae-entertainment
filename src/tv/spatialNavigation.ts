@@ -677,6 +677,8 @@ export function initSpatialNavigation() {
     'keydown',
     (e: KeyboardEvent) => {
       if (pointerOut()) return;
+      // The opening takes the arrows (it turns) and OK (it enters): SplashIntro.
+      if (document.querySelector('.hz:not(.hz-out)')) return;
       const active = document.activeElement as HTMLElement | null;
 
       // Escape / Back — close the top-most open layer (player, sheet, modal).

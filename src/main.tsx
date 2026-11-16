@@ -10,6 +10,7 @@ import { AuthProvider } from './hooks/useAuth.tsx';
 import { RadioProvider } from './hooks/useRadio.tsx';
 import { MusicProvider } from './hooks/useMusic.tsx';
 import { initSpatialNavigation } from './tv/spatialNavigation.ts';
+import { initTilt } from './services/tilt';
 import { applyTvViewport } from './tv/tvViewport.ts';
 import { startErrorReporting } from './services/errorReporter';
 import { applyGraphicsTier } from './services/graphicsTier.ts';
@@ -28,6 +29,7 @@ applyTvViewport();
 
 // Enable D-pad / arrow-key navigation for TV remotes & keyboards.
 initSpatialNavigation();
+initTilt();
 
 // Before first paint, so a weak device never renders one frame of real glass
 // and then visibly drops it.

@@ -175,5 +175,16 @@ same('an old size (70%) steps from the standard', stepZoom(70, 1), 110);
   same('the large preview is for televisions only', app.includes('{isTelevision() && <TvFocusPreview />}'), true);
 }
 
+// 3D motion (owner, 2026-11-17).
+{
+  const { readFileSync } = await import('node:fs');
+  const nav = readFileSync(new URL('./src/tv/spatialNavigation.ts', import.meta.url), 'utf8');
+  same('the opening keeps the remote while it is on screen', nav.includes("if (document.querySelector('.hz:not(.hz-out)')) return;"), true);
+  const css = readFileSync(new URL('./src/index.css', import.meta.url), 'utf8');
+  same('a page swing leaves no transform behind (fill: backwards)', /.tab-in { animation: tab-in [^;]*backwards;/.test(css), true);
+  same('only the poster in hand is a 3D layer', css.includes('.poster-card.is-tilted > div:first-child { transform:'), true);
+  same('weak phones: a plain fade between pages', /html.low-gfx .tab-in { animation: tab-fade/.test(css), true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

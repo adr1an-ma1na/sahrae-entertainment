@@ -842,9 +842,10 @@ export default function App() {
           />
 
           <main className="pb-28 md:pb-0">
-            {/* The new section draws at once and fades up. It used to wait out a
-                fade of the old one first, a delay on every press. Opacity only: a
-                transform would re-anchor fixed overlays (the Sports player). */}
+            {/* The new section draws at once and swings in from depth (index.css
+                .tab-in, 2026-11-17). Its transform lasts only the swing (fill:
+                backwards), so fixed overlays inside it (the Sports player) are
+                anchored to the screen once it has arrived. */}
             <div key={activeTab} className="tab-in">
               <Suspense fallback={<div className="min-h-screen" aria-hidden />}>
                 {introShown ? renderContent() : null}

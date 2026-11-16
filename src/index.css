@@ -1342,10 +1342,41 @@ html.tv-mode .quiet-focus a:focus { transform: scale(1.05); filter: brightness(1
 @media (max-width: 767px) { html.consent-open .signin-page { padding-bottom: 9rem; } }
 
 /* A section appearing. No transform: see App.tsx. */
-@keyframes tab-in { from { opacity: 0; } to { opacity: 1; } }
-.tab-in { animation: tab-in 0.14s ease-out; }
+/* 3D (owner, 2026-11-17): the new section swings in from behind. The fill is
+   `backwards` only, so once it has arrived the page carries no transform and a
+   fixed overlay inside it (the Sports player) is anchored to the screen again;
+   the transform lasts the half second of the swing. */
+@keyframes tab-in { from { opacity: 0; transform: perspective(1400px) translate3d(2.5%, 0, -220px) rotateY(9deg); } to { opacity: 1; transform: none; } }
+.tab-in { animation: tab-in 0.55s cubic-bezier(.22, 1, .36, 1) backwards; transform-origin: 0% 40%; }
 @media (prefers-reduced-motion: reduce) { .tab-in { animation: none; } }
-html.tv-mode .tab-in { animation: none; }
+/* A TV: a shorter swing with depth only (a turned page is a lot to redraw); weak phones: the fade. */
+@keyframes tab-in-tv { from { opacity: 0; transform: perspective(1400px) translate3d(0, 0, -160px); } to { opacity: 1; transform: none; } }
+html.tv-mode .tab-in { animation: tab-in-tv 0.38s cubic-bezier(.22, 1, .36, 1) backwards; }
+@keyframes tab-fade { from { opacity: 0; } to { opacity: 1; } }
+html.low-gfx .tab-in { animation: tab-fade 0.14s ease-out backwards; }
+
+/* The sidebar's selected item: a slab of the theme's gold with a visible edge,
+   tipping down into place, and its icon turning over (Sidebar.tsx). */
+.nav-on { position: relative; isolation: isolate; color: var(--on-gold) !important; perspective: 500px; }
+.nav-on::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; z-index: -1; transform-origin: 50% 0;
+  background: linear-gradient(180deg, var(--logo-hi) 0%, var(--gold-300) 34%, var(--gold-500) 62%, color-mix(in srgb, var(--gold-500) 68%, var(--logo-deep)) 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.55), 0 3px 0 color-mix(in srgb, var(--gold-500) 45%, #000), 0 10px 22px -10px rgb(var(--acc-rgb) / .7);
+  animation: nav-slab .55s cubic-bezier(.22, 1, .36, 1);
+}
+.nav-on > svg { animation: nav-icon .7s cubic-bezier(.22, 1, .36, 1); }
+@keyframes nav-slab { from { opacity: 0; transform: rotateX(-82deg) translateY(-25%); } 55% { opacity: 1; } to { opacity: 1; transform: none; } }
+@keyframes nav-icon { from { transform: perspective(200px) rotateY(-180deg) scale(.8); } to { transform: perspective(200px) rotateY(0) scale(1); } }
+@media (prefers-reduced-motion: reduce) { .nav-on::before, .nav-on > svg { animation: none; } }
+
+/* Posters that lean (services/tilt.ts): only the card in hand carries the 3D
+   transform, so a row of posters is not a row of 3D layers. */
+.poster-card.is-tilted > div:first-child { transform: perspective(700px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) scale(var(--press, 1)); }
+.poster-card.is-tilted > div:first-child::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 3;
+  background: radial-gradient(60% 50% at var(--gx, 50%) var(--gy, 0%), rgba(255,255,255,.22), transparent 70%);
+}
+html.tv-mode .poster-card.is-tilted > div:first-child::after { display: none; }
 /* The picture is never outlined, by the remote or by keyboard focus. */
 [data-tv-noring]:focus, [data-tv-noring]:focus-visible, iframe:focus, iframe:focus-visible, video:focus, video:focus-visible {
   outline: none !important;
@@ -1625,6 +1656,13 @@ a:focus-visible {
 .hz { --hz: 62%; background: #040306; }
 @media (orientation: portrait) { .hz { --hz: 54%; } }
 .hz-scene { position: absolute; inset: 0; transform-origin: 50% var(--hz); background: radial-gradient(140% 90% at 50% var(--hz), #120B10 0%, #040306 60%); animation: hz-push 5.2s cubic-bezier(.33, 0, .2, 1) both; }
+/* The depth (SplashIntro plane()): the world turns, each plane sits at its distance. */
+.hz-scene { perspective: 900px; perspective-origin: 50% var(--hz); }
+.hz-world { position: absolute; inset: 0; transform-style: preserve-3d; transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); transition: transform .6s cubic-bezier(.22, 1, .36, 1); }
+/* Wider than the screen, so a turned plane never shows its edge; heights unchanged. */
+.hz-plane { position: absolute; inset: 0 -18%; transform-style: preserve-3d; }
+.hz-sand { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.hz { cursor: pointer; }
 .hz-stars { position: absolute; left: 0; top: 0; width: 1px; height: 1px; border-radius: 50%; opacity: .55; animation: hz-starsout 2.6s ease .6s forwards; }
 .hz-dawn { position: absolute; left: -20%; right: -20%; top: 0; height: var(--hz); transform-origin: 50% 100%; transform: scaleY(.15); opacity: 0;
   background:
