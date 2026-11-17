@@ -1,83 +1,29 @@
 /**
- * The sidebar's artwork (owner, 2026-11-17: "an art design that's high level,
- * with the theme going on well"). All of it drawn in the theme's own colours:
+ * The sidebar's artwork: a wall of hieroglyphics (owner, 2026-11-17:
+ * "hieroglyphics, particularly on the sidebar"; ui/Glyphs.tsx).
  *
- *   SunMark   Sahrae's sun over dunes, as a small jewel beside the name.
- *   SideArt   behind the sidebar: dawn light at the top, a desert at the foot
- *             with the sun going down behind the dunes, and a gold edge whose
- *             light rests beside the selected item (--glow-y, set by Sidebar).
+ * Three layers of the same carved wall, all painted in the theme's colours:
+ *   shadow  the cut edge of each sign, a pixel down and right, so the signs
+ *           read as cut into the wall rather than drawn on it;
+ *   face    the signs themselves, quiet behind the menu;
+ *   lit     the signs near the selected item, brighter, as if a lamp were
+ *           held to the wall there (--glow-y, set by Sidebar).
+ * Plus warm light falling from the top and a gold edge on the right.
  *
- * Static shapes: nothing here moves except the edge light when the selection
- * changes, so a TV draws it once.
+ * Static: only the lit patch moves, when the selection changes. A TV draws
+ * the wall once.
  */
-import { useId, type CSSProperties } from 'react';
-import { glyphWallUrl } from './Glyphs';
+import type { CSSProperties } from 'react';
+import { WALL_W, glyphWallUrl } from './Glyphs';
 
-export function SunMark({ className = '' }: { className?: string }) {
-  // Its own ids: the tablet rail and the sidebar both draw one, and a gradient
-  // borrowed from the hidden copy does not paint.
-  const u = useId().replace(/:/g, '');
+export default function SideArt() {
+  const style = { '--wall': glyphWallUrl(), '--wall-w': `${WALL_W}px` } as CSSProperties;
   return (
-    <svg viewBox="0 0 40 40" className={className} aria-hidden="true">
-      <defs>
-        <linearGradient id={`sm-sky${u}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" className="sm-top" />
-          <stop offset="0.62" style={{ stopColor: 'rgb(var(--acc2-rgb))', stopOpacity: 0.55 }} />
-          <stop offset="1" style={{ stopColor: 'rgb(var(--acc-rgb))', stopOpacity: 0.85 }} />
-        </linearGradient>
-        <radialGradient id={`sm-sun${u}`} cx="0.5" cy="0.45" r="0.6">
-          <stop offset="0" style={{ stopColor: 'var(--logo-hi)' }} />
-          <stop offset="0.55" style={{ stopColor: 'var(--logo-1)' }} />
-          <stop offset="1" style={{ stopColor: 'var(--logo-2)' }} />
-        </radialGradient>
-        <clipPath id={`sm-clip${u}`}><rect width="40" height="40" rx="11" /></clipPath>
-      </defs>
-      <g clipPath={`url(#sm-clip${u})`}>
-        <rect width="40" height="40" fill={`url(#sm-sky${u})`} />
-        <circle cx="20" cy="22.5" r="7.2" fill={`url(#sm-sun${u})`} />
-        <path d="M-2 25.5 C 9 22.5 18 24.5 24 24.8 C 31 25.2 36 23.6 42 25 L42 42 L-2 42 Z" className="sa-far" />
-        <path d="M-2 29.5 C 8 25.5 17 26.6 22 27.2 C 30 28.2 35 26.6 42 28.6 L42 42 L-2 42 Z" className="sa-near" />
-        <path d="M-2 29.5 C 8 25.5 17 26.6 22 27.2 C 30 28.2 35 26.6 42 28.6" fill="none" style={{ stroke: 'var(--logo-1)' }} strokeWidth="0.9" opacity="0.85" />
-      </g>
-      <rect x="0.5" y="0.5" width="39" height="39" rx="10.5" fill="none" style={{ stroke: 'rgb(var(--acc-rgb))' }} strokeOpacity="0.45" />
-    </svg>
-  );
-}
-
-export default function SideArt({ dunes = true }: { dunes?: boolean }) {
-  const u = useId().replace(/:/g, '');
-  return (
-    <div className="side-art" aria-hidden="true">
+    <div className="side-art" aria-hidden="true" style={style}>
       <div className="side-art-glow" />
-      {/* A wall of Sahrae's carved symbols, painted in the theme's colour. */}
-      <div className="glyph-wall" style={{ '--wall': glyphWallUrl() } as CSSProperties} />
-      {dunes && (
-        <svg className="side-art-dunes" viewBox="0 0 256 210" preserveAspectRatio="xMidYMax slice">
-          <defs>
-            <radialGradient id={`sa-sky${u}`} cx="0.7" cy="0.62" r="0.7">
-              <stop offset="0" style={{ stopColor: 'rgb(var(--acc-rgb))', stopOpacity: 0.34 }} />
-              <stop offset="0.45" style={{ stopColor: 'rgb(var(--acc2-rgb))', stopOpacity: 0.14 }} />
-              <stop offset="1" style={{ stopColor: 'rgb(var(--acc2-rgb))', stopOpacity: 0 }} />
-            </radialGradient>
-            <radialGradient id={`sa-sun${u}`} cx="0.5" cy="0.45" r="0.6">
-              <stop offset="0" style={{ stopColor: 'var(--logo-hi)' }} />
-              <stop offset="0.55" style={{ stopColor: 'var(--logo-1)' }} />
-              <stop offset="1" style={{ stopColor: 'var(--logo-2)' }} />
-            </radialGradient>
-            <linearGradient id={`sa-fade${u}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" style={{ stopColor: 'var(--zinc-950)', stopOpacity: 0 }} />
-              <stop offset="1" style={{ stopColor: 'var(--zinc-950)', stopOpacity: 0.9 }} />
-            </linearGradient>
-          </defs>
-          <rect width="256" height="210" fill={`url(#sa-sky${u})`} />
-          <circle cx="182" cy="132" r="22" fill={`url(#sa-sun${u})`} opacity="0.72" />
-          <path d="M0 132 C 50 116 98 128 140 126 C 186 124 222 112 256 120 L256 210 L0 210 Z" className="sa-far" opacity="0.75" />
-          <path d="M0 152 C 44 128 104 136 150 141 C 196 146 228 134 256 140 L256 210 L0 210 Z" className="sa-mid" />
-          <path d="M0 152 C 44 128 104 136 150 141 C 196 146 228 134 256 140" fill="none" style={{ stroke: 'var(--logo-1)' }} strokeWidth="1" opacity="0.7" />
-          <path d="M0 178 C 60 160 120 170 170 172 C 210 174 236 166 256 170 L256 210 L0 210 Z" className="sa-near" />
-          <rect width="256" height="210" fill={`url(#sa-fade${u})`} />
-        </svg>
-      )}
+      <div className="glyph-wall glyph-wall-shadow" />
+      <div className="glyph-wall glyph-wall-face" />
+      <div className="glyph-wall glyph-wall-lit" />
       <div className="side-edge" />
     </div>
   );

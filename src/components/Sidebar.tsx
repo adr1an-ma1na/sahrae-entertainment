@@ -5,7 +5,7 @@ import { useMusic } from '../hooks/useMusic';
 import { isTelevision } from '../tv/spatialNavigation';
 import { CoverArt } from './ui/CoverArt';
 import { useLayoutEffect, useRef } from 'react';
-import SideArt, { SunMark } from './ui/SideArt';
+import SideArt from './ui/SideArt';
 import { Glyph } from './ui/Glyphs';
 
 /**
@@ -106,9 +106,9 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
     <>
       {/* Tablet icon rail (md–lg) */}
       <aside className="tv-rail side-shell hidden md:flex lg:hidden flex-col items-center fixed left-0 top-0 bottom-0 w-16 z-40 glass sidebar-glass border-r border-white/12 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 overflow-y-auto scrollbar-hide">
-        <SideArt dunes={false} />
+        <SideArt />
         <button onClick={() => setActiveTab('home')} aria-label="Sahrae home"
-          className="w-10 h-10 mb-2 rounded-xl shrink-0 overflow-hidden"><SunMark className="w-10 h-10" /></button>
+          className="w-10 h-10 mb-2 rounded-xl bg-gradient-to-tr from-amber-400 to-amber-600 flex items-center justify-center font-black text-white text-lg shrink-0">S</button>
         <div className="flex flex-col items-center gap-1">{PRIMARY.map(railBtn)}</div>
         {railDivider}
         <div className="flex flex-col items-center gap-1">{WATCH.map(railBtn)}</div>
@@ -131,14 +131,9 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
       {/* Full labelled sidebar (lg+) */}
       <aside ref={fullRef} className={`tv-full side-shell hidden lg:flex flex-col fixed left-0 top-0 bottom-0 w-64 z-40 glass sidebar-glass border-r border-white/10 pt-[env(safe-area-inset-top)] transition-transform duration-300 ${collapsed ? '-translate-x-full' : 'translate-x-0'}`}>
         <SideArt />
-        <div className="px-4 pt-5 pb-4 flex items-center justify-between gap-2">
-          {/* The name in a cartouche, the frame that held a ruler's name. */}
-          <h1 className="cartouche flex items-center gap-2.5 cursor-pointer whitespace-nowrap" onClick={() => setActiveTab('home')}>
-            <SunMark className="w-9 h-9 shrink-0 side-mark" />
-            <span className="flex flex-col">
-              <span className="text-gold text-2xl font-black tracking-tighter leading-none">SAHRAE</span>
-              <span className="side-tag">Entertainment</span>
-            </span>
+        <div className="px-5 pt-5 pb-4 flex items-center justify-between">
+          <h1 className="text-2xl font-black tracking-tighter cursor-pointer whitespace-nowrap" onClick={() => setActiveTab('home')}>
+            <span className="text-gold">SAHRAE</span>
           </h1>
           <button onClick={onToggle} tabIndex={0} data-tv-focusable aria-label="Hide sidebar"
             className="w-9 h-9 flex items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-white/10 transition-colors">
@@ -165,9 +160,9 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
         <div className="side-scroll mt-6 px-3 flex-1 overflow-y-auto custom-scrollbar pb-4">
           <div className="overline side-label px-3 mb-1.5"><Glyph name="eye" className="side-glyph" /> Watch</div>
           <nav className="space-y-1 mb-5">{renderNav(WATCH)}</nav>
-          <div className="overline side-label px-3 mb-1.5"><Glyph name="waves" className="side-glyph" /> Listen</div>
+          <div className="overline side-label px-3 mb-1.5"><Glyph name="water" className="side-glyph" /> Listen</div>
           <nav className="space-y-1 mb-5">{renderNav(LISTEN)}</nav>
-          <div className="overline side-label px-3 mb-1.5"><Glyph name="door" className="side-glyph" /> Your Library</div>
+          <div className="overline side-label px-3 mb-1.5"><Glyph name="scroll" className="side-glyph" /> Your Library</div>
           <nav className="space-y-1">{renderNav(LIBRARY)}</nav>
         </div>
 

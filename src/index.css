@@ -1369,48 +1369,44 @@ html.low-gfx .tab-in { animation: tab-fade 0.14s ease-out backwards; }
 @keyframes nav-icon { from { transform: perspective(200px) rotateY(-180deg) scale(.8); } to { transform: perspective(200px) rotateY(0) scale(1); } }
 @media (prefers-reduced-motion: reduce) { .nav-on::before, .nav-on > svg { animation: none; } }
 
-/* ── The sidebar's artwork (components/ui/SideArt.tsx; owner, 2026-11-17) ──
-   All in the theme's colours: dawn light at the top, a desert at the foot, a
-   gold edge whose light rests beside the selected item, ornamented labels. */
+/* ── The sidebar's artwork: a wall of hieroglyphics (ui/SideArt.tsx, ui/Glyphs.tsx;
+   owner, 2026-11-17). Columns of carved signs between fine rules under a frieze,
+   cut into the wall (a shadow edge), lit near the selected item. Every layer is
+   the same SVG used as a mask over a fill in the theme's colours. ── */
 .side-shell > :not(.side-art) { position: relative; z-index: 1; }
 .side-art { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
-.side-art-glow { position: absolute; left: 0; right: 0; top: 0; height: 18rem;
-  background: radial-gradient(130% 80% at 0% 0%, rgb(var(--acc-rgb) / .18), transparent 62%), radial-gradient(90% 70% at 100% 8%, rgb(var(--acc2-rgb) / .16), transparent 62%); }
-.side-art-dunes { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 15rem; }
-.side-art::after { content: ''; position: absolute; inset: 0; opacity: .5; mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.08'/%3E%3C/svg%3E"); }
-html.tv-mode .side-art::after, html.low-gfx .side-art::after { display: none; }
+.side-art-glow { position: absolute; left: 0; right: 0; top: 0; height: 22rem;
+  background: radial-gradient(120% 70% at 30% 0%, rgb(var(--acc-rgb) / .16), transparent 64%), radial-gradient(90% 60% at 100% 4%, rgb(var(--acc2-rgb) / .14), transparent 62%); }
+.glyph-wall { position: absolute; inset: 0;
+  /* The carvings, and a second mask that keeps them a whisper under the menu's words
+     and lets them stand out at the open right side of the wall. */
+  -webkit-mask-image: var(--wall), linear-gradient(90deg, rgba(0,0,0,.3) 0%, rgba(0,0,0,.3) 52%, #000 80%);
+  mask-image: var(--wall), linear-gradient(90deg, rgba(0,0,0,.3) 0%, rgba(0,0,0,.3) 52%, #000 80%);
+  -webkit-mask-composite: source-in; mask-composite: intersect;
+  -webkit-mask-size: var(--wall-w) auto, 100% 100%; mask-size: var(--wall-w) auto, 100% 100%;
+  /* The wall begins under the title, so the name stands clear above the frieze. */
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: 0 4.6rem, 0 0; mask-position: 0 4.6rem, 0 0; }
+/* The lamp lights the carvings it falls on, whatever side they are. */
+.glyph-wall-lit { -webkit-mask-image: var(--wall); mask-image: var(--wall); -webkit-mask-size: var(--wall-w) auto; mask-size: var(--wall-w) auto; -webkit-mask-position: 0 4.6rem; mask-position: 0 4.6rem; }
+/* The cut edge: the wall's shadow side, one pixel down and right. */
+.glyph-wall-shadow { background-color: color-mix(in srgb, var(--zinc-950) 55%, #000); opacity: .55; -webkit-mask-position: 1px calc(4.6rem + 1px), 0 0; mask-position: 1px calc(4.6rem + 1px), 0 0; }
+[data-mode="light"] .glyph-wall-shadow { background-color: color-mix(in srgb, var(--zinc-700) 70%, rgb(var(--acc2-rgb))); opacity: .28; }
+/* The signs: quiet behind the menu, warmer toward the top where the light falls. */
+.glyph-wall-face { background-image: linear-gradient(180deg, rgb(var(--acc-rgb) / .2) 0%, rgb(var(--acc-rgb) / .12) 45%, rgb(var(--acc-rgb) / .09) 100%); }
+[data-mode="light"] .glyph-wall-face { background-image: linear-gradient(180deg, rgb(var(--acc-rgb) / .24) 0%, rgb(var(--acc-rgb) / .15) 100%); }
+/* The lamp: the signs beside the selected item, bright, fading out around it. */
+.glyph-wall-lit { background: radial-gradient(150px 110px at 70% var(--glow-y, -400px), rgb(var(--acc-rgb) / .62), rgb(var(--acc-rgb) / .2) 55%, transparent 80%); }
 .side-edge { position: absolute; top: 0; bottom: 0; right: 0; width: 1px;
   background: linear-gradient(180deg, transparent 0%, rgb(var(--acc-rgb) / .45) 16%, rgb(var(--acc-rgb) / .14) 62%, rgb(var(--acc-rgb) / .35) 92%, transparent 100%); }
 .side-edge::after { content: ''; position: absolute; right: -5px; width: 11px; height: 7rem; top: calc(var(--glow-y, -400px) - 3.5rem);
   background: radial-gradient(closest-side, rgb(var(--acc-rgb) / .95), rgb(var(--acc-rgb) / .28) 45%, transparent);
   transition: top .55s cubic-bezier(.22, 1, .36, 1); }
-/* Dune shades: the theme's dark steps at night; on a pale page, tints of its
-   room colour, or the desert disappears into the page. */
-.sa-far { fill: var(--zinc-700); } .sa-mid { fill: var(--zinc-800); } .sa-near { fill: var(--zinc-900); } .sm-top { stop-color: var(--zinc-900); }
-[data-mode="light"] .sa-far { fill: color-mix(in srgb, rgb(var(--acc2-rgb)) 22%, var(--zinc-950)); }
-[data-mode="light"] .sa-mid { fill: color-mix(in srgb, rgb(var(--acc2-rgb)) 36%, var(--zinc-950)); }
-[data-mode="light"] .sa-near { fill: color-mix(in srgb, rgb(var(--acc2-rgb)) 52%, var(--zinc-950)); }
-[data-mode="light"] .sm-top { stop-color: color-mix(in srgb, rgb(var(--acc2-rgb)) 30%, var(--zinc-950)); }
-.side-tag { font-family: var(--font-display); font-size: .56rem; font-weight: 600; letter-spacing: .42em; text-transform: uppercase; color: var(--zinc-400); margin-top: .3rem; }
-.side-mark { border-radius: 11px; box-shadow: 0 6px 18px -8px rgb(var(--acc-rgb) / .8), 0 0 0 1px rgb(var(--acc-rgb) / .12); }
 .side-label { display: flex; align-items: center; gap: .5rem; }
-.side-glyph { flex: none; width: 1rem; height: 1rem; color: var(--gold-400); filter: drop-shadow(0 0 4px rgb(var(--acc-rgb) / .5)); }
+.side-glyph { flex: none; width: 1.05rem; height: 1.05rem; color: var(--gold-400); filter: drop-shadow(0 0 4px rgb(var(--acc-rgb) / .5)); }
 html.tv-mode .side-glyph, html.low-gfx .side-glyph { filter: none; }
-/* The carved wall (ui/Glyphs glyphWallUrl): the symbols are a mask, the paint is the theme's accent,
-   fading out toward the desert at the foot. */
-.glyph-wall { position: absolute; inset: 0; background-color: rgb(var(--acc-rgb) / .10);
-  -webkit-mask: var(--wall) 0 0 / 190px repeat, linear-gradient(180deg, #000 0%, rgba(0,0,0,.55) 50%, transparent 82%);
-  -webkit-mask-composite: source-in;
-  mask: var(--wall) 0 0 / 190px repeat, linear-gradient(180deg, #000 0%, rgba(0,0,0,.55) 50%, transparent 82%);
-  mask-composite: intersect; }
-[data-mode="light"] .glyph-wall { background-color: rgb(var(--acc-rgb) / .14); }
-/* The cartouche: an oval frame around the name, with the bar at its foot. */
-.cartouche { position: relative; padding: .3rem .95rem .3rem .3rem; border-radius: 999px;
-  box-shadow: inset 0 0 0 1px rgb(var(--acc-rgb) / .45), inset 0 0 0 3px color-mix(in srgb, var(--zinc-900) 70%, transparent), inset 0 0 0 4px rgb(var(--acc-rgb) / .18);
-  background: linear-gradient(180deg, rgb(var(--acc-rgb) / .08), transparent); }
-.cartouche::after { content: ''; position: absolute; right: -5px; top: 18%; bottom: 18%; width: 2px; border-radius: 2px; background: rgb(var(--acc-rgb) / .6); }
 .side-label::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, rgb(var(--acc-rgb) / .35), transparent); }
+/* Text over the wall: the labels and items sit on a soft clearing so the signs never fight the words. */
+.side-shell nav, .side-shell .side-label { text-shadow: 0 1px 6px color-mix(in srgb, var(--zinc-950) 85%, transparent); }
 .side-item:not(.nav-on):hover { background-color: color-mix(in srgb, rgb(var(--acc-rgb)) 10%, transparent) !important; }
 .side-item > svg { transition: transform .3s cubic-bezier(.22, 1, .36, 1); }
 .side-item:not(.nav-on):hover > svg { transform: translateX(2px) scale(1.06); }
@@ -1772,16 +1768,6 @@ a:focus-visible {
 .hz-grain { position: absolute; inset: -50%; opacity: .07; mix-blend-mode: overlay; pointer-events: none; animation: hz-grain .9s steps(5) infinite; }
 .hz-vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 95% at 50% 55%, transparent 55%, rgba(0, 0, 0, .55) 100%); }
 [data-mode="light"] .hz-vignette { background: radial-gradient(120% 95% at 50% 55%, transparent 60%, color-mix(in srgb, var(--zinc-600) 30%, transparent) 100%); }
-/* Sahrae's carved symbols on the horizon (ui/Glyphs), lit outward from the sun as the line draws. */
-/* Standing on the horizon like monuments on the skyline, clear of the name below. */
-.hz-glyphs { position: absolute; left: 0; right: 0; top: calc(var(--hz) - 3.5 * var(--s)); display: flex; justify-content: center; align-items: center; gap: calc(3 * var(--s)); color: var(--logo-1); }
-.hz-glyphs > svg { width: max(16px, calc(2.6 * var(--s))); height: max(16px, calc(2.6 * var(--s))); stroke-width: 1.8; opacity: 0; animation: hz-glyph 1.1s cubic-bezier(.22, 1, .36, 1) calc(.75s + var(--d, 0s)) forwards; }
-.hz-glyph-gap { width: calc(14 * var(--s)); }
-@keyframes hz-glyph { 0% { opacity: 0; transform: translateY(40%); } 45% { opacity: 1; } 100% { opacity: .62; transform: none; } }
-@media (orientation: portrait) { .hz-glyphs { gap: 2.6vw; top: calc(var(--hz) - 6.6vw); } .hz-glyphs > svg { width: 5vw; height: 5vw; } .hz-glyph-gap { width: 24vw; } }
-.hz-plain .hz-glyphs > svg { animation-name: hz-glyph-plain; }
-@keyframes hz-glyph-plain { 0% { opacity: 0; } 100% { opacity: .62; } }
-
 /* The ending (owner, 2026-11-17: "like Netflix"): the camera dives into the sun,
    the name flies past, and the app opens out from the sun's point as a widening
    circle of light. */
