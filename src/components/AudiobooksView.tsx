@@ -4,10 +4,11 @@ import { LuxGlow, LuxHeader } from './ui/Lux';
 import { useMusic } from '../hooks/useMusic';
 import { haptics } from '../services/haptics';
 import {
-  BOOKS_CHANGED, chapterTracks, chooseLanguage, chosenLanguage, findBooks, getBook, isSaved, listening, markFinished, otherRecordings,
+  BOOKS_CHANGED, chapterTracks, chooseLanguage, chosenLanguage, findBooks, findEverywhere, getBook, isSaved, listening, markFinished, otherRecordings, chooseLibrary, chosenLibrary,
   placeOf, saved, setActiveBook, sourceFor, toggleSaved, bookIdFromSource, bookRate, keepBookRate,
 } from '../services/audiobooks';
-import { LANGUAGES, SHELVES, coverOf, lengthText, progressOf, resumePoint, type Book, type BookDetail, type Shelf } from '../services/audiobooksCore';
+import { LANGUAGES, LIBRARIES, coverOf, lengthText, libraryOf, progressOf, resumePoint, type Book, type BookDetail, type LibraryId, type Shelf } from '../services/audiobooksCore';
+import { LuxSeg } from './ui/Lux';
 
 /**
  * Audiobooks (owner, 2026-11-17: "add audiobooks, the best library").
@@ -46,7 +47,12 @@ function BookCard({ book, onOpen, progress }: { book: Book; onOpen: (b: Book) =>
   return (
     <div role="button" tabIndex={0} data-tv-focusable onClick={() => onOpen(book)} onKeyDown={(e) => { if (e.key === 'Enter') onOpen(book); }}
       aria-label={`${book.title} by ${book.author}`} className="ab-card group flex-none w-[132px] md:w-[150px] snap-start cursor-pointer focus:outline-none">
-      <Cover book={book} className="aspect-square w-full transition-transform duration-300 group-hover:-translate-y-1 shadow-lg" />
+      <div className="relative">
+        <Cover book={book} className="aspect-square w-full transition-transform duration-300 group-hover:-translate-y-1 shadow-lg" />
+        {book.library && book.library !== 'librivox' && (
+          <span className="absolute left-1.5 bottom-1.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-black/70 text-white">{book.library === 'radio' ? 'Radio drama' : 'Computer voice'}</span>
+        )}
+      </div>
       {progress !== undefined && (
         <div className="h-1 rounded-full bg-white/10 overflow-hidden mt-2"><div className="h-full bg-amber-400 rounded-full" style={{ width: `${Math.round(progress * 100)}%` }} /></div>
       )}
@@ -68,7 +74,7 @@ function Row({ title, kicker, children }: { title: string; kicker?: string; chil
 }
 
 /** A shelf that fetches its books once it is about to be seen. */
-function ShelfRow({ shelf, language, onOpen, eager = false }: { shelf: Shelf; language: string; onOpen: (b: Book) => void; eager?: boolean }) {
+function ShelfRow({ shelf, library, language, onOpen, eager = false }: { shelf: Shelf; library: LibraryId; language?: string; onOpen: (b: Book) => void; eager?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const [books, setBooks] = useState<Book[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -77,13 +83,13 @@ function ShelfRow({ shelf, language, onOpen, eager = false }: { shelf: Shelf; la
     const el = ref.current;
     if (!el) return;
     let live = true;
-    const load = () => findBooks({ shelf, language, rows: 18 }).then((r) => { if (live) setBooks(r.books); }).catch(() => { if (live) setFailed(true); });
+    const load = () => findBooks({ shelf, library, language, rows: 18 }).then((r) => { if (live) setBooks(r.books); }).catch(() => { if (live) setFailed(true); });
     // The first shelves are on screen from the start: fetched at once.
     if (eager) { void load(); return () => { live = false; }; }
     const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { io.disconnect(); void load(); } }, { rootMargin: '600px 0px' });
     io.observe(el);
     return () => { live = false; io.disconnect(); };
-  }, [shelf, language, eager]);
+  }, [shelf, library, language, eager]);
   if (books && !books.length) return null;
   return (
     <div ref={ref}>
@@ -155,7 +161,7 @@ function BookPage({ book, onClose, onOpen }: { book: Book; onClose: () => void; 
               {(d?.runtime || book.runtime) > 0 && <span className="inline-flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {lengthText(d?.runtime || book.runtime)}</span>}
               {d && <span>{d.chapters.length} {d.chapters.length === 1 ? 'part' : 'parts'}</span>}
               {LANGUAGES.find((l) => l.code === book.language) && <span>{LANGUAGES.find((l) => l.code === book.language)!.name}</span>}
-              {d?.readers.length ? <span>Read by {d.readers.join(', ')}</span> : null}
+              {d?.readers.length ? <span>Read by {d.readers.join(', ')}</span> : <span>{libraryOf(book.library).voice}</span>}
             </p>
             {pct > 0 && pct < 100 && (
               <div className="mt-4 max-w-sm">
@@ -230,11 +236,11 @@ function BookPage({ book, onClose, onOpen }: { book: Book; onClose: () => void; 
         {others.length > 0 && (
           <section className="mt-10">
             <h2 className="mb-1 text-xl font-display font-bold text-white">Other recordings</h2>
-            <p className="mb-4 text-sm text-zinc-400">The same book, read by someone else.</p>
+            <p className="mb-4 text-sm text-zinc-400">The same book, read by someone else or by a computer voice.</p>
             <div className="flex gap-4 overflow-x-auto pb-3 scrollbar-hide snap-x">{others.map((o) => <BookCard key={o.id} book={o} onOpen={onOpen} />)}</div>
           </section>
         )}
-        <p className="mt-6 text-xs text-zinc-500">A LibriVox recording, in the public domain, hosted by the Internet Archive.</p>
+        <p className="mt-6 text-xs text-zinc-500">{libraryOf(book.library).credit}</p>
       </div>
     </div>
   );
@@ -242,8 +248,10 @@ function BookPage({ book, onClose, onOpen }: { book: Book; onClose: () => void; 
 
 export default function AudiobooksView() {
   const [language, setLanguage] = useState(chosenLanguage);
+  const [libraryId, setLibraryId] = useState<LibraryId>(chosenLibrary);
+  const library = libraryOf(libraryId);
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Book[] | null>(null);
+  const [results, setResults] = useState<{ library: LibraryId; books: Book[] }[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [open, setOpen] = useState<Book | null>(null);
   const v = useBooksVersion();
@@ -258,8 +266,8 @@ export default function AudiobooksView() {
     const n = ++seq.current;
     setSearching(true);
     const t = window.setTimeout(() => {
-      findBooks({ search: q, language, rows: 36 })
-        .then((r) => { if (n === seq.current) setResults(r.books); })
+      findEverywhere(q, language)
+        .then((r) => { if (n === seq.current) setResults(r); })
         .catch(() => { if (n === seq.current) setResults([]); })
         .finally(() => { if (n === seq.current) setSearching(false); });
     }, 380);
@@ -267,12 +275,18 @@ export default function AudiobooksView() {
   }, [query, language]);
 
   const pickLanguage = useCallback((code: string) => { setLanguage(code); chooseLanguage(code); }, []);
+  const pickLibrary = useCallback((id: LibraryId) => { setLibraryId(id); chooseLibrary(id); }, []);
 
   return (
     <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-40 relative">
       <LuxGlow />
       <LuxHeader kicker={<><BookOpen className="w-3.5 h-3.5" /> Sahrae · Listen</>} title="Audiobooks"
-        meta={<span>22,000 classics read aloud, free. Your place kept to the second, on every device.</span>} />
+        meta={<span>Three free libraries: 27,000 books and classic radio plays. Your place kept to the second, on every device.</span>} />
+
+      <div className="mt-6 flex flex-col gap-2">
+        <LuxSeg items={LIBRARIES.map((l) => ({ id: l.id, label: l.name }))} active={libraryId} onChange={pickLibrary} className="self-start max-w-full overflow-x-auto" />
+        <p className="text-sm text-zinc-400">{library.note}</p>
+      </div>
 
       <div className="mt-6 flex flex-col md:flex-row md:items-center gap-3">
         <label className="relative flex-1 max-w-xl">
@@ -282,17 +296,23 @@ export default function AudiobooksView() {
             className="w-full h-12 rounded-full bg-white/[0.06] ring-1 ring-white/10 focus:ring-amber-400/60 outline-none pl-11 pr-10 text-white placeholder:text-zinc-500" />
           {query && <button onClick={() => setQuery('')} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 w-7 h-7 grid place-items-center rounded-full hover:bg-white/10 text-zinc-400"><X className="w-4 h-4" /></button>}
         </label>
-        <div className="flex gap-2 overflow-x-auto scrollbar-hide" role="group" aria-label="Language">
+        {library.languages && <div className="flex gap-2 overflow-x-auto scrollbar-hide" role="group" aria-label="Language">
           {LANGUAGES.map((l) => <button key={l.code} onClick={() => pickLanguage(l.code)} aria-pressed={language === l.code} data-tv-focusable className="lux-chip">{l.name}</button>)}
-        </div>
+        </div>}
       </div>
 
       {query.trim().length >= 2 ? (
         <section className="mt-8">
-          <h2 className="text-xl font-display font-bold text-white mb-4">{searching ? 'Searching…' : results?.length ? `Books for “${query.trim()}”` : `Nothing found for “${query.trim()}”`}</h2>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(132px,1fr))] md:grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-5">
-            {(results || []).map((b) => <BookCard key={b.id} book={b} onOpen={setOpen} />)}
-          </div>
+          <h2 className="text-xl font-display font-bold text-white mb-1">{searching ? 'Searching all three libraries…' : results?.length ? `Results for “${query.trim()}”` : `Nothing found for “${query.trim()}”`}</h2>
+          {!searching && results?.length ? <p className="text-sm text-zinc-400 mb-2">From every library at once.</p> : null}
+          {(results || []).map((group) => (
+            <div key={group.library} className="mt-6">
+              <p className="lux-kicker mb-3">{libraryOf(group.library).name} · {group.books.length}</p>
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(132px,1fr))] md:grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-5">
+                {group.books.map((b) => <BookCard key={b.id} book={b} onOpen={setOpen} />)}
+              </div>
+            </div>
+          ))}
         </section>
       ) : (
         <>
@@ -304,7 +324,7 @@ export default function AudiobooksView() {
           {mine.length > 0 && (
             <Row title="Your library">{mine.map((b) => <BookCard key={b.id} book={b} onOpen={setOpen} />)}</Row>
           )}
-          {SHELVES.map((s, i) => <ShelfRow key={`${s.id}-${language}`} shelf={s} language={language} onOpen={setOpen} eager={i < 2} />)}
+          {library.shelves.map((s, i) => <ShelfRow key={`${library.id}-${s.id}-${language}`} shelf={s} library={library.id} language={library.languages ? language : undefined} onOpen={setOpen} eager={i < 2} />)}
         </>
       )}
 

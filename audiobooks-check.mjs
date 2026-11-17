@@ -3,7 +3,7 @@
 // Archive sends for LibriVox books, and a listener's place in a book.
 import {
   toSeconds, cleanTitle, bookFromDoc, chaptersFrom, readersFrom, lengthText, listened, progressOf, resumePoint,
-  placeFrom, inProgress, archiveQuery, SHELVES, oneEach,
+  placeFrom, inProgress, archiveQuery, SHELVES, oneEach, authorName, LIBRARIES, libraryOf,
 } from './src/services/audiobooksCore.ts';
 
 let pass = 0, fail = 0;
@@ -19,6 +19,7 @@ eq('seconds as text', toSeconds('1234.6'), 1235);
 eq('nothing', toSeconds(undefined), 0);
 eq('not a time', toSeconds('soon'), 0);
 eq('the author left off the title', cleanTitle("Alice's Adventures in Wonderland, by Lewis Carroll"), "Alice's Adventures in Wonderland");
+eq('a radio set named as its show', cleanTitle('Gunsmoke - Single Episodes'), 'Gunsmoke');
 eq('a version note left off', [cleanTitle('Pride and Prejudice (version 3)'), cleanTitle('Pride and Prejudice (version 6 dramatic reading)')], ['Pride and Prejudice', 'Pride and Prejudice']);
 const doc = { identifier: 'art_of_war_librivox', title: 'The Art of War', creator: 'Sun Tzu', runtime: '01:07:33', language: 'eng', subject: ['librivox', 'audiobooks', 'war', 'strategy'], publicdate: '2006-03-01T00:00:00Z', downloads: 24472929 };
 const book = bookFromDoc(doc);
@@ -40,7 +41,7 @@ eq('each with its length', ch.map((c) => c.duration), [506, 465]);
 eq('and a direct address', ch[0].url, 'https://archive.org/download/art_of_war_librivox/art_of_war_01-02_sun_tzu_64kb.mp3');
 eq('no light copies: the full ones', chaptersFrom('x', [{ name: 'b_02.mp3', length: '1:00' }, { name: 'a_01.mp3', length: '2:00' }]).map((c) => c.duration), [120, 60]);
 eq('a leading number is left to the list', chaptersFrom('x', [{ name: 'x_01_64kb.mp3', title: '01 - A Scandal in Bohemia' }, { name: 'x_02_64kb.mp3', title: 'Chapter 2: The Storm' }, { name: 'x_03_64kb.mp3', title: '1984 Revisited' }]).map((c) => c.title), ['A Scandal in Bohemia', 'The Storm', '1984 Revisited']);
-eq('an untitled chapter is numbered', chaptersFrom('x', [{ name: 'x_01_64kb.mp3' }])[0].title, 'Chapter 1');
+eq('an untitled chapter is numbered', chaptersFrom('x', [{ name: 'x_01_64kb.mp3' }, { name: 'x_02_64kb.mp3' }])[1].title, 'Chapter 2');
 eq('readers from the description', readersFrom('<p>LibriVox recording. Read by Kara Shallenberg and Mark Nelson.</p>'), ['Kara Shallenberg', 'Mark Nelson']);
 eq('no readers named: none', readersFrom('A dramatic reading.'), []);
 eq('lengths in words', [lengthText(24370), lengthText(1434), lengthText(3600), lengthText(0)], ['6 h 46 min', '24 min', '1 h', '']);
@@ -69,6 +70,19 @@ console.log('\nthe shelves');
 eq('a shelf in a language', archiveQuery({ shelf: SHELVES.find((s) => s.id === 'mystery'), language: 'eng' }), 'collection:librivoxaudio AND language:eng AND subject:(mystery OR detective)');
 eq('a search, by title or author, without query syntax', archiveQuery({ search: 'sherlock "holmes":' }), 'collection:librivoxaudio AND (title:(sherlock holmes) OR creator:(sherlock holmes))');
 eq('every shelf has a sort', SHELVES.every((s) => /^(downloads|publicdate) desc$/.test(s.sort)), true);
+
+console.log('\nthe libraries');
+eq('three libraries', LIBRARIES.map((l) => l.id), ['librivox', 'gutenberg', 'radio']);
+eq('each with shelves, a voice and a credit', LIBRARIES.every((l) => l.shelves.length >= 6 && l.voice && l.credit), true);
+eq('shelf ids are unique across libraries', new Set(LIBRARIES.flatMap((l) => l.shelves.map((s) => s.id))).size, LIBRARIES.reduce((n, l) => n + l.shelves.length, 0));
+eq('a query in the Gutenberg library', archiveQuery({ library: 'gutenberg', search: 'emma' }), 'collection:gutenberg-audiobooks AND (title:(emma) OR creator:(emma))');
+eq('radio: only playable restored sets', archiveQuery({ library: 'radio' }).startsWith('collection:oldtimeradio AND mediatype:audio AND creator:("Old Time Radio Researchers"'), true);
+eq('no library named: LibriVox', libraryOf(undefined).id, 'librivox');
+eq('a catalogue author, surname first with dates', authorName('Collins, Wilkie, 1824-1889'), 'Wilkie Collins');
+eq('an author already in order', authorName('Sir Arthur Conan Doyle'), 'Sir Arthur Conan Doyle');
+eq('a group name stays', authorName('Old Time Radio Researchers Group'), 'Old Time Radio Researchers Group');
+eq('a book knows its library', bookFromDoc({ identifier: 'x', title: 'X' }, 'gutenberg').library, 'gutenberg');
+eq('one untitled file is the whole book', chaptersFrom('g', [{ name: 'my_lady.mp3', length: '18809.95' }]).map((c) => [c.title, c.duration]), [['The whole book', 18810]]);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

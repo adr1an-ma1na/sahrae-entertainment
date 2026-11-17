@@ -23,6 +23,8 @@ export interface Book {
   added: number;
   downloads: number;
   description?: string;
+  /** Which library it comes from (LIBRARIES); LibriVox when absent (books saved before there were others). */
+  library?: LibraryId;
 }
 
 export interface Chapter { index: number; title: string; url: string; duration: number }
@@ -45,18 +47,26 @@ const list = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : v ? [
 
 /** The Archive's titles often repeat the author ("Alice in Wonderland, by Lewis Carroll"). */
 export function cleanTitle(title: string): string {
-  return title.replace(/\s*,?\s+by\s+[^,]+$/i, '').replace(/\s*\((version|dramatic reading)[^)]*\)\s*$/i, '').replace(/\s+/g, ' ').trim();
+  return title.replace(/\s*-\s*(single episodes|singles|otrr[^-]*)\s*$/i, '').replace(/\s*,?\s+by\s+[^,]+$/i, '').replace(/\s*\((version|dramatic reading)[^)]*\)\s*$/i, '').replace(/\s+/g, ' ').trim();
 }
 
 /** Subjects that say what the book is, not where it lives. */
 const NOISE = new Set(['librivox', 'audiobooks', 'audiobook', 'audio book', 'librivox audiobooks']);
-export function bookFromDoc(d: Record<string, unknown>): Book | null {
+/** "Collins, Wilkie, 1824-1889" → "Wilkie Collins": library catalogues write authors surname first, with dates. */
+export function authorName(raw: string): string {
+  const s = raw.replace(/,?\s*\(?\d{3,4}\??\s*-\s*\d{0,4}\??\)?\s*$/, '').replace(/,?\s*(b\.|d\.|fl\.)\s*\d{3,4}.*$/i, '').trim();
+  const m = /^([^,]+),\s*([^,]+)$/.exec(s);
+  return (m ? `${m[2]} ${m[1]}` : s).replace(/\s+/g, ' ').trim();
+}
+
+export function bookFromDoc(d: Record<string, unknown>, library?: LibraryId): Book | null {
   const id = first(d.identifier);
   if (!id) return null;
   return {
     id,
+    library,
     title: cleanTitle(first(d.title)) || id,
-    author: first(d.creator) || 'Unknown author',
+    author: authorName(first(d.creator)) || 'Unknown author',
     runtime: toSeconds(d.runtime),
     language: first(d.language) || 'eng',
     subjects: list(d.subject).filter((s) => !NOISE.has(s.toLowerCase().trim())),
@@ -85,7 +95,7 @@ export function chaptersFrom(id: string, files: Array<Record<string, unknown>>):
     .map((f, index) => ({
       index,
       // "01 - A Scandal in Bohemia" → "A Scandal in Bohemia": the list numbers its rows already.
-      title: first(f.title).trim().replace(/^(chapter\s+)?0*\d{1,3}\s*[-–—.:)]\s+(?=\S)/i, '') || `Chapter ${index + 1}`,
+      title: first(f.title).trim().replace(/^(chapter\s+)?0*\d{1,3}\s*[-–—.:)]\s+(?=\S)/i, '') || (chosen.length === 1 ? 'The whole book' : `Chapter ${index + 1}`),
       url: `https://archive.org/download/${encodeURIComponent(id)}/${first(f.name).split('/').map(encodeURIComponent).join('/')}`,
       duration: toSeconds(f.length),
     }));
@@ -183,8 +193,8 @@ export const LANGUAGES: { code: string; name: string }[] = [
 ];
 
 /** The Archive query for a shelf in a language, or for a search. */
-export function archiveQuery(opts: { shelf?: Shelf; search?: string; language?: string }): string {
-  const parts = ['collection:librivoxaudio'];
+export function archiveQuery(opts: { shelf?: Shelf; search?: string; language?: string; library?: LibraryId }): string {
+  const parts = [libraryOf(opts.library).scope];
   if (opts.language) parts.push(`language:${opts.language}`);
   if (opts.shelf?.query) parts.push(opts.shelf.query);
   if (opts.search?.trim()) {
@@ -203,3 +213,64 @@ export function oneEach(books: Book[]): Book[] {
   const seen = new Set<string>();
   return books.filter((b) => { const k = workKey(b); if (seen.has(k)) return false; seen.add(k); return true; });
 }
+
+
+// ── The libraries (owner, 2026-11-17: "more libraries, not just one") ─────
+// Each is a free, legal collection on the Internet Archive. Others there were
+// left out on purpose: open upload collections whose rights are unclear.
+
+export type LibraryId = 'librivox' | 'gutenberg' | 'radio';
+export interface Library {
+  id: LibraryId;
+  name: string;
+  /** What it is, in a line. */
+  note: string;
+  /** Who reads, shown on every book. */
+  voice: string;
+  /** The credit its licence asks for. */
+  credit: string;
+  scope: string;
+  shelves: Shelf[];
+  languages: boolean;
+}
+
+const by = (names: string[]) => `creator:(${names.map((n) => `"${n}"`).join(' OR ')})`;
+
+export const LIBRARIES: Library[] = [
+  {
+    id: 'librivox', name: 'LibriVox', note: '22,000 books read by volunteers, in many languages', voice: 'Read by volunteers',
+    credit: 'A LibriVox recording, in the public domain, hosted by the Internet Archive.',
+    scope: 'collection:librivoxaudio', shelves: SHELVES, languages: true,
+  },
+  {
+    id: 'gutenberg', name: 'Project Gutenberg', note: '4,800 classics read by a natural computer voice', voice: 'Read by a computer voice',
+    credit: 'From the Project Gutenberg Audiobook Collection (public-domain books, computer narration), hosted by the Internet Archive.',
+    scope: 'collection:gutenberg-audiobooks', languages: false,
+    shelves: [
+      { id: 'g-popular', title: 'Most listened', query: '', sort: 'downloads desc' },
+      { id: 'g-new', title: 'Recently added', query: '', sort: 'publicdate desc' },
+      { id: 'g-mystery', title: 'Mystery & detective', query: by(['Christie, Agatha', 'Doyle, Arthur Conan', 'Collins, Wilkie', 'Chesterton, G. K. (Gilbert Keith)', 'Leblanc, Maurice', 'Green, Anna Katharine']), sort: 'downloads desc' },
+      { id: 'g-adventure', title: 'Adventure', query: by(['Verne, Jules', 'Stevenson, Robert Louis', 'Dumas, Alexandre', 'Haggard, H. Rider (Henry Rider)', 'London, Jack', 'Burroughs, Edgar Rice']), sort: 'downloads desc' },
+      { id: 'g-dickens', title: 'Charles Dickens', query: 'creator:(Dickens)', sort: 'downloads desc' },
+      { id: 'g-austen', title: 'Austen, the Brontës and Eliot', query: 'creator:(Austen OR Brontë OR Bronte OR "Eliot, George")', sort: 'downloads desc' },
+      { id: 'g-twain', title: 'Mark Twain', query: 'creator:(Twain)', sort: 'downloads desc' },
+      { id: 'g-scifi', title: 'Early science fiction', query: 'creator:(Wells OR Verne OR Shelley OR Doyle) AND title:(time OR world OR moon OR machine OR war OR island OR lost)', sort: 'downloads desc' },
+    ],
+  },
+  {
+    id: 'radio', name: 'Radio drama', note: 'Classic radio plays and series, restored', voice: 'Full-cast radio drama',
+    credit: 'Restored by the Old Time Radio Researchers (CC BY-NC-ND 2.5), hosted by the Internet Archive.',
+    scope: 'collection:oldtimeradio AND mediatype:audio AND creator:("Old Time Radio Researchers" OR "Old Time Radio Researchers Group")', languages: false,
+    shelves: [
+      { id: 'r-popular', title: 'Most listened', query: '', sort: 'downloads desc' },
+      { id: 'r-detective', title: 'Detectives & crime', query: 'subject:(detective OR mystery OR crime)', sort: 'downloads desc' },
+      { id: 'r-western', title: 'Westerns', query: 'subject:western', sort: 'downloads desc' },
+      { id: 'r-scifi', title: 'Science fiction', query: 'subject:("science fiction" OR "sci-fi" OR scifi)', sort: 'downloads desc' },
+      { id: 'r-suspense', title: 'Suspense & horror', query: 'subject:(suspense OR horror OR thriller)', sort: 'downloads desc' },
+      { id: 'r-comedy', title: 'Comedy', query: 'subject:(comedy OR sitcom)', sort: 'downloads desc' },
+      { id: 'r-new', title: 'Recently restored', query: '', sort: 'publicdate desc' },
+    ],
+  },
+];
+
+export const libraryOf = (id?: LibraryId | string | null): Library => LIBRARIES.find((l) => l.id === id) || LIBRARIES[0];
