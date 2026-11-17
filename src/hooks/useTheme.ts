@@ -33,26 +33,43 @@ export const THEME_SYNC_KEY = 'sahrae.theme.v1';
 const THEME_EVENT = 'sahrae:theme';
 const isTheme = (v: unknown): v is Theme => THEMES.some((t) => t.id === v);
 
+/** Themes with a pale page: the opening and the sidebar art draw a day, not a night. */
+const LIGHT = new Set<Theme>(['light', 'midnight', 'orchid', 'visionary', 'sweet']);
+export const isLightTheme = (t: Theme) => LIGHT.has(t);
+
+/** The theme this device should open in: the synced choice, the last one used, or the system's. */
+export function storedTheme(): Theme {
+  try {
+    const synced = JSON.parse(localStorage.getItem(THEME_SYNC_KEY) || 'null');
+    if (isTheme(synced)) return synced;
+    const saved = localStorage.getItem('theme');
+    if (isTheme(saved)) return saved;
+  } catch { /* not set yet */ }
+  return typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+/**
+ * Put a theme on the page. Called before the first frame (main.tsx) as well
+ * as on every change: the opening is drawn before any component that used to
+ * apply the theme had mounted, so it opened in the default colours, not the
+ * viewer's (owner, 2026-11-17: "match the selected theme").
+ */
+export function applyTheme(theme: Theme): void {
+  const root = document.documentElement;
+  root.classList.remove(...THEMES.map((t) => t.id));
+  root.classList.add(theme);
+  root.dataset.mode = isLightTheme(theme) ? 'light' : 'dark';
+  const page = THEMES.find((t) => t.id === theme)?.page;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta && page) meta.setAttribute('content', page);
+}
+
 export function useTheme() {
-  const [theme, setTheme] = useState<Theme>(() => {
-    try {
-      const synced = JSON.parse(localStorage.getItem(THEME_SYNC_KEY) || 'null');
-      if (isTheme(synced)) return synced;
-    } catch { /* not set yet */ }
-    const savedTheme = localStorage.getItem('theme');
-    if (isTheme(savedTheme)) return savedTheme;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  });
+  const [theme, setTheme] = useState<Theme>(storedTheme);
 
   useEffect(() => {
-    const root = window.document.documentElement;
-    root.classList.remove(...THEMES.map((t) => t.id));
-    root.classList.add(theme);
-    localStorage.setItem('theme', theme);
-    // The phone's status bar and the browser chrome take the page colour.
-    const page = THEMES.find((t) => t.id === theme)?.page;
-    const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta && page) meta.setAttribute('content', page);
+    applyTheme(theme);
+    try { localStorage.setItem('theme', theme); } catch { /* storage full */ }
   }, [theme]);
 
   // The top bar and Settings each hold this hook; a pick in one shows in both.

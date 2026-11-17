@@ -11,6 +11,7 @@ import { RadioProvider } from './hooks/useRadio.tsx';
 import { MusicProvider } from './hooks/useMusic.tsx';
 import { initSpatialNavigation } from './tv/spatialNavigation.ts';
 import { initTilt } from './services/tilt';
+import { applyTheme, storedTheme } from './hooks/useTheme';
 import { applyTvViewport } from './tv/tvViewport.ts';
 import { startErrorReporting } from './services/errorReporter';
 import { applyGraphicsTier } from './services/graphicsTier.ts';
@@ -26,6 +27,9 @@ startErrorReporting();
 
 // Sahrae TV: a wider page fitted to the screen, not a phone-sized one blown up.
 applyTvViewport();
+
+// The viewer's theme before the first frame, so the opening is drawn in it.
+try { applyTheme(storedTheme()); } catch { /* the app applies it when it mounts */ }
 
 // Enable D-pad / arrow-key navigation for TV remotes & keyboards.
 initSpatialNavigation();

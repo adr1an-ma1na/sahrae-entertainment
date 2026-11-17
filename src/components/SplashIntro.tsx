@@ -80,7 +80,8 @@ function grainTile(): string {
 const SETTLED_MS = 3600;
 /** When the fade into the app starts on the website. */
 const OUT_MS = 4300;
-const FADE_MS = 800;
+/** The dive into the sun that opens onto the app. */
+const FADE_MS = 900;
 
 /**
  * `onShown` is called once the opening is really on screen. The app builds the
