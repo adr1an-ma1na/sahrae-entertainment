@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { isTelevision } from '../tv/spatialNavigation';
+import { Glyph, type GlyphName } from './ui/Glyphs';
 
 /**
  * The launch: Horizon (owner's choice, 2026-11-16, from three proposals; the
@@ -26,6 +27,9 @@ import { isTelevision } from '../tv/spatialNavigation';
  * scaled so that, facing straight on, the scene is exactly as before.
  */
 const WORD = 'SAHRAE';
+/** Carved along the horizon either side of the sun, lit outward as the gold line draws. */
+const LEFT: GlyphName[] = ['star', 'palm', 'eye', 'waves', 'dune'];
+const RIGHT: GlyphName[] = ['reel', 'note', 'ball', 'door', 'moon'];
 
 /**
  * The intro plays once per visit. A reload (a newer library from the cloud, a
@@ -228,6 +232,11 @@ export default function SplashIntro({ onShown }: { onShown?: () => void } = {}) 
             <div className="hz-line" />
             <div className="hz-streak" />
             <div className="hz-spark" />
+            <div className="hz-glyphs">
+              {LEFT.map((g, i) => <Glyph key={g} name={g} style={{ '--d': `${(LEFT.length - i) * 0.13}s` } as CSSProperties} />)}
+              <span className="hz-glyph-gap" />
+              {RIGHT.map((g, i) => <Glyph key={g} name={g} style={{ '--d': `${(i + 1) * 0.13}s` } as CSSProperties} />)}
+            </div>
           </div>
           <div className="hz-plane" style={plane(140)}>
             <div className="hz-title">

@@ -97,7 +97,7 @@ const MOODS: { name: string; grad: string; tint: string }[] = [
   { name: 'Happy', grad: 'from-yellow-400 to-amber-500', tint: 'rgba(250,204,21,0.5)' },
   { name: 'Romance', grad: 'from-pink-500 to-rose-600', tint: 'rgba(236,72,153,0.5)' },
   { name: 'Afro Vibes', grad: 'from-green-500 to-emerald-700', tint: 'rgba(34,197,94,0.5)' },
-  { name: 'Gospel', grad: 'from-amber-400 to-yellow-600', tint: 'rgba(251,191,36,0.5)' },
+  { name: 'Gospel', grad: 'from-amber-400 to-yellow-600', tint: 'rgb(var(--acc-rgb)/0.5)' },
   { name: 'Road Trip', grad: 'from-sky-400 to-sky-600', tint: 'rgba(56,189,248,0.5)' },
   { name: 'Sleep', grad: 'from-slate-700 to-slate-900', tint: 'rgba(51,65,85,0.6)' },
   { name: 'Throwback', grad: 'from-purple-500 to-purple-800', tint: 'rgba(168,85,247,0.5)' },

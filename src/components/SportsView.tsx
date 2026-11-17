@@ -1330,7 +1330,7 @@ export default function SportsView() {
           )}
 
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <span className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full font-bold text-sm text-amber-950 bg-gradient-to-b from-amber-300 to-amber-500 shadow-[0_10px_30px_-8px_rgba(245,158,11,0.7)] group-hover:from-amber-200 group-hover:to-amber-400 transition-colors self-start">
+            <span className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full font-bold text-sm text-amber-950 bg-gradient-to-b from-amber-300 to-amber-500 shadow-[0_10px_30px_-8px_rgb(var(--acc-rgb)/0.7)] group-hover:from-amber-200 group-hover:to-amber-400 transition-colors self-start">
               <Play className="w-4 h-4 fill-current" /> {live ? 'Watch live' : 'Open match'}
             </span>
             <span className="text-xs text-white/55">{(m.embeds?.length || 0) > 1 ? `${m.embeds!.length} feeds · ` : ''}HD where offered · switches feed by itself if one drops</span>
@@ -1562,7 +1562,7 @@ export default function SportsView() {
     <div className="sports-page pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-12 relative">
       {/* Aurora glow behind the header */}
       <div aria-hidden className="pointer-events-none absolute -top-10 left-0 right-0 h-64 -z-10 opacity-70"
-        style={{ background: 'radial-gradient(60% 70% at 12% 0%, rgba(251,191,36,0.20), transparent 70%), radial-gradient(50% 60% at 85% 8%, rgba(244,63,94,0.16), transparent 72%)', filter: 'blur(8px)' }} />
+        style={{ background: 'radial-gradient(60% 70% at 12% 0%, rgb(var(--acc-rgb)/0.20), transparent 70%), radial-gradient(50% 60% at 85% 8%, rgba(244,63,94,0.16), transparent 72%)', filter: 'blur(8px)' }} />
       {/* Player */}
       {playing && (
         <div role="dialog" data-tv-layer className="sports-dialog fixed inset-0 z-[100] bg-black flex flex-col items-center justify-start md:justify-center p-0 md:p-10 overflow-y-auto">
@@ -1872,7 +1872,7 @@ export default function SportsView() {
         <div className="flex p-1 rounded-full bg-white/[0.05] ring-1 ring-white/10 backdrop-blur self-start md:self-end">
           {(['events', 'channels'] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)} tabIndex={0} data-tv-focusable
-              className={`px-5 py-2 rounded-full text-sm font-bold transition-all flex items-center gap-2 ${tab === t ? 'bg-gradient-to-b from-amber-300 to-amber-500 text-amber-950 shadow-[0_6px_18px_-6px_rgba(245,158,11,0.7)]' : 'text-zinc-400 hover:text-white'}`}>
+              className={`px-5 py-2 rounded-full text-sm font-bold transition-all flex items-center gap-2 ${tab === t ? 'bg-gradient-to-b from-amber-300 to-amber-500 text-amber-950 shadow-[0_6px_18px_-6px_rgb(var(--acc-rgb)/0.7)]' : 'text-zinc-400 hover:text-white'}`}>
               {t === 'events' ? <><Clapperboard className="w-4 h-4" /> Matches</> : <><Tv className="w-4 h-4" /> Channels</>}
             </button>
           ))}

@@ -80,7 +80,7 @@ export default function SignInGate() {
   return (
     <div className="signin-page quiet-focus min-h-screen bg-zinc-950 text-white relative overflow-hidden" data-tv-noring>
       <div aria-hidden className="pointer-events-none absolute inset-0"
-        style={{ background: 'radial-gradient(70% 55% at 15% 0%, rgba(245,158,11,0.22), transparent 70%), radial-gradient(60% 50% at 90% 100%, rgba(244,63,94,0.16), transparent 70%)' }} />
+        style={{ background: 'radial-gradient(70% 55% at 15% 0%, rgb(var(--acc-rgb)/0.22), transparent 70%), radial-gradient(60% 50% at 90% 100%, rgba(244,63,94,0.16), transparent 70%)' }} />
 
       <div className="relative min-h-screen max-w-6xl mx-auto px-5 md:px-10 pt-[calc(env(safe-area-inset-top)+1.25rem)] pb-[calc(env(safe-area-inset-bottom)+1.5rem)] flex flex-col">
         <header className="flex items-center justify-between">

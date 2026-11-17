@@ -1,11 +1,12 @@
 import { t as tr } from '../i18n';
-import { Home, Search, Headphones, Radio, Film, Tv2, Clapperboard, Trophy, Heart, Clock, Download, Library, PanelLeftClose, PanelLeftOpen, Music2, Mic2, Settings } from 'lucide-react';
+import { Home, Search, Headphones, Radio, Film, Tv2, Clapperboard, Trophy, Heart, Clock, Download, PanelLeftClose, PanelLeftOpen, Music2, Mic2, Settings } from 'lucide-react';
 import { useNotifications } from '../hooks/useNotifications';
 import { useMusic } from '../hooks/useMusic';
 import { isTelevision } from '../tv/spatialNavigation';
 import { CoverArt } from './ui/CoverArt';
 import { useLayoutEffect, useRef } from 'react';
 import SideArt, { SunMark } from './ui/SideArt';
+import { Glyph } from './ui/Glyphs';
 
 /**
  * Left navigation, grouped Watch / Listen / Library.
@@ -130,9 +131,10 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
       {/* Full labelled sidebar (lg+) */}
       <aside ref={fullRef} className={`tv-full side-shell hidden lg:flex flex-col fixed left-0 top-0 bottom-0 w-64 z-40 glass sidebar-glass border-r border-white/10 pt-[env(safe-area-inset-top)] transition-transform duration-300 ${collapsed ? '-translate-x-full' : 'translate-x-0'}`}>
         <SideArt />
-        <div className="px-5 pt-5 pb-4 flex items-center justify-between">
-          <h1 className="flex items-center gap-3 cursor-pointer whitespace-nowrap" onClick={() => setActiveTab('home')}>
-            <SunMark className="w-10 h-10 shrink-0 side-mark" />
+        <div className="px-4 pt-5 pb-4 flex items-center justify-between gap-2">
+          {/* The name in a cartouche, the frame that held a ruler's name. */}
+          <h1 className="cartouche flex items-center gap-2.5 cursor-pointer whitespace-nowrap" onClick={() => setActiveTab('home')}>
+            <SunMark className="w-9 h-9 shrink-0 side-mark" />
             <span className="flex flex-col">
               <span className="text-gold text-2xl font-black tracking-tighter leading-none">SAHRAE</span>
               <span className="side-tag">Entertainment</span>
@@ -161,11 +163,11 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
         <nav className="px-3 space-y-1">{renderNav(PRIMARY)}</nav>
 
         <div className="side-scroll mt-6 px-3 flex-1 overflow-y-auto custom-scrollbar pb-4">
-          <div className="overline side-label px-3 mb-1.5">Watch</div>
+          <div className="overline side-label px-3 mb-1.5"><Glyph name="eye" className="side-glyph" /> Watch</div>
           <nav className="space-y-1 mb-5">{renderNav(WATCH)}</nav>
-          <div className="overline side-label px-3 mb-1.5">Listen</div>
+          <div className="overline side-label px-3 mb-1.5"><Glyph name="waves" className="side-glyph" /> Listen</div>
           <nav className="space-y-1 mb-5">{renderNav(LISTEN)}</nav>
-          <div className="overline side-label px-3 mb-1.5"><Library className="w-3.5 h-3.5" /> Your Library</div>
+          <div className="overline side-label px-3 mb-1.5"><Glyph name="door" className="side-glyph" /> Your Library</div>
           <nav className="space-y-1">{renderNav(LIBRARY)}</nav>
         </div>
 

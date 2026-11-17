@@ -10,7 +10,8 @@
  * Static shapes: nothing here moves except the edge light when the selection
  * changes, so a TV draws it once.
  */
-import { useId } from 'react';
+import { useId, type CSSProperties } from 'react';
+import { glyphWallUrl } from './Glyphs';
 
 export function SunMark({ className = '' }: { className?: string }) {
   // Its own ids: the tablet rail and the sidebar both draw one, and a gradient
@@ -48,6 +49,8 @@ export default function SideArt({ dunes = true }: { dunes?: boolean }) {
   return (
     <div className="side-art" aria-hidden="true">
       <div className="side-art-glow" />
+      {/* A wall of Sahrae's carved symbols, painted in the theme's colour. */}
+      <div className="glyph-wall" style={{ '--wall': glyphWallUrl() } as CSSProperties} />
       {dunes && (
         <svg className="side-art-dunes" viewBox="0 0 256 210" preserveAspectRatio="xMidYMax slice">
           <defs>

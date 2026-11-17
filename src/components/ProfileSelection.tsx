@@ -166,7 +166,7 @@ export default function ProfileSelection() {
     <div className="fixed inset-0 z-[200] isolate bg-zinc-950 flex flex-col items-center justify-center p-4 animate-in fade-in duration-300">
       {!richBackdrop && (
         <div className="absolute inset-0 -z-10 pointer-events-none"
-          style={{ background: 'radial-gradient(ellipse at 50% 42%, rgba(251,191,36,0.16), rgba(251,191,36,0.05) 38%, transparent 70%)' }} />
+          style={{ background: 'radial-gradient(ellipse at 50% 42%, rgb(var(--acc-rgb)/0.16), rgb(var(--acc-rgb)/0.05) 38%, transparent 70%)' }} />
       )}
       {/* Premium golden shader ambience behind the profiles */}
       {richBackdrop && <div
