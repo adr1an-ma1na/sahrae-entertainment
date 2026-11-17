@@ -28,6 +28,7 @@ const SW: Record<string, string> = {
   'Flow Channels': 'Chaneli za Flow',
   'Music': 'Muziki',
   'Podcasts': 'Podikasti',
+  'Audiobooks': 'Vitabu vya sauti',
   'Radio': 'Redio',
   'Listen': 'Sikiliza',
   'My List': 'Orodha Yangu',

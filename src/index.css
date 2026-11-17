@@ -1411,6 +1411,11 @@ html.tv-mode .side-glyph, html.low-gfx .side-glyph { filter: none; }
 .side-item > svg { transition: transform .3s cubic-bezier(.22, 1, .36, 1); }
 .side-item:not(.nav-on):hover > svg { transform: translateX(2px) scale(1.06); }
 
+/* Audiobooks: the book page sits on its own cover, blurred and darkened into the page. */
+.ab-backdrop { position: fixed; inset: -10%; background-size: cover; background-position: center; filter: blur(60px) saturate(140%); opacity: .35; pointer-events: none; }
+.ab-backdrop::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, color-mix(in srgb, var(--zinc-950) 40%, transparent), var(--zinc-950) 70%); }
+html.tv-mode .ab-backdrop, html.low-gfx .ab-backdrop { filter: none; opacity: .12; }
+
 /* Posters that lean (services/tilt.ts): only the card in hand carries the 3D
    transform, so a row of posters is not a row of 3D layers. */
 .poster-card.is-tilted > div:first-child { transform: perspective(700px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) scale(var(--press, 1)); }

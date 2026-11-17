@@ -1,5 +1,5 @@
 import { t as tr } from '../i18n';
-import { Home, Search, Headphones, Radio, Film, Tv2, Clapperboard, Trophy, Heart, Clock, Download, PanelLeftClose, PanelLeftOpen, Music2, Mic2, Settings } from 'lucide-react';
+import { Home, Search, Headphones, Radio, Film, Tv2, Clapperboard, Trophy, Heart, Clock, Download, PanelLeftClose, PanelLeftOpen, Music2, Mic2, Settings, BookOpen } from 'lucide-react';
 import { useNotifications } from '../hooks/useNotifications';
 import { useMusic } from '../hooks/useMusic';
 import { isTelevision } from '../tv/spatialNavigation';
@@ -30,6 +30,7 @@ const WATCH = [
 const LISTEN = [
   { id: 'music', label: 'Music', icon: Music2 },
   { id: 'podcasts', label: 'Podcasts', icon: Mic2 },
+  { id: 'audiobooks', label: 'Audiobooks', icon: BookOpen },
   { id: 'audio', label: 'Radio', icon: Headphones },
 ];
 const LIBRARY = [

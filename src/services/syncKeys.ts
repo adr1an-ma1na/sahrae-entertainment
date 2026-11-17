@@ -26,6 +26,9 @@ export const SYNCED_KEYS = [
   // The matches opened and the follows switched off (notify.ts): watched on the TV, announced on the phone.
   'sahrae.sports.watched.v1',
   'sahrae.sports.muted.v1',
+  // Audiobooks: the saved books and where each was left (audiobooks.ts).
+  'sahrae.audiobooks.saved.v1',
+  'sahrae.audiobooks.places.v1',
 ] as const;
 
 /**

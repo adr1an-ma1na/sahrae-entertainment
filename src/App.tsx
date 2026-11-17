@@ -25,6 +25,7 @@ import { setScreenHandlers, startScreen } from './services/remote';
 import { isTelevision } from './tv/spatialNavigation';
 const AudioHubView = lazyView(() => import('./components/AudioHubView'));
 const PodcastsView = lazyView(() => import('./components/PodcastsView'));
+const AudiobooksView = lazyView(() => import('./components/AudiobooksView'));
 const LiveTVView = lazyView(() => import('./components/LiveTVView'));
 const SportsView = lazyView(() => import('./components/SportsView'));
 const ContinueWatchingView = lazyView(() => import('./components/ContinueWatchingView'));
@@ -535,7 +536,7 @@ export default function App() {
     // `loading` tracks the TMDB catalog fetch. Destinations that don't read TMDB
     // must be listed here or they sit behind a skeleton waiting on data they
     // never use — 'music' was missing, so Sauti stalled on a cold start.
-    const NEEDS_TMDB = !['home', 'radio', 'audio', 'music', 'podcasts', 'tv', 'sports', 'continue', 'settings', 'search'].includes(activeTab);
+    const NEEDS_TMDB = !['home', 'radio', 'audio', 'music', 'podcasts', 'audiobooks', 'tv', 'sports', 'continue', 'settings', 'search'].includes(activeTab);
     if (loading && NEEDS_TMDB) {
       // A skeleton in the shape of the destination, not a spinner over a blank
       // screen: the layout stays still, and the wait reads as "loading this"
@@ -736,6 +737,8 @@ export default function App() {
         return <MusicView onNav={navigate} />;
       case 'podcasts':
         return <PodcastsView onNav={navigate} />;
+      case 'audiobooks':
+        return <AudiobooksView />;
       case 'settings':
         return <SettingsView onPlay={handlePlay} />;
       case 'downloads':

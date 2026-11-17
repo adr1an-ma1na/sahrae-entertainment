@@ -1037,7 +1037,9 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   // Playback speed (podcasts). Applies to whichever engine is active.
   const setRate = (n: number) => {
     try { playerRef.current?.setPlaybackRate?.(n); } catch { /* ignore */ }
-    try { const a = audioElRef.current; if (a) a.playbackRate = n; } catch { /* ignore */ }
+    // defaultPlaybackRate too: loading the next chapter or episode resets the
+    // rate to the default, which put an audiobook back to normal speed each chapter.
+    try { const a = audioElRef.current; if (a) { a.defaultPlaybackRate = n; a.playbackRate = n; } } catch { /* ignore */ }
   };
   // Only what is still to come is dealt or put back: the song playing carries on.
   const toggleShuffle = () => {

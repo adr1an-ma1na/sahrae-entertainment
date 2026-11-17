@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useMusic } from '../hooks/useMusic';
 import { savePodcastProgress } from '../services/podcasts';
+import { activeBook, bookIdFromSource, keepPlace } from '../services/audiobooks';
 
 /**
  * Invisible, always-mounted. While a PODCAST plays (queueSource === 'Podcasts'),
@@ -19,11 +20,16 @@ export default function PodcastProgressTracker() {
     if (c.current && c.queueSource === 'Podcasts' && c.position > 2) {
       savePodcastProgress(c.current, Math.round(c.position * 1000), Math.round(c.duration * 1000));
     }
+    // An audiobook: the book, the chapter and the second (services/audiobooks.ts).
+    const bookId = bookIdFromSource(c.queueSource), a = activeBook();
+    if (c.current && bookId && a && a.book.id === bookId && c.current.id.startsWith('ab:' + bookId + ':') && c.position > 2) {
+      keepPlace(a.book, a.chapters, Number(c.current.id.split(':').pop()) || 0, c.position, c.duration);
+    }
   };
 
   // Throttled tick (every ~10s of playback).
   useEffect(() => {
-    if (!current || queueSource !== 'Podcasts' || position <= 2) return;
+    if (!current || (queueSource !== 'Podcasts' && !bookIdFromSource(queueSource)) || position <= 2) return;
     const now = Date.now();
     if (now - last.current >= 10_000) { last.current = now; flush(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
