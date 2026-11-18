@@ -4,6 +4,7 @@
 import {
   toSeconds, cleanTitle, bookFromDoc, chaptersFrom, readersFrom, lengthText, listened, progressOf, resumePoint,
   placeFrom, inProgress, archiveQuery, SHELVES, oneEach, authorName, LIBRARIES, libraryOf,
+  bookFromPick, bookFromOpenLibrary, shopLinks, isInterview, alikeShelf,
 } from './src/services/audiobooksCore.ts';
 
 let pass = 0, fail = 0;
@@ -72,7 +73,7 @@ eq('a search, by title or author, without query syntax', archiveQuery({ search: 
 eq('every shelf has a sort', SHELVES.every((s) => /^(downloads|publicdate) desc$/.test(s.sort)), true);
 
 console.log('\nthe libraries');
-eq('three libraries', LIBRARIES.map((l) => l.id), ['librivox', 'gutenberg', 'radio']);
+eq('four libraries, the bestsellers second', LIBRARIES.map((l) => l.id), ['librivox', 'shop', 'gutenberg', 'radio']);
 eq('each with shelves, a voice and a credit', LIBRARIES.every((l) => l.shelves.length >= 6 && l.voice && l.credit), true);
 eq('shelf ids are unique across libraries', new Set(LIBRARIES.flatMap((l) => l.shelves.map((s) => s.id))).size, LIBRARIES.reduce((n, l) => n + l.shelves.length, 0));
 eq('a query in the Gutenberg library', archiveQuery({ library: 'gutenberg', search: 'emma' }), 'collection:gutenberg-audiobooks AND (title:(emma) OR creator:(emma))');
@@ -80,9 +81,35 @@ eq('radio: only playable restored sets', archiveQuery({ library: 'radio' }).star
 eq('no library named: LibriVox', libraryOf(undefined).id, 'librivox');
 eq('a catalogue author, surname first with dates', authorName('Collins, Wilkie, 1824-1889'), 'Wilkie Collins');
 eq('an author already in order', authorName('Sir Arthur Conan Doyle'), 'Sir Arthur Conan Doyle');
-eq('a group name stays', authorName('Old Time Radio Researchers Group'), 'Old Time Radio Researchers Group');
+eq('a translator or a title after the comma is not a first name', [authorName('Epictetus, tr. Elizabeth Carter'), authorName('Philip Stanhope, 4th Earl of Chesterfield'), authorName('Nicolo Machiavelli; translated by W. K. Marriott')], ['Epictetus', 'Philip Stanhope', 'Nicolo Machiavelli']);
+eq('one card for a book whatever the first name is spelt', oneEach([{ ...book, id: 'p1', title: 'The Prince', author: 'Nicolo Machiavelli' }, { ...book, id: 'p2', title: 'The Prince', author: 'Niccolò Machiavelli' }]).length, 1);
+eq('a group name stays',authorName('Old Time Radio Researchers Group'), 'Old Time Radio Researchers Group');
 eq('a book knows its library', bookFromDoc({ identifier: 'x', title: 'X' }, 'gutenberg').library, 'gutenberg');
 eq('one untitled file is the whole book', chaptersFrom('g', [{ name: 'my_lady.mp3', length: '18809.95' }]).map((c) => [c.title, c.duration]), [['The whole book', 18810]]);
+
+console.log('\nthe bestsellers');
+const shop = libraryOf('shop');
+eq('hand-picked shelves, eight books each', shop.shelves.map((s) => s.picks.length), [8, 8, 8, 8, 8, 8, 8]);
+const laws = bookFromPick(shop.shelves[0].picks[0]);
+eq('The 48 Laws of Power, with its cover', [laws.id, laws.title, laws.author, laws.library, laws.cover], ['ol:OL1968368W', 'The 48 Laws of Power', 'Robert Greene', 'shop', 'https://covers.openlibrary.org/b/id/6424160-M.jpg']);
+eq('every pick a real work and cover', shop.shelves.every((s) => s.picks.every((p) => /^OL\d+W$/.test(p[2]) && p[3] > 0)), true);
+eq('an Open Library result becomes a book', bookFromOpenLibrary({ key: '/works/OL5749847W', title: 'Outliers', author_name: ['Malcolm Gladwell'], cover_i: 10021591, edition_count: 40 }).id, 'ol:OL5749847W');
+eq('no cover or few editions: not offered', [bookFromOpenLibrary({ key: '/works/OL1W', title: 'X', author_name: ['A'], edition_count: 9 }), bookFromOpenLibrary({ key: '/works/OL2W', title: 'Y', author_name: ['B'], cover_i: 5, edition_count: 1 })], [null, null]);
+const links = shopLinks(laws);
+eq('a book old enough to be free is not a bestseller', bookFromOpenLibrary({ key: '/works/OL3W', title: "Dell'Arte della Guerra", author_name: ['Niccolò Machiavelli'], cover_i: 7, edition_count: 30, first_publish_year: 1521 }), null);
+eq('the library first, then the stores', links.map((l) => l.id), ['libby', 'audible', 'play', 'spotify']);
+eq('each a search for the book', links.every((l) => l.url.startsWith('https://') && l.url.includes('48%20Laws%20of%20Power%20Robert%20Greene')), true);
+eq('only hosts the phone app lets open', links.map((l) => new URL(l.url).hostname), ['www.overdrive.com', 'www.audible.com', 'play.google.com', 'open.spotify.com']);
+eq('an interview with the author', isInterview({ title: 'Robert Greene: How to use the 48 Laws of Power', artist: 'My First Million', duration: 5040 }, laws), true);
+eq('not a summary, not a short clip, not a show named for the book', [
+  isInterview({ title: 'The 48 Laws of Power by Robert Greene - Summary', artist: 'Book Bites', duration: 3000 }, laws),
+  isInterview({ title: 'Robert Greene on power', artist: 'Clips', duration: 300 }, laws),
+  isInterview({ title: 'Law 3, Robert Greene', artist: 'The 48 Laws of Power', duration: 1800 }, laws),
+  isInterview({ title: 'Chris Voss on negotiating', artist: 'Some Show', duration: 3000 }, laws),
+], [false, false, false, false]);
+eq('free classics on the same idea', [alikeShelf(laws), alikeShelf(bookFromPick(shop.shelves[5].picks[0]))], ['power', undefined]);
+eq('the classic shelves are LibriVox shelves', ['power', 'success', 'modern'].every((id) => SHELVES.some((s) => s.id === id)), true);
+eq('a bestseller search has no Archive query', archiveQuery({ library: 'shop', search: 'outliers' }), '(title:(outliers) OR creator:(outliers))');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

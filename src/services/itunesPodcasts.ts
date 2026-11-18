@@ -142,6 +142,19 @@ export async function getEpisodesById(collectionId: string, limit = LOOKUP_LIMIT
   return out.sort((a, b) => (b.uploaded || 0) - (a.uploaded || 0));
 }
 
+/** Episodes from any show matching words (an author's name: their interviews). Newest-first is not kept: Apple's order, most relevant first. */
+export async function searchEpisodes(term: string, limit = 40): Promise<Track[]> {
+  const j = await fetchJson(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=podcastEpisode&limit=${Math.min(Math.max(1, limit), 100)}`);
+  const results: any[] = Array.isArray(j?.results) ? j.results : [];
+  const out: Track[] = [];
+  const seen = new Set<string>();
+  for (const r of results) {
+    const t = mapEpisode(r, String(r.collectionName || ''), String(r.artworkUrl600 || ''), r.feedUrl ? String(r.feedUrl) : undefined);
+    if (t && !seen.has(t.id)) { seen.add(t.id); out.push(t); }
+  }
+  return out;
+}
+
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 /**

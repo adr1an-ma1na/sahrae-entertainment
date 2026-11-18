@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BookOpen, Check, ChevronLeft, Clock, Gauge, Heart, Loader2, Moon, Play, Search, X } from 'lucide-react';
+import { BookOpen, Check, ChevronLeft, Clock, ExternalLink, Gauge, Heart, Library, Loader2, Mic, Moon, Pause, Play, Search, X } from 'lucide-react';
+import qrcode from 'qrcode-generator';
+import { isTelevision } from '../tv/spatialNavigation';
+import type { Track } from '../services/ytmusic';
 import { LuxGlow, LuxHeader } from './ui/Lux';
 import { useMusic } from '../hooks/useMusic';
 import { haptics } from '../services/haptics';
 import {
   BOOKS_CHANGED, chapterTracks, chooseLanguage, chosenLanguage, findBooks, findEverywhere, getBook, isSaved, listening, markFinished, otherRecordings, chooseLibrary, chosenLibrary,
-  placeOf, saved, setActiveBook, sourceFor, toggleSaved, bookIdFromSource, bookRate, keepBookRate,
+  placeOf, saved, setActiveBook, sourceFor, toggleSaved, bookIdFromSource, bookRate, keepBookRate, aboutBestseller, authorAudio, openOutside,
 } from '../services/audiobooks';
-import { LANGUAGES, LIBRARIES, coverOf, lengthText, libraryOf, progressOf, resumePoint, type Book, type BookDetail, type LibraryId, type Shelf } from '../services/audiobooksCore';
+import { LANGUAGES, LIBRARIES, SHELVES, alikeShelf, coverOf, lengthText, libraryOf, progressOf, resumePoint, shopLinks, type Book, type BookDetail, type LibraryId, type Shelf, type ShopLink } from '../services/audiobooksCore';
 import { LuxSeg } from './ui/Lux';
 
 /**
@@ -37,8 +40,16 @@ function Cover({ book, className = '' }: { book: Book; className?: string }) {
   return (
     <div className={`relative overflow-hidden rounded-xl bg-zinc-800 ${className}`}>
       <span aria-hidden="true" className="absolute inset-0 flex items-center justify-center p-3 text-center text-[11px] font-semibold text-zinc-500 leading-tight">{book.title}</span>
-      <img src={coverOf(book.id)} alt="" loading="lazy" decoding="async" className="relative w-full h-full object-cover"
-        onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+      {book.cover ? (
+        <>
+          <img src={book.cover} alt="" aria-hidden="true" loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover scale-125 blur-xl opacity-60" />
+          <img src={book.cover} alt="" loading="lazy" decoding="async" className="relative h-full mx-auto object-contain py-2 drop-shadow-[0_8px_16px_rgba(0,0,0,.55)]"
+            onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+        </>
+      ) : (
+        <img src={coverOf(book.id)} alt="" loading="lazy" decoding="async" className="relative w-full h-full object-cover"
+          onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+      )}
     </div>
   );
 }
@@ -50,7 +61,7 @@ function BookCard({ book, onOpen, progress }: { book: Book; onOpen: (b: Book) =>
       <div className="relative">
         <Cover book={book} className="aspect-square w-full transition-transform duration-300 group-hover:-translate-y-1 shadow-lg" />
         {book.library && book.library !== 'librivox' && (
-          <span className="absolute left-1.5 bottom-1.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-black/70 text-white">{book.library === 'radio' ? 'Radio drama' : 'Computer voice'}</span>
+          <span className="absolute left-1.5 bottom-1.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-black/70 text-white">{book.library === 'radio' ? 'Radio drama' : book.library === 'shop' ? 'Bestseller' : 'Computer voice'}</span>
         )}
       </div>
       {progress !== undefined && (
@@ -246,6 +257,156 @@ function BookPage({ book, onClose, onOpen }: { book: Book; onClose: () => void; 
   );
 }
 
+function Qr({ text }: { text: string }) {
+  const cells = useMemo(() => {
+    const q = qrcode(0, 'M');
+    q.addData(text);
+    q.make();
+    const n = q.getModuleCount();
+    let d = '';
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) d += `M${c} ${r}h1v1h-1z`;
+    return { n, d };
+  }, [text]);
+  return (
+    <svg viewBox={`-2 -2 ${cells.n + 4} ${cells.n + 4}`} className="w-56 h-56 rounded-xl bg-white" role="img" aria-label="QR code: scan with your phone">
+      <path d={cells.d} fill="#000" />
+    </svg>
+  );
+}
+
+/** A list of free episodes (the author's show, interviews), played in Sahrae's player. */
+function EpisodeList({ tracks }: { tracks: Track[] }) {
+  const { playQueue, current, isPlaying, toggle } = useMusic();
+  return (
+    <ol className="divide-y divide-white/5 rounded-2xl bg-white/[0.03] ring-1 ring-white/5 overflow-hidden">
+      {tracks.map((t, i) => {
+        const on = current?.id === t.id;
+        return (
+          <li key={t.id}>
+            <button onClick={() => { haptics.press(); if (on) toggle(); else playQueue(tracks, i, 'Podcasts'); }} data-tv-focusable
+              className={`w-full flex items-center gap-3 px-3 py-3 text-left hover:bg-white/[0.05] ${on ? 'bg-amber-500/10' : ''}`}>
+              <span className="relative w-12 h-12 rounded-lg overflow-hidden bg-zinc-800 shrink-0">
+                {t.artwork && <img src={t.artwork} alt="" loading="lazy" className="w-full h-full object-cover" />}
+                <span className="absolute inset-0 grid place-items-center bg-black/35">{on && isPlaying ? <Pause className="w-4 h-4 text-white fill-current" /> : <Play className="w-4 h-4 text-white fill-current" />}</span>
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className={`block text-sm font-semibold line-clamp-2 ${on ? 'text-amber-200' : 'text-white'}`}>{t.title}</span>
+                <span className="block text-xs text-zinc-400 truncate">{t.artist}{t.date ? ` · ${t.date}` : ''}</span>
+              </span>
+              {(t.duration || 0) > 0 && <span className="text-xs text-zinc-500 tabular-nums shrink-0">{lengthText(t.duration || 0)}</span>}
+            </button>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/**
+ * A bestseller (owner, 2026-11-17: "books like The 48 Laws of Power, Malcolm
+ * Gladwell"). In copyright, so Sahrae cannot stream it: the page opens the
+ * legal ways to listen (borrowing free with a library card, or a store), and
+ * plays what is free: the author's own show, interviews with them, and the
+ * public-domain classics on the same idea. On a TV, which has no browser, a
+ * link is a QR code for the phone.
+ */
+function ShopPage({ book, onClose, onOpen }: { book: Book; onClose: () => void; onOpen: (b: Book) => void }) {
+  useBooksVersion();
+  const tv = isTelevision();
+  const [about, setAbout] = useState('');
+  const [more, setMore] = useState(false);
+  const [audio, setAudio] = useState<{ show?: { name: string; episodes: Track[] }; talks: Track[] } | null>(null);
+  const [qr, setQr] = useState<ShopLink | null>(null);
+  useEffect(() => {
+    let live = true;
+    aboutBestseller(book).then((t) => { if (live) setAbout(t); }).catch(() => {});
+    authorAudio(book).then((a) => { if (live) setAudio(a); }).catch(() => { if (live) setAudio({ talks: [] }); });
+    return () => { live = false; };
+  }, [book]);
+  const big = book.cover?.replace(/-M\.jpg$/, '-L.jpg') || coverOf(book.id);
+  const links = shopLinks(book);
+  const alike = alikeShelf(book);
+  const alikeShelfDef = alike ? SHELVES.find((s) => s.id === alike) : undefined;
+  const go = (l: ShopLink) => { haptics.press(); if (tv) setQr(l); else openOutside(l.url); };
+
+  return (
+    <div role="dialog" aria-label={book.title} data-tv-layer className="fixed inset-0 z-[90] overflow-y-auto bg-zinc-950">
+      <div aria-hidden="true" className="ab-backdrop" style={{ backgroundImage: `url("${big}")` }} />
+      <div className="relative max-w-5xl mx-auto px-4 md:px-10 pt-[calc(env(safe-area-inset-top)+1rem)] pb-32">
+        <button onClick={onClose} data-tv-close data-tv-focusable aria-label="Back to audiobooks" className="mb-6 inline-flex items-center gap-1.5 h-10 px-4 rounded-full bg-white/10 hover:bg-white/15 text-white text-sm font-semibold">
+          <ChevronLeft className="w-4 h-4" /> Audiobooks
+        </button>
+        <div className="flex flex-col md:flex-row gap-6 md:gap-10">
+          <div className="w-44 md:w-60 shrink-0 mx-auto md:mx-0">
+            <div className="aspect-[2/3] rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/10 bg-zinc-800">
+              <img src={big} alt="" className="w-full h-full object-cover" onError={(e) => { if (book.cover) e.currentTarget.src = book.cover; }} />
+            </div>
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="lux-kicker mb-2"><BookOpen className="w-3.5 h-3.5" /> Bestseller</p>
+            <h1 className="text-3xl md:text-5xl font-display font-extrabold text-white tracking-tight leading-[1.05]">{book.title}</h1>
+            <p className="mt-2 text-lg text-zinc-200">{book.author}</p>
+            <p className="mt-4 text-sm text-zinc-400 max-w-xl">This book is in copyright, so no free library may stream it. {tv ? 'Choose a way to listen and scan the code with your phone.' : 'Listen to it legally here:'}</p>
+            <div className="mt-4 grid sm:grid-cols-2 gap-3 max-w-2xl">
+              {links.map((l, i) => (
+                <button key={l.id} onClick={() => go(l)} data-tv-focusable {...(i === 0 ? { 'data-tv-autofocus': true } : {})}
+                  className={`text-left rounded-2xl px-4 py-3.5 ring-1 transition-colors ${i === 0 ? 'bg-amber-400/15 ring-amber-300/40 hover:bg-amber-400/25' : 'bg-white/[0.05] ring-white/10 hover:bg-white/[0.09]'}`}>
+                  <span className="flex items-center gap-2 text-[15px] font-bold text-white">{i === 0 ? <Library className="w-4 h-4 text-amber-300" /> : null}{l.label}<ExternalLink className="w-3.5 h-3.5 text-zinc-400 ml-auto" /></span>
+                  <span className="block mt-0.5 text-xs text-zinc-400">{l.note}</span>
+                </button>
+              ))}
+            </div>
+            <div className="mt-4">
+              <button onClick={() => toggleSaved(book)} data-tv-focusable aria-pressed={isSaved(book.id)} className="lux-chip h-11 px-5 text-sm">
+                <Heart className={`w-4 h-4 ${isSaved(book.id) ? 'fill-current' : ''}`} /> {isSaved(book.id) ? 'In your library' : 'Add to library'}
+              </button>
+            </div>
+            {about && (
+              <div className="mt-6 max-w-2xl">
+                <p className={`text-[15px] leading-relaxed text-zinc-300 whitespace-pre-line ${more ? '' : 'line-clamp-5'}`}>{about}</p>
+                {about.length > 320 && <button onClick={() => setMore((m) => !m)} data-tv-focusable className="mt-1 text-sm font-semibold text-amber-300">{more ? 'Less' : 'More'}</button>}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {audio?.show && (
+          <section className="mt-12">
+            <p className="lux-kicker mb-1"><Mic className="w-3.5 h-3.5" /> Free · the author's own show</p>
+            <h2 className="mb-4 text-xl font-display font-bold text-white">{audio.show.name}</h2>
+            <EpisodeList tracks={audio.show.episodes} />
+          </section>
+        )}
+        <section className="mt-12">
+          <p className="lux-kicker mb-1"><Mic className="w-3.5 h-3.5" /> Free · plays here</p>
+          <h2 className="mb-1 text-xl font-display font-bold text-white">{book.author} in conversation</h2>
+          <p className="mb-4 text-sm text-zinc-400">Interviews with the author on podcasts, often about this book.</p>
+          {!audio ? <div className="flex items-center gap-2 text-zinc-400 text-sm"><Loader2 className="w-4 h-4 animate-spin" /> Finding interviews…</div>
+            : audio.talks.length ? <EpisodeList tracks={audio.talks} />
+            : <p className="text-sm text-zinc-500">No interviews found right now.</p>}
+        </section>
+        {alikeShelfDef && (
+          <div className="-mt-2">
+            <ShelfRow shelf={{ ...alikeShelfDef, title: 'Free classics on the same idea' }} library="librivox" language="eng" onOpen={onOpen} eager />
+          </div>
+        )}
+        <p className="mt-8 text-xs text-zinc-500">{libraryOf('shop').credit} Library availability depends on your library; store prices and Spotify audiobooks vary by country.</p>
+      </div>
+
+      {qr && (
+        <div role="dialog" aria-label={`Open ${qr.label} on your phone`} data-tv-layer className="fixed inset-0 z-[95] bg-black/80 backdrop-blur-sm grid place-items-center p-6" onClick={() => setQr(null)}>
+          <div className="rounded-3xl bg-zinc-900 ring-1 ring-white/10 p-8 flex flex-col items-center text-center max-w-md" onClick={(e) => e.stopPropagation()}>
+            <Qr text={qr.url} />
+            <p className="mt-5 text-lg font-bold text-white">{qr.label}</p>
+            <p className="mt-1 text-sm text-zinc-400">Scan with your phone's camera to open {book.title} there.</p>
+            <button onClick={() => setQr(null)} data-tv-close data-tv-focusable data-tv-autofocus className="mt-6 lux-btn px-6 py-2.5">Done</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AudiobooksView() {
   const [language, setLanguage] = useState(chosenLanguage);
   const [libraryId, setLibraryId] = useState<LibraryId>(chosenLibrary);
@@ -281,7 +442,7 @@ export default function AudiobooksView() {
     <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-40 relative">
       <LuxGlow />
       <LuxHeader kicker={<><BookOpen className="w-3.5 h-3.5" /> Sahrae · Listen</>} title="Audiobooks"
-        meta={<span>Three free libraries: 27,000 books and classic radio plays. Your place kept to the second, on every device.</span>} />
+        meta={<span>27,000 free books and classic radio plays, your place kept to the second on every device. And today's bestsellers, through your library card or a store.</span>} />
 
       <div className="mt-6 flex flex-col gap-2">
         <LuxSeg items={LIBRARIES.map((l) => ({ id: l.id, label: l.name }))} active={libraryId} onChange={pickLibrary} className="self-start max-w-full overflow-x-auto" />
@@ -303,11 +464,12 @@ export default function AudiobooksView() {
 
       {query.trim().length >= 2 ? (
         <section className="mt-8">
-          <h2 className="text-xl font-display font-bold text-white mb-1">{searching ? 'Searching all three libraries…' : results?.length ? `Results for “${query.trim()}”` : `Nothing found for “${query.trim()}”`}</h2>
+          <h2 className="text-xl font-display font-bold text-white mb-1">{searching ? 'Searching every library…' : results?.length ? `Results for “${query.trim()}”` : `Nothing found for “${query.trim()}”`}</h2>
           {!searching && results?.length ? <p className="text-sm text-zinc-400 mb-2">From every library at once.</p> : null}
           {(results || []).map((group) => (
             <div key={group.library} className="mt-6">
               <p className="lux-kicker mb-3">{libraryOf(group.library).name} · {group.books.length}</p>
+              {libraryOf(group.library).shop && <p className="-mt-1 mb-3 text-sm text-zinc-400">In copyright: borrow free with a library card, or buy.</p>}
               <div className="grid grid-cols-[repeat(auto-fill,minmax(132px,1fr))] md:grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-5">
                 {group.books.map((b) => <BookCard key={b.id} book={b} onOpen={setOpen} />)}
               </div>
@@ -328,7 +490,9 @@ export default function AudiobooksView() {
         </>
       )}
 
-      {open && <BookPage key={open.id} book={open} onClose={() => setOpen(null)} onOpen={setOpen} />}
+      {open && (open.library === 'shop'
+        ? <ShopPage key={open.id} book={open} onClose={() => setOpen(null)} onOpen={setOpen} />
+        : <BookPage key={open.id} book={open} onClose={() => setOpen(null)} onOpen={setOpen} />)}
     </div>
   );
 }

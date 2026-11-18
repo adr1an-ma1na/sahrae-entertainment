@@ -426,7 +426,15 @@ public class MainActivity extends BridgeActivity {
     private static final Set<String> DOWNLOAD_HOSTS = new HashSet<>(Arrays.asList(
         "vidvault.ru",
         // Our own sites, e.g. Sahrae Predictor from the Matchday screen.
-        "adr1an-ma1na.github.io"
+        "adr1an-ma1na.github.io",
+        // Bestseller audiobooks (2026-11-17): the library (Libby / OverDrive) and
+        // the stores that sell them. Sahrae cannot stream them; these open the
+        // book there, in the browser or the store's own app.
+        "overdrive.com",
+        "libbyapp.com",
+        "audible.com",
+        "play.google.com",
+        "open.spotify.com"
     ));
 
     private static boolean isAllowedDownloadHost(String host) {

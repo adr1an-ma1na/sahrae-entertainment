@@ -8,8 +8,11 @@
  * costs little data the second time.
  */
 import { httpFetch } from './http';
+import { Capacitor } from '@capacitor/core';
+import { getEpisodesById, searchEpisodes } from './itunesPodcasts';
 import {
   bigCoverFrom, bookFromDoc, chaptersFrom, inProgress, placeFrom, readersFrom, archiveQuery, oneEach, sameWork, LIBRARIES,
+  bookFromPick, bookFromOpenLibrary, isInterview, OWN_SHOWS, libraryOf,
   type Book, type LibraryId, type BookDetail, type BookPlace, type Shelf,
 } from './audiobooksCore';
 import type { Track } from './ytmusic';
@@ -51,6 +54,9 @@ function libraryFromDoc(d: Record<string, unknown>, fallback?: LibraryId): Libra
 
 /** A page of books from one library: a shelf, a search, or both, in a language. */
 export async function findBooks(opts: { shelf?: Shelf; search?: string; language?: string; library?: LibraryId; rows?: number; page?: number }): Promise<{ books: Book[]; total: number }> {
+  // A hand-picked shelf (the bestsellers) needs no search.
+  if (opts.shelf?.picks) return { books: opts.shelf.picks.map(bookFromPick), total: opts.shelf.picks.length };
+  if (libraryOf(opts.library).shop) return opts.search ? { books: await findBestsellers(opts.search, opts.rows ?? 12), total: 0 } : { books: [], total: 0 };
   const q = archiveQuery(opts);
   const sort = opts.search ? 'downloads desc' : opts.shelf?.sort || 'downloads desc';
   const rows = opts.rows ?? 24, page = opts.page ?? 1;
@@ -66,11 +72,64 @@ export async function findBooks(opts: { shelf?: Shelf; search?: string; language
 
 /** Every library at once, for a search: the same words in each. */
 export async function findEverywhere(search: string, language?: string): Promise<{ library: LibraryId; books: Book[] }[]> {
-  const rows: Record<LibraryId, number> = { librivox: 30, gutenberg: 18, radio: 12 };
+  const rows: Record<LibraryId, number> = { librivox: 30, shop: 12, gutenberg: 18, radio: 12 };
   const all = await Promise.all(LIBRARIES.map((l) =>
-    findBooks({ library: l.id, search, language: l.languages ? language : undefined, rows: rows[l.id] }).then((r) => ({ library: l.id, books: r.books })).catch(() => ({ library: l.id, books: [] as Book[] })),
+    l.shop ? findBestsellers(search, rows.shop).then((books) => ({ library: l.id, books })).catch(() => ({ library: l.id, books: [] as Book[] })) : findBooks({ library: l.id, search, language: l.languages ? language : undefined, rows: rows[l.id] }).then((r) => ({ library: l.id, books: r.books })).catch(() => ({ library: l.id, books: [] as Book[] })),
   ));
-  return all.filter((x) => x.books.length);
+  // A bestseller that a free library has too is shown only there: free first.
+  const free = all.filter((x) => !libraryOf(x.library).shop).flatMap((x) => x.books);
+  return all
+    .map((x) => (libraryOf(x.library).shop ? { ...x, books: x.books.filter((b) => !free.some((f) => sameWork(f, b))) } : x))
+    .filter((x) => x.books.length);
+}
+
+/** Books in print, from Open Library's catalogue: what the free libraries cannot have. */
+export async function findBestsellers(search: string, rows = 12): Promise<Book[]> {
+  const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(search)}&fields=key,title,author_name,cover_i,edition_count,first_publish_year&limit=${rows * 2}`;
+  return cached(`ol:${url}`, 6 * 3_600_000, async () => {
+    const res = await httpFetch(url);
+    if (!res.ok) throw new Error(`Open Library ${res.status}`);
+    const j = await res.json();
+    return oneEach(((j?.docs || []) as Record<string, unknown>[]).map(bookFromOpenLibrary).filter((b): b is Book => !!b)).slice(0, rows);
+  });
+}
+
+/** What a bestseller is about, from Open Library. */
+export async function aboutBestseller(book: Book): Promise<string> {
+  const work = book.id.replace(/^ol:/, '');
+  return cached(`olw:${work}`, 7 * 86_400_000, async () => {
+    const res = await httpFetch(`https://openlibrary.org/works/${encodeURIComponent(work)}.json`);
+    if (!res.ok) return '';
+    const j = await res.json();
+    const d = typeof j?.description === 'string' ? j.description : j?.description?.value || '';
+    // Open Library descriptions often end with source notes and links.
+    return String(d).replace(/\(\[source\]\[\d+\]\)/g, '').replace(/\n-{3,}[\s\S]*$/, '').replace(/\[(\d+)\]:\s*\S+/g, '').trim();
+  });
+}
+
+/** Free audio from a bestseller's author: their own show, and interviews with them on other shows. */
+export async function authorAudio(book: Book): Promise<{ show?: { name: string; episodes: Track[] }; talks: Track[] }> {
+  return cached(`aa:${book.id}`, 86_400_000, async () => {
+    const own = OWN_SHOWS[book.author];
+    const [episodes, found] = await Promise.all([
+      own ? getEpisodesById(own.id, 12).catch(() => [] as Track[]) : Promise.resolve([] as Track[]),
+      searchEpisodes(book.author, 50).catch(() => [] as Track[]),
+    ]);
+    const talks = found.filter((t) => isInterview({ title: t.title, artist: t.artist, duration: t.duration || 0, description: t.description }, book)
+      && !episodes.some((e) => e.id === t.id) && !(own && t.artist === own.name)).slice(0, 12);
+    // Spoken word: the player's skip back and ahead, and not counted as music taste.
+    const pod = (t: Track): Track => ({ ...t, isPodcast: true });
+    return { show: own && episodes.length ? { name: own.name, episodes: episodes.slice(0, 10).map(pod) } : undefined, talks: talks.map(pod) };
+  });
+}
+
+/** Open a library or store page: in the browser on the website, through the app's checked handover on a phone. */
+export function openOutside(url: string): void {
+  if (Capacitor.isNativePlatform()) {
+    try { fetch(`https://localhost/__openext?url=${encodeURIComponent(url)}`, { cache: 'no-store' }).catch(() => {}); } catch { /* ignore */ }
+  } else {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
 }
 
 /** Other recordings of the same book (other readers, a computer voice), in LibriVox and Gutenberg, most listened first. */
