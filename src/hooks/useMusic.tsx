@@ -10,6 +10,8 @@ import { loadEq, EQ_CHANGE } from '../services/eq';
 import { cleanTrackText } from '../services/trackText.ts';
 import { songKey } from '../services/tasteHome';
 import { resolveYt, prefetchMatches, asTrack } from '../services/resolveYt';
+import { afterSkip, wasSkipped } from '../services/stationCore';
+import { artistKey } from '../services/taste';
 import { upNext } from '../services/upNext';
 import { songBase, isVersion, dealQueue, onePerPlay, shuffled } from '../services/curate';
 import { hifiWanted, hifiSrc, prefetchHifi } from '../services/hifiAudio';
@@ -72,6 +74,8 @@ interface MusicCtx {
   canShowVideo: boolean;
   /** Now Playing registers the element the video should cover. */
   setVideoSlot: (el: HTMLElement | null) => void;
+  /** Load YouTube's player now, empty, so the first song switches into it at once (Music opened). */
+  warmPlayer: () => void;
   setVideoCovered: (covered: boolean) => void;
   // Library
   playlists: Playlist[];
@@ -279,7 +283,20 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     // How far the song before got: played through, or skipped (taste.ts). A song
     // that never started (a catalogue song becoming its YouTube match) counts as neither.
     const before = listenRef.current;
-    if (before.t && !before.t.isPodcast) saveTaste(recordListen(loadTaste(), before.t.artist, before.max, before.t.duration || 0));
+    if (before.t && !before.t.isPodcast) {
+      saveTaste(recordListen(loadTaste(), before.t.artist, before.max, before.t.duration || 0));
+      // A quick skip: the station plays that artist later, or not again (stationCore.afterSkip).
+      if (wasSkipped(before.max, before.t.duration || 0)) {
+        const k = artistKey(before.t.artist);
+        const times = (sessionSkipsRef.current.get(k) || 0) + 1;
+        sessionSkipsRef.current.set(k, times);
+        const at = index, skippedArtist = before.t.artist;
+        setQueue((prev) => {
+          const next = afterSkip(prev.slice(at + 1), skippedArtist, times);
+          return next.length === prev.length - at - 1 && next.every((t, i) => t === prev[at + 1 + i]) ? prev : [...prev.slice(0, at + 1), ...next];
+        });
+      }
+    }
     listenRef.current = { t: c || null, max: 0 };
     if (!c) return;
     // Every play teaches the catalogue which genres this listener is into.
@@ -372,6 +389,18 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   //    stuck is nudged and then reloaded where it was. Only while away. ──
   const wantPlayRef = useRef(false);
   const ytIdRef = useRef('');
+  // Switching songs inside the loaded player (owner, 2026-11-19: "taking time to
+  // start, need it instant"): 0.7 s against about 2 s for reloading YouTube's
+  // whole player page with each song. Measured on the website; the Android app
+  // once refused it, so a switch that has not started in 2.5 s reloads the page
+  // as before, and this session stops trying.
+  const frameReadyRef = useRef(false);
+  const inPlaceRef = useRef<boolean>((() => { try { return sessionStorage.getItem('sahrae.yt.inplace') !== '0'; } catch { return true; } })());
+  const reportedIdRef = useRef<string | null>(null);
+  const switchTimerRef = useRef<number>(0);
+  const warmPlayerRef = useRef<() => void>(() => {});
+  // Quick skips this session, per artist (stationCore: the station learns).
+  const sessionSkipsRef = useRef(new Map<string, number>());
   const ytStateRef = useRef(-1);
   const ytStateAtRef = useRef(0);
   const undoneRef = useRef(0);
@@ -393,16 +422,29 @@ export function MusicProvider({ children }: { children: ReactNode }) {
 
     playerRef.current = {
       loadVideoById: (id: string, start?: number) => {
-        // Set the embed src per track — the proven-reliable path. (The
-        // postMessage loadVideoById switch was faster but didn't actually play
-        // on this WebView, so we keep the reliable reload.)
         wantPlayRef.current = true;
         if (id !== ytIdRef.current) undoneRef.current = 0;
         ytIdRef.current = id;
         ytStateRef.current = -1; ytStateAtRef.current = Date.now();
         if (isAway()) bgLog(`Loading "${titleRef.current}"`);
-        f.src = `https://www.youtube.com/embed/${id}?enablejsapi=1&autoplay=1&playsinline=1&controls=0&rel=0&modestbranding=1&iv_load_policy=3`
-          + (start && start > 1 ? `&start=${Math.floor(start)}` : '');
+        window.clearTimeout(switchTimerRef.current);
+        const reload = () => {
+          frameReadyRef.current = false; reportedIdRef.current = null;
+          f.src = `https://www.youtube.com/embed/${id}?enablejsapi=1&autoplay=1&playsinline=1&controls=0&rel=0&modestbranding=1&iv_load_policy=3`
+            + (start && start > 1 ? `&start=${Math.floor(start)}` : '');
+        };
+        // Into the player already loaded, when it is there and this device allows it.
+        if (frameReadyRef.current && inPlaceRef.current) {
+          cmd('loadVideoById', [{ videoId: id, startSeconds: start && start > 1 ? Math.floor(start) : 0 }]);
+          switchTimerRef.current = window.setTimeout(() => {
+            if (ytIdRef.current !== id || reportedIdRef.current === id) return;
+            inPlaceRef.current = false;
+            try { sessionStorage.setItem('sahrae.yt.inplace', '0'); } catch { /* this load only */ }
+            reload();
+          }, 2500);
+          return;
+        }
+        reload();
       },
       playVideo: () => { wantPlayRef.current = true; cmd('playVideo'); },
       pauseVideo: () => { wantPlayRef.current = false; cmd('pauseVideo'); },
@@ -417,7 +459,13 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     // The embed starts posting state once it receives a 'listening' message.
     const onFrameLoad = () => {
       post({ event: 'listening', id: 1, channel: 'widget' });
+      frameReadyRef.current = !!f.getAttribute('src');
       if (isAway()) bgLog('Song page loaded');
+    };
+    // An empty player, loaded before the first song (it then switches in, not reloads).
+    warmPlayerRef.current = () => {
+      if (f.getAttribute('src') || ytIdRef.current) return;
+      f.src = 'https://www.youtube.com/embed/?enablejsapi=1&autoplay=0&playsinline=1&controls=0&rel=0&modestbranding=1&iv_load_policy=3';
     };
     f.addEventListener('load', onFrameLoad);
 
@@ -443,7 +491,11 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         return;
       }
       if ((d.event === 'infoDelivery' || d.event === 'onStateChange') && d.info) {
-        const info = d.info;
+        const info = d.info as typeof d.info & { videoData?: { video_id?: string } };
+        // Which song is speaking: after a switch the old one can still report its
+        // time, or that it ended (which would skip the new one).
+        if (info.videoData?.video_id) reportedIdRef.current = info.videoData.video_id;
+        if (reportedIdRef.current && ytIdRef.current && reportedIdRef.current !== ytIdRef.current) return;
         if (typeof info.currentTime === 'number') { liveRef.current.position = info.currentTime; setPosition(info.currentTime); }
         if (typeof info.duration === 'number' && info.duration > 0) { liveRef.current.duration = info.duration; setDuration(info.duration); }
         if (typeof info.playerState === 'number') {
@@ -711,9 +763,9 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         return add.length ? [...prev, ...add] : prev;
       });
       // The catalogue first: this artist and related artists, as Spotify's radio does (upNext.ts).
-      const cat = await upNext(c, avoid, 25).catch(() => []);
+      const cat = await upNext(c, avoid, 25, stationCtx()).catch(() => []);
       if (extendingRef.current !== c.id) return;
-      if (cat.length >= 8) { appendNew(cat.map((t) => asTrack(t))); return; }
+      if (cat.length >= 8) { appendNew(cat.map((t) => ({ ...asTrack(t), via: 'radio' as const }))); return; }
 
       // Fallback: YouTube's related videos, held to the same rules.
       const have = new Set(queue.map((t) => t.id));
@@ -910,6 +962,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   // Song Radio (spec §1.3.5): start the seed instantly, then extend into a
   // diversified ~50-track radio from its related-tracks graph. The seed stays at
   // index 0 so playback never restarts when the radio fills in.
+  // What the station knows of the listener: the artists of their liked songs, this session's skips.
+  const stationCtx = () => ({ liked: likedTracks.map((t) => t.artist), sessionSkips: sessionSkipsRef.current });
   const startRadio = (seed: Track) => {
     if (!seed) return;
     playQueue([seed], 0, `${seed.title} Radio`);
@@ -917,8 +971,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     (async () => {
       const onRadio = (radio: Track[]) => setQueue((prev) => (prev.length && prev[0]?.id === sid ? radio : prev));
       // The catalogue first (upNext.ts): related artists' songs, each song once, no versions.
-      const cat = await upNext(seed, new Set([songBase(seed.title)]), 49).catch(() => []);
-      if (cat.length >= 8) { onRadio([seed, ...cat.map((t) => asTrack(t))]); return; }
+      const cat = await upNext(seed, new Set([songBase(seed.title), ...recentlyPlayed.slice(0, 15).map((t) => songBase(t.title))]), 49, stationCtx()).catch(() => []);
+      if (cat.length >= 8) { onRadio([seed, ...cat.map((t) => ({ ...asTrack(t), via: 'radio' as const }))]); return; }
       const have = new Set<string>([sid]);
       const avoid = new Set([songBase(seed.title)]);
       const pool: Track[] = [];
@@ -1167,6 +1221,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         toggle, stop, next, prev, seek, setRate, toggleShuffle, cycleRepeat, toggleLike, isLiked,
         likedTracks, setExpanded,
         videoMode, setVideoMode, canShowVideo, setVideoSlot, setVideoCovered,
+        warmPlayer: () => warmPlayerRef.current(),
         playlists, recentlyPlayed, tasteSeeds, onboarded, addTasteSeeds, completeOnboarding,
         eqReachable,
         playbackError, clearPlaybackError: () => setPlaybackError(null),

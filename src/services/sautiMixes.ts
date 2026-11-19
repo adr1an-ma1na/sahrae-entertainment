@@ -12,13 +12,14 @@
  */
 import { deezer } from './deezer';
 import { buildMix, clusterArtists, interleave, mixSubtitle, type CArtist, type CTrack } from './curate';
+import { leadOnly } from './stationCore';
 import { GENRES, type Genre } from './genres';
 
 export interface Picks { artists: CArtist[]; genres: string[]; at: number }
 export interface Mix { id: string; title: string; subtitle: string; cover?: string; tint?: string; tracks: CTrack[] }
 
 export const PICKS_KEY = 'sahrae.music.picks.v1';
-const MIXES_KEY = 'sahrae.music.dailyMixes.v2';
+const MIXES_KEY = 'sahrae.music.dailyMixes.v3';
 const GENRE_MIX_KEY = 'sahrae.music.genreMix.v1.';
 
 export function loadPicks(): Picks | null {
@@ -71,7 +72,16 @@ export async function dailyMixes(picks: CArtist[], played: string[] = []): Promi
     const mine = new Set(artists.map((a) => a.id));
     const neighbours: CArtist[] = [];
     for (const a of group) for (const r of relatedOf[a.id] || []) if (!mine.has(r.id) && !neighbours.some((x) => x.id === r.id)) neighbours.push(r);
-    const [familiar, discovery] = await Promise.all([tops(group, 12), tops(neighbours.slice(0, 8), 6)]);
+    // Discovery leads with Deezer's radio for the group's first two artists (what their
+    // listeners play with them), the group's own artists taken out, then the neighbours'
+    // best known. Familiar songs are each artist's own, not their features on others'.
+    const [familiar, radios, neighbourTops] = await Promise.all([
+      tops(group, 12).then((ls) => ls.map((l, i) => leadOnly(l, group[i].id))),
+      Promise.all(group.slice(0, 2).map((a) => deezer.artistRadio(a.id, 30).catch(() => [] as CTrack[]))),
+      tops(neighbours.slice(0, 8), 6),
+    ]);
+    const groupIds = new Set(group.map((a) => a.id));
+    const discovery = [...radios.map((r) => r.filter((t) => !groupIds.has(t.artistId))), ...neighbourTops.map((l, i) => leadOnly(l, neighbours[i].id))];
     const tracks = buildMix(familiar, discovery, 50);
     if (tracks.length < 12) continue;
     mixes.push({ id: `daily-${mixes.length + 1}`, title: `Daily Mix ${mixes.length + 1}`, subtitle: mixSubtitle(tracks), cover: group[0].picture, tracks });

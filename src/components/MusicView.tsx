@@ -20,7 +20,18 @@ import EmptyState from './EmptyState';
 const YEAR = new Date().getFullYear();
 import SautiOnboarding, { type OnboardingResult } from './SautiOnboarding';
 import { loadPicks, savePicks, dailyMixes as curatedDailyMixes, pickedGenreMixes, artistNamed } from '../services/sautiMixes';
-import { asTrack } from '../services/resolveYt';
+import { asTrack, resolveYt, prefetchMatches } from '../services/resolveYt';
+
+/**
+ * Ready a song before it is tapped (owner, 2026-11-19: "taking time to start,
+ * need it instant"): YouTube's player is warmed, and a catalogue song is
+ * matched to its audio while the finger or pointer is on it, so the tap plays
+ * at once instead of searching first.
+ */
+function usePrime() {
+  const { warmPlayer } = useMusic();
+  return (t: Track) => { warmPlayer(); if (t.id.startsWith('dz:')) void resolveYt(t).catch(() => null); };
+}
 import { weigh, loadTaste, artistKey, TASTE_CHANGE } from '../services/taste';
 import { buildTasteHome, songKey, uniqueSongs, type TasteHome } from '../services/tasteHome';
 import { deezer, type DzAlbum } from '../services/deezer';
@@ -172,8 +183,9 @@ function TrackRow({ track, onPlay, onRemove, index, list = false }: { track: Tra
   const { current, isPlaying, toggle, toggleLike, isLiked, openAddSheet, setExpanded } = useMusic();
   const active = sameSong(current, track);
   const { handlers, consumed } = useLongPress(() => openAddSheet(track));
+  const prime = usePrime();
   return (
-    <div tabIndex={0} data-tv-focusable role="button" {...handlers} onClick={() => { if (consumed()) return; if (active && isTelevision()) setExpanded(true); else if (active) toggle(); else onPlay(); }}
+    <div tabIndex={0} data-tv-focusable role="button" {...handlers} onPointerEnter={() => prime(track)} onFocus={() => prime(track)} onClick={() => { if (consumed()) return; if (active && isTelevision()) setExpanded(true); else if (active) toggle(); else onPlay(); }}
       className={list
         ? `group flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer focus:outline-none transition-colors hover:bg-white/[0.06] focus-visible:bg-white/[0.08] ${active ? 'bg-amber-400/[0.08]' : ''}`
         : 'card-lift group flex items-center gap-3 p-2 pr-2 rounded-xl border border-white/5 bg-zinc-900/40 cursor-pointer focus:outline-none'}>
@@ -215,8 +227,8 @@ function TrackRow({ track, onPlay, onRemove, index, list = false }: { track: Tra
  * faint record in the corner (Sauti's vinyl motif). The flat colour band it
  * replaces copied Spotify exactly and looked cheaper than the rest of Sahrae.
  */
-function MixCard({ title, subtitle, tracks, cover, tint, onOpen, onPlay }: {
-  title: string; subtitle: string; tracks: Track[]; cover?: string; tint?: string; onOpen: () => void; onPlay: () => void;
+function MixCard({ title, subtitle, tracks, cover, tint, onOpen, onPlay, badge = 'Made for you' }: {
+  title: string; subtitle: string; tracks: Track[]; cover?: string; tint?: string; onOpen: () => void; onPlay: () => void; badge?: string;
 }) {
   const colour = tint || tracks[0]?.dominantColor || 'rgb(var(--acc-rgb))';
   const faces: Track[] = [];
@@ -243,7 +255,7 @@ function MixCard({ title, subtitle, tracks, cover, tint, onOpen, onPlay }: {
           style={{ background: 'repeating-radial-gradient(circle, #fff 0 1px, transparent 1px 4px)' }} />
         {/* A light sweep on hover. */}
         <span aria-hidden className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-[1100ms] ease-out bg-gradient-to-r from-transparent via-white/15 to-transparent" />
-        <span className="absolute top-2.5 left-2.5 px-2 py-[3px] rounded-full bg-black/40 backdrop-blur-sm text-[9px] font-bold uppercase tracking-[0.2em] text-amber-200 ring-1 ring-amber-200/25">Made for you</span>
+        <span className="absolute top-2.5 left-2.5 px-2 py-[3px] rounded-full bg-black/40 backdrop-blur-sm text-[9px] font-bold uppercase tracking-[0.2em] text-amber-200 ring-1 ring-amber-200/25">{badge}</span>
         <div className="absolute inset-x-0 bottom-0 p-3 md:p-3.5">
           <p className="font-display font-extrabold text-[21px] md:text-[25px] leading-[1.02] tracking-tight text-[#fff] line-clamp-2 [text-shadow:0_2px_14px_rgba(0,0,0,0.45)]">{title}</p>
           <div className="mt-2 flex items-center justify-between">
@@ -352,6 +364,9 @@ function CollectionHero({ kicker, title, tracks, image, icon, round = false, blu
 
 /** The songs of a collection, as one clean list: number, title, length. */
 function SongList({ tracks, onPlay, onRemove }: { tracks: Track[]; onPlay: (i: number) => void; onRemove?: (t: Track) => void }) {
+  // The first songs of a page are matched to their audio as it opens: the likeliest taps.
+  const head = tracks.slice(0, 6).map((t) => t.id).join(',');
+  useEffect(() => { void prefetchMatches(tracks.slice(0, 6).filter((t) => t.id.startsWith('dz:'))); }, [head]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div>
       <div className="hidden sm:flex items-center gap-3 px-3 pb-2 mb-1 text-[11px] font-bold uppercase tracking-[0.16em] text-zinc-500 border-b" style={{ borderColor: 'var(--lux-line)' }}>
@@ -374,8 +389,9 @@ function TrackCard({ track, onPlay }: { track: Track; onPlay: () => void }) {
   const { current, isPlaying, toggle, openAddSheet, setExpanded } = useMusic();
   const active = sameSong(current, track);
   const { handlers, consumed } = useLongPress(() => openAddSheet(track));
+  const prime = usePrime();
   return (
-    <div {...handlers} className="relative shrink-0 group/card">
+    <div {...handlers} onPointerEnter={() => prime(track)} onFocusCapture={() => prime(track)} className="relative shrink-0 group/card">
       <ArtCard
         title={track.title}
         subtitle={track.artist}
@@ -399,8 +415,9 @@ function QuickRow({ track, onPlay }: { track: Track; onPlay: () => void }) {
   const { current, isPlaying, toggle, openAddSheet, setExpanded } = useMusic();
   const active = sameSong(current, track);
   const { handlers, consumed } = useLongPress(() => openAddSheet(track));
+  const prime = usePrime();
   return (
-    <div tabIndex={0} data-tv-focusable role="button" {...handlers} onClick={() => { if (consumed()) return; if (active && isTelevision()) setExpanded(true); else if (active) toggle(); else onPlay(); }}
+    <div tabIndex={0} data-tv-focusable role="button" {...handlers} onPointerEnter={() => prime(track)} onFocus={() => prime(track)} onClick={() => { if (consumed()) return; if (active && isTelevision()) setExpanded(true); else if (active) toggle(); else onPlay(); }}
       className="group flex items-center gap-3 p-1.5 rounded-lg hover:bg-white/5 focus:bg-white/5 cursor-pointer focus:outline-none">
       <div className="relative w-12 h-12 rounded-md overflow-hidden bg-zinc-800 shrink-0">
         <CoverArt imageUrl={track.artworkLarge || track.artwork} fallbackUrl={track.artwork} dominantColor={track.dominantColor} rounded="" className="absolute inset-0 w-full h-full" />
@@ -461,7 +478,9 @@ function greeting(): string {
 }
 
 export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) {
-  const { current, isPlaying, playQueue, playShuffled, startRadio, likedTracks, playlists, recentlyPlayed: rawRecent, tasteSeeds, onboarded, addTasteSeeds, completeOnboarding, createPlaylist, importPlaylist, deletePlaylist, removeFromPlaylist, openAddSheet, setVideoMode, setExpanded } = useMusic();
+  const { current, isPlaying, playQueue, playShuffled, startRadio, likedTracks, playlists, recentlyPlayed: rawRecent, tasteSeeds, onboarded, addTasteSeeds, completeOnboarding, createPlaylist, importPlaylist, deletePlaylist, removeFromPlaylist, openAddSheet, setVideoMode, setExpanded, warmPlayer } = useMusic();
+  // Music open: YouTube's player loads now, empty, so the first song switches into it.
+  useEffect(() => { const id = window.setTimeout(warmPlayer, 600); return () => window.clearTimeout(id); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // One hover preview at a time across the Music videos shelf.
   const [videoPreviewId, setVideoPreviewId] = useState<string | null>(null);
   // Sauti is music only — podcasts play through the shared engine, so strip them
@@ -1288,7 +1307,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                   ) : rSongs[0] && (
                     <div>
                       <SectionHead>Top result</SectionHead>
-                      <button onClick={() => playQueue(rSongs, 0)} tabIndex={0} data-tv-focusable className="group relative w-full text-left rounded-2xl p-5 bg-white/5 hover:bg-white/10 transition-colors">
+                      <button onClick={() => startRadio(rSongs[0])} tabIndex={0} data-tv-focusable className="group relative w-full text-left rounded-2xl p-5 bg-white/5 hover:bg-white/10 transition-colors">
                         <div className="w-24 h-24 rounded-xl overflow-hidden mb-4 relative shadow-xl"><CoverArt imageUrl={rSongs[0].artworkLarge || rSongs[0].artwork} fallbackUrl={rSongs[0].artwork} dominantColor={rSongs[0].dominantColor} rounded="" className="absolute inset-0 w-full h-full" /></div>
                         <p className="text-2xl font-display font-bold text-white truncate">{rSongs[0].title}</p>
                         <p className="text-sm text-zinc-400 mt-1 truncate">{rSongs[0].artist} · <span className="text-zinc-300 font-semibold">Song</span></p>
@@ -1299,7 +1318,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                   {rSongs.length > 0 && (
                     <div>
                       <SectionHead>Songs</SectionHead>
-                      <div>{rSongs.slice(0, 5).map((t, i) => <Fragment key={t.id}><TrackRow track={t} list onPlay={() => playQueue(rSongs, i)} /></Fragment>)}</div>
+                      <div>{rSongs.slice(0, 5).map((t, i) => <Fragment key={t.id}><TrackRow track={t} list onPlay={() => startRadio(rSongs[i])} /></Fragment>)}</div>
                     </div>
                   )}
                 </div>
@@ -1447,7 +1466,14 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                         <h3 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight truncate">{title}</h3>
                       </div>
                     </div>
-                    <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{list.map((t, i) => <Fragment key={t.id}><TrackCard track={t} onPlay={() => playQueue(list, i, title)} /></Fragment>)}</div>
+                    {/* The station leads its row as a poster, in the Daily Mixes' look (owner, 2026-11-19:
+                        "love the daily mix imagery"): their photo melting into colour, their name. */}
+                    <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">
+                      <MixCard badge="Radio" title={`${artist.name} Radio`} subtitle={`${artist.name} and the artists their listeners play with them`} tracks={list} cover={artist.picture}
+                        onOpen={() => setViewMix({ id: `radio-${artist.id}`, title: `${artist.name} Radio`, subtitle: `Because you play ${artist.name}`, tracks: list })}
+                        onPlay={() => playQueue(list, 0, `${artist.name} Radio`)} />
+                      {list.map((t, i) => <Fragment key={t.id}><TrackCard track={t} onPlay={() => playQueue(list, i, title)} /></Fragment>)}
+                    </div>
                   </section>
                 );
               })}

@@ -34,6 +34,7 @@ export interface Track {
   chapters?: { start: number; title: string }[]; // inline <psc:chapter> chapters
   isPodcast?: boolean;  // a podcast episode (audio file OR a YouTube video episode) — gets podcast transport
   dz?: { id: number; artistId: number }; // a catalogue song (Deezer); its id is `dz:<id>` until matched to YouTube (resolveYt.ts)
+  via?: 'radio';      // added by a station (Up next / autoplay), not chosen: a quick skip may move it (stationCore.afterSkip)
 }
 
 // Deterministic, pleasant "dominant colour" per track for CoverArt /

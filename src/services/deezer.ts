@@ -107,7 +107,7 @@ function keep(path: string, data: unknown) {
 const artist = (a: any): CArtist => ({ id: a.id, name: a.name, picture: a.picture_xl || a.picture_big || a.picture_medium, fans: a.nb_fan });
 const track = (t: any): CTrack => ({
   id: t.id, title: t.title_short || t.title, artist: t.artist?.name || '', artistId: t.artist?.id || 0,
-  duration: t.duration || 0, cover: t.album?.cover_medium, coverXl: t.album?.cover_xl || t.album?.cover_big, rank: t.rank,
+  duration: t.duration || 0, cover: t.album?.cover_medium, coverXl: t.album?.cover_xl || t.album?.cover_big, rank: Number(t.rank) || undefined,
 });
 // Not an artist: compilations, and joint credits Deezer files as artists of their
 // own ("Oxlade, Fally Ipupa", "MASIDI & Fally Ipupa"). A real duo or band
@@ -139,6 +139,9 @@ export const deezer = {
     (await get<List<unknown>>(`/artist/${id}/related?limit=${limit}`, 14 * DAY, urgent)).data?.filter(real).map(artist) || [],
   topTracks: async (id: number, limit = 15): Promise<CTrack[]> =>
     (await get<List<unknown>>(`/artist/${id}/top?limit=${limit}`, 3 * DAY)).data?.map(track).filter((t) => t.duration >= 60) || [],
+  /** Deezer's own radio for an artist: songs its listeners play with theirs, the closest first (stationCore's strongest signal). */
+  artistRadio: async (id: number, limit = 40): Promise<CTrack[]> =>
+    (await get<List<unknown>>(`/artist/${id}/radio?limit=${limit}`, DAY)).data?.map(track).filter((t) => t.duration >= 60) || [],
   chartArtists: async (limit = 40): Promise<CArtist[]> =>
     (await get<List<unknown>>(`/chart/0/artists?limit=${limit}`, DAY)).data?.filter(real).map(artist) || [],
   genreArtists: async (genreId: number): Promise<CArtist[]> =>

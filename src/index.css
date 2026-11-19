@@ -2558,3 +2558,14 @@ html.low-gfx.sports-open .sports-page > :not(.sports-dialog) { visibility: hidde
 .pod-next { display: grid; gap: .25rem; }
 .pod-next button { width: 100%; display: flex; align-items: center; gap: .8rem; padding: .55rem; border-radius: .9rem; transition: background .2s; }
 .pod-next button:hover { background: rgb(255 255 255 / .06); }
+
+/* Covers before they load, and without one (ui/CoverArt): a dark surface tinted with the
+   cover's colour, a soft light passing while it loads, a faint record when there is none. */
+.cover-base { background: radial-gradient(120% 120% at 25% 15%, color-mix(in srgb, var(--cov, #3a3a44) 30%, var(--zinc-900)) 0%, var(--zinc-950) 72%); }
+.cover-wait::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / .07) 50%, transparent 70%); transform: translateX(-100%); animation: cover-sheen 1.5s ease-in-out infinite; }
+.cover-none::before { content: ''; position: absolute; inset: 20%; border-radius: 9999px; pointer-events: none;
+  background: radial-gradient(circle, color-mix(in srgb, var(--cov, #3a3a44) 60%, #fff) 0 6%, transparent 7%), repeating-radial-gradient(circle, rgb(255 255 255 / .07) 0 1px, transparent 1px 4px);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / .07); }
+@keyframes cover-sheen { to { transform: translateX(100%); } }
+html.tv-mode .cover-wait::after, html.low-gfx .cover-wait::after { animation: none; display: none; }
+@media (prefers-reduced-motion: reduce) { .cover-wait::after { animation: none; display: none; } }

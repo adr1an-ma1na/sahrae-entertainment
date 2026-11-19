@@ -20,6 +20,8 @@ import { deezer, type DzAlbum } from './deezer';
 import { buildMix, interleave, type CArtist, type CTrack } from './curate';
 import { artistNamed } from './sautiMixes';
 import { artistKey, type Weighted } from './taste';
+import { leadOnly } from './stationCore';
+import { artistStation } from './upNext';
 
 export interface TasteHome {
   sig: string;
@@ -32,7 +34,7 @@ export interface TasteHome {
   mightLike: { artist: CArtist; because: string[] }[];
 }
 
-const HOME_KEY = 'sahrae.music.tasteHome.v1';
+const HOME_KEY = 'sahrae.music.tasteHome.v2';
 const DAY = 86_400_000;
 const fold = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\(.*?\)|\[.*?\]/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
 /** A song's key for "already heard": lead artist and title, spelling aside. */
@@ -103,18 +105,18 @@ export async function buildTasteHome(input: {
 
   // 4. Songs: your artists' best known, and your likely next artists'.
   const [familiar, neighbours] = await Promise.all([
-    Promise.all(top.slice(0, 8).map((a) => safe(deezer.topTracks(a.id, 12), [] as CTrack[]))),
-    Promise.all(mightLike.slice(0, 10).map((m) => safe(deezer.topTracks(m.artist.id, 6), [] as CTrack[]))),
+    Promise.all(top.slice(0, 8).map((a) => safe(deezer.topTracks(a.id, 12), [] as CTrack[]).then((l) => leadOnly(l, a.id)))),
+    Promise.all(mightLike.slice(0, 10).map((m) => safe(deezer.topTracks(m.artist.id, 6), [] as CTrack[]).then((l) => leadOnly(l, m.artist.id)))),
   ]);
   const quick = buildMix(familiar, neighbours, 24);
 
   // 5. More like your two strongest: their songs woven with who they lead to.
   const moreLike: TasteHome['moreLike'] = [];
+  // Their station (stationCore, owner 2026-11-19: "the Spotify algorithm"): what their
+  // listeners play with them, scored for this listener. It used to open with their "top"
+  // songs, which carried features on others' (Shakira's "Dai Dai" as Burna Boy's).
   for (let i = 0; i < Math.min(2, top.length); i++) {
-    const rel = related[i].filter(allowed).slice(0, 8);
-    if (rel.length < 3) continue;
-    const relTops = await Promise.all(rel.map((r) => safe(deezer.topTracks(r.id, 6), [] as CTrack[])));
-    const tracks = buildMix([familiar[i]?.slice(0, 5) || []], relTops, 30);
+    const tracks = await safe(artistStation(top[i], 30), [] as CTrack[]);
     if (tracks.length >= 10) moreLike.push({ artist: top[i], tracks });
   }
 

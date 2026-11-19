@@ -3,9 +3,12 @@ import { useState } from 'react';
 type Size = 'sm' | 'md' | 'lg' | 'hero';
 
 /**
- * CoverArt: paints the track/album's dominant colour immediately, then fades the
- * artwork in once it decodes — so a shelf never flashes empty grey, and the
- * now-playing never lingers on the PREVIOUS track's art.
+ * CoverArt: a dark surface tinted with the cover's colour, with a light passing
+ * over it while the artwork loads, then the artwork faded in, so a shelf never
+ * flashes empty grey and the now-playing never lingers on the PREVIOUS track's
+ * art. No cover at all: the same surface with a faint record. It used to paint
+ * the colour itself, flat (the colour is a hash of the id, often magenta or
+ * green), which read as broken tiles (owner, 2026-11-19: "doesn't feel high end").
  *
  * `imageUrl` is the best-quality source; if it 404s (e.g. an HD variant that the
  * CDN doesn't have) we transparently fall back to `fallbackUrl`. The image is
@@ -38,8 +41,8 @@ export function CoverArt({
 
   return (
     <div
-      className={`relative overflow-hidden ${rounded} ${className}`}
-      style={{ backgroundColor: dominantColor || '#282828' }}
+      className={`cover-base relative overflow-hidden ${rounded} ${className} ${loaded ? '' : src ? 'cover-wait' : 'cover-none'}`}
+      style={{ ['--cov' as string]: dominantColor || '#3a3a44' }}
     >
       {src ? (
         <img
