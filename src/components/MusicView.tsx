@@ -21,6 +21,7 @@ const YEAR = new Date().getFullYear();
 import SautiOnboarding, { type OnboardingResult } from './SautiOnboarding';
 import { loadPicks, savePicks, dailyMixes as curatedDailyMixes, pickedGenreMixes, artistNamed } from '../services/sautiMixes';
 import { asTrack, resolveYt, prefetchMatches } from '../services/resolveYt';
+import { useAuth } from '../hooks/useAuth';
 
 /**
  * Ready a song before it is tapped (owner, 2026-11-19: "taking time to start,
@@ -447,10 +448,14 @@ function QuickRow({ track, onPlay }: { track: Track; onPlay: () => void }) {
  * because those carry meaning (Sparkles for generated mixes, YouTube for synced
  * playlists) rather than being decoration.
  */
-const SectionHead = ({ children, icon }: { children: ReactNode; icon?: ReactNode }) => (
+const SectionHead = ({ children, icon, kicker }: { children: ReactNode; icon?: ReactNode; kicker?: string }) => (
   <div className="flex items-center gap-2.5 mb-4">
     {icon}
-    <h3 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">{children}</h3>
+    <div className="min-w-0">
+      {/* A short line above, as the "More like" rows have (owner, 2026-11-19: "make it high end"). */}
+      {kicker && <p className="lux-kicker mb-0.5">{kicker}</p>}
+      <h3 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">{children}</h3>
+    </div>
   </div>
 );
 
@@ -479,6 +484,9 @@ function greeting(): string {
 
 export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) {
   const { current, isPlaying, playQueue, playShuffled, startRadio, likedTracks, playlists, recentlyPlayed: rawRecent, tasteSeeds, onboarded, addTasteSeeds, completeOnboarding, createPlaylist, importPlaylist, deletePlaylist, removeFromPlaylist, openAddSheet, setVideoMode, setExpanded, warmPlayer } = useMusic();
+  // The greeting by the listener's first name, as the opening welcomes them.
+  const { activeProfile } = useAuth();
+  const firstName = activeProfile?.name?.trim().split(/s+/)[0] || '';
   // Music open: YouTube's player loads now, empty, so the first song switches into it.
   useEffect(() => { const id = window.setTimeout(warmPlayer, 600); return () => window.clearTimeout(id); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // One hover preview at a time across the Music videos shelf.
@@ -1245,7 +1253,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
       {/* Kept short: on a phone the old header (kicker, title, a line of
           description, then the switch) pushed the first song below the fold. */}
       <LuxHeader className="relative !mb-5 md:!mb-8 !gap-4" kicker={<><Music2 className="w-3.5 h-3.5" /> Sauti</>}
-        title={tab === 'home' ? greeting() : 'Your Library'}
+        title={tab === 'home' ? (firstName ? `${greeting()}, ${firstName}` : greeting()) : 'Your Library'}
         right={<LuxSeg active={tab} onChange={(t) => { setTab(t); setOpenId(null); }} items={[
           { id: 'home', label: 'Home', icon: Music2 },
           { id: 'library', label: 'Library', icon: Library },
@@ -1426,7 +1434,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
               {/* ── Quick picks — YouTube-Music's signature 4-row tap-to-play grid ── */}
               {quickPicks.length > 0 && (
                 <section className="mb-9">
-                  <SectionHead>Quick picks</SectionHead>
+                  <SectionHead kicker="Start here">Quick picks</SectionHead>
                   <div className="overflow-x-auto scrollbar-hide pb-3 -mx-1 px-1">
                     <div className="grid grid-rows-4 grid-flow-col auto-cols-[86%] sm:auto-cols-[minmax(320px,360px)] gap-x-5 gap-y-0.5">
                       {quickPicks.map((t, i) => <Fragment key={t.id}><QuickRow track={t} onPlay={() => playQueue(quickPicks, i, 'Quick picks')} /></Fragment>)}
@@ -1437,7 +1445,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
 
               {mixes.length > 0 && (
                 <section className="mb-9">
-                  <SectionHead>Mixed for you</SectionHead>
+                  <SectionHead kicker="Made for you · new every day">Mixed for you</SectionHead>
                   <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">
                     {mixes.map((m) => (
                       <Fragment key={m.id}>
@@ -1481,7 +1489,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
               {/* ── New releases from the listener's artists (the catalogue's dates, newest first) ── */}
               {tasteHome && tasteHome.releases.filter(allowed).length > 0 && (
                 <section className="mb-9">
-                  <SectionHead>New releases for you</SectionHead>
+                  <SectionHead kicker="From the artists you play">New releases for you</SectionHead>
                   <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">
                     {tasteHome.releases.filter(allowed).map((r) => (
                       <button key={r.id} onClick={() => openAlbum({ id: `dz:${r.id}`, name: r.title, thumbnail: r.coverXl || r.cover, artist: r.artist })} tabIndex={0} data-tv-focusable
@@ -1500,7 +1508,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
 
               {tasteHome && tasteHome.mightLike.length > 0 ? (
                 <section className="mb-9">
-                  <SectionHead>Artists you might like</SectionHead>
+                  <SectionHead kicker="Who your artists lead to">Artists you might like</SectionHead>
                   <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">
                     {tasteHome.mightLike.slice(0, 16).map(({ artist, because }) => artistTile({ id: `dz:${artist.id}`, name: artist.name, thumbnail: artist.picture }, `Like ${because.slice(0, 2).join(' & ')}`))}
                   </div>
@@ -1517,7 +1525,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                   out of its corner (Sauti's vinyl motif), the way Spotify tilts a
                   cover out of its browse tiles. */}
               <section className="mb-9">
-                <SectionHead>Browse genres</SectionHead>
+                <SectionHead kicker="Explore">Browse genres</SectionHead>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 md:gap-3">
                   {(allGenres ? CATALOG_GENRES : CATALOG_GENRES.slice(0, 8)).map((g) => (
                     <button key={g.id} onClick={() => setCatGenre(g.id)} tabIndex={0} data-tv-focusable
@@ -1650,7 +1658,7 @@ export default function MusicView({ onNav }: { onNav?: (tab: string) => void }) 
                 const again = uniqueSongs(recentlyPlayed).slice(0, 20);
                 return again.length >= 6 && (
                   <section className="mb-10">
-                    <SectionHead>Listen again</SectionHead>
+                    <SectionHead kicker="Your history">Listen again</SectionHead>
                     <div className="flex overflow-x-auto gap-4 pt-1 pb-4 scrollbar-hide">{again.map((t, i) => <Fragment key={t.id}><TrackCard track={t} onPlay={() => playQueue(again, i, 'Listen again')} /></Fragment>)}</div>
                   </section>
                 );
