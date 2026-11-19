@@ -3,6 +3,9 @@ import type { ReactNode } from 'react';
 import { MediaItem } from '../services/tmdb';
 import { Fragment } from 'react';
 import PosterCard from './PosterCard';
+// As many posters as fit across the window, and two more: fetched at once, the rest as
+// the row is scrolled (six on a phone, 13 on a 1366 px laptop, 17 on a TV).
+const EAGER = typeof window !== 'undefined' ? Math.max(6, Math.ceil(window.innerWidth / 130) + 2) : 6;
 import { RailHeader } from './ui/Lux';
 import { useRail } from '../hooks/useRail';
 
@@ -55,7 +58,7 @@ export default function MediaRow({ title, items, onPlay, defaultType = 'movie', 
           return (
             <Fragment key={`${type}-${item.id}`}>
               {/* The first posters of a row are on screen or one swipe away: fetched at once. */}
-              <PosterCard item={item} type={type} eager={i < 6} onPlay={() => onPlay(item.id, type, true)} />
+              <PosterCard item={item} type={type} eager={i < EAGER} onPlay={() => onPlay(item.id, type, true)} />
             </Fragment>
           );
         })}

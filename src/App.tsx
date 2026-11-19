@@ -500,11 +500,13 @@ export default function App() {
   const lastElementRef = useCallback((node: HTMLDivElement | null) => {
     if (searchLoading) return;
     if (observer.current) observer.current.disconnect();
+    // The next page is fetched well before the last result is reached, not at it
+    // (owner, 2026-11-19: lag when scrolling, on laptop, TV and phone).
     observer.current = new IntersectionObserver(entries => {
       if (entries[0].isIntersecting && hasMoreSearch) {
         loadMoreSearchResults();
       }
-    });
+    }, { rootMargin: '1200px 0px' });
     if (node) observer.current.observe(node);
   }, [searchLoading, hasMoreSearch, loadMoreSearchResults]);
 
