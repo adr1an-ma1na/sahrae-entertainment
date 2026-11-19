@@ -22,10 +22,19 @@ const STOP = new Set([
   'podcast', 'show', 'full', 'official', 'video', 'audio', 'hd',
 ]);
 
+/** Feed and API text arrive with HTML entities ("Wasn&#39;t"). */
+export function decodeEntities(s: string): string {
+  return (s || '')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&');
+}
+
 /** Lowercase, strip punctuation, drop filler words and bare numbers-as-noise. */
 export function tokenize(s: string): string[] {
-  return (s || '')
+  return decodeEntities(s || '')
     .toLowerCase()
+    .replace(/[’']/g, '')
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
     .split(/\s+/)
     .filter((w) => w.length > 1 && !STOP.has(w));
@@ -61,8 +70,9 @@ export interface VideoMatch { track: Track; score: number; reason: string }
  *     identically), even when YouTube gave us no duration to check.
  */
 export function matchEpisodeVideo(
-  episode: Pick<Track, 'title' | 'artist' | 'duration'>,
+  episode: Pick<Track, 'title' | 'artist' | 'duration'> & { uploaded?: number },
   candidates: Track[],
+  opts: { sameChannel?: boolean } = {},
 ): VideoMatch | null {
   let best: VideoMatch | null = null;
 
@@ -80,10 +90,21 @@ export function matchEpisodeVideo(
     const durationsComparable = (episode.duration || 0) > 0 && (c.duration || 0) > 0;
     const titleAlone = titleScore >= 0.85 && !durationsComparable;
     const showBacked = showScore >= 0.5 && titleScore >= 0.6 && durScore > 0;
-    if (!durationBacked && !titleAlone && !showBacked) continue;
+    // From the show's own channel (videoShows), published within days of the
+    // episode and the same length to within 4%: the same episode even when the
+    // video is titled for YouTube. A clip is never that long, a compilation
+    // never that close in length, and the date rules out an older episode.
+    const days = episode.uploaded && c.uploaded ? Math.abs(episode.uploaded - c.uploaded) / 86_400_000 : Infinity;
+    // Two words in common (the guest's name) or a fifth of the title: what tells two
+    // same-week, same-length episodes apart.
+    const have = new Set(tokenize(c.title));
+    const shared = new Set(tokenize(episode.title).filter((w) => have.has(w))).size;
+    const channelBacked = !!opts.sameChannel && durScore >= 0.8 && days <= 4 && (titleScore >= 0.2 || shared >= 2);
+    if (!durationBacked && !titleAlone && !showBacked && !channelBacked) continue;
 
     const score = titleScore * 0.5 + durScore * 0.35 + showScore * 0.15;
-    const reason = durScore > 0
+    const reason = channelBacked && !durationBacked ? "the show's own upload, same length and week"
+      : durScore > 0
       ? `runtime and title match${showScore >= 0.5 ? ', same show' : ''}`
       : 'title matches almost exactly';
     if (!best || score > best.score) best = { track: c, score, reason };

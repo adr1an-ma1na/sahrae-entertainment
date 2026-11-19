@@ -94,3 +94,49 @@ export function pickEpisodes(shows: VideoShow[], uploads: Map<string, Track[]>):
   }
   return out;
 }
+
+/**
+ * More shows that post their full episodes on YouTube, used only to find the
+ * video of an episode being listened to (the Now Playing Watch switch), not
+ * to fill the Video podcasts shelf. Owner, 2026-11-19: "certain podcasts post
+ * also on YouTube … Diary of a CEO, I know there's more". Each channel was
+ * resolved from its @handle and checked on YouTube's own feed on 2026-11-19 to
+ * be the show's real channel, posting that week; impostors and clip channels
+ * found on the way (an old "New heights", "Impaulsive Show Clips", a dormant
+ * "myfirstmillion") were left out. `match` is the show's name as podcast
+ * catalogues write it, letters and digits only.
+ */
+export const MATCH_SHOWS: { match: string[]; channelId: string }[] = [
+  { match: ['joeroganexperience'], channelId: 'UCzQUP1qoWDoEbmsQxvdjxgQ' },
+  { match: ['modernwisdom'], channelId: 'UCIaH-gZIVC432YRjNVvnyCA' },
+  { match: ['melrobbins'], channelId: 'UCk2U-Oqn7RXf-ydPqfSxG5g' },
+  { match: ['thispastweekend', 'theovon'], channelId: 'UC5AQEUAwCh1sGDvkQtkDWUQ' },
+  { match: ['shawnryanshow'], channelId: 'UCkoujZQZatbqy4KGcgjpVxQ' },
+  { match: ['impaulsive'], channelId: 'UCGeBogGDZ9W3dsGx-mWQGJA' },
+  { match: ['timferrissshow'], channelId: 'UCznv7Vf9nBdJYvBagFdAHWw' },
+  { match: ['schoolofgreatness'], channelId: 'UCKsP3v2JeT2hWI_HzkxWiMA' },
+  { match: ['armchairexpert'], channelId: 'UClKP53RewJWK5s5WtLSg7Dg' },
+  { match: ['callherdaddy'], channelId: 'UCyGi3eCuxko37WB6uUr7LjA' },
+  { match: ['dwarkesh'], channelId: 'UCXl4i9dYBrFOabk0xGmbkRA' },
+  { match: ['peterattiadrive', 'thedrivewithpeterattia', 'peterattia'], channelId: 'UC8kGsMa0LygSX9nkBcBH1Sg' },
+  { match: ['richrollpodcast'], channelId: 'UCpjlh0e319ksmoOD7bQFSiw' },
+  { match: ['onpurposewithjayshetty', 'jayshetty'], channelId: 'UCbV60AGIHKz2xIGvbk0LLvg' },
+  { match: ['profgpod', 'profgshow'], channelId: 'UC1E1SVcVyU3ntWMSQEp38Yw' },
+  { match: ['allinwithchamath', 'allinpodcast'], channelId: 'UCESLZhusAkFfsNsApnjF_Cg' },
+  { match: ['restispolitics'], channelId: 'UCsufaClk5if2RGqABb-09Uw' },
+  { match: ['smartless'], channelId: 'UC-W8Qu2Zb407kjVhW-5U-SA' },
+  { match: ['minimalistspodcast'], channelId: 'UCkbFiBwMYMXAqifXF4xo5Uw' },
+  { match: ['startupideaspodcast'], channelId: 'UCPjNBjflYl0-HQtUvOx0Ibw' },
+];
+
+const letters = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '');
+
+/** The YouTube channel a podcast show posts its episodes to, when it is one we know. */
+export function channelForShow(showName: string): string | null {
+  const n = letters(showName);
+  if (!n) return null;
+  const extra = MATCH_SHOWS.find((s) => s.match.some((m) => n.includes(m)));
+  if (extra) return extra.channelId;
+  const known = VIDEO_SHOWS.find((v) => { const a = letters(v.name); return a.length >= 5 && (n.includes(a) || (n.length >= 8 && a.includes(n))); });
+  return known ? known.channelId : null;
+}

@@ -8,6 +8,7 @@ import { DynamicBackground } from './ui/DynamicBackground';
 import { posterColor, cachedPosterColor } from '../services/posterColor';
 import { isTelevision, tvFocus } from '../tv/spatialNavigation';
 import EqualizerPanel from './EqualizerPanel';
+import PodcastPlayer from './PodcastPlayer';
 
 const fmt = (s: number) => {
   if (!s || !isFinite(s)) return '0:00';
@@ -209,6 +210,8 @@ export default function MusicPlayer() {
 
   useEffect(() => {
     if (!current) return;
+    // An episode has no lyrics: not looked up.
+    if (isPodcast) { setLyricsState('none'); return; }
     let cancelled = false;
     setLyricsState('loading'); setSyncedLyrics([]); setPlainLyrics('');
     (async () => {
@@ -305,8 +308,11 @@ export default function MusicPlayer() {
 
   return (
     <>
+      {/* Podcasts and audiobooks have their own Now Playing (PodcastPlayer): notes, chapters, Listen or Watch. */}
+      {expanded && isPodcast && <PodcastPlayer speed={speed} cycleSpeed={cycleSpeed} sleepMin={sleepMin} cycleSleep={cycleSleep} onEq={() => setShowEq(true)} />}
+
       {/* ── Full-screen now-playing (album-art dominant) ── */}
-      {expanded && (
+      {expanded && !isPodcast && (
         <div role="dialog" data-tv-layer className="lux-stage sauti fixed inset-0 z-[120] overflow-y-auto custom-scrollbar animate-in fade-in duration-300">
           <DynamicBackground color={current.dominantColor} />
 

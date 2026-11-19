@@ -307,6 +307,10 @@ export const ytmusic = {
   // Video search — used for Podcasts (which live as videos on YouTube). Returns
   // the same Track shape (id = videoId) so it plays through the music engine for
   // audio, or via a YouTube embed for video.
+  // The same video search through Piped only: free, for finding a podcast episode's video
+  // without spending the day's Data API allowance (episodeVideoFind.ts). Empty when Piped cannot answer.
+  searchVideosFree: (q: string): Promise<Track[]> => searchRaw(q, 'videos').then(mapItems).catch(() => [] as Track[]),
+
   searchVideos: (q: string): Promise<Track[]> =>
     official(() => ytDataApi.search(q, 'video'), () => searchRaw(q, 'videos').then(mapItems)),
 
