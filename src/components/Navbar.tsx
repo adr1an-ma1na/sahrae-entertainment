@@ -231,8 +231,8 @@ export default function Navbar({ activeTab, setActiveTab, onPlay }: NavbarProps)
                   {activeProfile.name}
                 </span>
               )}
-              <div 
-                className="w-8 h-8 rounded bg-gradient-to-tr from-amber-500 to-rose-500 flex items-center justify-center cursor-pointer overflow-hidden"
+              <button type="button" data-tv-focusable aria-label="Profile settings"
+                className="w-8 h-8 rounded bg-gradient-to-tr from-amber-500 to-rose-500 flex items-center justify-center cursor-pointer overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
                 onClick={() => setIsProfileModalOpen(true)}
                 title="Profile Settings"
               >
@@ -243,7 +243,7 @@ export default function Navbar({ activeTab, setActiveTab, onPlay }: NavbarProps)
                 ) : (
                   <User className="w-5 h-5 text-white" />
                 )}
-              </div>
+              </button>
             </div>
           ) : (
             <button

@@ -405,7 +405,7 @@ const SIZE_PX: Record<TmdbImageSize, number> = {
  * drawn on a card a couple of hundred pixels wide, so it is already modest, and
  * second-guessing it would cost visible sharpness for very little memory.
  */
-export const getImageUrl = (path: string | null, size: TmdbImageSize = 'w500') => {
+export const getImageUrl = (path: string | null, size: TmdbImageSize = 'w500', opts: { tall?: boolean } = {}) => {
   if (!path) return POSTER_PLACEHOLDER;
   if (path.startsWith('http')) return path;
   let asked: TmdbImageSize = size;
@@ -417,7 +417,18 @@ export const getImageUrl = (path: string | null, size: TmdbImageSize = 'w500') =
     return `https://image.tmdb.org/t/p/${asked}${path}`;
   }
   if (SIZE_PX[size] >= 780) {
-    const budget = screenPixels();
+    let budget = screenPixels();
+    // A wide picture filling a TALL area (the home banner on a phone held upright) shows
+    // only its middle, blown up: sized by that, at the screen's real density, it was
+    // a 780 px image stretched across some 3,300 device pixels and looked blurry on
+    // phones while sharp on a TV or laptop (owner, 2026-11-19).
+    // A phone (narrow screen) at its real density, up to 3x: capped at 2x, a 3x phone got a
+    // 780 px backdrop for a page 1,125 device pixels across, a little soft.
+    if (typeof window !== 'undefined' && window.innerWidth < 600) budget = Math.round(window.innerWidth * Math.min(window.devicePixelRatio || 1, 3));
+    if (opts.tall && typeof window !== 'undefined') {
+      const dpr = Math.min(window.devicePixelRatio || 1, 3);
+      budget = Math.round(Math.max(window.innerWidth, window.innerHeight * 0.75 * (16 / 9)) * dpr);
+    }
     // A 720 px phone at 2x wants ~1440 px across: w1280 fills it, and costs
     // about 3.7 MB decoded where `original` costs 60. A full-HD TV or monitor
     // (1920 px) and anything wider keep the full file: w1280 stretched to 1920

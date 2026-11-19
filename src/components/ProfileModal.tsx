@@ -1,5 +1,5 @@
 import { useState, useEffect, FormEvent } from 'react';
-import { X, User, LogOut, Key, Check, Database, Trash2, ShieldAlert, Languages, Sun, Moon, Palette, Tv, ShieldCheck, Download, Scale, Volume2, VolumeX, Music } from 'lucide-react';
+import { X, ChevronLeft, User, LogOut, Key, Check, Database, Trash2, ShieldAlert, Languages, Sun, Moon, Palette, Tv, ShieldCheck, Download, Scale, Volume2, VolumeX, Music } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { loadConsent, saveConsent, openLegal, CONSENT_CHANGE } from '../services/consent';
 import { exportMyData, deleteAccount } from '../services/accountData';
@@ -57,6 +57,16 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [cacheStats, setCacheStats] = useState<CacheStats>(() => getCacheStats());
+
+  // Escape closes it; the page behind stays still while it is open, and moves again when it closes.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    const was = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = was; };
+  }, [isOpen, onClose]);
 
   if (!isOpen || !user) return null;
 
@@ -122,18 +132,39 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl relative animate-in fade-in zoom-in-95 duration-200 flex flex-col md:flex-row">
-        <button 
+    // On a phone the menu and the page stack into one tall card; with the theme list
+    // open it was taller than the screen, centred in a layer that could not scroll, so
+    // its top (the close button) sat off the screen and nothing moved (owner,
+    // 2026-11-19: "no return keys, then it freezes the scrolling"). Now the layer
+    // scrolls, the card starts at the top on a phone, a bar with Back stays in view,
+    // and a tap outside, Escape or Android's back closes it.
+    <div role="dialog" aria-modal="true" aria-label="Settings" data-tv-layer
+      className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm overflow-y-auto overscroll-contain"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="min-h-full flex items-start md:items-center justify-center p-0 sm:p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="bg-zinc-900 border border-white/10 sm:rounded-2xl w-full max-w-2xl md:overflow-hidden shadow-2xl relative animate-in fade-in zoom-in-95 duration-200 flex flex-col md:flex-row md:max-h-[90vh]">
+        {/* Phone: a bar that stays at the top while the settings scroll. */}
+        <div className="md:hidden sticky top-0 z-20 flex items-center justify-between gap-2 px-2 py-2 pt-[calc(env(safe-area-inset-top)+0.5rem)] bg-zinc-950/95 backdrop-blur border-b border-white/10">
+          <button onClick={onClose} data-tv-close aria-label="Back" className="flex items-center gap-1 px-2 py-2 rounded-full text-zinc-200 hover:bg-white/10 font-semibold text-sm">
+            <ChevronLeft className="w-5 h-5" /> Back
+          </button>
+          <span className="font-bold text-white">Settings</span>
+          <button onClick={onClose} aria-label="Close" className="w-10 h-10 rounded-full flex items-center justify-center text-zinc-300 hover:bg-white/10">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-zinc-400 hover:text-white transition-colors z-10"
+          aria-label="Close"
+          data-tv-close
+          className="hidden md:block absolute top-4 right-4 text-zinc-400 hover:text-white transition-colors z-10"
         >
           <X className="w-6 h-6" />
         </button>
 
         {/* Sidebar */}
-        <div className="bg-zinc-950 p-6 md:w-64 flex flex-col gap-2">
-          <h2 className="text-xl font-bold text-white mb-6">Settings</h2>
+        <div className="bg-zinc-950 p-6 md:w-64 flex flex-col gap-2 md:overflow-y-auto">
+          <h2 className="hidden md:block text-xl font-bold text-white mb-6">Settings</h2>
           <button 
             onClick={() => { setTab('profile'); setMessage(''); setError(''); }}
             className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${tab === 'profile' ? 'bg-amber-500/10 text-amber-500' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}
@@ -221,7 +252,7 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
         </div>
 
         {/* Content */}
-        <div className="p-8 flex-1 overflow-y-auto max-h-[85vh] md:max-h-none">
+        <div className="p-6 sm:p-8 flex-1 md:overflow-y-auto">
           {message && (
             <div className="bg-green-500/10 border border-green-500/50 text-green-500 p-3 rounded-lg mb-6 text-sm flex items-center gap-2">
               <Check className="w-4 h-4" /> {message}
@@ -417,6 +448,7 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
             </div>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

@@ -2569,3 +2569,23 @@ html.low-gfx.sports-open .sports-page > :not(.sports-dialog) { visibility: hidde
 @keyframes cover-sheen { to { transform: translateX(100%); } }
 html.tv-mode .cover-wait::after, html.low-gfx .cover-wait::after { animation: none; display: none; }
 @media (prefers-reduced-motion: reduce) { .cover-wait::after { animation: none; display: none; } }
+
+/* The sidebar's hieroglyphs as a frieze on the phone (ui/GlyphFrieze): the bottom bar and the
+   More sheet. A band of the same wall, repeated across; the cut edge, the signs, a lamp over the
+   selected tab, a gold edge on top. */
+.glyph-frieze { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; border-radius: inherit; }
+.frieze-wall { position: absolute; inset: 0;
+  -webkit-mask-image: var(--wall); mask-image: var(--wall); -webkit-mask-size: var(--wall-w) auto; mask-size: var(--wall-w) auto;
+  -webkit-mask-repeat: repeat; mask-repeat: repeat; -webkit-mask-position: 0 -15.5rem; mask-position: 0 -15.5rem; }
+.frieze-shadow { background-color: color-mix(in srgb, var(--zinc-950) 55%, #000); opacity: .5; -webkit-mask-position: 1px calc(-15.5rem + 1px); mask-position: 1px calc(-15.5rem + 1px); }
+[data-mode="light"] .frieze-shadow { background-color: color-mix(in srgb, var(--zinc-700) 70%, rgb(var(--acc2-rgb))); opacity: .25; }
+.frieze-face { background-image: linear-gradient(180deg, rgb(var(--acc-rgb) / .17), rgb(var(--acc-rgb) / .09)); }
+[data-mode="light"] .frieze-face { background-image: linear-gradient(180deg, rgb(var(--acc-rgb) / .22), rgb(var(--acc-rgb) / .13)); }
+.frieze-lit { background: radial-gradient(70px 60px at var(--lit-x) 45%, rgb(var(--acc-rgb) / .6), rgb(var(--acc-rgb) / .18) 55%, transparent 80%); transition: background-position .4s; }
+.frieze-edge { position: absolute; left: 0; right: 0; top: 0; height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgb(var(--acc-rgb) / .45) 16%, rgb(var(--acc-rgb) / .14) 55%, rgb(var(--acc-rgb) / .4) 88%, transparent 100%); }
+/* The More sheet: a taller band, quieter behind its tiles. */
+.frieze-sheet .frieze-face { background-image: linear-gradient(180deg, rgb(var(--acc-rgb) / .16) 0%, rgb(var(--acc-rgb) / .07) 60%, rgb(var(--acc-rgb) / .04) 100%); }
+.frieze-sheet .frieze-wall { -webkit-mask-position: 0 -4rem; mask-position: 0 -4rem; }
+.frieze-sheet .frieze-shadow { -webkit-mask-position: 1px calc(-4rem + 1px); mask-position: 1px calc(-4rem + 1px); }
+.frieze-host > :not(.glyph-frieze) { position: relative; z-index: 1; }

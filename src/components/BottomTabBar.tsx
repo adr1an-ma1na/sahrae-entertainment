@@ -1,5 +1,6 @@
 import { t as tr } from '../i18n';
 import { useState } from 'react';
+import GlyphFrieze from './ui/GlyphFrieze';
 import { Home, Search, Headphones, Radio, RadioTower, Grid3x3, X, Film, Tv2, Clapperboard, Trophy, Heart, Clock, Download, Mic2, BookOpen } from 'lucide-react';
 
 /**
@@ -39,6 +40,9 @@ export default function BottomTabBar({ activeTab, setActiveTab }: { activeTab: s
   // Music and Podcasts sit in the More sheet but already light the Listen tab,
   // so exclude them here — otherwise two tabs go gold at once.
   const moreActive = MORE.some((m) => m.id === activeTab) && !AUDIO_TABS.includes(activeTab);
+  // The lamp on the frieze sits over the selected tab (five equal tabs).
+  const litTab = moreActive || moreOpen ? 4 : PRIMARY.findIndex((t) => (t.id === 'music' ? AUDIO_TABS.includes(activeTab) : activeTab === t.id));
+  const litX = litTab >= 0 ? `${(litTab + 0.5) * 20}%` : undefined;
 
   return (
     <>
@@ -46,7 +50,9 @@ export default function BottomTabBar({ activeTab, setActiveTab }: { activeTab: s
       {moreOpen && (
         <div role="dialog" className="md:hidden fixed inset-0 z-[95] flex flex-col justify-end" onClick={() => setMoreOpen(false)}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in" />
-          <div onClick={(e) => e.stopPropagation()} className="relative glass rounded-t-3xl p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] animate-in slide-in-from-bottom-4 duration-200">
+          <div onClick={(e) => e.stopPropagation()} className="frieze-host relative overflow-hidden glass rounded-t-3xl p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] animate-in slide-in-from-bottom-4 duration-200">
+            {/* The hieroglyphs, as on the sidebar (owner, 2026-11-19). */}
+            <GlyphFrieze className="frieze-sheet" />
             <div className="flex items-center justify-between mb-3 px-1">
               <h3 className="text-white font-display font-bold text-lg">Browse all</h3>
               <button onClick={() => setMoreOpen(false)} className="w-9 h-9 rounded-full glass-liquid flex items-center justify-center text-white" aria-label="Close"><X className="w-5 h-5" /></button>
@@ -68,7 +74,9 @@ export default function BottomTabBar({ activeTab, setActiveTab }: { activeTab: s
       )}
 
       {/* Tab bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-[90] glass border-t border-white/10 pb-[env(safe-area-inset-bottom)]">
+      <nav className="frieze-host md:hidden fixed bottom-0 left-0 right-0 z-[90] glass border-t border-white/10 pb-[env(safe-area-inset-bottom)]">
+        {/* The sidebar's hieroglyphs, as a frieze along the bar (owner, 2026-11-19). */}
+        <GlyphFrieze litX={litX} />
         <div className="flex items-stretch">
           {PRIMARY.map((t) => {
             const Icon = t.icon; const on = t.id === 'music' ? AUDIO_TABS.includes(activeTab) : activeTab === t.id;

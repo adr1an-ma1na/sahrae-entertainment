@@ -83,7 +83,7 @@ export default function Hero({ items, onPlay, genreName, inList, onToggleList, r
           return (
             <img
               key={s.id}
-              src={near ? getImageUrl(s.backdrop_path, 'original') : undefined}
+              src={near ? getImageUrl(s.backdrop_path, 'original', { tall: true }) : undefined}
               alt={n === idx ? (s.title || s.name) : ''}
               aria-hidden={n !== idx}
               className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-[1400ms] ease-out ${n === idx ? 'opacity-100 kenburns' : 'opacity-0'}`}
