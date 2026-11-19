@@ -5,6 +5,7 @@ import {
   toSeconds, cleanTitle, bookFromDoc, chaptersFrom, readersFrom, lengthText, listened, progressOf, resumePoint,
   placeFrom, inProgress, archiveQuery, SHELVES, oneEach, authorName, LIBRARIES, libraryOf,
   bookFromPick, bookFromOpenLibrary, shopLinks, isInterview, alikeShelf,
+  recordingsOf, sameLanguage, bookFromWork, openLibraryQuery, fewEach, MISLABELLED,
 } from './src/services/audiobooksCore.ts';
 
 let pass = 0, fail = 0;
@@ -68,16 +69,17 @@ const places = {
 eq('continue listening: most recent first, not finished, not barely started, not a year old', inProgress(places, NOW).map((p) => p.id), ['b', 'a']);
 
 console.log('\nthe shelves');
-eq('a shelf in a language', archiveQuery({ shelf: SHELVES.find((s) => s.id === 'mystery'), language: 'eng' }), 'collection:librivoxaudio AND language:eng AND subject:(mystery OR detective)');
-eq('a search, by title or author, without query syntax', archiveQuery({ search: 'sherlock "holmes":' }), 'collection:librivoxaudio AND (title:(sherlock holmes) OR creator:(sherlock holmes))');
+eq('a shelf in a language', archiveQuery({ shelf: SHELVES.find((s) => s.id === 'mystery'), language: 'eng' }), 'collection:librivoxaudio AND format:(MP3) AND language:eng AND subject:(mystery OR detective)');
+eq('a search, by title or author, without query syntax', archiveQuery({ search: 'sherlock "holmes":' }), 'collection:librivoxaudio AND format:(MP3) AND (title:(sherlock holmes) OR creator:(sherlock holmes))');
 eq('every shelf has a sort', SHELVES.every((s) => /^(downloads|publicdate) desc$/.test(s.sort)), true);
 
 console.log('\nthe libraries');
-eq('four libraries, the bestsellers second', LIBRARIES.map((l) => l.id), ['librivox', 'shop', 'gutenberg', 'radio']);
+eq('six libraries: LibriVox, Open Library, the bestsellers, the Internet Archive, Gutenberg, radio', LIBRARIES.map((l) => l.id), ['librivox', 'openlibrary', 'shop', 'archive', 'gutenberg', 'radio']);
 eq('each with shelves, a voice and a credit', LIBRARIES.every((l) => l.shelves.length >= 6 && l.voice && l.credit), true);
 eq('shelf ids are unique across libraries', new Set(LIBRARIES.flatMap((l) => l.shelves.map((s) => s.id))).size, LIBRARIES.reduce((n, l) => n + l.shelves.length, 0));
-eq('a query in the Gutenberg library', archiveQuery({ library: 'gutenberg', search: 'emma' }), 'collection:gutenberg-audiobooks AND (title:(emma) OR creator:(emma))');
-eq('radio: only playable restored sets', archiveQuery({ library: 'radio' }).startsWith('collection:oldtimeradio AND mediatype:audio AND creator:("Old Time Radio Researchers"'), true);
+eq('a query in the Gutenberg library', archiveQuery({ library: 'gutenberg', search: 'emma' }), 'collection:gutenberg-audiobooks AND format:(MP3) AND (title:(emma) OR creator:(emma))');
+eq('radio: only restored sets with files a player can stream (a ZIP will not play)', archiveQuery({ library: 'radio' }).startsWith('collection:oldtimeradio AND mediatype:audio AND format:(MP3) AND creator:("Old Time Radio Researchers"'), true);
+eq('every Archive library asks for MP3 files', LIBRARIES.filter((l) => l.scope).every((l) => l.scope.includes('format:(MP3)')), true);
 eq('no library named: LibriVox', libraryOf(undefined).id, 'librivox');
 eq('a catalogue author, surname first with dates', authorName('Collins, Wilkie, 1824-1889'), 'Wilkie Collins');
 eq('an author already in order', authorName('Sir Arthur Conan Doyle'), 'Sir Arthur Conan Doyle');
@@ -110,6 +112,34 @@ eq('not a summary, not a short clip, not a show named for the book', [
 eq('free classics on the same idea', [alikeShelf(laws), alikeShelf(bookFromPick(shop.shelves[5].picks[0]))], ['power', undefined]);
 eq('the classic shelves are LibriVox shelves', ['power', 'success', 'modern'].every((id) => SHELVES.some((s) => s.id === id)), true);
 eq('a bestseller search has no Archive query', archiveQuery({ library: 'shop', search: 'outliers' }), '(title:(outliers) OR creator:(outliers))');
+
+console.log('\nOpen Library');
+const olDoc = { key: '/works/OL1W', title: 'Преступление и наказание', author_name: ['Fyodor Dostoevsky'], cover_i: 123, ia: ['crimeandpunishment00dost', 'crime_etrange_2206_librivox', 'crime_and_punishment_0902_librivox', 'crime_v2_librivox'] };
+eq('a work links to its LibriVox recordings, not its scans', recordingsOf(olDoc), ['crime_etrange_2206_librivox', 'crime_and_punishment_0902_librivox', 'crime_v2_librivox']);
+eq('languages match however the Archive spells them', [sameLanguage('eng', 'English'), sameLanguage('fre', 'french'), sameLanguage('eng', 'fre')], [true, true, false]);
+const recs = new Map([
+  ['crime_etrange_2206_librivox', { ...book, id: 'crime_etrange_2206_librivox', title: 'Crime étrange', language: 'fre', downloads: 9000 }],
+  ['crime_and_punishment_0902_librivox', { ...book, id: 'crime_and_punishment_0902_librivox', title: 'Crime and Punishment', language: 'eng', downloads: 5000 }],
+  ['crime_v2_librivox', { ...book, id: 'crime_v2_librivox', title: 'Crime and Punishment', language: 'English', downloads: 7000 }],
+]);
+const w = bookFromWork(olDoc, recs, 'eng');
+eq('a work plays its most-listened recording in the language', w.id, 'crime_v2_librivox');
+eq('with the recording\'s title, Open Library\'s author and cover', [w.title, w.author, w.cover, w.library], ['Crime and Punishment', 'Fyodor Dostoevsky', 'https://covers.openlibrary.org/b/id/123-M.jpg', 'openlibrary']);
+eq('in French, the French recording', bookFromWork(olDoc, recs, 'fre').id, 'crime_etrange_2206_librivox');
+eq('no recording in the language: no card', bookFromWork(olDoc, recs, 'ger'), null);
+eq('no playable recording found: no card', bookFromWork(olDoc, new Map(), 'eng'), null);
+const olLib = libraryOf('openlibrary');
+eq('Open Library\'s shelves are its own catalogue searches', olLib.openLibrary && olLib.shelves.every((s) => typeof s.ol === 'string' && ['trending', 'readinglog', 'rating', 'editions'].includes(s.sort)), true);
+eq('a shelf asks only for works with a recording', openLibraryQuery({ shelf: olLib.shelves.find((s) => s.id === 'o-mystery') }), 'subject:mystery ia:*_librivox');
+eq('a search is cleaned of query syntax', openLibraryQuery({ search: 'sherlock (holmes)*' }), 'sherlock holmes ia:*_librivox');
+eq('recording notes leave the title', [cleanTitle('Wuthering Heights (Solo Version)'), cleanTitle('Emma (version 3)'), cleanTitle('Hamlet (Dramatic Reading)')], ['Wuthering Heights', 'Emma', 'Hamlet']);
+
+console.log('\nthe Internet Archive');
+const ia = libraryOf('archive');
+eq('only what its makers shared freely, from the spoken-word collections', ['licenseurl:*creativecommons*', 'collection:(audio_bookspoetry OR naropa)', 'format:(MP3)'].every((x) => ia.scope.includes(x)), true);
+eq('not the libraries Sahrae has already, music or adult readings', ['NOT collection:(librivoxaudio OR gutenberg-audiobooks OR oldtimeradio)', 'music', 'erotica', 'porno'].every((x) => ia.scope.includes(x)), true);
+eq('books wrongly marked public domain are left out', MISLABELLED.every((n) => ia.scope.includes(n)), true);
+eq('two cards per author at most, in order', fewEach(['A', 'A', 'B', 'A', 'C', 'b'].map((a, i) => ({ ...book, id: String(i), author: a }))).map((b) => b.id), ['0', '1', '2', '4', '5']);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

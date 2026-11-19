@@ -822,7 +822,7 @@ export default function App() {
     return (
       <div className="aurora-bg isolate min-h-screen text-zinc-50 font-sans selection:bg-amber-500/30 transition-colors duration-300">
         {synced
-          ? <SplashIntro onShown={() => setIntroShown(true)} />
+          ? <SplashIntro onShown={() => setIntroShown(true)} name={activeProfile.name} profileId={activeProfile.id} />
           : <div className="fixed inset-0 z-[200]" style={{ background: '#050302' }} aria-hidden />}
         <RemotePanel />
         <WatchParty />

@@ -60,8 +60,8 @@ function BookCard({ book, onOpen, progress }: { book: Book; onOpen: (b: Book) =>
       aria-label={`${book.title} by ${book.author}`} className="ab-card group flex-none w-[132px] md:w-[150px] snap-start cursor-pointer focus:outline-none">
       <div className="relative">
         <Cover book={book} className="aspect-square w-full transition-transform duration-300 group-hover:-translate-y-1 shadow-lg" />
-        {book.library && book.library !== 'librivox' && (
-          <span className="absolute left-1.5 bottom-1.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-black/70 text-white">{book.library === 'radio' ? 'Radio drama' : book.library === 'shop' ? 'Bestseller' : 'Computer voice'}</span>
+        {book.library && BADGE[book.library] && (
+          <span className="absolute left-1.5 bottom-1.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-black/70 text-white">{BADGE[book.library]}</span>
         )}
       </div>
       {progress !== undefined && (
@@ -85,6 +85,9 @@ function Row({ title, kicker, children }: { title: string; kicker?: string; chil
 }
 
 /** A shelf that fetches its books once it is about to be seen. */
+/** What a card says about where a book is from (LibriVox and Open Library's recordings need no word: read by volunteers). */
+const BADGE: Partial<Record<LibraryId, string>> = { radio: 'Radio drama', shop: 'Bestseller', gutenberg: 'Computer voice', archive: 'Internet Archive' };
+
 function ShelfRow({ shelf, library, language, onOpen, eager = false }: { shelf: Shelf; library: LibraryId; language?: string; onOpen: (b: Book) => void; eager?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const [books, setBooks] = useState<Book[] | null>(null);
@@ -442,7 +445,7 @@ export default function AudiobooksView() {
     <div className="pt-[calc(env(safe-area-inset-top)+7.5rem)] md:pt-24 px-4 md:px-12 max-w-7xl mx-auto min-h-screen pb-40 relative">
       <LuxGlow />
       <LuxHeader kicker={<><BookOpen className="w-3.5 h-3.5" /> Sahrae · Listen</>} title="Audiobooks"
-        meta={<span>27,000 free books and classic radio plays, your place kept to the second on every device. And today's bestsellers, through your library card or a store.</span>} />
+        meta={<span>Over 30,000 free books, readings, lectures and classic radio plays, found through Open Library and the Internet Archive, your place kept to the second on every device. And today's bestsellers, through your library card or a store.</span>} />
 
       <div className="mt-6 flex flex-col gap-2">
         <LuxSeg items={LIBRARIES.map((l) => ({ id: l.id, label: l.name }))} active={libraryId} onChange={pickLibrary} className="self-start max-w-full overflow-x-auto" />

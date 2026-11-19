@@ -12,6 +12,7 @@ import { OPEN_PROFILE } from './Navbar';
 import { OPEN_REMOTE } from './RemotePanel';
 import ThemePicker from './ui/ThemePicker';
 import { LuxHeader } from './ui/Lux';
+import { introSoundOn, setIntroSound } from '../services/introSound';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -36,6 +37,7 @@ export default function SettingsView({ onPlay }: { onPlay: (id: number, type: 'm
   const avatar = activeProfile?.avatar || user?.photoURL;
   const tv = isTelevision();
   const button = 'lux-chip inline-flex items-center gap-2';
+  const [introSound, setIntroSoundState] = useState(introSoundOn);
   // Notifications on the device itself, and what Sahrae has learned to announce.
   const [deviceOn, setDeviceOn] = useState(deviceNotifyOn);
   const [deviceRefused, setDeviceRefused] = useState(false);
@@ -89,6 +91,14 @@ export default function SettingsView({ onPlay }: { onPlay: (id: number, type: 'm
 
         <Section title="Theme">
           <ThemePicker theme={theme} onPick={pick} />
+        </Section>
+
+        <Section title="Intro sound">
+          <p className="text-sm text-zinc-400 mb-3">The sound of the opening when Sahrae starts.</p>
+          <div className="flex gap-2" role="group" aria-label="Intro sound">
+            <button onClick={() => { setIntroSound(true); setIntroSoundState(true); }} aria-pressed={introSound} data-tv-focusable className="lux-chip">On</button>
+            <button onClick={() => { setIntroSound(false); setIntroSoundState(false); }} aria-pressed={!introSound} data-tv-focusable className="lux-chip">Off</button>
+          </div>
         </Section>
 
         <Section title={unreadCount ? `Notifications (${unreadCount} new)` : 'Notifications'}>

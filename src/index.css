@@ -1407,6 +1407,39 @@ html.tv-mode .side-glyph, html.low-gfx .side-glyph { filter: none; }
 .side-label::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, rgb(var(--acc-rgb) / .35), transparent); }
 /* Text over the wall: the labels and items sit on a soft clearing so the signs never fight the words. */
 .side-shell nav, .side-shell .side-label { text-shadow: 0 1px 6px color-mix(in srgb, var(--zinc-950) 85%, transparent); }
+/* Now playing in the sidebar (ui/SideNowPlaying): a card of the theme's glass with the art's own
+   colour glowing through, gold play, level bars and a hairline of progress. Moves only by transform. */
+.side-np { position: relative; overflow: hidden; border-radius: 1rem; isolation: isolate;
+  /* Solid enough that the sidebar's drawn glyphs do not show through. */
+  background: linear-gradient(180deg, color-mix(in srgb, var(--zinc-800) 92%, transparent), color-mix(in srgb, var(--zinc-900) 96%, transparent));
+  border: 1px solid rgb(255 255 255 / .09); box-shadow: inset 0 1px 0 rgb(255 255 255 / .06), 0 10px 30px -12px rgb(0 0 0 / .6);
+  animation: side-np-in .5s cubic-bezier(.22, 1, .36, 1) both; }
+.side-np-glow { position: absolute; inset: -40%; width: 180%; height: 180%; object-fit: cover; filter: blur(28px) saturate(1.4); opacity: .32; z-index: -1; pointer-events: none; }
+.side-np-glow-radio { background: radial-gradient(circle at 25% 50%, rgb(var(--acc-rgb) / .55), transparent 60%); filter: blur(20px); }
+html.tv-mode .side-np-glow, html.low-gfx .side-np-glow { filter: none; opacity: .14; }
+.side-np-art { position: relative; width: 2.75rem; height: 2.75rem; border-radius: .6rem; overflow: hidden; flex-shrink: 0; box-shadow: 0 6px 16px -6px rgb(0 0 0 / .7), 0 0 0 1px rgb(255 255 255 / .08); }
+.side-np-kicker { display: flex; align-items: center; gap: .4rem; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: rgb(var(--acc-rgb)); margin-bottom: 1px; white-space: nowrap; overflow: hidden; }
+.side-np-play { flex-shrink: 0; width: 2.1rem; height: 2.1rem; border-radius: 9999px; display: grid; place-items: center; color: var(--on-gold, #1a1206);
+  background: linear-gradient(180deg, var(--logo-1, #f5c86a), var(--logo-2, #d89a2b)); box-shadow: 0 4px 14px -4px rgb(var(--acc-rgb) / .7);
+  transition: transform .2s cubic-bezier(.22, 1, .36, 1); }
+.side-np-play:hover { transform: scale(1.07); }
+.side-np-play:active { transform: scale(.94); }
+.side-np-ghost { flex-shrink: 0; width: 1.8rem; height: 1.8rem; margin-left: -.35rem; border-radius: 9999px; display: grid; place-items: center; color: var(--zinc-400); transition: color .2s; }
+.side-np-ghost:hover { color: #fff; }
+.side-np-track { position: relative; height: 2px; margin: 0 .75rem .55rem; border-radius: 2px; background: rgb(255 255 255 / .1); overflow: hidden; }
+.side-np-fill { position: absolute; inset: 0; transform-origin: 0 50%; background: linear-gradient(90deg, var(--logo-2, #d89a2b), var(--logo-hi, #ffe3a3)); transition: transform .35s linear; }
+.np-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 9px; }
+.np-bars > span { width: 2px; height: 100%; border-radius: 1px; background: currentColor; transform-origin: 50% 100%; transform: scaleY(.35); }
+.np-bars.np-on > span { animation: np-bar .9s ease-in-out infinite; }
+.np-bars.np-on > span:nth-child(2) { animation-duration: .7s; animation-delay: -.3s; }
+.np-bars.np-on > span:nth-child(3) { animation-duration: 1.1s; animation-delay: -.55s; }
+@keyframes np-bar { 0%, 100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
+.np-live { width: 6px; height: 6px; border-radius: 9999px; background: #ef4444; box-shadow: 0 0 0 0 rgb(239 68 68 / .6); animation: np-live 1.6s ease-out infinite; }
+@keyframes np-live { 0% { box-shadow: 0 0 0 0 rgb(239 68 68 / .55); } 100% { box-shadow: 0 0 0 6px rgb(239 68 68 / 0); } }
+@keyframes side-np-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.rail-np { position: relative; width: 2.6rem; height: 2.6rem; border-radius: .7rem; overflow: hidden; box-shadow: 0 6px 16px -6px rgb(0 0 0 / .7), 0 0 0 1px rgb(255 255 255 / .1); }
+.rail-np-veil { position: absolute; inset: auto 0 0 0; height: 45%; display: grid; place-items: center; color: #fff; background: linear-gradient(0deg, rgb(0 0 0 / .65), transparent); }
+@media (prefers-reduced-motion: reduce) { .np-bars.np-on > span, .np-live, .side-np { animation: none; } }
 .side-item:not(.nav-on):hover { background-color: color-mix(in srgb, rgb(var(--acc-rgb)) 10%, transparent) !important; }
 .side-item > svg { transition: transform .3s cubic-bezier(.22, 1, .36, 1); }
 .side-item:not(.nav-on):hover > svg { transform: translateX(2px) scale(1.06); }
@@ -1700,59 +1733,67 @@ a:focus-visible {
    --acc-*. Transforms and opacity only, except where html.tv-mode / low-gfx
    leave a part out (.hz-plain).
    ───────────────────────────────────────────────────────────── */
-.hz { --hz: 62%; background: var(--zinc-950); }
+/* The horizon above the old 62%: room below it for the name, ENTERTAINMENT and the welcome on any
+   16:9 screen, with the scene pushed in and turned as far as it turns (checked at 1280x720). */
+.hz { --hz: 55%; background: var(--zinc-950); cursor: pointer; }
 @media (orientation: portrait) { .hz { --hz: 54%; } }
+/* Smooth (owner, 2026-11-19: "very laggy … giving off cheap"): every animation
+   below moves, scales or fades a layer and nothing else, so the graphics chip
+   runs it alone, whatever the page is doing meanwhile. The clock: nothing moves
+   until SplashIntro adds .hz-go, the moment the sound starts (services/introSound,
+   HIT = 1.25 s, when the name lands). Four seconds in all, Netflix's pace:
+   0 spark · .15 the line · .55 dawn · .7 the sun · 1.25 SAHRAE lands ·
+   1.7 rule · 1.85 ENTERTAINMENT · 1.9 the light sweeps the name · 2.05 the
+   welcome · 3.15 the dive into the sun (SplashIntro OUT_MS) · 4.0 the app. */
+.hz:not(.hz-go), .hz:not(.hz-go) * { animation-play-state: paused !important; }
 /* Every colour of the scene is the theme's (owner, 2026-11-17: "match the selected theme"):
    the page colour for the sky, the room light for the glow, the accent for the sun and the line. */
-.hz-scene { position: absolute; inset: 0; transform-origin: 50% var(--hz); background: radial-gradient(140% 90% at 50% var(--hz), color-mix(in srgb, var(--zinc-950) 80%, rgb(var(--acc2-rgb))) 0%, var(--zinc-950) 62%); animation: hz-push 5.2s cubic-bezier(.33, 0, .2, 1) both; }
+.hz-scene { position: absolute; inset: 0; transform-origin: 50% var(--hz); background: radial-gradient(140% 90% at 50% var(--hz), color-mix(in srgb, var(--zinc-950) 80%, rgb(var(--acc2-rgb))) 0%, var(--zinc-950) 62%);
+  perspective: 900px; perspective-origin: 50% var(--hz); will-change: transform; animation: hz-push 3.15s cubic-bezier(.33, 0, .2, 1) both; }
 [data-mode="light"] .hz-stars { display: none; }
 /* The depth (SplashIntro plane()): the world turns, each plane sits at its distance. */
-.hz-scene { perspective: 900px; perspective-origin: 50% var(--hz); }
-.hz-world { position: absolute; inset: 0; transform-style: preserve-3d; transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); transition: transform .6s cubic-bezier(.22, 1, .36, 1); }
+.hz-world { position: absolute; inset: 0; transform-style: preserve-3d; transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); transition: transform .6s cubic-bezier(.22, 1, .36, 1); will-change: transform; }
 /* Wider than the screen, so a turned plane never shows its edge; heights unchanged. */
 .hz-plane { position: absolute; inset: 0 -18%; transform-style: preserve-3d; }
-.hz-sand { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.hz { cursor: pointer; }
-.hz-stars { position: absolute; left: 0; top: 0; width: 1px; height: 1px; border-radius: 50%; opacity: .55; animation: hz-starsout 2.6s ease .6s forwards; }
-.hz-dawn { position: absolute; left: -20%; right: -20%; top: 0; height: var(--hz); transform-origin: 50% 100%; transform: scaleY(.15); opacity: 0;
+.hz-stars { position: absolute; left: 0; top: 0; width: 1px; height: 1px; border-radius: 50%; opacity: .55; will-change: opacity; animation: hz-starsout 1.9s ease .4s forwards; }
+.hz-dawn { position: absolute; left: -20%; right: -20%; top: 0; height: var(--hz); transform-origin: 50% 100%; transform: scaleY(.15); opacity: 0; will-change: transform, opacity;
   background:
     radial-gradient(50% 70% at 50% 100%, rgb(var(--acc-rgb) / .55) 0%, rgb(var(--acc2-rgb) / .38) 28%, rgb(var(--acc2-rgb) / .14) 55%, transparent 80%),
     radial-gradient(90% 100% at 50% 100%, rgb(var(--acc2-rgb) / .22) 0%, transparent 70%);
-  animation: hz-dawn 2.6s cubic-bezier(.22, 1, .36, 1) .8s forwards; }
+  animation: hz-dawn 1.9s cubic-bezier(.22, 1, .36, 1) .55s forwards; }
 .hz-sunmask { position: absolute; left: 0; right: 0; top: 0; height: var(--hz); overflow: hidden; }
 .hz-halo { position: absolute; left: 50%; bottom: calc(-26 * var(--s)); width: calc(52 * var(--s)); height: calc(52 * var(--s)); margin-left: calc(-26 * var(--s)); border-radius: 50%;
   background: radial-gradient(circle, rgb(var(--acc-rgb) / .45) 0%, rgb(var(--acc2-rgb) / .18) 35%, transparent 65%);
-  transform: translateY(27%); opacity: 0; animation: hz-halo 2.6s cubic-bezier(.22, 1, .36, 1) 1.1s forwards; }
+  transform: translateY(27%); opacity: 0; will-change: transform, opacity; animation: hz-halo 1.9s cubic-bezier(.22, 1, .36, 1) .7s forwards; }
 .hz-sun { position: absolute; left: 50%; bottom: calc(-13 * var(--s)); width: calc(13 * var(--s)); height: calc(13 * var(--s)); margin-left: calc(-6.5 * var(--s)); border-radius: 50%;
   /* A soft edge and a darker rim, as a real low sun has: a flat bright disc read as clip-art. */
   background: radial-gradient(circle at 50% 58%, color-mix(in srgb, var(--logo-hi) 55%, #fff) 0%, var(--logo-hi) 24%, var(--logo-1) 54%, var(--logo-2) 76%, rgb(var(--acc2-rgb) / .55) 90%, rgb(var(--acc2-rgb) / 0) 100%);
   box-shadow: 0 0 calc(4 * var(--s)) rgb(var(--acc-rgb) / .35), 0 0 calc(14 * var(--s)) rgb(var(--acc2-rgb) / .22);
-  transform: translateY(15%); animation: hz-sun 2.6s cubic-bezier(.22, 1, .36, 1) 1.15s forwards; }
+  transform: translateY(15%); will-change: transform; animation: hz-sun 1.9s cubic-bezier(.22, 1, .36, 1) .72s forwards; }
 .hz-ground { position: absolute; left: 0; right: 0; top: var(--hz); bottom: 0; background: linear-gradient(180deg, color-mix(in srgb, var(--zinc-800) 70%, rgb(var(--acc2-rgb))) 0%, var(--zinc-900) 34%, var(--zinc-950) 100%); }
 .hz-spill { position: absolute; left: 50%; top: var(--hz); width: calc(110 * var(--s)); height: calc(26 * var(--s)); margin-left: calc(-55 * var(--s));
   background: radial-gradient(50% 60% at 50% 0%, rgb(var(--acc-rgb) / .30), rgb(var(--acc2-rgb) / .12) 45%, transparent 75%);
-  opacity: 0; transform: scaleX(.3); animation: hz-spill 2.4s cubic-bezier(.22, 1, .36, 1) 1s forwards; }
-.hz-line { position: absolute; left: 0; right: 0; top: var(--hz); height: 1px; margin-top: -.5px; transform: scaleX(0);
+  opacity: 0; transform: scaleX(.3); will-change: transform, opacity; animation: hz-spill 1.8s cubic-bezier(.22, 1, .36, 1) .65s forwards; }
+.hz-line { position: absolute; left: 0; right: 0; top: var(--hz); height: 1px; margin-top: -.5px; transform: scaleX(0); will-change: transform;
   background: linear-gradient(90deg, transparent 0%, rgb(var(--acc-rgb) / .25) 12%, var(--logo-1) 34%, var(--logo-hi) 50%, var(--logo-1) 66%, rgb(var(--acc-rgb) / .25) 88%, transparent 100%);
-  animation: hz-draw 1.5s cubic-bezier(.65, 0, .25, 1) .45s forwards; }
-.hz-bloom { position: absolute; left: 0; right: 0; top: var(--hz); height: calc(3.6 * var(--s)); margin-top: calc(-1.8 * var(--s)); transform: scaleX(0); opacity: 0;
+  animation: hz-draw 1s cubic-bezier(.65, 0, .25, 1) .15s forwards; }
+.hz-bloom { position: absolute; left: 0; right: 0; top: var(--hz); height: calc(3.6 * var(--s)); margin-top: calc(-1.8 * var(--s)); transform: scaleX(0); opacity: 0; will-change: transform, opacity;
   background: radial-gradient(50% 50% at 50% 50%, rgb(var(--acc-rgb) / .55), rgb(var(--acc2-rgb) / .16) 45%, transparent 75%);
-  animation: hz-bloom 2.2s cubic-bezier(.16, 1, .3, 1) .55s forwards; }
+  animation: hz-bloom 1.6s cubic-bezier(.16, 1, .3, 1) .25s forwards; }
 .hz-spark { position: absolute; left: 50%; top: var(--hz); width: calc(.5 * var(--s)); height: calc(.5 * var(--s)); margin: calc(-.25 * var(--s)) 0 0 calc(-.25 * var(--s)); border-radius: 50%;
   background: color-mix(in srgb, var(--logo-hi) 60%, #fff); box-shadow: 0 0 calc(1.5 * var(--s)) calc(.5 * var(--s)) color-mix(in srgb, var(--logo-hi) 90%, transparent), 0 0 calc(5 * var(--s)) calc(1.5 * var(--s)) rgb(var(--acc-rgb) / .5);
-  transform: scale(0); animation: hz-spark 1.1s cubic-bezier(.16, 1, .3, 1) .25s forwards; }
+  transform: scale(0); will-change: transform; animation: hz-spark .9s cubic-bezier(.16, 1, .3, 1) 0s forwards; }
 .hz-streak { position: absolute; left: 50%; top: var(--hz); width: calc(70 * var(--s)); height: max(1px, calc(.18 * var(--s))); margin-left: calc(-35 * var(--s)); margin-top: calc(-.09 * var(--s));
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--logo-hi) 90%, transparent) 50%, transparent); opacity: 0; transform: scaleX(.2);
-  animation: hz-streak 2.4s cubic-bezier(.16, 1, .3, 1) 1.5s forwards; }
-.hz-title { position: absolute; left: 0; right: 0; top: calc(var(--hz) + 5 * var(--s)); display: grid; justify-items: center; gap: calc(1.5 * var(--s)); }
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--logo-hi) 90%, transparent) 50%, transparent); opacity: 0; transform: scaleX(.2); will-change: transform, opacity;
+  animation: hz-streak 1.8s cubic-bezier(.16, 1, .3, 1) 1.2s forwards; }
+.hz-title { position: absolute; left: 0; right: 0; top: calc(var(--hz) + 3.2 * var(--s)); display: grid; justify-items: center; gap: calc(1.5 * var(--s)); will-change: transform, opacity; }
 /* The name exactly as the app writes it (Sidebar: font-black, tracking-tighter,
-   .text-gold): the opening's thin wide letters did not match (owner, 2026-11-17). */
+   .text-gold), landing on the beat: it arrives from a little larger and settles. */
 .hz-word { position: relative; margin: 0; font-family: var(--font-display, 'Outfit'), system-ui, sans-serif; font-weight: 900; line-height: 1; white-space: nowrap;
-  font-size: clamp(3rem, calc(11 * var(--s)), 12rem); letter-spacing: -0.05em; text-indent: 0;
+  font-size: clamp(3rem, calc(10 * var(--s)), 11rem); letter-spacing: -0.05em; text-indent: 0;
   background: linear-gradient(180deg, var(--logo-1) 0%, var(--logo-2) 55%, var(--logo-3) 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;
-  -webkit-mask-image: linear-gradient(0deg, #000 40%, transparent 60%); mask-image: linear-gradient(0deg, #000 40%, transparent 60%);
-  -webkit-mask-size: 100% 300%; mask-size: 100% 300%; -webkit-mask-position: 0 0; mask-position: 0 0;
-  animation: hz-reveal 1.5s cubic-bezier(.22, 1, .36, 1) 2s forwards, hz-track 3s cubic-bezier(.22, 1, .36, 1) 2s forwards; }
+  opacity: 0; transform: translateY(.06em) scale(1.14); will-change: transform, opacity;
+  animation: hz-land 1s cubic-bezier(.16, 1, .3, 1) 1.25s forwards; }
 /* A phone held upright: the sun and its light sized by the screen's width, the name further below. */
 @media (orientation: portrait) {
   .hz-word { font-size: 18vw; }
@@ -1761,32 +1802,44 @@ a:focus-visible {
   .hz-title { top: calc(var(--hz) + 9vw); gap: 3vw; }
   .hz-rule { width: 50vw; }
   .hz-sub { font-size: 2.6vw; }
+  .hz-hello { font-size: 4vw; }
 }
-.hz-sheen { position: absolute; inset: 0; text-indent: inherit; letter-spacing: inherit;
-  background: linear-gradient(100deg, transparent 44%, rgba(255, 255, 255, .95) 50%, transparent 56%); background-size: 300% 100%; background-position: 140% 0;
-  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;
-  animation: hz-sheen 1.6s cubic-bezier(.4, 0, .2, 1) 3.3s forwards; }
-.hz-rule { width: calc(26 * var(--s)); height: 1px; transform: scaleX(0); background: linear-gradient(90deg, transparent, rgb(var(--acc-rgb) / .7), transparent);
-  animation: hz-rule 1.4s cubic-bezier(.22, 1, .36, 1) 2.7s forwards; }
-.hz-sub { font-family: var(--font-display, 'Outfit'), system-ui, sans-serif; font-weight: 400; text-transform: uppercase; font-size: max(.62rem, calc(1.15 * var(--s)));
-  font-weight: 600; letter-spacing: .9em; text-indent: .9em; color: var(--zinc-400); opacity: 0; animation: hz-sub 1.4s cubic-bezier(.22, 1, .36, 1) 2.9s forwards; }
-.hz-grain { position: absolute; inset: -50%; opacity: .07; mix-blend-mode: overlay; pointer-events: none; animation: hz-grain .9s steps(5) infinite; }
+/* The sweep of light: a narrow soft-edged window travels across the name over
+   a still, brighter copy that moves back by as much, so the light passes over
+   still letters. Both move together (same timing), nothing is redrawn. */
+.hz-sheenwin { position: absolute; top: 0; bottom: 0; left: 0; width: 18%; overflow: hidden; pointer-events: none; transform: translateX(-100%); will-change: transform;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 45%, #000 55%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0%, #000 45%, #000 55%, transparent 100%);
+  animation: hz-win .95s cubic-bezier(.45, 0, .25, 1) 1.9s forwards; }
+.hz-sheen { position: absolute; top: 0; left: 0; width: 555.56%; white-space: nowrap; letter-spacing: inherit; transform: translateX(18%); will-change: transform;
+  background: linear-gradient(180deg, #fff 0%, color-mix(in srgb, var(--logo-hi) 55%, #fff) 60%, var(--logo-hi) 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; opacity: .92;
+  animation: hz-unwin .95s cubic-bezier(.45, 0, .25, 1) 1.9s forwards; }
+.hz-rule { width: calc(26 * var(--s)); height: 1px; transform: scaleX(0); will-change: transform; background: linear-gradient(90deg, transparent, rgb(var(--acc-rgb) / .7), transparent);
+  animation: hz-rule 1s cubic-bezier(.22, 1, .36, 1) 1.7s forwards; }
+.hz-sub { font-family: var(--font-display, 'Outfit'), system-ui, sans-serif; text-transform: uppercase; font-size: max(.62rem, calc(1.15 * var(--s)));
+  font-weight: 600; letter-spacing: .7em; text-indent: .7em; color: var(--zinc-400); opacity: 0; transform: translateY(40%); will-change: transform, opacity;
+  animation: hz-rise .9s cubic-bezier(.22, 1, .36, 1) 1.85s forwards; }
+/* The welcome, by name (SplashIntro welcomeLine). */
+.hz-hello { margin: calc(.3 * var(--s)) 0 0; font-family: var(--font-display, 'Outfit'), system-ui, sans-serif; font-weight: 400; font-size: max(.95rem, calc(1.7 * var(--s))); letter-spacing: .01em;
+  color: var(--zinc-200); opacity: 0; transform: translateY(35%); will-change: transform, opacity; animation: hz-rise .9s cubic-bezier(.22, 1, .36, 1) 2.05s forwards; }
 .hz-vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 95% at 50% 55%, transparent 55%, rgba(0, 0, 0, .55) 100%); }
 [data-mode="light"] .hz-vignette { background: radial-gradient(120% 95% at 50% 55%, transparent 60%, color-mix(in srgb, var(--zinc-600) 30%, transparent) 100%); }
 /* The ending (owner, 2026-11-17: "like Netflix"): the camera dives into the sun,
-   the name flies past, and the app opens out from the sun's point as a widening
-   circle of light. */
-@property --iris { syntax: '<percentage>'; inherits: false; initial-value: 0%; }
-.hz-out { animation: hz-iris .9s cubic-bezier(.7, 0, .3, 1) forwards;
-  -webkit-mask-image: radial-gradient(circle at 50% var(--hz), transparent var(--iris), #000 calc(var(--iris) + 10%));
-  mask-image: radial-gradient(circle at 50% var(--hz), transparent var(--iris), #000 calc(var(--iris) + 10%)); }
-.hz-out .hz-scene { animation: hz-dive .9s cubic-bezier(.7, 0, .3, 1) forwards; }
-.hz-out .hz-title { animation: hz-fly .75s cubic-bezier(.55, 0, .6, .2) forwards; }
-@keyframes hz-iris { 0% { --iris: 0%; } 100% { --iris: 150%; visibility: hidden; } }
-@keyframes hz-dive { from { transform: scale(1.045); } to { transform: scale(3.4); } }
+   the name flies past, light bursts from the sun's point and the app shows
+   through as the scene clears. A burst growing and a scene fading: both run
+   on the graphics chip (the old circle mask was redrawn every frame). */
+.hz-flash { position: absolute; left: 50%; top: var(--hz); width: calc(12 * var(--s)); height: calc(12 * var(--s)); margin: calc(-6 * var(--s)) 0 0 calc(-6 * var(--s)); border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, color-mix(in srgb, var(--logo-hi) 40%, #fff) 0%, rgb(var(--acc-rgb) / .75) 30%, rgb(var(--acc2-rgb) / .3) 55%, transparent 72%);
+  opacity: 0; transform: scale(0); will-change: transform, opacity; }
+.hz-out { animation: hz-clear .85s cubic-bezier(.6, 0, .4, 1) forwards; }
+.hz-out .hz-scene { animation: hz-dive .85s cubic-bezier(.7, 0, .3, 1) forwards; }
+.hz-out .hz-title { animation: hz-fly .7s cubic-bezier(.55, 0, .6, .2) forwards; }
+.hz-out .hz-flash { animation: hz-burst .85s cubic-bezier(.5, 0, .3, 1) forwards; }
+@keyframes hz-clear { 0%, 35% { opacity: 1; } 100% { opacity: 0; visibility: hidden; } }
+@keyframes hz-dive { from { transform: scale(1.03); } to { transform: scale(3.4); } }
 @keyframes hz-fly { to { transform: scale(2.6); opacity: 0; } }
+@keyframes hz-burst { 0% { opacity: 0; transform: scale(.2); } 40% { opacity: 1; } 100% { opacity: 0; transform: scale(28); } }
 
-@keyframes hz-push { from { transform: scale(1); } to { transform: scale(1.045); } }
+@keyframes hz-push { from { transform: scale(1); } to { transform: scale(1.03); } }
 @keyframes hz-starsout { to { opacity: 0; } }
 @keyframes hz-spark { 0% { transform: scale(0); } 45% { transform: scale(1.4); } 100% { transform: scale(.6); } }
 @keyframes hz-draw { to { transform: scaleX(1); } }
@@ -1796,26 +1849,20 @@ a:focus-visible {
 @keyframes hz-spill { to { opacity: 1; transform: scaleX(1); } }
 @keyframes hz-halo { to { opacity: 1; transform: translateY(0); } }
 @keyframes hz-sun { to { transform: translateY(-35%); } }
-@keyframes hz-reveal { to { -webkit-mask-position: 0 100%; mask-position: 0 100%; } }
-@keyframes hz-track { from { letter-spacing: .18em; } to { letter-spacing: -0.05em; } }
-@keyframes hz-sheen { to { background-position: -40% 0; } }
+@keyframes hz-land { 0% { opacity: 0; transform: translateY(.06em) scale(1.14); } 35% { opacity: 1; } 100% { opacity: 1; transform: none; } }
+@keyframes hz-win { to { transform: translateX(556%); } }
+@keyframes hz-unwin { to { transform: translateX(-100%); } }
 @keyframes hz-rule { to { transform: scaleX(1); } }
-@keyframes hz-sub { to { opacity: 1; letter-spacing: .7em; text-indent: .7em; } }
-@keyframes hz-grain { 0% { transform: translate(0, 0); } 20% { transform: translate(-3%, 2%); } 40% { transform: translate(2%, -4%); } 60% { transform: translate(-4%, -1%); } 80% { transform: translate(3%, 3%); } 100% { transform: translate(0, 0); } }
+@keyframes hz-rise { to { opacity: 1; transform: none; } }
 @keyframes hz-out { to { opacity: 0; transform: scale(1.03); visibility: hidden; } }
 @keyframes hz-fadein { from { opacity: 0; } to { opacity: 1; } }
 @keyframes hz-fade { to { opacity: 0; visibility: hidden; } }
 
-/* A TV and weak phones: the same scene without what is redrawn every frame.
-   The name fades in at its final spacing; the subtitle fades; no push. */
+/* A TV and weak phones: the same scene and timing, without the sweep of light and the push. */
 .hz-plain .hz-scene { animation: none; }
-.hz-plain .hz-word { -webkit-mask-image: none; mask-image: none; letter-spacing: -0.05em; text-indent: 0; opacity: 0; animation: hz-fadein 1.2s cubic-bezier(.22, 1, .36, 1) 2s forwards; }
-.hz-plain .hz-sub { letter-spacing: .7em; text-indent: .7em; animation-name: hz-fadein; }
-/* A TV: the dive (moved whole, cheap) and a fade; the circle of light is redrawn every frame. */
-.hz-plain.hz-out { animation: hz-fade .8s ease forwards; -webkit-mask-image: none; mask-image: none; }
 /* Less motion asked for: the finished scene, then a quick fade. */
 .hz-still *, .hz-still { animation-duration: 1ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; }
-.hz-still.hz-out { animation: hz-fade .3s ease forwards !important; -webkit-mask-image: none; mask-image: none; }
+.hz-still.hz-out { animation: hz-fade .3s ease forwards !important; }
 
 
 

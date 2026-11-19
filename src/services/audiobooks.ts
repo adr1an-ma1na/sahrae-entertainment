@@ -12,7 +12,7 @@ import { Capacitor } from '@capacitor/core';
 import { getEpisodesById, searchEpisodes } from './itunesPodcasts';
 import {
   bigCoverFrom, bookFromDoc, chaptersFrom, inProgress, placeFrom, readersFrom, archiveQuery, oneEach, sameWork, LIBRARIES,
-  bookFromPick, bookFromOpenLibrary, isInterview, OWN_SHOWS, libraryOf,
+  bookFromPick, bookFromOpenLibrary, isInterview, OWN_SHOWS, libraryOf, bookFromWork, openLibraryQuery, recordingsOf, fewEach,
   type Book, type LibraryId, type BookDetail, type BookPlace, type Shelf,
 } from './audiobooksCore';
 import type { Track } from './ytmusic';
@@ -49,31 +49,38 @@ function libraryFromDoc(d: Record<string, unknown>, fallback?: LibraryId): Libra
   if (c.includes('gutenberg-audiobooks')) return 'gutenberg';
   if (c.includes('oldtimeradio')) return 'radio';
   if (c.includes('librivoxaudio')) return 'librivox';
-  return fallback;
+  if (fallback) return fallback;
+  return c.includes('audio_bookspoetry') || c.includes('naropa') ? 'archive' : undefined;
 }
 
 /** A page of books from one library: a shelf, a search, or both, in a language. */
 export async function findBooks(opts: { shelf?: Shelf; search?: string; language?: string; library?: LibraryId; rows?: number; page?: number }): Promise<{ books: Book[]; total: number }> {
   // A hand-picked shelf (the bestsellers) needs no search.
   if (opts.shelf?.picks) return { books: opts.shelf.picks.map(bookFromPick), total: opts.shelf.picks.length };
+  if (libraryOf(opts.library).openLibrary) return findOpenLibrary(opts);
   if (libraryOf(opts.library).shop) return opts.search ? { books: await findBestsellers(opts.search, opts.rows ?? 12), total: 0 } : { books: [], total: 0 };
   const q = archiveQuery(opts);
   const sort = opts.search ? 'downloads desc' : opts.shelf?.sort || 'downloads desc';
-  const rows = opts.rows ?? 24, page = opts.page ?? 1;
+  // The Internet Archive's shelves: a few per author, so fetch more to fill the shelf.
+  const varied = opts.library === 'archive' && !opts.search;
+  const want = opts.rows ?? 24, page = opts.page ?? 1;
+  const rows = varied ? want * 3 : want;
   const url = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(q)}&${FIELDS.map((f) => `fl[]=${f}`).join('&')}&sort[]=${encodeURIComponent(sort)}&rows=${rows}&page=${page}&output=json`;
   return cached(`find:${url}`, 6 * 3_600_000, async () => {
     const res = await httpFetch(url);
     if (!res.ok) throw new Error(`Archive search ${res.status}`);
     const j = await res.json();
     const docs: Record<string, unknown>[] = j?.response?.docs || [];
-    return { books: oneEach(docs.map((d) => bookFromDoc(d, libraryFromDoc(d, opts.library))).filter((b): b is Book => !!b)), total: Number(j?.response?.numFound) || 0 };
+    const books = oneEach(docs.map((d) => bookFromDoc(d, libraryFromDoc(d, opts.library))).filter((b): b is Book => !!b));
+    return { books: varied ? fewEach(books).slice(0, want) : books, total: Number(j?.response?.numFound) || 0 };
   });
 }
 
 /** Every library at once, for a search: the same words in each. */
 export async function findEverywhere(search: string, language?: string): Promise<{ library: LibraryId; books: Book[] }[]> {
-  const rows: Record<LibraryId, number> = { librivox: 30, shop: 12, gutenberg: 18, radio: 12 };
-  const all = await Promise.all(LIBRARIES.map((l) =>
+  const rows: Record<LibraryId, number> = { librivox: 30, openlibrary: 0, shop: 12, archive: 12, gutenberg: 18, radio: 12 };
+  // Open Library's books are LibriVox recordings: LibriVox's results already have them.
+  const all = await Promise.all(LIBRARIES.filter((l) => !l.openLibrary).map((l) =>
     l.shop ? findBestsellers(search, rows.shop).then((books) => ({ library: l.id, books })).catch(() => ({ library: l.id, books: [] as Book[] })) : findBooks({ library: l.id, search, language: l.languages ? language : undefined, rows: rows[l.id] }).then((r) => ({ library: l.id, books: r.books })).catch(() => ({ library: l.id, books: [] as Book[] })),
   ));
   // A bestseller that a free library has too is shown only there: free first.
@@ -81,6 +88,45 @@ export async function findEverywhere(search: string, language?: string): Promise
   return all
     .map((x) => (libraryOf(x.library).shop ? { ...x, books: x.books.filter((b) => !free.some((f) => sameWork(f, b))) } : x))
     .filter((x) => x.books.length);
+}
+
+/**
+ * Open Library's shelves and search: works that link to a LibriVox recording,
+ * as Open Library sorts them (trending, most read, highest rated), each
+ * played from its most-listened recording in the language.
+ */
+export async function findOpenLibrary(opts: { shelf?: Shelf; search?: string; language?: string; rows?: number }): Promise<{ books: Book[]; total: number }> {
+  const rows = opts.rows ?? 24;
+  const sort = opts.search ? '' : opts.shelf?.sort || 'readinglog';
+  const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(openLibraryQuery(opts))}${sort ? `&sort=${sort}` : ''}&fields=key,title,author_name,cover_i,ia&limit=${Math.round(rows * 2.5)}`;
+  return cached(`olib:${opts.language || 'eng'}:${url}`, 6 * 3_600_000, async () => {
+    const res = await httpFetch(url);
+    if (!res.ok) throw new Error(`Open Library ${res.status}`);
+    const j = await res.json();
+    const docs: Record<string, unknown>[] = j?.docs || [];
+    const recordings = await archiveItems([...new Set(docs.flatMap(recordingsOf))]);
+    const books = oneEach(docs.map((d) => bookFromWork(d, recordings, opts.language || 'eng')).filter((b): b is Book => !!b));
+    return { books: books.slice(0, rows), total: Number(j?.numFound) || 0 };
+  });
+}
+
+/** Archive items by identifier, in a few look-ups (each id list kept short enough for a web address). Only playable ones. */
+async function archiveItems(ids: string[]): Promise<Map<string, Book>> {
+  const out = new Map<string, Book>();
+  const groups: string[][] = [];
+  // The Archive refuses a look-up of more than about 55 (400, 2026-11-19): 40 at a time.
+  for (let i = 0; i < ids.length; i += 40) groups.push(ids.slice(i, i + 40));
+  await Promise.all(groups.map(async (g) => {
+    const q = `identifier:(${g.join(' OR ')}) AND format:(MP3)`;
+    const url = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(q)}&${FIELDS.map((f) => `fl[]=${f}`).join('&')}&rows=${g.length}&output=json`;
+    try {
+      const res = await httpFetch(url);
+      if (!res.ok) return;
+      const j = await res.json();
+      for (const d of (j?.response?.docs || []) as Record<string, unknown>[]) { const b = bookFromDoc(d, 'librivox'); if (b) out.set(b.id, b); }
+    } catch { /* that group is left out */ }
+  }));
+  return out;
 }
 
 /** Books in print, from Open Library's catalogue: what the free libraries cannot have. */
@@ -136,7 +182,7 @@ export function openOutside(url: string): void {
 export async function otherRecordings(book: Book): Promise<Book[]> {
   const surname = book.author.split(/\s+/).pop()?.replace(/[()":\\]/g, ' ') || '';
   const title = book.title.replace(/[()":\\]/g, ' ').trim();
-  const q = `(collection:librivoxaudio OR collection:gutenberg-audiobooks) AND title:(${title}) AND creator:(${surname})`;
+  const q = `(collection:librivoxaudio OR collection:gutenberg-audiobooks) AND format:(MP3) AND title:(${title}) AND creator:(${surname})`;
   const url = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(q)}&${FIELDS.map((f) => `fl[]=${f}`).join('&')}&sort[]=downloads+desc&rows=12&output=json`;
   return cached(`others:${book.id}`, 7 * 86_400_000, async () => {
     const res = await httpFetch(url);
@@ -162,6 +208,8 @@ export async function getBook(book: Book): Promise<BookDetail> {
       description,
       chapters: chaptersFrom(book.id, files),
       readers: readersFrom(description),
+      // The recording's own art: Open Library's cover is any edition's (a library scan of a stage
+      // adaptation for A Christmas Carol, 2026-11-19), fine small on a card, not large over what is heard.
       cover: bigCoverFrom(book.id, files),
     };
   });

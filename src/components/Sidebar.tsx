@@ -3,7 +3,7 @@ import { Home, Search, Headphones, Radio, Film, Tv2, Clapperboard, Trophy, Heart
 import { useNotifications } from '../hooks/useNotifications';
 import { useMusic } from '../hooks/useMusic';
 import { isTelevision } from '../tv/spatialNavigation';
-import { CoverArt } from './ui/CoverArt';
+import { RailNowPlaying, SideNowPlaying } from './ui/SideNowPlaying';
 import { useLayoutEffect, useRef } from 'react';
 import SideArt from './ui/SideArt';
 import { Glyph } from './ui/Glyphs';
@@ -43,7 +43,8 @@ type NavItem = { id: string; label: string; icon: typeof Home };
 
 export default function Sidebar({ activeTab, setActiveTab, collapsed = false, onToggle }: { activeTab: string; setActiveTab: (t: string) => void; collapsed?: boolean; onToggle?: () => void }) {
   const { unreadCount } = useNotifications();
-  const { current, active: musicOn, setExpanded } = useMusic();
+  const { active: musicOn } = useMusic();
+  const tv = isTelevision();
   const SETTINGS: NavItem[] = [{ id: 'settings', label: 'Settings', icon: Settings }];
   // The gold edge's light rests beside the selected item (SideArt).
   const fullRef = useRef<HTMLElement>(null);
@@ -119,6 +120,7 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
         <div className="flex flex-col items-center gap-1">{LIBRARY.map(railBtn)}</div>
         {railDivider}
         <div className="flex flex-col items-center gap-1">{SETTINGS.map(railBtn)}</div>
+        <div className="mt-auto pt-3 empty:hidden"><RailNowPlaying /></div>
       </aside>
 
       {/* Reveal button — only on lg+ and only while the full sidebar is hidden. */}
@@ -143,18 +145,7 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
         </div>
 
         {/* TV: what is playing, one press from anywhere (the remote can always go left). */}
-        {isTelevision() && musicOn && current && (
-          <div className="px-3 pb-3">
-            <button onClick={() => setExpanded(true)} tabIndex={0} data-tv-focusable aria-label={`Open the player: ${current.title}`}
-              className="w-full flex items-center gap-3 p-2 rounded-xl bg-white/[0.07] text-left focus:outline-none">
-              <CoverArt imageUrl={current.artwork} dominantColor={current.dominantColor} className="w-11 h-11 shrink-0" />
-              <span className="min-w-0 flex-1">
-                <span className="block text-[10px] font-bold uppercase tracking-wider text-amber-300">Now playing</span>
-                <span className="block text-sm font-semibold text-white truncate">{current.title}</span>
-              </span>
-            </button>
-          </div>
-        )}
+        {tv && <div className="px-3 pb-3 empty:hidden"><SideNowPlaying tv /></div>}
 
         <nav className="px-3 space-y-1">{renderNav(PRIMARY)}</nav>
 
@@ -166,6 +157,9 @@ export default function Sidebar({ activeTab, setActiveTab, collapsed = false, on
           <div className="overline side-label px-3 mb-1.5"><Glyph name="scroll" className="side-glyph" /> Your Library</div>
           <nav className="space-y-1">{renderNav(LIBRARY)}</nav>
         </div>
+
+        {/* What is playing, above the foot (owner, 2026-11-19): on a TV it sits at the top instead. */}
+        {!tv && <div className="px-3 pt-3 empty:hidden"><SideNowPlaying /></div>}
 
         {/* Always in reach at the foot, whatever the list above is scrolled to. */}
         <div className="relative px-3 py-3 border-t border-white/10">

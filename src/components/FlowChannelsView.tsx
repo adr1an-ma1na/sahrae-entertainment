@@ -5,6 +5,8 @@ import { isBigScreen } from '../services/deviceTier';
 import { LiveMeta, LuxChapter, RailHeader } from './ui/Lux';
 import { useRail } from '../hooks/useRail';
 
+const FLOW_MUTED_KEY = 'sahrae.flow.muted.v1';
+
 const CHANNELS = [
   { id: '1', name: 'Action Cinema', icon: Flame, genreId: 28, color: 'from-orange-500 to-red-600', tag: 'Action' },
   { id: '2', name: 'Sci-Fi Universe', icon: Rocket, genreId: 878, color: 'from-blue-500 to-indigo-600', tag: 'Sci-Fi' },
@@ -26,7 +28,9 @@ export default function FlowChannelsView({ onPlay, paused = false }: { onPlay: (
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [muted, setMuted] = useState(true);
+  // Sound on (owner, 2026-11-19: "on flow channels lets have it unmute"); a viewer who mutes it keeps that.
+  // The embed still starts muted (a browser blocks a video starting with sound) and is unmuted as it plays.
+  const [muted, setMuted] = useState(() => { try { return localStorage.getItem(FLOW_MUTED_KEY) === '1'; } catch { return false; } });
   const [isActuallyPlaying, setIsActuallyPlaying] = useState(false);
   
   const [playlist, setPlaylist] = useState<MediaDetails[]>([]);
@@ -166,7 +170,7 @@ export default function FlowChannelsView({ onPlay, paused = false }: { onPlay: (
   const post = (func: string, args: unknown[] = []) => {
     try { ytFrameRef.current?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func, args }), '*'); } catch { /* ignore */ }
   };
-  const toggleMute = () => { const n = !muted; setMuted(n); post(n ? 'mute' : 'unMute'); };
+  const toggleMute = () => { const n = !muted; setMuted(n); post(n ? 'mute' : 'unMute'); try { localStorage.setItem(FLOW_MUTED_KEY, n ? '1' : '0'); } catch { /* this visit only */ } };
 
   // While a film is open over the channel (Watch the film, or any title opened
   // from elsewhere), the trailer is paused and silent: two soundtracks at once
@@ -200,7 +204,8 @@ export default function FlowChannelsView({ onPlay, paused = false }: { onPlay: (
       if (st === undefined) return;
       // A trailer that starts while a film is open (autoplay) is stopped again.
       if (st === 1 && pausedRef.current) { hush(); return; }
-      if (st === 1) setIsActuallyPlaying(true);
+      // Playing: with sound, unless the viewer muted it (an unmute sent before the player was ready is lost).
+      if (st === 1) { setIsActuallyPlaying(true); if (!mutedRef.current) post('unMute'); }
       else if (st === 2) setIsActuallyPlaying(false);
       else if (st === 0 && !pausedRef.current) handleEndedRef.current(); // ended → next in channel
     };

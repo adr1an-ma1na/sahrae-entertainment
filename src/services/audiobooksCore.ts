@@ -49,7 +49,7 @@ const list = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : v ? [
 
 /** The Archive's titles often repeat the author ("Alice in Wonderland, by Lewis Carroll"). */
 export function cleanTitle(title: string): string {
-  return title.replace(/\s*-\s*(single episodes|singles|otrr[^-]*)\s*$/i, '').replace(/\s*,?\s+by\s+[^,]+$/i, '').replace(/\s*\((version|dramatic reading)[^)]*\)\s*$/i, '').replace(/\s+/g, ' ').trim();
+  return title.replace(/\s*-\s*(single episodes|singles|otrr[^-]*)\s*$/i, '').replace(/\s*,?\s+by\s+[^,]+$/i, '').replace(/\s*\(((solo|dramati[cz]ed|abridged|unabridged)\s+)?(version|reading|recording)[^)]*\)\s*$/i, '').replace(/\s*\((version|dramatic reading)[^)]*\)\s*$/i, '').replace(/\s+/g, ' ').trim();
 }
 
 /** Subjects that say what the book is, not where it lives. */
@@ -172,7 +172,11 @@ export function inProgress(places: Record<string, BookPlace>, now: number): Book
 
 // ── Shelves ───────────────────────────────────────────────────────────────
 
-export interface Shelf { id: string; title: string; query: string; sort: string; /** A hand-picked shelf: these books, no search. */ picks?: BookPick[] }
+export interface Shelf {
+  id: string; title: string; query: string; sort: string;
+  /** A hand-picked shelf: these books, no search. */ picks?: BookPick[];
+  /** An Open Library shelf: this catalogue search (sort is Open Library's: trending, readinglog, rating, editions). */ ol?: string;
+}
 
 /** The library's shelves: searches on the Archive, each in the chosen language. */
 export const SHELVES: Shelf[] = [
@@ -217,6 +221,12 @@ export function archiveQuery(opts: { shelf?: Shelf; search?: string; language?: 
 export const sameWork = (a: Book, b: Book) => workKey(a) === workKey(b);
 // Title and surname: catalogues spell first names differently ("Nicolo" / "Niccolò Machiavelli").
 const workKey = (b: Book) => `${b.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}|${(b.author.normalize('NFD').toLowerCase().replace(/[^a-z\s]+/g, '').trim().split(/\s+/).pop() || '')}`;
+
+/** At most a few cards per author on a shelf: one uploader's series would fill it (the Internet Archive). */
+export function fewEach(books: Book[], max = 2): Book[] {
+  const n = new Map<string, number>();
+  return books.filter((b) => { const k = b.author.toLowerCase(); const c = n.get(k) || 0; n.set(k, c + 1); return c < max; });
+}
 
 /** One card per book: LibriVox often has several recordings of one book; the first (most listened) stands for it. */
 export function oneEach(books: Book[]): Book[] {
@@ -369,7 +379,7 @@ export function isInterview(ep: { title: string; artist: string; duration: numbe
 // Each is a free, legal collection on the Internet Archive. Others there were
 // left out on purpose: open upload collections whose rights are unclear.
 
-export type LibraryId = 'librivox' | 'shop' | 'gutenberg' | 'radio';
+export type LibraryId = 'librivox' | 'openlibrary' | 'shop' | 'archive' | 'gutenberg' | 'radio';
 export interface Library {
   id: LibraryId;
   name: string;
@@ -384,7 +394,52 @@ export interface Library {
   languages: boolean;
   /** Not free to stream: borrowed with a library card, or bought (the bestsellers). */
   shop?: boolean;
+  /** Found through Open Library's catalogue, played from the LibriVox recording it links to. */
+  openLibrary?: boolean;
 }
+
+// Only items with MP3 files: some Archive items are a ZIP or a scan, nothing a player can stream
+// (233 of the 530 radio items, 2026-11-19).
+const PLAYABLE = 'format:(MP3)';
+
+// ── Open Library (owner, 2026-11-19: "add Open Library … a discovery layer paired with LibriVox") ──
+// Open Library links many works to their LibriVox recordings (its `ia` field):
+// its catalogue, covers and what readers are reading choose the books, and the
+// recording plays. Its DAISY editions are lent only to readers certified
+// print-disabled, so they are not offered.
+
+/** The LibriVox recordings an Open Library work links to. */
+export function recordingsOf(d: Record<string, unknown>): string[] {
+  return list(d.ia).filter((x) => /_librivox$/i.test(x)).slice(0, 8);
+}
+
+/** Same language, whichever way the Archive spells it ("eng", "English"). */
+export const sameLanguage = (a: string, b: string) => a.trim().toLowerCase().slice(0, 2) === b.trim().toLowerCase().slice(0, 2);
+
+/** An Open Library work as a book: its best recording in the language (most listened), with Open Library's cover and author. */
+export function bookFromWork(d: Record<string, unknown>, recordings: Map<string, Book>, language = 'eng'): Book | null {
+  const recs = recordingsOf(d).map((id) => recordings.get(id)).filter((b): b is Book => !!b && sameLanguage(b.language, language));
+  if (!recs.length) return null;
+  const rec = recs.sort((a, b) => b.downloads - a.downloads)[0];
+  const cover = Number(d.cover_i);
+  return { ...rec, library: 'openlibrary', author: first(d.author_name) || rec.author, cover: cover ? olCover(cover) : undefined };
+}
+
+/** The Open Library search for a shelf or a search: always only works with a LibriVox recording. */
+export function openLibraryQuery(opts: { shelf?: Shelf; search?: string }): string {
+  const s = opts.search?.trim().replace(/[()":\\[\]{}^~*!]/g, ' ').replace(/\s+/g, ' ').trim();
+  return [opts.shelf?.ol, s, 'ia:*_librivox'].filter(Boolean).join(' ');
+}
+
+// ── Internet Archive (owner, 2026-11-19: "add Internet Archive … independent authors, lectures") ──
+// Beyond its LibriVox, Gutenberg and radio collections the Archive holds every
+// kind of upload, many of them commercial audiobooks shared without rights.
+// Only items their makers released under a Creative Commons licence or as
+// public domain are taken, from its spoken-word collections; music and adult
+// readings are left out. A few uploads mark a book still in copyright as
+// public domain; those authors are excluded by name.
+export const MISLABELLED = ['MacLean', 'Alistair MacLean'];
+const ARCHIVE_SCOPE = `mediatype:audio AND ${PLAYABLE} AND licenseurl:*creativecommons* AND collection:(audio_bookspoetry OR naropa) AND NOT collection:(librivoxaudio OR gutenberg-audiobooks OR oldtimeradio) AND NOT subject:(music OR chant OR songs OR album OR erotic OR erotica OR erotique OR érotique OR erotisme OR érotisme OR porno OR porn OR sex OR sexe OR sexy OR adult OR adulte OR xxx) AND NOT creator:(${MISLABELLED.map((n) => `"${n}"`).join(' OR ')}) AND NOT title:(MacLean)`;
 
 const by = (names: string[]) => `creator:(${names.map((n) => `"${n}"`).join(' OR ')})`;
 
@@ -392,7 +447,27 @@ export const LIBRARIES: Library[] = [
   {
     id: 'librivox', name: 'LibriVox', note: '22,000 books read by volunteers, in many languages', voice: 'Read by volunteers',
     credit: 'A LibriVox recording, in the public domain, hosted by the Internet Archive.',
-    scope: 'collection:librivoxaudio', shelves: SHELVES, languages: true,
+    scope: `collection:librivoxaudio AND ${PLAYABLE}`, shelves: SHELVES, languages: true,
+  },
+  {
+    id: 'openlibrary', name: 'Open Library', note: 'The classics readers are reading on Open Library, each with a free recording', voice: 'Read by volunteers',
+    credit: "Chosen from Open Library's catalogue, with its covers; a LibriVox recording in the public domain, hosted by the Internet Archive.",
+    scope: '', languages: true, openLibrary: true,
+    shelves: [
+      { id: 'o-trending', title: 'Trending on Open Library', query: '', sort: 'trending', ol: '' },
+      { id: 'o-read', title: 'Most read', query: '', sort: 'readinglog', ol: '' },
+      { id: 'o-rated', title: 'Highest rated', query: '', sort: 'rating', ol: '' },
+      { id: 'o-mystery', title: 'Mystery & detective', query: '', sort: 'readinglog', ol: 'subject:mystery' },
+      { id: 'o-adventure', title: 'Adventure', query: '', sort: 'readinglog', ol: 'subject:adventure' },
+      { id: 'o-love', title: 'Love stories', query: '', sort: 'readinglog', ol: 'subject:love' },
+      { id: 'o-fantasy', title: 'Fantasy & science fiction', query: '', sort: 'readinglog', ol: 'subject:(fantasy OR "science fiction")' },
+      { id: 'o-horror', title: 'Ghost & horror stories', query: '', sort: 'readinglog', ol: 'subject:horror' },
+      { id: 'o-children', title: "Children's classics", query: '', sort: 'readinglog', ol: 'subject:(children OR juvenile)' },
+      { id: 'o-short', title: 'Short stories', query: '', sort: 'readinglog', ol: 'subject:("short stories" OR "short story")' },
+      { id: 'o-drama', title: 'Plays', query: '', sort: 'readinglog', ol: 'subject:drama' },
+      { id: 'o-poetry', title: 'Poetry', query: '', sort: 'readinglog', ol: 'subject:poetry' },
+      { id: 'o-lives', title: 'History & lives', query: '', sort: 'readinglog', ol: 'subject:biography' },
+    ],
   },
   {
     id: 'shop', name: 'Bestsellers', note: 'Today\'s bestsellers: borrow them free with a library card, or buy them', voice: 'A licensed audiobook',
@@ -409,15 +484,29 @@ export const LIBRARIES: Library[] = [
     ],
   },
   {
+    id: 'archive', name: 'Internet Archive', note: 'Readings, lectures and poetry their makers shared freely', voice: 'An independent recording',
+    credit: 'Shared by its maker under a Creative Commons licence or as public domain, hosted by the Internet Archive.',
+    scope: ARCHIVE_SCOPE, languages: false,
+    shelves: [
+      { id: 'a-popular', title: 'Most listened', query: '', sort: 'downloads desc' },
+      { id: 'a-english', title: 'In English', query: 'language:(eng OR english)', sort: 'downloads desc' },
+      { id: 'a-talks', title: 'Lectures & talks', query: 'title:(lecture OR lectures OR class OR course OR talk OR talks OR discusses OR workshop OR panel OR speech OR address)', sort: 'downloads desc' },
+      { id: 'a-poetry', title: 'Poets reading', query: '(subject:(poetry OR poems) OR collection:naropa)', sort: 'downloads desc' },
+      { id: 'a-philosophy', title: 'Philosophy', query: 'subject:philosophy', sort: 'downloads desc' },
+      { id: 'a-french', title: 'En français', query: '(collection:AuFilDesLectures OR language:(fre OR french))', sort: 'downloads desc' },
+      { id: 'a-stories', title: 'Stories, read aloud', query: 'language:(eng OR english) AND subject:(fiction OR stories OR "short stories" OR novel OR horror OR "science fiction" OR fantasy OR audiobook)', sort: 'downloads desc' },
+    ],
+  },
+  {
     id: 'gutenberg', name: 'Project Gutenberg', note: '4,800 classics read by a natural computer voice', voice: 'Read by a computer voice',
     credit: 'From the Project Gutenberg Audiobook Collection (public-domain books, computer narration), hosted by the Internet Archive.',
-    scope: 'collection:gutenberg-audiobooks', languages: false,
+    scope: `collection:gutenberg-audiobooks AND ${PLAYABLE}`, languages: false,
     shelves: [
       { id: 'g-popular', title: 'Most listened', query: '', sort: 'downloads desc' },
       { id: 'g-new', title: 'Recently added', query: '', sort: 'publicdate desc' },
       { id: 'g-mystery', title: 'Mystery & detective', query: by(['Christie, Agatha', 'Doyle, Arthur Conan', 'Collins, Wilkie', 'Chesterton, G. K. (Gilbert Keith)', 'Leblanc, Maurice', 'Green, Anna Katharine']), sort: 'downloads desc' },
       { id: 'g-adventure', title: 'Adventure', query: by(['Verne, Jules', 'Stevenson, Robert Louis', 'Dumas, Alexandre', 'Haggard, H. Rider (Henry Rider)', 'London, Jack', 'Burroughs, Edgar Rice']), sort: 'downloads desc' },
-      { id: 'g-dickens', title: 'Charles Dickens', query: 'creator:(Dickens)', sort: 'downloads desc' },
+      { id: 'g-american', title: 'Hawthorne, Alcott and Melville', query: 'creator:(Hawthorne OR Alcott OR Melville)', sort: 'downloads desc' },
       { id: 'g-austen', title: 'Austen, the Brontës and Eliot', query: 'creator:(Austen OR Brontë OR Bronte OR "Eliot, George")', sort: 'downloads desc' },
       { id: 'g-twain', title: 'Mark Twain', query: 'creator:(Twain)', sort: 'downloads desc' },
       { id: 'g-scifi', title: 'Early science fiction', query: 'creator:(Wells OR Verne OR Shelley OR Doyle) AND title:(time OR world OR moon OR machine OR war OR island OR lost)', sort: 'downloads desc' },
@@ -426,7 +515,7 @@ export const LIBRARIES: Library[] = [
   {
     id: 'radio', name: 'Radio drama', note: 'Classic radio plays and series, restored', voice: 'Full-cast radio drama',
     credit: 'Restored by the Old Time Radio Researchers (CC BY-NC-ND 2.5), hosted by the Internet Archive.',
-    scope: 'collection:oldtimeradio AND mediatype:audio AND creator:("Old Time Radio Researchers" OR "Old Time Radio Researchers Group")', languages: false,
+    scope: `collection:oldtimeradio AND mediatype:audio AND ${PLAYABLE} AND creator:("Old Time Radio Researchers" OR "Old Time Radio Researchers Group")`, languages: false,
     shelves: [
       { id: 'r-popular', title: 'Most listened', query: '', sort: 'downloads desc' },
       { id: 'r-detective', title: 'Detectives & crime', query: 'subject:(detective OR mystery OR crime)', sort: 'downloads desc' },
