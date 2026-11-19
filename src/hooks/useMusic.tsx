@@ -11,6 +11,7 @@ import { cleanTrackText } from '../services/trackText.ts';
 import { songKey } from '../services/tasteHome';
 import { resolveYt, prefetchMatches, asTrack } from '../services/resolveYt';
 import { afterSkip, wasSkipped } from '../services/stationCore';
+import { isDataSaver } from '../services/dataSaver';
 import { artistKey } from '../services/taste';
 import { upNext } from '../services/upNext';
 import { songBase, isVersion, dealQueue, onePerPlay, shuffled } from '../services/curate';
@@ -76,6 +77,8 @@ interface MusicCtx {
   setVideoSlot: (el: HTMLElement | null) => void;
   /** Load YouTube's player now, empty, so the first song switches into it at once (Music opened). */
   warmPlayer: () => void;
+  /** Load this song in the standby player, muted and buffered, so choosing it starts it at once. */
+  preloadTrack: (t: Track) => void;
   setVideoCovered: (covered: boolean) => void;
   // Library
   playlists: Playlist[];
@@ -399,8 +402,18 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const reportedIdRef = useRef<string | null>(null);
   const switchTimerRef = useRef<number>(0);
   const warmPlayerRef = useRef<() => void>(() => {});
+  // Two YouTube players (owner, 2026-11-19: "the sound … from 1.5 s to 0.3 s"):
+  // the one playing, and a standby that loads the song most likely next, muted,
+  // buffers it and waits at its start. Choosing that song swaps them: the sound
+  // starts from what is already buffered instead of YouTube connecting first.
+  const preloadRef = useRef<(id: string) => void>(() => {});
+  const preloadTimerRef = useRef<number>(0);
+  const framesRef = useRef<{ active: () => HTMLIFrameElement; standby: () => HTMLIFrameElement } | null>(null);
+  const [frameSwap, setFrameSwap] = useState(0);
   // Quick skips this session, per artist (stationCore: the station learns).
   const sessionSkipsRef = useRef(new Map<string, number>());
+  // The song last told to play after it sat unstarted (once per song).
+  const nudgedRef = useRef<string | null>(null);
   const ytStateRef = useRef(-1);
   const ytStateAtRef = useRef(0);
   const undoneRef = useRef(0);
@@ -415,10 +428,39 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   // already calls (loadVideoById / playVideo / pauseVideo / seekTo / getCurrentTime
   // / getDuration), so no other call site changes.
   useEffect(() => {
-    const f = document.getElementById('sahrae-yt') as HTMLIFrameElement | null;
-    if (!f) return;
-    const post = (msg: unknown) => { try { f.contentWindow?.postMessage(JSON.stringify(msg), '*'); } catch { /* ignore */ } };
+    const A = document.getElementById('sahrae-yt') as HTMLIFrameElement | null;
+    const B = document.getElementById('sahrae-yt2') as HTMLIFrameElement | null;
+    if (!A || !B) return;
+    // `f` is the player that plays; `sb` the standby. They swap (preloaded song chosen).
+    let f: HTMLIFrameElement = A, sb: HTMLIFrameElement = B;
+    let standby: { id: string | null; ready: boolean; loaded: boolean } = { id: null, ready: false, loaded: false };
+    framesRef.current = { active: () => f, standby: () => sb };
+    const postTo = (fr: HTMLIFrameElement, msg: unknown) => { try { fr.contentWindow?.postMessage(JSON.stringify(msg), '*'); } catch { /* ignore */ } };
+    const post = (msg: unknown) => postTo(f, msg);
     const cmd = (func: string, args: unknown[] = []) => post({ event: 'command', func, args });
+    const cmdTo = (fr: HTMLIFrameElement, func: string, args: unknown[] = []) => postTo(fr, { event: 'command', func, args });
+
+    // The standby: load a song muted; when it plays, pause it at its start (buffered).
+    preloadRef.current = (id: string) => {
+      if (!id || id.startsWith('dz:') || id === ytIdRef.current || standby.id === id) return;
+      standby = { id, ready: false, loaded: standby.loaded };
+      // A player that was paused does not start a song it is given: told to play (muted) as well.
+      if (standby.loaded) { cmdTo(sb, 'mute'); cmdTo(sb, 'loadVideoById', [{ videoId: id, startSeconds: 0 }]); window.setTimeout(() => { if (standby.id === id && !standby.ready) cmdTo(sb, 'playVideo'); }, 300); }
+      else sb.src = `https://www.youtube.com/embed/${id}?enablejsapi=1&autoplay=1&mute=1&playsinline=1&controls=0&rel=0&modestbranding=1&iv_load_policy=3`;
+    };
+    const fromStandby = (raw: string) => {
+      let d: { event?: string; info?: { playerState?: number; videoData?: { video_id?: string } } };
+      try { d = JSON.parse(raw); } catch { return; }
+      const info = d?.info as unknown;
+      // onStateChange sends the state alone; infoDelivery an object.
+      const s = typeof info === 'number' ? info : d?.info?.playerState, vid = d?.info?.videoData?.video_id;
+      // Loaded but not started: play it, muted, so it buffers.
+      if ((s === -1 || s === 5) && standby.id && (!vid || vid === standby.id) && !standby.ready) { cmdTo(sb, 'mute'); cmdTo(sb, 'playVideo'); }
+      if (s === 1 && standby.id && (!vid || vid === standby.id) && !standby.ready) {
+        standby.ready = true;
+        cmdTo(sb, 'pauseVideo'); cmdTo(sb, 'seekTo', [0, true]);
+      }
+    };
 
     playerRef.current = {
       loadVideoById: (id: string, start?: number) => {
@@ -428,6 +470,21 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         ytStateRef.current = -1; ytStateAtRef.current = Date.now();
         if (isAway()) bgLog(`Loading "${titleRef.current}"`);
         window.clearTimeout(switchTimerRef.current);
+        // The standby has this song: swap the players and play what is buffered.
+        if (standby.id === id && standby.loaded) {
+          const old = f; f = sb; sb = old;
+          standby = { id: null, ready: false, loaded: true };
+          cmdTo(old, 'pauseVideo'); cmdTo(old, 'mute');
+          frameReadyRef.current = true; reportedIdRef.current = id;
+          cmd('seekTo', [start && start > 1 ? Math.floor(start) : 0, true]);
+          cmd('unMute'); cmd('setVolume', [100]); cmd('playVideo');
+          setFrameSwap((n) => n + 1);
+          // Not playing soon after all (the standby had dropped it): load it in place.
+          switchTimerRef.current = window.setTimeout(() => {
+            if (ytIdRef.current === id && ytStateRef.current !== 1 && ytStateRef.current !== 3) cmd('loadVideoById', [{ videoId: id, startSeconds: start && start > 1 ? Math.floor(start) : 0 }]);
+          }, 1500);
+          return;
+        }
         const reload = () => {
           frameReadyRef.current = false; reportedIdRef.current = null;
           f.src = `https://www.youtube.com/embed/${id}?enablejsapi=1&autoplay=1&playsinline=1&controls=0&rel=0&modestbranding=1&iv_load_policy=3`
@@ -457,8 +514,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     readyRef.current = true;
 
     // The embed starts posting state once it receives a 'listening' message.
-    const onFrameLoad = () => {
-      post({ event: 'listening', id: 1, channel: 'widget' });
+    const onFrameLoad = (e: Event) => {
+      const fr = e.currentTarget as HTMLIFrameElement;
+      postTo(fr, { event: 'listening', id: 1, channel: 'widget' });
+      if (fr === sb) { standby.loaded = !!fr.getAttribute('src'); cmdTo(fr, 'mute'); return; }
       frameReadyRef.current = !!f.getAttribute('src');
       if (isAway()) bgLog('Song page loaded');
     };
@@ -467,10 +526,13 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       if (f.getAttribute('src') || ytIdRef.current) return;
       f.src = 'https://www.youtube.com/embed/?enablejsapi=1&autoplay=0&playsinline=1&controls=0&rel=0&modestbranding=1&iv_load_policy=3';
     };
-    f.addEventListener('load', onFrameLoad);
+    A.addEventListener('load', onFrameLoad);
+    B.addEventListener('load', onFrameLoad);
 
     const onMsg = (e: MessageEvent) => {
       if (typeof e.data !== 'string' || e.origin.indexOf('youtube') < 0) return;
+      if (e.source === sb.contentWindow) { fromStandby(e.data); return; }
+      if (e.source && e.source !== f.contentWindow) return;
       let d: { event?: string; info?: { currentTime?: number; duration?: number; playerState?: number } };
       try { d = JSON.parse(e.data); } catch { return; }
       if (!d || !d.event) return;
@@ -513,6 +575,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
               } else if (undoneRef.current++ === 8) bgLog('Stopped undoing pauses on this song');
             }
           }
+          if (s === -1 && wantPlayRef.current && nudgedRef.current !== ytIdRef.current) {
+            const want = ytIdRef.current; nudgedRef.current = want;
+            window.setTimeout(() => { if (ytIdRef.current === want && ytStateRef.current === -1 && wantPlayRef.current) cmd('playVideo'); }, 300);
+          }
           if (s === 1) { setIsPlaying(true); setBuffering(false); setActive(true); window.dispatchEvent(new CustomEvent('sahrae:audioclaim', { detail: 'music' })); }
           else if (s === 2) { setIsPlaying(false); }
           else if (s === 3) { setBuffering(true); }
@@ -524,7 +590,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
 
     if (pendingRef.current) { playerRef.current.loadVideoById(pendingRef.current); pendingRef.current = null; }
 
-    return () => { window.removeEventListener('message', onMsg); f.removeEventListener('load', onFrameLoad); };
+    return () => { window.removeEventListener('message', onMsg); A.removeEventListener('load', onFrameLoad); B.removeEventListener('load', onFrameLoad); };
   }, []);
 
   // A song that sits unstarted, loading or paused while Sahrae is away (and the
@@ -962,6 +1028,26 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   // Song Radio (spec §1.3.5): start the seed instantly, then extend into a
   // diversified ~50-track radio from its related-tracks graph. The seed stays at
   // index 0 so playback never restarts when the radio fills in.
+  // A song likely to be chosen (pointed at, focused, next in the queue) waits in the
+  // standby player. Not on Data Saver, nor while Sahrae is in the background.
+  const preloadTrack = (t: Track) => {
+    warmPlayerRef.current();
+    // Not on a weak device either (two YouTube players are too much for it): it switches in place instead.
+    if (!t || t.audioUrl || t.scStream || t.isPodcast || isDataSaver() || isAway() || document.documentElement.classList.contains('low-gfx')) return;
+    window.clearTimeout(preloadTimerRef.current);
+    preloadTimerRef.current = window.setTimeout(async () => {
+      const id = t.id.startsWith('dz:') ? await resolveYt(t).catch(() => null) : t.id;
+      if (id) preloadRef.current(id);
+    }, 200);
+  };
+  // The next song, once this one has been playing a moment: Next and the song's end then start at once.
+  const nextId = queue[index + 1]?.id;
+  useEffect(() => {
+    if (!isPlaying || !nextId) return;
+    const t = window.setTimeout(() => { const nx = queue[index + 1]; if (nx) preloadTrack(nx); }, 3000);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current?.id, isPlaying, nextId]);
   // What the station knows of the listener: the artists of their liked songs, this session's skips.
   const stationCtx = () => ({ liked: likedTracks.map((t) => t.artist), sessionSkips: sessionSkipsRef.current });
   const startRadio = (seed: Track) => {
@@ -1155,8 +1241,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   // song plays.
   useEffect(() => {
     const host = playerHostRef.current;
-    const frame = document.getElementById('sahrae-yt') as HTMLIFrameElement | null;
+    const frame = framesRef.current?.active() || (document.getElementById('sahrae-yt') as HTMLIFrameElement | null);
     if (!host || !frame) return;
+    const other = framesRef.current?.standby();
+    if (other) { other.style.width = '1px'; other.style.height = '1px'; }
 
     const park = () => {
       Object.assign(host.style, {
@@ -1210,7 +1298,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       document.removeEventListener('scroll', place, true);
       park();
     };
-  }, [videoMode, canShowVideo, expanded, videoSlot, current?.id, videoCovered]);
+  }, [videoMode, canShowVideo, expanded, videoSlot, current?.id, videoCovered, frameSwap]);
 
   return (
     <Ctx.Provider
@@ -1222,6 +1310,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         likedTracks, setExpanded,
         videoMode, setVideoMode, canShowVideo, setVideoSlot, setVideoCovered,
         warmPlayer: () => warmPlayerRef.current(),
+        preloadTrack,
         playlists, recentlyPlayed, tasteSeeds, onboarded, addTasteSeeds, completeOnboarding,
         eqReachable,
         playbackError, clearPlaybackError: () => setPlaybackError(null),
@@ -1236,7 +1325,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
           the effect above. Pointer events stay off so Sahrae's own controls
           remain the ones that work. */}
       <div ref={playerHostRef} aria-hidden style={{ position: 'fixed', right: 0, bottom: 0, width: 1, height: 1, opacity: 0, pointerEvents: 'none', zIndex: -1, background: '#000', transition: 'border-radius .2s' }}>
-        <iframe id="sahrae-yt" title="Sauti audio" allow="autoplay; encrypted-media" style={{ border: 0, width: '1px', height: '1px' }} />
+        <iframe id="sahrae-yt" title="Sauti audio" allow="autoplay; encrypted-media" style={{ border: 0, width: '1px', height: '1px', position: 'absolute', left: 0, top: 0 }} />
+        <iframe id="sahrae-yt2" title="Sauti audio, next" allow="autoplay; encrypted-media" style={{ border: 0, width: '1px', height: '1px', position: 'absolute', left: 0, top: 0 }} />
       </div>
     </Ctx.Provider>
   );

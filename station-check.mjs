@@ -60,6 +60,10 @@ eq('a skip reorders what is to come', um.includes('afterSkip(prev.slice(at + 1),
 eq('a song from search plays as its radio', mv.includes('onPlay={() => startRadio(rSongs[i])}'), true);
 eq('songs switch inside the loaded player, reloading only if that fails', um.includes("cmd('loadVideoById', [{ videoId: id") && um.includes("sessionStorage.setItem('sahrae.yt.inplace', '0')"), true);
 eq('the player is warmed when Music opens; songs matched before the tap', mv.includes('window.setTimeout(warmPlayer, 600)') && mv.includes('onPointerEnter={() => prime(track)}'), true);
+eq('a likely song waits in a second player, buffered; choosing it swaps them', um.includes('<iframe id="sahrae-yt2"') && um.includes('if (standby.id === id && standby.loaded) {') && um.includes("cmd('unMute'); cmd('setVolume', [100]); cmd('playVideo');"), true);
+eq('the next song and the one pointed at are preloaded; not on Data Saver or a weak device', um.includes('if (nx) preloadTrack(nx); }, 3000);') && um.includes('isDataSaver() || isAway()') && um.includes("classList.contains('low-gfx')"), true);
+eq('only the playing player is listened to', um.includes('if (e.source === sb.contentWindow) { fromStandby(e.data); return; }'), true);
+eq('a paused player given a song is told to play it (muted for the standby)', um.includes("if (standby.id === id && !standby.ready) cmdTo(sb, 'playVideo');") && um.includes("cmd('playVideo'); }, 300);"), true);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

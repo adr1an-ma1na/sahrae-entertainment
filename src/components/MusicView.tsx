@@ -29,8 +29,8 @@ import { asTrack, resolveYt, prefetchMatches } from '../services/resolveYt';
  * at once instead of searching first.
  */
 function usePrime() {
-  const { warmPlayer } = useMusic();
-  return (t: Track) => { warmPlayer(); if (t.id.startsWith('dz:')) void resolveYt(t).catch(() => null); };
+  const { preloadTrack } = useMusic();
+  return (t: Track) => preloadTrack(t);
 }
 import { weigh, loadTaste, artistKey, TASTE_CHANGE } from '../services/taste';
 import { buildTasteHome, songKey, uniqueSongs, type TasteHome } from '../services/tasteHome';
