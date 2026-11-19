@@ -178,7 +178,7 @@ function TeamLogo({ name, src, category, size = 'w-10 h-10', color }: { name: st
     let live = true;
     const look = () => { void findBadge(name, category).then((u) => { if (live && u) setFound(u); }); };
     if (typeof IntersectionObserver !== 'function') { look(); return () => { live = false; }; }
-    const io = new IntersectionObserver((seen) => { if (seen.some((x) => x.isIntersecting)) { io.disconnect(); look(); } }, { rootMargin: '300px' });
+    const io = new IntersectionObserver((seen) => { if (seen.some((x) => x.isIntersecting)) { io.disconnect(); look(); } }, { rootMargin: '1200px 0px' });
     io.observe(el);
     return () => { live = false; io.disconnect(); };
   }, [needLookup, name, category]);

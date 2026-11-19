@@ -100,7 +100,7 @@ function ShelfRow({ shelf, library, language, onOpen, eager = false }: { shelf: 
     const load = () => findBooks({ shelf, library, language, rows: 18 }).then((r) => { if (live) setBooks(r.books); }).catch(() => { if (live) setFailed(true); });
     // The first shelves are on screen from the start: fetched at once.
     if (eager) { void load(); return () => { live = false; }; }
-    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { io.disconnect(); void load(); } }, { rootMargin: '600px 0px' });
+    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { io.disconnect(); void load(); } }, { rootMargin: '1600px 0px' });
     io.observe(el);
     return () => { live = false; io.disconnect(); };
   }, [shelf, library, language, eager]);

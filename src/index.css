@@ -2138,7 +2138,10 @@ html.low-gfx .illo .illo-float, html.low-gfx .illo .illo-twinkle { animation: no
    off-screen simply are not painted until they are scrolled near, so a home
    screen of a dozen rails holds a few decoded images instead of all of them.
    That, plus artwork sized to the screen, is what keeps the renderer alive. */
-html.lite section { content-visibility: auto; contain-intrinsic-size: auto 320px; }
+/* Only far rows: those within a screen and a half are marked data-near and painted ahead of the
+   scroll (services/paintAhead.ts). Left to the browser, a row was painted only at the screen's edge,
+   every poster decoded as it came into view: the wait the owner saw when scrolling (2026-11-19). */
+html.lite section:not([data-near]) { content-visibility: auto; contain-intrinsic-size: auto 320px; }
 
 /* ── Movie / series player: the provider's frame and Sahrae's bar side by side ──
    In fullscreen the frame takes all the height the bar leaves, so the two still

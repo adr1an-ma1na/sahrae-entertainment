@@ -16,6 +16,7 @@ import { applyTvViewport } from './tv/tvViewport.ts';
 import { startErrorReporting } from './services/errorReporter';
 import { applyGraphicsTier } from './services/graphicsTier.ts';
 import { applyDeviceTier } from './services/deviceTier.ts';
+import { startPaintAhead } from './services/paintAhead.ts';
 import { crumb, startHeartbeat } from './services/bootCrumbs.ts';
 
 crumb('boot');
@@ -40,7 +41,8 @@ initTilt();
 applyGraphicsTier();
 // Lite mode first: it also implies low graphics, and image sizes are chosen
 // the moment the first screen renders.
-applyDeviceTier();
+// Small-memory phones skip painting far rows; the near ones are painted ahead of the scroll.
+if (applyDeviceTier()) { if (document.body) startPaintAhead(); else window.addEventListener('DOMContentLoaded', startPaintAhead, { once: true }); }
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

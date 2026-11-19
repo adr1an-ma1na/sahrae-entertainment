@@ -50,11 +50,12 @@ export default function MediaRow({ title, items, onPlay, defaultType = 'movie', 
         ref={rail.ref}
         className="flex overflow-x-auto gap-2.5 md:gap-3 lg:gap-3.5 xl:gap-4 pt-1 pb-6 scrollbar-hide snap-x scroll-smooth"
       >
-        {items.map((item) => {
+        {items.map((item, i) => {
           const type = item.media_type || defaultType;
           return (
             <Fragment key={`${type}-${item.id}`}>
-              <PosterCard item={item} type={type} onPlay={() => onPlay(item.id, type, true)} />
+              {/* The first posters of a row are on screen or one swipe away: fetched at once. */}
+              <PosterCard item={item} type={type} eager={i < 6} onPlay={() => onPlay(item.id, type, true)} />
             </Fragment>
           );
         })}

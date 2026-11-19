@@ -8,11 +8,13 @@ import { usePreviewRef } from '../tv/focusPreview';
  * 2:3 poster, title + year BELOW the art. Responsive widths:
  *   mobile 120 · tablet 140 · laptop 160 · TV 180  (px)
  */
-export default function PosterCard({ item, type, onPlay, onRemove }: {
+export default function PosterCard({ item, type, onPlay, onRemove, eager = false }: {
   item: MediaItem;
   type: 'movie' | 'tv';
   onPlay: () => void;
   onRemove?: () => void;
+  /** The first posters of a row: fetched at once, not when scrolled to. */
+  eager?: boolean;
 }) {
   const year = (item.release_date || item.first_air_date || '').slice(0, 4);
   const previewRef = usePreviewRef(item, type);
@@ -39,8 +41,12 @@ export default function PosterCard({ item, type, onPlay, onRemove }: {
           alt={item.title || item.name}
           // Fade in once decoded. Posters used to pop in one by one as they
           // arrived, which makes a scrolling rail feel jumpy.
-          className="relative w-full h-full object-cover opacity-0 transition-opacity duration-500"
-          loading="lazy"
+          // Quick (150 ms, was half a second), and at once when it is already here: the slow
+          // fade read as waiting for posters while scrolling (owner, 2026-11-19).
+          className="relative w-full h-full object-cover opacity-0 transition-opacity duration-150"
+          loading={eager ? 'eager' : 'lazy'}
+          decoding="async"
+          ref={(el) => { if (el && el.complete && el.naturalWidth > 0) el.style.opacity = '1'; }}
           onLoad={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = '1'; }}
           onError={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = '1'; }}
         />

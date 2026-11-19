@@ -26,7 +26,7 @@ export default function LazyShelf({ type, title, kicker, params, onPlay }: {
     if (items || near) return;
     const el = ref.current;
     if (!el || !('IntersectionObserver' in window)) { setNear(true); return; }
-    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setNear(true); io.disconnect(); } }, { rootMargin: '700px 0px' });
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setNear(true); io.disconnect(); } }, { rootMargin: '1800px 0px' });
     io.observe(el);
     return () => io.disconnect();
   }, [items, near]);
