@@ -44,6 +44,12 @@ eq('late sound is dropped, not played out of step', snd.includes('if (late > 0.4
 eq('a skip fades it', tsx.includes('stopIntro(0.35)'), true);
 eq('nothing is scheduled before the audio clock began (a RangeError silenced it)', /\.(setValueAtTime\([^)]*, |start\()(t0|hit)\)/.test(snd), false);
 
+console.log('\na TV: the same opening, flat');
+eq('only weak graphics get the plain scene, not a TV', /const plain = [^;]*low-gfx[^;]*;/.test(tsx) && !/const plain = [^;]*isTelevision/.test(tsx), true);
+eq('a TV draws it flat: no 3D planes, no tilt', tsx.includes("const flat = !plain && typeof document !== 'undefined' && isTelevision();") && tsx.includes('const at = (z: number) => (flat ? undefined : plane(z));') && tsx.includes("if (phase === 'done' || reduce || flat) return;"), true);
+eq('flat CSS: no perspective, flat planes', block.includes('.hz-flat .hz-scene { perspective: none; }') && block.includes('.hz-flat .hz-plane { transform-style: flat; inset: 0; }'), true);
+eq('the sweep of light is drawn on a TV too', tsx.includes('{!plain && <span className="hz-sheenwin">'), true);
+
 console.log('\nthe welcome');
 eq('by name, from the profile', tsx.includes('welcomeLine(name, profileId)') && readFileSync('src/App.tsx', 'utf8').includes('name={activeProfile.name} profileId={activeProfile.id}'), true);
 

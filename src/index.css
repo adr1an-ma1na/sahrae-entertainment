@@ -1858,7 +1858,12 @@ a:focus-visible {
 @keyframes hz-fadein { from { opacity: 0; } to { opacity: 1; } }
 @keyframes hz-fade { to { opacity: 0; visibility: hidden; } }
 
-/* A TV and weak phones: the same scene and timing, without the sweep of light and the push. */
+/* A TV: the same scene, flat. No perspective, no 3D planes, no widened planes: a handful of
+   flat layers moved and faded by the graphics chip, which a TV keeps up with. */
+.hz-flat .hz-scene { perspective: none; }
+.hz-flat .hz-world { transform: none; transform-style: flat; transition: none; will-change: auto; }
+.hz-flat .hz-plane { transform-style: flat; inset: 0; }
+/* Weak graphics (a renderer that crashed): the same scene and timing, without the sweep of light and the push. */
 .hz-plain .hz-scene { animation: none; }
 /* Less motion asked for: the finished scene, then a quick fade. */
 .hz-still *, .hz-still { animation-duration: 1ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; }
@@ -2058,6 +2063,11 @@ html.tv-mode .glass-liquid,
 html.low-gfx .btn-glass,
 html.low-gfx .glass-liquid { background-color: var(--zinc-800) !important; }
 html.tv-mode .chip { background: transparent !important; }
+/* The sidebar on a TV: see-through, as on the website (owner, 2026-11-20: "the website is more
+   pristine, even the hieroglyphics"). What cost a TV was the live blur, not the transparency;
+   the sidebar sits over the page's soft glow, which a blur barely changes, so the glow and the
+   carved wall read as they do on the website. Weak graphics keep it solid. */
+html.tv-mode:not(.low-gfx) .sidebar-glass { background-color: color-mix(in srgb, var(--zinc-900) 80%, transparent) !important; }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .glass, .sidebar-glass, .control-deck { background-color: var(--zinc-900) !important; }
@@ -2592,3 +2602,16 @@ html.tv-mode .cover-wait::after, html.low-gfx .cover-wait::after { animation: no
 .frieze-sheet .frieze-wall { -webkit-mask-position: 0 -4rem; mask-position: 0 -4rem; }
 .frieze-sheet .frieze-shadow { -webkit-mask-position: 1px calc(-4rem + 1px); mask-position: 1px calc(-4rem + 1px); }
 .frieze-host > :not(.glyph-frieze) { position: relative; z-index: 1; }
+
+/* The carved wall on a TV, read from across a room (owner, 2026-11-20: "the hieroglyphics don't
+   seem clear" on the TV). At a laptop's arm's length the signs at a fifth of the gold read as
+   carved; three metres away they vanish. On a TV: about twice as strong, the menu side less
+   dimmed, and the wall scaled with the TV's larger type (root 118%) so the signs keep their
+   proportion to the menu. */
+html.tv-mode:not(.low-gfx) .glyph-wall {
+  -webkit-mask-image: var(--wall), linear-gradient(90deg, rgba(0,0,0,.55) 0%, rgba(0,0,0,.55) 52%, #000 80%);
+  mask-image: var(--wall), linear-gradient(90deg, rgba(0,0,0,.55) 0%, rgba(0,0,0,.55) 52%, #000 80%);
+  -webkit-mask-size: calc(var(--wall-w) * 1.18) auto, 100% 100%; mask-size: calc(var(--wall-w) * 1.18) auto, 100% 100%; }
+html.tv-mode:not(.low-gfx) .glyph-wall-lit { -webkit-mask-size: calc(var(--wall-w) * 1.18) auto; mask-size: calc(var(--wall-w) * 1.18) auto; }
+html.tv-mode:not(.low-gfx) .glyph-wall-face { background-image: linear-gradient(180deg, rgb(var(--acc-rgb) / .38) 0%, rgb(var(--acc-rgb) / .26) 45%, rgb(var(--acc-rgb) / .2) 100%); }
+html.tv-mode:not(.low-gfx) .glyph-wall-shadow { opacity: .75; }

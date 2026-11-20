@@ -47,12 +47,27 @@ export function isLowGraphics(s: GraphicsSignals): boolean {
  */
 export const SAFE_GRAPHICS_KEY = 'sahrae.gfx.safe.v1';
 
-export function safeGraphicsRequested(): boolean {
-  try { return localStorage.getItem(SAFE_GRAPHICS_KEY) === '1'; } catch { return false; }
+/**
+ * One crash used to keep a device flat for good, so a TV or phone that crashed once
+ * looked plainer than the website from then on (owner, 2026-11-20). Now it lasts three
+ * days; then the full look is tried again (a new crash sets it again). The Android
+ * shell still writes "1", which is read as set now.
+ */
+const SAFE_DAYS = 3;
+export function safeGraphicsRequested(now = Date.now()): boolean {
+  try {
+    const raw = localStorage.getItem(SAFE_GRAPHICS_KEY);
+    if (!raw) return false;
+    if (raw === '1') { localStorage.setItem(SAFE_GRAPHICS_KEY, JSON.stringify({ at: now })); return true; }
+    const s = JSON.parse(raw) as { at?: number };
+    const fresh = typeof s.at === 'number' && now - s.at < SAFE_DAYS * 86_400_000;
+    if (!fresh) localStorage.removeItem(SAFE_GRAPHICS_KEY);
+    return fresh;
+  } catch { return false; }
 }
 
 export function requestSafeGraphics(): void {
-  try { localStorage.setItem(SAFE_GRAPHICS_KEY, '1'); } catch { /* storage unavailable */ }
+  try { localStorage.setItem(SAFE_GRAPHICS_KEY, JSON.stringify({ at: Date.now() })); } catch { /* storage unavailable */ }
   try { document.documentElement.classList.add('low-gfx'); } catch { /* no document */ }
 }
 

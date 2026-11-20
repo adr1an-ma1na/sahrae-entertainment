@@ -42,5 +42,18 @@ console.log('\nno document means no work and no exception');
   ok('applyGraphicsTier is safe headless', !threw && r === false);
 }
 
+console.log('\nafter a crash: flat for three days, then the full look again');
+{
+  const store = new Map();
+  globalThis.localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
+  const { safeGraphicsRequested, SAFE_GRAPHICS_KEY } = await import('./src/services/graphicsTier.ts');
+  const day = 86_400_000, t0 = Date.parse('2026-11-20T10:00:00Z');
+  ok('nothing set: full look', safeGraphicsRequested(t0) === false);
+  store.set(SAFE_GRAPHICS_KEY, '1'); // what the Android shell writes after a renderer crash
+  ok('the shell\'s "1": flat, from now', safeGraphicsRequested(t0) === true && JSON.parse(store.get(SAFE_GRAPHICS_KEY)).at === t0);
+  ok('two days on: still flat', safeGraphicsRequested(t0 + 2 * day) === true);
+  ok('four days on: the full look is tried again (one crash used to keep a device flat for good)', safeGraphicsRequested(t0 + 4 * day) === false && !store.has(SAFE_GRAPHICS_KEY));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -109,7 +109,14 @@ export default function SplashIntro({ onShown, name, profileId }: { onShown?: ()
   const [unit] = useState(() => (typeof window === 'undefined' ? 10 : sceneUnit()));
   const [stars] = useState(() => (typeof window === 'undefined' ? '' : starShadows()));
   const native = Capacitor.isNativePlatform();
-  const plain = typeof document !== 'undefined' && (isTelevision() || document.documentElement.classList.contains('low-gfx'));
+  // A TV gets the website's opening, every part of it (owner, 2026-11-20: "the opening
+  // on the TV is lagging … make it so I can tell no difference"), drawn FLAT: the depth
+  // (six tilted planes, some enlarged half again) is what a TV's graphics chip could not
+  // keep up with, and on a TV it only answered the remote's arrows. Only weak graphics
+  // (a renderer that crashed) still get the plain scene.
+  const plain = typeof document !== 'undefined' && document.documentElement.classList.contains('low-gfx');
+  const flat = !plain && typeof document !== 'undefined' && isTelevision();
+  const at = (z: number) => (flat ? undefined : plane(z));
   const [hello] = useState(() => (typeof window === 'undefined' || playedThisVisit() ? '' : welcomeLine(name, profileId)));
   const rootRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
@@ -163,7 +170,7 @@ export default function SplashIntro({ onShown, name, profileId }: { onShown?: ()
 
   // The scene turns toward the mouse, a finger, the phone's tilt or the remote.
   useEffect(() => {
-    if (phase === 'done' || reduce) return;
+    if (phase === 'done' || reduce || flat) return;
     const world = worldRef.current;
     if (!world) return;
     // Up and down a little less than side to side: the name sits low, near the bottom of the frame.
@@ -195,19 +202,19 @@ export default function SplashIntro({ onShown, name, profileId }: { onShown?: ()
       window.removeEventListener('keydown', onKey, true);
       window.clearTimeout(back);
     };
-  }, [phase === 'done', reduce, plain]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [phase === 'done', reduce, plain, flat]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (phase === 'done') return null;
 
-  const cls = ['hz fixed inset-0 z-[200] overflow-hidden', plain ? 'hz-plain' : '', phase === 'out' ? 'hz-out' : '', reduce ? 'hz-still' : ''].filter(Boolean).join(' ');
+  const cls = ['hz fixed inset-0 z-[200] overflow-hidden', plain ? 'hz-plain' : '', flat ? 'hz-flat' : '', phase === 'out' ? 'hz-out' : '', reduce ? 'hz-still' : ''].filter(Boolean).join(' ');
   return (
     <div ref={rootRef} className={cls} style={{ '--s': `${unit}px` } as CSSProperties} aria-hidden onClick={() => skipRef.current()}>
       <div className="hz-scene">
         <div className="hz-world" ref={worldRef}>
-          <div className="hz-plane" style={plane(-420)}><div className="hz-stars" style={{ boxShadow: stars }} /></div>
-          <div className="hz-plane" style={plane(-260)}><div className="hz-dawn" /></div>
-          <div className="hz-plane" style={plane(-200)}><div className="hz-sunmask"><div className="hz-halo" /><div className="hz-sun" /></div></div>
-          <div className="hz-plane" style={plane(-120)}>
+          <div className="hz-plane" style={at(-420)}><div className="hz-stars" style={{ boxShadow: stars }} /></div>
+          <div className="hz-plane" style={at(-260)}><div className="hz-dawn" /></div>
+          <div className="hz-plane" style={at(-200)}><div className="hz-sunmask"><div className="hz-halo" /><div className="hz-sun" /></div></div>
+          <div className="hz-plane" style={at(-120)}>
             <div className="hz-ground" />
             <div className="hz-spill" />
             <div className="hz-bloom" />
@@ -215,7 +222,7 @@ export default function SplashIntro({ onShown, name, profileId }: { onShown?: ()
             <div className="hz-streak" />
             <div className="hz-spark" />
           </div>
-          <div className="hz-plane" style={plane(140)}>
+          <div className="hz-plane" style={at(140)}>
             <div className="hz-title">
               {/* The sweep of light: a window moving over a still, brighter copy of the name. */}
               <h1 className="hz-word">{WORD}{!plain && <span className="hz-sheenwin"><span className="hz-sheen">{WORD}</span></span>}</h1>
