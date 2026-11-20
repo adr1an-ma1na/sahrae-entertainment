@@ -331,12 +331,53 @@
       setTimeout(function () { if (film() === v) boost(boostLevel); }, 300);
     }, true);
 
+    // ── Step down, never stall (owner, 2026-11-20: "move to the lower quality like Netflix,
+    // without the film stalling") ──
+    // A player held on one picture size (its own default, not the viewer's pick) cannot
+    // step down when the line dips, so it stops and waits. On a real stall it is put on
+    // Auto: it then adapts between the sizes the app left on its menu (HlsCap: never
+    // below 720p, or 1080p on a 4K film) and climbs back as the line recovers.
+    var viewerPicked = false, stallTimer = 0;
+    function toAuto(v) {
+      if (viewerPicked || v.__sahraeAuto) return false;
+      var p = jw();
+      if (p) {
+        var q = list(p.getQualityLevels());
+        if (q.length > 1 && /auto/i.test(String((q[0] && q[0].label) || '')) && p.getCurrentQuality() !== 0) { p.setCurrentQuality(0); return (v.__sahraeAuto = true); }
+        return false;
+      }
+      var h = hlsNow();
+      if (h) {
+        // nextLevel -1 is Auto, from the next segment: no flush of what is already loaded.
+        if (!h.autoLevelEnabled && h.levels && h.levels.length > 1) { h.nextLevel = -1; return (v.__sahraeAuto = true); }
+        return false;
+      }
+      var j = vjs();
+      if (j) {
+        var l = list(j.qualityLevels());
+        if (l.length > 1 && !l.every(function (x) { return x.enabled; })) { l.forEach(function (x) { x.enabled = true; }); return (v.__sahraeAuto = true); }
+      }
+      return false;
+    }
+    document.addEventListener('waiting', function (e) {
+      var v = e.target;
+      // The film, under way, not a seek (a seek waits for its new place, as it should).
+      if (warm || !v || v.tagName !== 'VIDEO' || v.seeking || !(v.currentTime > 3) || film() !== v) return;
+      clearTimeout(stallTimer);
+      stallTimer = setTimeout(function () {
+        if (v.readyState >= 3 || v.paused || v.seeking) return;
+        var done = false;
+        try { done = toAuto(v); } catch (x) {}
+        if (done) setTimeout(report, 400);
+      }, 1200);
+    }, true);
+
     window.addEventListener('message', function (e) {
       var d = e.data;
       if (!d || typeof d !== 'object' || typeof d.sahrae !== 'string') return;
       if (e.source === parent) {
         // The player helper passes everything from above on to the frames below.
-        if (d.sahrae === 'set-quality' && typeof d.id === 'number') { try { setQuality(d.id); } catch (x) {} setTimeout(report, 400); }
+        if (d.sahrae === 'set-quality' && typeof d.id === 'number') { viewerPicked = d.id !== -1; try { setQuality(d.id); } catch (x) {} setTimeout(report, 400); }
         else if (d.sahrae === 'set-audio' && typeof d.id === 'number') { try { setAudio(d.id); } catch (x) {} setTimeout(report, 400); }
         else if (d.sahrae === 'set-subs' && typeof d.id === 'number') { try { setSubs(d.id); } catch (x) {} setTimeout(report, 400); }
         else if (d.sahrae === 'sub-style' && typeof d.size === 'string') subStyle(d.size);

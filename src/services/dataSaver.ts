@@ -22,7 +22,8 @@ import { useEffect, useState } from 'react';
 
 export type Picture = 'saver' | 'hd' | 'best';
 const PICTURE_KEY = 'sahrae.picture.v1';
-/** The floor sent to the Android app for each setting, in pixel rows. */
+/** The floor sent to the Android app for each setting, in pixel rows. Best's 1080 is the
+ *  ladder there (HlsCap.ladderFloor): 1080p only on a menu with 4K, else 720p. */
 const FLOOR: Record<Picture, number> = { saver: 0, hd: 720, best: 1080 };
 
 const KEY = 'sahrae.dataSaver.v1';

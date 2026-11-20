@@ -7,9 +7,13 @@ import java.util.List;
  * Picture quality for films and episodes, by editing the menu of qualities a
  * player is given (an HLS master playlist or a DASH manifest):
  *   Data Saver  drop everything above 480p (cap)
- *   HD / Best   drop everything below 720p / 1080p (floor), so an adaptive
- *               player cannot settle on 360p on a slow start, which is what
- *               made films look soft on mobile data
+ *   HD          drop everything below 720p (floor), so an adaptive player
+ *               cannot settle on 360p on a slow start, which is what made
+ *               films look soft on mobile data
+ *   Best        the ladder (owner, 2026-11-20): the player adapts down a rung
+ *               at a time on a weak line instead of stalling, and no lower than
+ *               1080p on a 4K film, 720p on anything else (ladderFloor). Best
+ *               used to keep 1080p and up only, so a dip in the line stalled.
  * When nothing would be left, the closest rendition stays, so the player always
  * has something to play.
  *
@@ -102,6 +106,31 @@ public final class HlsCap {
             if (i < lines.length - 1) sb.append('\n');
         }
         return sb.toString();
+    }
+
+    /**
+     * Best's floor for this menu, from the tallest picture on it: 1080 when it has
+     * 4K (4K, 1440p, 1080p), otherwise 720 (1440p or 1080p down to 720p). The same
+     * rule as ladderFloor in the web app's cleanStream.ts.
+     */
+    public static int ladderFloor(String text) {
+        long top = 0;
+        if (isMaster(text)) {
+            for (String line : text.split("\n", -1)) {
+                if (line.trim().startsWith("#EXT-X-STREAM-INF")) top = Math.max(top, height(line));
+            }
+        } else if (isDash(text)) {
+            int i = 0;
+            while (true) {
+                int s = text.indexOf("<Representation", i);
+                if (s < 0) break;
+                int e = text.indexOf('>', s);
+                if (e < 0) break;
+                top = Math.max(top, xmlAttrLong(text.substring(s, e), "height"));
+                i = e;
+            }
+        }
+        return top >= 2000 ? 1080 : 720;
     }
 
     /** How good a rendition is: height first, bandwidth to break ties or stand in. */
@@ -323,6 +352,22 @@ public final class HlsCap {
         check(r, "DASH HD: audio untouched", dh.contains("id=\"a1\""));
         String lowDash = mpd.replace("height=\"1080\"", "height=\"360\"").replace("height=\"720\"", "height=\"240\"");
         check(r, "DASH HD on a low-only manifest keeps the tallest", floorDash(lowDash, 720).contains("id=\"v480\"") && !floorDash(lowDash, 720).contains("v720"));
+
+        String uhd = String.join("\n", "#EXTM3U",
+            "#EXT-X-STREAM-INF:BANDWIDTH=16000000,RESOLUTION=3840x2160", "2160.m3u8",
+            "#EXT-X-STREAM-INF:BANDWIDTH=9000000,RESOLUTION=2560x1440", "1440.m3u8",
+            "#EXT-X-STREAM-INF:BANDWIDTH=6000000,RESOLUTION=1920x1080", "1080.m3u8",
+            "#EXT-X-STREAM-INF:BANDWIDTH=3000000,RESOLUTION=1280x720", "720.m3u8",
+            "#EXT-X-STREAM-INF:BANDWIDTH=1200000,RESOLUTION=854x480", "480.m3u8");
+        check(r, "ladder: a 4K menu steps 4K, 1440p, 1080p and no lower", ladderFloor(uhd) == 1080
+            && floor(uhd, ladderFloor(uhd)).contains("1080.m3u8") && !floor(uhd, ladderFloor(uhd)).contains("720.m3u8"));
+        String qhd = uhd.replace("#EXT-X-STREAM-INF:BANDWIDTH=16000000,RESOLUTION=3840x2160\n2160.m3u8\n", "");
+        check(r, "ladder: a 1440p menu steps 1440p, 1080p, 720p and no lower", ladderFloor(qhd) == 720
+            && floor(qhd, 720).contains("720.m3u8") && !floor(qhd, 720).contains("480.m3u8"));
+        check(r, "ladder: a 1080p menu keeps 720p to step down to", ladderFloor(master) == 720);
+        check(r, "ladder: DASH heights are read too", ladderFloor(mpd) == 720
+            && ladderFloor(mpd.replace("height=\"1080\"", "height=\"2160\"")) == 1080);
+        check(r, "ladder: a menu without heights falls back to 720p", ladderFloor(unlabelled) == 720);
 
         System.out.println("\n" + r[0] + " passed, " + r[1] + " failed");
         if (r[1] > 0) System.exit(1);

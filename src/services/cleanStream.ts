@@ -94,30 +94,43 @@ export type PictureSetting = 'saver' | 'hd' | 'best';
  * Indexes refer to the stream's own list. Viewers saw 480p on "1080p" servers
  * because nothing held the quality up.
  */
-export function pictureRule(levels: Rendition[], picture: PictureSetting, tv = false): { start: number; lock: boolean; cap: number; minBitrate: number } {
-  // On a TV, Best opens on the sharpest up to 1080p but is not locked there:
-  // the player may step down for a moment rather than stall. A locked 1080p
-  // through the app's relay on a TV's Wi-Fi stopped and started (2026-11-01).
-  // Not capped there any more (owner, 2026-11-20: start the server that has the film in
-  // 4K): it opens on 1080p, so a film starts as fast as before, and climbs to 4K only
-  // while the line carries it, stepping down rather than stalling when it does not.
-  if (tv && picture === 'best') {
-    const r = pictureRule(levels, 'best');
-    return r.start < 0 ? r : { start: r.start, lock: false, cap: -1, minBitrate: 0 };
+export function pictureRule(levels: Rendition[], picture: PictureSetting, tv = false): { start: number; lock: boolean; cap: number; minBitrate: number; floor: number } {
+  const none = { start: -1, lock: false, cap: -1, minBitrate: 0, floor: 0 };
+  if (!levels.length) return none;
+  if (picture === 'saver') {
+    const start = pickLevel(levels, true);
+    return { start, lock: false, cap: start, minBitrate: 0, floor: 0 };
   }
-  // VidFast offers 2160p at 16 Mb/s: locking onto that stalls a home line that
-  // carries 1080p easily. Best means the sharpest up to 1080p, on phones and TVs
-  // alike (TVs used to climb to 4K and never drop below 1080p, and took ages to
-  // start a film on the same line a phone played well; 2026-10-28).
+  // Best (and HD): never locked. A locked rendition cannot step down, so a dip in
+  // the line stalled the film (owner, 2026-11-20: "move to the lower quality like
+  // Netflix, without stalling"). It adapts down a rung at a time, never below the
+  // ladder's floor (ladderFloor), and climbs back as the line recovers.
+  //
+  // It opens on the sharpest up to 1080p, so a film starts fast; VidFast's 2160p is
+  // 16 Mb/s, and opening on it took ages on lines that carry 1080p easily
+  // (2026-10-28). A TV then climbs to the top the stream has while the line carries
+  // it. A phone stays at 1080p at most (its screen cannot show more, and 4K costs
+  // four times the data).
   const upTo1080 = levels.map((l, i) => ({ l, i })).filter((x) => !x.l.height || x.l.height <= 1080);
-  if (picture === 'best' && levels.some((l) => l.height > 1080) && upTo1080.length) {
-    const sub = pickLevel(upTo1080.map((x) => x.l), false);
-    return { start: upTo1080[sub].i, lock: true, cap: -1, minBitrate: 0 };
-  }
-  const start = pickLevel(levels, picture === 'saver');
-  if (start < 0) return { start: -1, lock: false, cap: -1, minBitrate: 0 };
-  if (picture === 'saver') return { start, lock: false, cap: start, minBitrate: 0 };
-  if (picture === 'best') return { start, lock: true, cap: -1, minBitrate: 0 };
-  const hd = levels.filter((l) => l.height >= 720).map((l) => l.bitrate || 0).filter((b) => b > 0);
-  return { start, lock: false, cap: -1, minBitrate: hd.length ? Math.min(...hd) : 0 };
+  const start = upTo1080.length && levels.some((l) => l.height > 1080)
+    ? upTo1080[pickLevel(upTo1080.map((x) => x.l), false)].i
+    : pickLevel(levels, false);
+  const capped = !tv && levels.some((l) => l.height > 1080) && upTo1080.length > 0;
+  const top = capped ? levels[start].height : Math.max(...levels.map((l) => l.height || 0));
+  const floor = picture === 'hd' ? Math.min(720, top) : ladderFloor(top);
+  const above = levels.filter((l) => l.height >= floor && (!capped || l.height <= 1080)).map((l) => l.bitrate || 0).filter((b) => b > 0);
+  return { start, lock: false, cap: capped ? start : -1, minBitrate: floor > 0 && above.length ? Math.min(...above) : 0, floor };
+}
+
+/**
+ * The lowest picture a film may step down to on a weak line, from the sharpest the
+ * stream has (owner, 2026-11-20): a 4K film goes 4K, then 1440p, and no lower than
+ * 1080p; anything else (1440p, 1080p) no lower than 720p. A stream whose best is
+ * under 720p keeps its best. Heights in pixel rows; 0 means nothing is known.
+ * Mirrored in HlsCap.ladderFloor (the Android app, for the servers' own players).
+ */
+export function ladderFloor(top: number): number {
+  if (!(top > 0)) return 0;
+  if (top >= 2000) return 1080;
+  return Math.min(720, top);
 }

@@ -19,7 +19,7 @@ import { qualityList, audioList, subsList, type PlayerChoices } from '../service
  */
 export interface CleanPlayerProps {
   src: string;
-  /** The Picture setting: Best locks the sharpest, HD keeps 720p or better, Data Saver caps at 480p. */
+  /** The Picture setting: Best adapts down a rung at a time to its floor (cleanStream.ladderFloor), HD keeps 720p or better, Data Saver caps at 480p. */
   picture: PictureSetting;
   startAt?: number;
   onPlaying: () => void;
@@ -59,6 +59,12 @@ export default function CleanPlayer({ src, picture, startAt = 0, onPlaying, onPr
   const [levels, setLevels] = useState<{ id: number; label: string; height: number }[]>([]);
   const [pinned, setPinned] = useState(-1);
   const capRef = useRef(-1);
+  // A word when the picture steps down for a weak line, and when it is back up,
+  // so a softer picture reads as the player keeping the film going, not a fault.
+  const [note, setNote] = useState<string | null>(null);
+  const shownRef = useRef(0);
+  const noteTimer = useRef(0);
+  useEffect(() => () => window.clearTimeout(noteTimer.current), []);
   // Volume boost: the film through a gain and a limiter (so loud scenes do not crack), set up
   // the first time it is asked for. The stream plays from memory (hls.js), so Web Audio may
   // shape it; nothing is routed until the sound engine runs, or the film would go silent.
@@ -110,24 +116,31 @@ export default function CleanPlayer({ src, picture, startAt = 0, onPlaying, onPr
       maxBufferLength: 60,
       maxMaxBufferLength: 120,
       backBufferLength: 30,
-      // Open on the sharpest rendition and stay there while the line allows,
-      // instead of climbing up from the bottom.
+      // Open sharp (the rule's start), never locked: on a weak line hls.js steps
+      // down a rung at the next segment, abandoning a segment that would arrive
+      // too late, so the film keeps playing instead of stalling, and the floor
+      // (minAutoBitrate) stops it going below 720p, or 1080p on a 4K film.
       startLevel: -1,
       capLevelToPlayerSize: false,
       abrEwmaDefaultEstimate: 8_000_000,
-      abrBandWidthUpFactor: 0.9,
+      // Down early, up carefully: a rendition must fit in 80% of the line to be
+      // kept and in 70% to climb to, so the player does not bounce between sizes.
+      abrBandWidthFactor: 0.8,
+      abrBandWidthUpFactor: 0.7,
+      abrEwmaFastVoD: 2,
+      abrEwmaSlowVoD: 6,
       fragLoadingMaxRetry: 6,
       manifestLoadingMaxRetry: 3,
     });
     hlsRef.current = hls;
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
-      const rule = pictureRule(hls.levels.map((l) => ({ height: l.height, bitrate: l.bitrate })), picture, isTvBuild());
+      // hls.js holds its floor against each rendition's maxBitrate (BANDWIDTH).
+      const rule = pictureRule(hls.levels.map((l) => ({ height: l.height, bitrate: l.maxBitrate || l.bitrate })), picture, isTvBuild());
       capRef.current = rule.cap;
       setLevels([{ id: -1, label: 'Auto', height: 0 }, ...hls.levels.map((l, i) => ({ id: i, label: l.name || '', height: l.height }))]);
-      setPinned(rule.start >= 0 && rule.lock ? rule.start : -1);
+      setPinned(-1);
       if (rule.start >= 0) {
         hls.startLevel = rule.start;
-        if (rule.lock) hls.currentLevel = rule.start;
         if (rule.cap >= 0) hls.autoLevelCapping = rule.cap;
         if (rule.minBitrate > 0) hls.config.minAutoBitrate = rule.minBitrate;
       }
@@ -165,7 +178,17 @@ export default function CleanPlayer({ src, picture, startAt = 0, onPlaying, onPr
       if (now - ticked > 450) { ticked = now; cb.current.onClock?.(v.currentTime, v.duration || 0); }
       if (now - last > 4000) { last = now; cb.current.onProgress(v.currentTime, v.duration || 0); }
     };
-    const onRes = () => setHeight(v.videoHeight);
+    const onRes = () => {
+      const h = v.videoHeight;
+      setHeight(h);
+      // Only once the film is under way: the first picture is not a change.
+      const was = shownRef.current;
+      shownRef.current = h;
+      if (!was || !h || v.currentTime < 3 || Math.abs(was - h) < 100) return;
+      setNote(h < was ? `Slower connection · ${heightLabel(h)} for now` : `Sharper again · ${heightLabel(h)}`);
+      window.clearTimeout(noteTimer.current);
+      noteTimer.current = window.setTimeout(() => setNote(null), 3500);
+    };
     const onWait = () => setWaiting(true);
     const onPlay = () => setWaiting(false);
     const onEnd = () => cb.current.onEnded();
@@ -236,6 +259,9 @@ export default function CleanPlayer({ src, picture, startAt = 0, onPlaying, onPr
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <Loader2 className="w-10 h-10 animate-spin text-amber-500" />
         </div>
+      )}
+      {note && (
+        <div role="status" className="pointer-events-none absolute top-2 left-1/2 -translate-x-1/2 text-xs font-semibold px-3 py-1 rounded-full bg-black/65 text-white border border-white/15 shadow-lg">{note}</div>
       )}
       <div className="absolute top-2 right-2 flex items-center gap-1.5">
         {height > 0 && (

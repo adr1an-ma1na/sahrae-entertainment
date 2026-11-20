@@ -1451,6 +1451,8 @@ public class MainActivity extends BridgeActivity {
      * Picture floor in pixel rows (/__quality): 720 by default (HD), 1080 for
      * Best, 0 for none. Adaptive players otherwise start low on mobile data and
      * often stay there, which is why films looked soft. Data Saver wins over it.
+     * Best is the ladder (HlsCap.ladderFloor): 1080p is the floor only on a menu
+     * with 4K; otherwise 720p, so the player can step down instead of stalling.
      */
     private static volatile int sQualityFloor = 720;
     /** The current player's menu of qualities has been handled; its later playlists load untouched. */
@@ -1523,7 +1525,7 @@ public class MainActivity extends BridgeActivity {
             byte[] body = readAll(conn.getInputStream());
             String text = new String(body, StandardCharsets.UTF_8);
             boolean saver = sDataSaver;
-            int floor = sQualityFloor;
+            int floor = sQualityFloor == 1080 ? HlsCap.ladderFloor(text) : sQualityFloor;
             if (HlsCap.isDash(text)) {
                 sMenuHandled = true;
                 String out = saver ? HlsCap.capDash(text, DATA_SAVER_MAX_HEIGHT) : floor > 0 ? HlsCap.floorDash(text, floor) : text;
