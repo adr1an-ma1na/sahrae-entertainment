@@ -40,9 +40,13 @@ export interface CleanPlayerProps {
    */
   onFullscreen?: () => void;
   isFull?: boolean;
+  /** Volume boost, 1 (normal) to 3 (owner, 2026-11-20: "volume boost like CinemaOS"). */
+  boost?: number;
+  /** Whether the boost could be applied (the sound engine may refuse until a tap). */
+  onBoost?: (ok: boolean) => void;
 }
 
-export default function CleanPlayer({ src, picture, startAt = 0, onPlaying, onProgress, onEnded, onFail, onChoices, onClock, seekRef, onFullscreen, isFull }: CleanPlayerProps) {
+export default function CleanPlayer({ src, picture, startAt = 0, onPlaying, onProgress, onEnded, onFail, onChoices, onClock, seekRef, onFullscreen, isFull, boost = 1, onBoost }: CleanPlayerProps) {
   const Hls = useHls();
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<HlsT | null>(null);
@@ -55,6 +59,36 @@ export default function CleanPlayer({ src, picture, startAt = 0, onPlaying, onPr
   const [levels, setLevels] = useState<{ id: number; label: string; height: number }[]>([]);
   const [pinned, setPinned] = useState(-1);
   const capRef = useRef(-1);
+  // Volume boost: the film through a gain and a limiter (so loud scenes do not crack), set up
+  // the first time it is asked for. The stream plays from memory (hls.js), so Web Audio may
+  // shape it; nothing is routed until the sound engine runs, or the film would go silent.
+  const boostRef = useRef<{ ctx: AudioContext; gain: GainNode } | null>(null);
+  const onBoostRef = useRef(onBoost);
+  onBoostRef.current = onBoost;
+  useEffect(() => {
+    const v = videoRef.current;
+    const g = Math.max(1, Math.min(3, boost || 1));
+    const b = boostRef.current;
+    if (b) { try { b.gain.gain.setTargetAtTime(g, b.ctx.currentTime, 0.05); } catch { /* closed */ } onBoostRef.current?.(true); return; }
+    if (!v || g <= 1) return;
+    const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AC) { onBoostRef.current?.(false); return; }
+    let ctx: AudioContext;
+    try { ctx = new AC(); } catch { onBoostRef.current?.(false); return; }
+    const route = () => {
+      if (ctx.state !== 'running' || boostRef.current) { if (!boostRef.current) onBoostRef.current?.(false); return; }
+      try {
+        const source = ctx.createMediaElementSource(v), gain = ctx.createGain(), lim = ctx.createDynamicsCompressor();
+        lim.threshold.value = -3; lim.knee.value = 2; lim.ratio.value = 20; lim.attack.value = 0.003; lim.release.value = 0.15;
+        gain.gain.value = g;
+        source.connect(gain); gain.connect(lim); lim.connect(ctx.destination);
+        boostRef.current = { ctx, gain };
+        onBoostRef.current?.(true);
+      } catch { onBoostRef.current?.(false); }
+    };
+    if (ctx.state === 'running') route(); else ctx.resume().then(route, () => onBoostRef.current?.(false));
+  }, [boost]);
+  useEffect(() => () => { try { void boostRef.current?.ctx.close(); } catch { /* gone */ } }, []);
   const cb = useRef({ onPlaying, onProgress, onEnded, onFail, onClock });
   cb.current = { onPlaying, onProgress, onEnded, onFail, onClock };
   useEffect(() => {

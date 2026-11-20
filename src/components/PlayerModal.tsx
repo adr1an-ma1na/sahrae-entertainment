@@ -34,6 +34,10 @@ import { t } from '../i18n';
 import { reportRoomNow } from '../services/room';
 import { useServerPool, fill as fillTemplate, label as poolLabel, type PoolServer, leadCount } from '../services/serverPool';
 import { useDataSaver, usePicture, announcePlayerSource, canCapVideo, estimateText } from '../services/dataSaver';
+import { isUhdLabel, crowdUhd, localUhd, keepUhd, uhdKeys, uhdMarker, seriesKey } from '../services/uhd';
+import { isBigScreen } from '../services/deviceTier';
+import { SUB_PARAM_SERVERS } from '../services/trackPrefs';
+import { readFrameOptions, languageLabel } from '../services/playerChoices';
 import { NO_CROWD, crowdChoice, fetchProof, fetchSeasonPlayable, nextServerRanked, reportPlay, titleKey, warmUp, type CrowdChoice, type ProofRow } from '../services/playProof';
 
 /** How soon the crowd's answer must arrive to change the opening server; later it would interrupt a loading player. */
@@ -172,6 +176,18 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const crowdRef = useRef<{ choice: CrowdChoice; rows: ProofRow[] }>({ choice: NO_CROWD, rows: [] });
   const [seasonPlayable, setSeasonPlayable] = useState<Set<number>>(() => new Set());
   const [dataSaver, setDataSaverOn] = useDataSaver();
+  const dataSaverRef = useRef(dataSaver);
+  dataSaverRef.current = dataSaver;
+  // Volume boost (owner, 2026-11-20: "like the CinemaOS server"): 1 = normal, up to 3.
+  // Kept between films; applied through Sahrae's player or, in the apps, inside any server's.
+  const [boost, setBoostState] = useState<number>(() => { try { const n = Number(localStorage.getItem('sahrae.player.boost.v1')); return n >= 1 && n <= 3 ? n : 1; } catch { return 1; } });
+  const [boostOk, setBoostOk] = useState<boolean | null>(null);
+  const [showBoost, setShowBoost] = useState(false);
+  const setBoost = (g: number) => { setBoostState(g); try { localStorage.setItem('sahrae.player.boost.v1', String(g)); } catch { /* this film only */ } };
+  // Subtitles on the website, where a server's own player cannot be reached (webSubs below).
+  const [showWebSubs, setShowWebSubs] = useState(false);
+  // The server this title (or series) is known to have in 4K (services/uhd.ts).
+  const [uhdHere, setUhdHere] = useState<string | null>(null);
   // Films play at Best (the owner removed the choice, 2026-10-26); Data Saver still caps them.
   const [picture] = usePicture();
   // Data this viewing has used, measured by the Android app; null where it cannot be.
@@ -582,6 +598,8 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     name: poolLabel(p),
     getUrl: (type: string, id: number, s: number, e: number) => fillTemplate(type === 'movie' ? p.movie : p.tv, id, s, e, brand),
     type: 'iframe',
+    // Measured serving 4K (servers.json visual.maxHeight): the one a 4K check opens.
+    uhd: (p.visual?.maxHeight || 0) >= 2160,
   }));
 
   useEffect(() => { failedServersRef.current = failedServers; }, [failedServers]);
@@ -785,7 +803,10 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
       const back = resumePoint(currentMediaId ? getProgress(currentMediaId) : undefined, initialSeason || 1, initialEpisode || 1);
       const savedIdx = back.server ? ids.indexOf(back.server) : -1;
       resumeServerRef.current = savedIdx >= 0;
-      setSelectedServer(savedIdx >= 0 ? savedIdx : startServer(ids));
+      // Known here to have this title in 4K: start there (owner, 2026-11-20), unless on Data Saver.
+      const uhdKnown = currentMediaId && currentMediaType && savedIdx < 0 && !dataSaverRef.current
+        ? localUhd(uhdKeys(currentMediaType as 'movie' | 'tv', currentMediaId, titleKey(currentMediaType, currentMediaId, initialSeason || 1, initialEpisode || 1)), ids) : null;
+      setSelectedServer(savedIdx >= 0 ? savedIdx : uhdKnown ? ids.indexOf(uhdKnown) : startServer(ids));
       setResumeAt({ s: initialSeason || 1, e: initialEpisode || 1, at: back.at });
       lastPosRef.current = null;
       setSelectedSeason(initialSeason || 1);
@@ -837,15 +858,21 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     manualPickRef.current = false;
     crowdRef.current = { choice: NO_CROWD, rows: [] };
     setCrowd(NO_CROWD);
-    fetchProof(key).then((rows) => {
+    setUhdHere(null);
+    Promise.all([fetchProof(key), currentMediaType === 'tv' ? fetchProof(seriesKey(currentMediaId)) : Promise.resolve([] as ProofRow[])]).then(([rows, seriesRows]) => {
       if (!live) return;
       const ids = SERVERS.map((sv) => sv.id);
       const choice = crowdChoice(ids, rows);
       crowdRef.current = { choice, rows };
       setCrowd(choice);
+      // 4K: what this device saw, else what other viewers' players reported (marker rows).
+      const uhd = localUhd(uhdKeys(currentMediaType as 'movie' | 'tv', currentMediaId, key), ids) || crowdUhd([...rows, ...seriesRows], ids)[0] || null;
+      setUhdHere(uhd);
       // The viewer's own server for this title (where they left it) is kept too.
       if (manualPickRef.current || resumeServerRef.current || heardRef.current || Date.now() - startedAt > CROWD_FOLLOW_MS) return;
       setSelectedServer((cur) => {
+        // The server that has it in 4K starts it (owner, 2026-11-20), unless it failed here or on Data Saver.
+        if (uhd && !dataSaverRef.current && !failedServersRef.current.includes(uhd)) return ids.indexOf(uhd);
         if (choice.best !== null && !failedServersRef.current.includes(ids[choice.best])) return choice.best;
         if (choice.bad.has(ids[cur])) return nextServerRanked(ids, cur, new Set(failedServersRef.current), choice, rows, provenHere(ids)) ?? cur;
         return cur;
@@ -1166,6 +1193,85 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
 
   const usingClean = clean.state === 'ready' && !!clean.url;
   const liveChoices = usingClean ? cleanChoices : frameChoices;
+
+  // A server's player listed a 4K size for this title: kept here and told to everyone,
+  // so the next viewer starts on it (services/uhd.ts).
+  const uhdSeen = !!liveChoices?.quality.some((q) => isUhdLabel(q.label));
+  useEffect(() => {
+    if (!uhdSeen || !currentMediaType || !currentMediaId) return;
+    const id = SERVERS[selectedServer]?.id;
+    if (!id) return;
+    const keys = uhdKeys(currentMediaType as 'movie' | 'tv', currentMediaId, titleKey(currentMediaType, currentMediaId, selectedSeason, selectedEpisode));
+    if (keepUhd(keys, id)) keys.forEach((k) => reportPlay(k, uhdMarker(id), true));
+    setUhdHere(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uhdSeen, selectedServer, currentMediaId, selectedSeason, selectedEpisode]);
+
+  // The 4K check (apps, on a TV or big screen, not on Data Saver): when the server playing has no
+  // 4K and none is known, a server measured serving 4K is opened out of sight (a silent, held
+  // 'sahrae-warm' frame) just long enough for its player to list its sizes; then it is closed.
+  // Once per title per visit. What it finds starts the next viewing, here and for everyone.
+  const uhdProbedRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (!isOpen || !isPlaying || playingTrailer || !videoLoaded || dataSaver || uhdHere || uhdSeen) return;
+    if (!canFrameKick() || !isBigScreen() || !currentMediaType || !currentMediaId) return;
+    const key = titleKey(currentMediaType, currentMediaId, selectedSeason, selectedEpisode);
+    const cand = SERVERS.find((sv) => sv.uhd && sv.id !== SERVERS[selectedServer]?.id && !uhdProbedRef.current.has(key + '|' + sv.id) && !failedServersRef.current.includes(sv.id));
+    if (!cand) return;
+    let frame: HTMLIFrameElement | null = null, done = false;
+    const finish = () => { if (done) return; done = true; window.removeEventListener('message', onMsg); try { frame?.remove(); } catch { /* gone */ } };
+    const onMsg = (e: MessageEvent) => {
+      if (!frame || e.source !== frame.contentWindow) return;
+      const d = e.data as { sahrae?: string; o?: unknown } | null;
+      if (!d || d.sahrae !== 'frame-options') return;
+      const lists = readFrameOptions(d.o);
+      if (!lists || !lists.quality.length) return;
+      if (lists.quality.some((q) => isUhdLabel(q.label))) {
+        const keys = uhdKeys(currentMediaType as 'movie' | 'tv', currentMediaId, key);
+        if (keepUhd(keys, cand.id)) keys.forEach((k) => reportPlay(k, uhdMarker(cand.id), true));
+        setUhdHere(cand.id);
+      }
+      finish();
+    };
+    // Twenty seconds into the film, so the check never competes with its start.
+    const begin = window.setTimeout(() => {
+      uhdProbedRef.current.add(key + '|' + cand.id);
+      frame = document.createElement('iframe');
+      frame.name = 'sahrae-warm';
+      frame.setAttribute('aria-hidden', 'true');
+      frame.allow = 'autoplay; encrypted-media';
+      const url = cand.getUrl(currentMediaType, currentMediaId, selectedSeason, selectedEpisode);
+      frame.referrerPolicy = playerReferrer(url);
+      frame.style.cssText = 'position:fixed;left:-4px;top:-4px;width:2px;height:2px;opacity:0;pointer-events:none;border:0';
+      window.addEventListener('message', onMsg);
+      frame.src = url;
+      document.body.appendChild(frame);
+      window.setTimeout(finish, 25_000);
+    }, 20_000);
+    return () => { window.clearTimeout(begin); finish(); };
+    // SERVERS is fixed while a title is open (poolSnap).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, isPlaying, playingTrailer, videoLoaded, dataSaver, uhdHere, uhdSeen, selectedServer, currentMediaId, selectedSeason, selectedEpisode]);
+
+  // Volume boost into a server's own player (apps): sent once its player has reported,
+  // and whenever it changes; its answer says whether it could be applied.
+  const frameStreamKey = frameChoices ? `${selectedServer}|${refreshKey}|${selectedSeason}|${selectedEpisode}` : '';
+  useEffect(() => {
+    if (usingClean || !canFrameKick() || !frameStreamKey) return;
+    if (boost <= 1 && boostOk === null) return;
+    try { iframeRef.current?.contentWindow?.postMessage({ sahrae: 'boost', g: boost }, '*'); } catch { /* frame gone */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boost, frameStreamKey, usingClean]);
+  useEffect(() => {
+    const onMsg = (e: MessageEvent) => {
+      const d = e.data as { sahrae?: string; ok?: boolean } | null;
+      if (!d || d.sahrae !== 'boost-state' || e.source !== iframeRef.current?.contentWindow) return;
+      setBoostOk(!!d.ok);
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+  useEffect(() => { setBoostOk(null); }, [selectedServer, usingClean]);
   // The subtitle and audio language picked before, set on each new stream once it says what it has.
   const streamKey = `${currentMediaId}-${selectedServer}-${selectedSeason}-${selectedEpisode}-${refreshKey}-${usingClean ? 'clean' : 'frame'}`;
   const appliedRef = useRef('');
@@ -1216,6 +1322,25 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   // (±10 s, subtitles, quality), through Sahrae's player or the frame helper.
   // The website cannot reach into another site's player; there its own bar is in reach.
   const appControls = !isTelevision() && !playingTrailer && (usingClean || canFrameKick()) && !removedNow;
+  // Subtitles and the volume boost: wherever Sahrae can reach the player, the TV too
+  // (owner, 2026-11-20: "ensure the captions button is there when watching").
+  const trackReach = !playingTrailer && (usingClean || canFrameKick()) && !removedNow;
+  // The website, a server's own player: Sahrae cannot reach into it. A server that takes a
+  // subtitle language in its address (VidFast) is reopened with it; on the others the
+  // player's own CC button is the way, and Sahrae says where it is.
+  const webSubs = !playingTrailer && !trackReach && !removedNow && isPlaying;
+  const subParam = !!SUB_PARAM_SERVERS[SERVERS[selectedServer]?.id || ''];
+  const subParamServer = SERVERS.findIndex((sv) => !!SUB_PARAM_SERVERS[sv.id]);
+  const WEB_SUB_LANGS = ['en', 'fr', 'es', 'pt', 'ar', 'sw', 'de', 'it', 'hi', 'ja', 'ko', 'zh'];
+  const webSubNow = subsWanted(readTrackPrefs(), details.original_language, null);
+  const pickWebSubs = (code: string | null) => {
+    saveTrackPrefs({ subs: code ? languageLabel(code).toLowerCase() : null, subsChosen: true });
+    setShowWebSubs(false);
+    // Reopened with the language, at the minute it had reached where the server takes a start time.
+    const at = lastPosRef.current?.position || 0;
+    if (at > 5 && START_AT_SERVERS.includes(SERVERS[selectedServer]?.id || '')) setJumpAt(Math.floor(at));
+    setRefreshKey((k) => k + 1);
+  };
   const nudge = (by: number) => {
     const at = lastPosRef.current;
     if (!at || !(at.position > 0)) return;
@@ -1292,6 +1417,8 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                         onEnded={() => window.dispatchEvent(new Event(CLEAN_ENDED))}
                         onFail={(why) => { console.info('[sahrae-player]', JSON.stringify({ server: cleanServer?.id, playFailed: why })); setClean({ state: 'failed', why }); }}
                         onChoices={setCleanChoices}
+                        boost={boost}
+                        onBoost={setBoostOk}
                       />
                     ) : clean.state === 'resolving' ? null : (
                     // On a TV, OK presses the server's own play button (services/nativeTap.ts).
@@ -1535,7 +1662,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                           const isDown = failedServers.includes(server.id);
                           return (
                             <option key={server.id} value={idx} className="bg-zinc-900 text-white">
-                              {`${(server.name || `Server ${idx + 1}`).split(' · ')[0]}${isDown ? ' (down)' : playsHere.has(server.id) ? ' · plays here' : crowd.good.has(server.id) ? ' · works for others' : ''}`}
+                              {`${(server.name || `Server ${idx + 1}`).split(' · ')[0]}${uhdHere === server.id ? ' · 4K' : ''}${isDown ? ' (down)' : playsHere.has(server.id) ? ' · plays here' : crowd.good.has(server.id) ? ' · works for others' : ''}`}
                             </option>
                           );
                         })}
@@ -1557,8 +1684,8 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       </>
                     )}
                     <div className="flex-1" />
-                    {appControls && !hasLanguages(choices) && (
-                      <button onClick={() => { setShowLangs((v) => !v); setShowChoices(false); }} aria-expanded={showLangs} title="Audio & Subtitles" aria-label="Audio and subtitles"
+                    {trackReach && !hasLanguages(choices) && (
+                      <button onClick={() => { setShowLangs((v) => !v); setShowChoices(false); setShowBoost(false); }} aria-expanded={showLangs} title="Audio & Subtitles" aria-label="Audio and subtitles" data-tv-focusable
                         className="h-10 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-sm font-semibold flex items-center gap-1.5 transition-colors active:scale-95">
                         <Subtitles className="w-4 h-4" /> <span className="hidden sm:inline">Audio &amp; Subtitles</span>
                       </button>
@@ -1569,8 +1696,8 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                         <Gauge className="w-4 h-4" /> Quality
                       </button>
                     )}
-                    {hasLanguages(choices) && !isTelevision() && (
-                      <button onClick={() => { setShowLangs((v) => !v); setShowChoices(false); }} aria-expanded={showLangs} title="Audio & Subtitles" aria-label="Audio and subtitles"
+                    {hasLanguages(choices) && (
+                      <button onClick={() => { setShowLangs((v) => !v); setShowChoices(false); setShowBoost(false); }} aria-expanded={showLangs} title="Audio & Subtitles" aria-label="Audio and subtitles" data-tv-focusable
                         className={`h-10 px-3 shrink-0 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-colors active:scale-95 ${choices.subsOn >= 0 ? 'bg-white text-black' : 'bg-white/10 hover:bg-white/20 text-white'}`}>
                         <Subtitles className="w-4 h-4" /> <span className="hidden sm:inline">Audio &amp; Subtitles</span>
                       </button>
@@ -1579,6 +1706,18 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                       <button onClick={() => { setShowChoices((v) => !v); setShowLangs(false); }} aria-expanded={showChoices} title="Quality" aria-label="Quality"
                         className="h-10 px-3 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white text-sm font-semibold flex items-center gap-1.5 transition-colors active:scale-95">
                         <Gauge className="w-4 h-4" /> {choices.quality.find((q) => q.id === choices.qualityOn)?.label || 'Quality'}
+                      </button>
+                    )}
+                    {webSubs && (
+                      <button onClick={() => { setShowWebSubs((v) => !v); setShowBoost(false); }} aria-expanded={showWebSubs} title="Subtitles" aria-label="Subtitles" data-tv-focusable
+                        className={`h-10 px-3 shrink-0 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-colors active:scale-95 ${subParam && webSubNow ? 'bg-white text-black' : 'bg-white/10 hover:bg-white/20 text-white'}`}>
+                        <Subtitles className="w-4 h-4" /> <span className="hidden sm:inline">Subtitles</span>
+                      </button>
+                    )}
+                    {trackReach && (
+                      <button onClick={() => { setShowBoost((v) => !v); setShowLangs(false); setShowChoices(false); setShowWebSubs(false); }} aria-expanded={showBoost} title="Volume boost" aria-label="Volume boost" data-tv-focusable
+                        className={`h-10 px-3 shrink-0 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-colors active:scale-95 ${boost > 1 && boostOk !== false ? 'bg-amber-500 text-amber-950' : 'bg-white/10 hover:bg-white/20 text-white'}`}>
+                        <Volume2 className="w-4 h-4" /> {boost > 1 ? `${Math.round(boost * 100)}%` : <span className="hidden sm:inline">Boost</span>}
                       </button>
                     )}
                     {pointerOffered && !(clean.state === 'ready' && clean.url) && (
@@ -1595,6 +1734,53 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                 )}
                 {pointerOn && <TvPointer area={serverFrameRef.current} onExit={() => setPointerOn(false)} />}
                 <button onClick={() => { if (playingTrailer) { setPlayingTrailer(null); return; } onClose(); }} data-tv-focusable data-tv-close title="Close" aria-label="Close" className="w-10 h-10 shrink-0 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"><X className="w-4 h-4" /></button>
+                {!playingTrailer && trackReach && showBoost && (
+                  <div role="dialog" aria-label="Volume boost"
+                    className={`absolute ${fsActive ? 'top-full mt-1' : 'bottom-full mb-2'} right-2 z-50 w-64 bg-zinc-950/95 rounded-xl border border-white/15 shadow-2xl p-2 animate-in fade-in duration-150`}>
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 px-2 pt-1 pb-2 flex items-center gap-1.5"><Volume2 className="w-3.5 h-3.5" /> Volume boost</p>
+                    {[1, 1.5, 2, 3].map((g) => (
+                      <button key={g} onClick={() => { setBoost(g); setShowBoost(false); }} data-tv-focusable
+                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-semibold flex items-center justify-between transition-colors ${boost === g ? 'bg-amber-500 text-amber-950' : 'text-white hover:bg-white/10'}`}>
+                        {g === 1 ? 'Normal' : `${g * 100}%`} {boost === g && <Check className="w-4 h-4" />}
+                      </button>
+                    ))}
+                    <p className="text-[11px] text-zinc-500 px-2 pt-2 leading-snug">{boostOk === false
+                      ? 'This server\'s sound cannot be boosted. Another server may allow it.'
+                      : 'Louder than the film alone, with a limiter so loud scenes do not crack. Kept for the next film.'}</p>
+                  </div>
+                )}
+                {!playingTrailer && webSubs && showWebSubs && (
+                  <div role="dialog" aria-label="Subtitles"
+                    className={`absolute ${fsActive ? 'top-full mt-1' : 'bottom-full mb-2'} right-2 z-50 w-[min(22rem,calc(100vw-1rem))] max-h-[70vh] overflow-y-auto bg-zinc-950/95 rounded-xl border border-white/15 shadow-2xl p-4 animate-in fade-in duration-150`}>
+                    <p className="text-base font-bold text-white mb-2">Subtitles</p>
+                    {subParam ? (
+                      <>
+                        {[null, ...WEB_SUB_LANGS].map((code) => {
+                          const key = code ? languageLabel(code).toLowerCase() : null;
+                          const on = (webSubNow || null) === key;
+                          return (
+                            <button key={code || 'off'} onClick={() => pickWebSubs(code)} data-tv-focusable
+                              className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors ${on ? 'text-white font-bold' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}>
+                              <Check className={`w-4 h-4 shrink-0 ${on ? '' : 'invisible'}`} /> {code ? languageLabel(code) : 'Off'}
+                            </button>
+                          );
+                        })}
+                        <p className="text-[11px] text-zinc-500 mt-3 leading-snug">The server reopens with your choice, at the minute you had reached.</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm text-zinc-300 leading-snug">On this server the subtitles are in its own player: tap the <b>CC</b> button on the picture (bottom right, beside its settings).</p>
+                        {subParamServer >= 0 && (
+                          <button onClick={() => { setShowWebSubs(false); pickServer(subParamServer); }} data-tv-focusable
+                            className="mt-3 h-9 px-4 rounded-full bg-white text-black text-sm font-bold active:scale-95">
+                            Switch to {(SERVERS[subParamServer]?.name || 'VidFast').split(' · ')[0]}: it opens with your language
+                          </button>
+                        )}
+                        <p className="text-[11px] text-zinc-500 mt-3 leading-snug">In the Sahrae apps the subtitles of every server are chosen here.</p>
+                      </>
+                    )}
+                  </div>
+                )}
                 {!playingTrailer && showLangs && hasLanguages(choices) && (
                   <div role="dialog" aria-label="Audio and subtitles"
                     className={`absolute ${fsActive ? 'top-full mt-1' : 'bottom-full mb-2'} right-2 z-50 w-[min(34rem,calc(100vw-1rem))] max-h-[70vh] overflow-y-auto bg-zinc-950/95 backdrop-blur rounded-xl border border-white/15 shadow-2xl p-4 animate-in fade-in duration-150`}>
@@ -1638,7 +1824,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                     <p className="text-[11px] text-zinc-500 mt-4 leading-snug">What each server offers differs. Your choice carries on to the next episode.</p>
                   </div>
                 )}
-                {!playingTrailer && appControls && ((showLangs && !hasLanguages(choices)) || (showChoices && !(choices && choices.quality.length > 1))) && (
+                {!playingTrailer && ((trackReach && showLangs && !hasLanguages(choices)) || (appControls && showChoices && !(choices && choices.quality.length > 1))) && (
                   <div role="dialog" aria-label={showLangs ? 'Audio and subtitles' : 'Quality'}
                     className={`absolute ${fsActive ? 'top-full mt-1' : 'bottom-full mb-2'} right-2 z-50 w-[min(22rem,calc(100vw-1rem))] bg-zinc-950/95 rounded-xl border border-white/15 shadow-2xl p-4`}>
                     <p className="text-sm font-bold text-white mb-1">{showLangs ? 'No subtitles offered' : 'No other sizes offered'}</p>

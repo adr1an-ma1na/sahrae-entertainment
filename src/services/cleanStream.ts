@@ -98,9 +98,12 @@ export function pictureRule(levels: Rendition[], picture: PictureSetting, tv = f
   // On a TV, Best opens on the sharpest up to 1080p but is not locked there:
   // the player may step down for a moment rather than stall. A locked 1080p
   // through the app's relay on a TV's Wi-Fi stopped and started (2026-11-01).
+  // Not capped there any more (owner, 2026-11-20: start the server that has the film in
+  // 4K): it opens on 1080p, so a film starts as fast as before, and climbs to 4K only
+  // while the line carries it, stepping down rather than stalling when it does not.
   if (tv && picture === 'best') {
     const r = pictureRule(levels, 'best');
-    return r.start < 0 ? r : { start: r.start, lock: false, cap: r.start, minBitrate: 0 };
+    return r.start < 0 ? r : { start: r.start, lock: false, cap: -1, minBitrate: 0 };
   }
   // VidFast offers 2160p at 16 Mb/s: locking onto that stalls a home line that
   // carries 1080p easily. Best means the sharpest up to 1080p, on phones and TVs

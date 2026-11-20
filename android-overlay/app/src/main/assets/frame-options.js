@@ -276,6 +276,61 @@
     }
     if (!warm && parent !== window.top) up({ sahrae: 'warm?' });
 
+    // ── Volume boost (owner, 2026-11-20: "volume boost just like the CinemaOS server") ──
+    // down {sahrae:'boost', g} (1 = normal, up to 3), up {sahrae:'boost-state', ok, g, why}.
+    // The film's sound goes through a gain and a limiter, so loud scenes do not
+    // crack. Only where it is safe: a stream the page plays from memory (blob:,
+    // which is nearly every player here) or a file from this frame's own site. A
+    // file from elsewhere would play SILENT through Web Audio, so it is left
+    // alone and reported; and nothing is routed until the sound engine runs.
+    var boostCtx = null, boostLevel = 1;
+    function film() {
+      var best = null;
+      vids().forEach(function (v) { if (isFinite(v.duration) && v.duration > 60 && (!best || v.duration > best.duration)) best = v; });
+      return best;
+    }
+    function boostable(v) {
+      var s = v.currentSrc || v.src || '';
+      if (!s) return false;
+      if (s.indexOf('blob:') === 0) return true;
+      try { return new URL(s, location.href).origin === location.origin; } catch (x) { return false; }
+    }
+    function boost(g) {
+      boostLevel = Math.max(1, Math.min(3, g));
+      var v = film();
+      if (!v) return; // not the frame with the film
+      if (v.__sahraeGain) {
+        try { v.__sahraeGain.gain.setTargetAtTime(boostLevel, boostCtx.currentTime, 0.05); } catch (x) {}
+        up({ sahrae: 'boost-state', ok: true, g: boostLevel });
+        return;
+      }
+      if (boostLevel <= 1) { up({ sahrae: 'boost-state', ok: true, g: 1 }); return; }
+      if (!boostable(v)) { up({ sahrae: 'boost-state', ok: false, why: 'source' }); return; }
+      try {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) { up({ sahrae: 'boost-state', ok: false, why: 'engine' }); return; }
+        boostCtx = boostCtx || new AC();
+        var route = function () {
+          if (boostCtx.state !== 'running') { up({ sahrae: 'boost-state', ok: false, why: 'engine' }); return; }
+          if (v.__sahraeGain) return;
+          var src = boostCtx.createMediaElementSource(v), gain = boostCtx.createGain(), lim = boostCtx.createDynamicsCompressor();
+          lim.threshold.value = -3; lim.knee.value = 2; lim.ratio.value = 20; lim.attack.value = 0.003; lim.release.value = 0.15;
+          gain.gain.value = boostLevel;
+          src.connect(gain); gain.connect(lim); lim.connect(boostCtx.destination);
+          v.__sahraeGain = gain;
+          up({ sahrae: 'boost-state', ok: true, g: boostLevel });
+        };
+        if (boostCtx.state === 'running') route();
+        else boostCtx.resume().then(route, function () { up({ sahrae: 'boost-state', ok: false, why: 'engine' }); });
+      } catch (x) { up({ sahrae: 'boost-state', ok: false, why: 'engine' }); }
+    }
+    // A new film in this frame (the next episode) is boosted as the one before was.
+    document.addEventListener('playing', function (e) {
+      var v = e.target;
+      if (warm || boostLevel <= 1 || !v || v.tagName !== 'VIDEO' || v.__sahraeGain) return;
+      setTimeout(function () { if (film() === v) boost(boostLevel); }, 300);
+    }, true);
+
     window.addEventListener('message', function (e) {
       var d = e.data;
       if (!d || typeof d !== 'object' || typeof d.sahrae !== 'string') return;
@@ -289,7 +344,8 @@
         else if (d.sahrae === 'options?') { sent = ''; report(); }
         else if (d.sahrae === 'wake') wake();
         else if (d.sahrae === 'warm-yes') warm = true;
-      } else if (d.sahrae === 'frame-options' || d.sahrae === 'frame-clock') {
+        else if (d.sahrae === 'boost' && typeof d.g === 'number') boost(d.g);
+      } else if (d.sahrae === 'frame-options' || d.sahrae === 'frame-clock' || d.sahrae === 'boost-state') {
         up(d);
       } else if (d.sahrae === 'warm?' && warm && e.source) {
         try { e.source.postMessage({ sahrae: 'warm-yes' }, '*'); } catch (x) {}
