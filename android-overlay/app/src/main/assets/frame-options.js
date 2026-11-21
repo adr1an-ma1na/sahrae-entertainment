@@ -95,7 +95,85 @@
     function nativeRead() {
       var tracks = nativeSubs(), on = -1;
       tracks.forEach(function (t, i) { if (t.mode === 'showing') on = i; });
+      if (!tracks.length && subFiles.length) {
+        // No tracks on the video yet, but the player fetched its list of subtitle files.
+        return { subs: subFiles.map(function (f, i) { return { id: i, label: f.label }; }), sOn: ownOn };
+      }
       return { subs: tracks.map(function (t, i) { return { id: i, label: String(t.label || t.language || '') }; }), sOn: on };
+    }
+
+    // ── Subtitles a player keeps to itself until they are picked in its own menu ──
+    // VidFast's and VidCore's players (owner, 2026-11-21: "the subtitles are there in
+    // the servers, why is it not opening") put a track on the video for each language
+    // but download its file only when it is picked in their own menu, and draw it
+    // themselves; a pick from Sahrae turned on an empty track. So the subtitle lists a
+    // player fetches are noted (label and file), and an empty track Sahrae turns on is
+    // filled from its file (SRT or WebVTT) and shown by the video itself.
+    var subFiles = [], ownOn = -1;
+    function noteSubList(j) {
+      if (!Array.isArray(j)) return;
+      j.forEach(function (x) {
+        if (!x || typeof x !== 'object') return;
+        var url = x.url || x.file || x.src, label = x.display || x.label || x.languageName || x.language || x.lang;
+        if (typeof url !== 'string' || typeof label !== 'string' || !label.trim()) return;
+        label = label.trim();
+        for (var i = 0; i < subFiles.length; i++) if (subFiles[i].label.toLowerCase() === label.toLowerCase()) return;
+        if (subFiles.length < 60) subFiles.push({ label: label, url: url });
+      });
+    }
+    try {
+      var fetch0 = window.fetch;
+      if (fetch0) {
+        window.fetch = function (input) {
+          var p = fetch0.apply(this, arguments);
+          try {
+            var u = typeof input === 'string' ? input : (input && input.url) || '';
+            if (/wyzie|subtitle|opensub|\/subs?\b|caption/i.test(u)) {
+              p.then(function (r) {
+                try { if (/json/i.test(r.headers.get('content-type') || '')) r.clone().json().then(noteSubList, function () {}); } catch (x) {}
+              }, function () {});
+            }
+          } catch (x) {}
+          return p;
+        };
+      }
+    } catch (x) {}
+    function secs(s) {
+      var m = /(?:(\d+):)?(\d{1,2}):(\d{2})[.,](\d{1,3})/.exec(s);
+      return m ? (+(m[1] || 0)) * 3600 + (+m[2]) * 60 + (+m[3]) + (+m[4]) / Math.pow(10, m[4].length) : NaN;
+    }
+    /** SRT or WebVTT text to [start, end, text] cues. */
+    function parseSubs(text) {
+      var out = [];
+      String(text || '').replace(/\r/g, '').split(/\n\s*\n/).forEach(function (b) {
+        var lines = b.split('\n');
+        for (var i = 0; i < lines.length; i++) {
+          if (lines[i].indexOf('-->') < 0) continue;
+          var p = lines[i].split('-->'), a = secs(p[0]), z = secs(p[1]);
+          var t = lines.slice(i + 1).join('\n').replace(/\{[^}]*\}/g, '').trim();
+          if (a >= 0 && z > a && t) out.push([a, z, t]);
+          return;
+        }
+      });
+      return out;
+    }
+    function fileFor(label) {
+      var k = String(label || '').trim().toLowerCase();
+      for (var i = 0; i < subFiles.length; i++) if (subFiles[i].label.toLowerCase() === k) return subFiles[i].url;
+      return null;
+    }
+    /** Fill an empty track from its file and show it; true when a fill started. */
+    function fill(t, url) {
+      if (!t || (t.cues && t.cues.length) || t.__sahraeFill) return false;
+      url = url || fileFor(t.label);
+      if (!url) return false;
+      t.__sahraeFill = true;
+      (fetch0 || window.fetch)(url).then(function (r) { return r.text(); }).then(function (txt) {
+        var C = window.VTTCue || window.TextTrackCue;
+        parseSubs(txt).forEach(function (c) { try { t.addCue(new C(c[0], c[1], c[2])); } catch (x) {} });
+        if (t.mode !== 'disabled') t.mode = 'showing';
+      }).catch(function () { t.__sahraeFill = false; });
+      return true;
     }
 
     function read() {
@@ -155,7 +233,24 @@
       if (h && h.subtitleTracks && h.subtitleTracks.length) { h.subtitleTrack = id; h.subtitleDisplay = id >= 0; return; }
       var v = vjs();
       if (v) { vsubs(v).forEach(function (t, i) { t.mode = i === id ? 'showing' : 'disabled'; }); return; }
-      nativeSubs().forEach(function (t, i) { t.mode = i === id ? 'showing' : 'disabled'; });
+      var tracks = nativeSubs();
+      if (!tracks.length && subFiles.length) {
+        // Only the player's list: Sahrae's own track on the video, filled from the file.
+        var film = main() || vids()[0];
+        if (!film) return;
+        list(film.textTracks).forEach(function (t) { if (t.__sahraeOwn) t.mode = 'disabled'; });
+        ownOn = id;
+        if (id < 0 || !subFiles[id]) { ownOn = -1; return; }
+        var own = null;
+        list(film.textTracks).forEach(function (t) { if (t.__sahraeOwn && t.label === subFiles[id].label) own = t; });
+        if (!own) { own = film.addTextTrack('subtitles', subFiles[id].label); own.__sahraeOwn = true; }
+        own.mode = 'showing';
+        fill(own, subFiles[id].url);
+        return;
+      }
+      tracks.forEach(function (t, i) { t.mode = i === id ? 'showing' : 'disabled'; });
+      // A track the player has not downloaded yet: fill it, once it has had a moment to.
+      if (id >= 0 && tracks[id]) setTimeout(function () { fill(tracks[id]); }, 800);
     }
 
     // Subtitle size, for the players that draw subtitles themselves too.
@@ -372,6 +467,20 @@
       }, 1200);
     }, true);
 
+    // ── Touched: Sahrae's bar comes back in full screen (a touch on a server's picture
+    // never reaches Sahrae's page, which is another document) ──
+    var touched = 0;
+    function poke() {
+      if (warm) return;
+      var n = Date.now();
+      if (n - touched < 700) return;
+      touched = n;
+      up({ sahrae: 'frame-touch' });
+    }
+    document.addEventListener('pointerdown', poke, true);
+    document.addEventListener('touchstart', poke, { capture: true, passive: true });
+    document.addEventListener('mousemove', poke, { capture: true, passive: true });
+
     window.addEventListener('message', function (e) {
       var d = e.data;
       if (!d || typeof d !== 'object' || typeof d.sahrae !== 'string') return;
@@ -386,7 +495,7 @@
         else if (d.sahrae === 'wake') wake();
         else if (d.sahrae === 'warm-yes') warm = true;
         else if (d.sahrae === 'boost' && typeof d.g === 'number') boost(d.g);
-      } else if (d.sahrae === 'frame-options' || d.sahrae === 'frame-clock' || d.sahrae === 'boost-state') {
+      } else if (d.sahrae === 'frame-options' || d.sahrae === 'frame-clock' || d.sahrae === 'boost-state' || d.sahrae === 'frame-touch') {
         up(d);
       } else if (d.sahrae === 'warm?' && warm && e.source) {
         try { e.source.postMessage({ sahrae: 'warm-yes' }, '*'); } catch (x) {}

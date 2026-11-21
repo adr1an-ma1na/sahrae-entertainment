@@ -2442,12 +2442,34 @@ html.low-gfx #player-modal-container {
   backdrop-filter: none !important;
   background-color: #000 !important;
 }
+/* Skipped, not hidden: visibility:hidden is inherited, so opening and closing the
+   player restyled every element of the page behind it (about 4,000 on Home), a
+   clear pause on a TV on the way in and out of a film (owner, 2026-11-21).
+   content-visibility:hidden skips the contents and keeps their layout, so the
+   page comes back as it was, at once. The remembered size keeps the scroll place. */
+/* The size is remembered only while it applies to a drawn element, so it is
+   set at all times (it changes nothing until the contents are skipped). */
+.tv-shell, .tv-rail, .tv-full { contain-intrinsic-size: auto 1920px auto 1080px; }
 html.tv-mode.player-open .tv-shell,
 html.tv-mode.player-open .tv-rail,
 html.tv-mode.player-open .tv-full,
+html.low-gfx.player-open .tv-shell {
+  content-visibility: hidden;
+}
 html.tv-mode.player-open .aurora-glow,
-html.low-gfx.player-open .tv-shell,
 html.low-gfx.player-open .aurora-glow { visibility: hidden !important; }
+/* A phone the same way (owner, 2026-11-21: lag on the phone too): the player covers
+   the screen there anyway, and a blur of the live page under it was redrawn on every
+   frame, while scrolling the film's page and while it opened and closed. */
+@media (pointer: coarse) {
+  html.player-open #player-modal-container {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background-color: #000 !important;
+  }
+  html.player-open .tv-shell { content-visibility: hidden; }
+  html.player-open .aurora-glow { visibility: hidden !important; }
+}
 
 /* The film player in full screen: nothing behind it moves (PlayerModal sets
    html.player-maxed), as with Live TV and Sports full screen. */

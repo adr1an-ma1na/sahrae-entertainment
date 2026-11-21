@@ -48,6 +48,8 @@ const PROVEN_ALTERNATIVE_LIMIT_MS = 20000;
 const SERVER_LOAD_MS = 20000;
 /** Seconds between an episode ending and the next one starting by itself. */
 const UP_NEXT_S = 3;
+/** In full screen, how long the controls stay after the last touch, movement or key (Netflix: about 3 s). */
+const BAR_IDLE_MS = 3500;
 
 interface PlayerModalProps {
   isOpen: boolean;
@@ -357,6 +359,13 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     document.documentElement.classList.toggle('player-open', isOpen);
     return () => document.documentElement.classList.remove('player-open');
   }, [isOpen]);
+  // The page behind is skipped, not drawn, while the player is open (index.css); it keeps
+  // its height, but should it not have been measured yet, its place is put back on close.
+  useEffect(() => {
+    if (!isOpen) return;
+    const y = window.scrollY;
+    return () => { requestAnimationFrame(() => { if (Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y); }); };
+  }, [isOpen]);
   useEffect(() => {
     if (!nativeShell) return;
     fetch(`https://localhost/__player?open=${playerUp ? 1 : 0}`, { cache: 'no-store' }).catch(() => {});
@@ -501,8 +510,36 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const strip = useTvServerStrip(isOpen && isPlaying && !playingTrailer && isTelevision(), serverFrameRef);
   const frameChoices = useFrameChoices(() => serverFrameRef.current?.querySelector('iframe'),
     isOpen && isPlaying && !playingTrailer ? `${selectedServer}-${selectedSeason}-${selectedEpisode}-${refreshKey}` : null);
-  const barVisible = !barHidden && !strip.open && (!fsActive || peek || paused === true || showAudioMenu || showChoices || showLangs);
+  const barVisible = !barHidden && !strip.open && (!fsActive || peek || paused === true || showAudioMenu || showChoices || showLangs || showBoost || showWebSubs);
   const showBar = () => { setBarHidden(false); peekBar(5000); };
+  // As on Netflix, in full screen the controls go after a moment with nothing done,
+  // and any touch, mouse movement or key brings them back (owner, 2026-11-21: "the
+  // buttons don't disappear in full screen"). A touch on a server's picture is in
+  // its own document and never reaches this page: in the apps frame-options.js
+  // passes it up ('frame-touch'); on the website the top edge and the small
+  // button bring them back.
+  useEffect(() => {
+    if (!fsActive || !playerUp) return;
+    const wake = () => peekBar(BAR_IDLE_MS);
+    const onMsg = (e: MessageEvent) => {
+      const d = e.data as { sahrae?: unknown } | null;
+      if (d && typeof d === 'object' && d.sahrae === 'frame-touch' && fromFrame(iframeRef.current?.contentWindow, e.source)) wake();
+    };
+    const opts = { capture: true, passive: true } as const;
+    window.addEventListener('keydown', wake, true);
+    window.addEventListener('pointermove', wake, opts);
+    window.addEventListener('pointerdown', wake, opts);
+    window.addEventListener('wheel', wake, opts);
+    window.addEventListener('message', onMsg);
+    return () => {
+      window.removeEventListener('keydown', wake, true);
+      window.removeEventListener('pointermove', wake, opts);
+      window.removeEventListener('pointerdown', wake, opts);
+      window.removeEventListener('wheel', wake, opts);
+      window.removeEventListener('message', onMsg);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fsActive, playerUp, peekBar]);
   // The bar has gone: the remote goes back to the picture, or OK would press a
   // button nobody can see (Sports does the same).
   useEffect(() => {
@@ -1149,6 +1186,9 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
       const dur = typeof d.d === 'number' && d.d !== Infinity ? d.d : 0;
       notePositionRef.current(d.t, dur, d.paused === true);
       tellClock(d.t, dur, d.paused === true);
+      // The picture's own clock is the surest word on paused or playing: a server's
+      // "pause" message with no "play" after it kept the controls up for good.
+      if (typeof d.paused === 'boolean') setPaused(d.paused);
     };
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
@@ -1620,12 +1660,18 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                 </div>
               )}
 
-              {!barVisible && paused === null && (barHidden || fsActive) && (
-                // This server does not report pause, so offer a quiet way back to the bar.
+              {!barVisible && (barHidden || fsActive) && (paused === null || !isTelevision()) && (
+                // A quiet way back to the controls (a remote has its keys; a finger on a
+                // server's picture never reaches this page on the website).
                 <button onClick={showBar} data-tv-focusable title="Show controls" aria-label="Show controls"
                   className="dark absolute top-2 left-2 z-30 w-8 h-8 grid place-items-center rounded-full bg-black/40 text-white/70 hover:text-white">
                   <ChevronDown className="w-4 h-4" />
                 </button>
+              )}
+              {!barVisible && fsActive && !barHidden && !isTelevision() && (
+                // The mouse at the top edge brings the controls, over a server's picture too.
+                <div aria-hidden onPointerMove={(e) => { if (e.pointerType === 'mouse') peekBar(BAR_IDLE_MS); }}
+                  className="absolute inset-x-12 top-0 z-20 h-10" />
               )}
               {strip.open && (
                 <TvServerStrip
@@ -1637,6 +1683,8 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
                   onSubs={(id) => choices && pickSubs(choices, id)}
                   onAudio={(id) => choices && pickAudio(choices, id)}
                   onSize={pickSize}
+                  boost={trackReach ? { value: boost, ok: boostOk, onPick: setBoost } : undefined}
+                  subsNote={trackReach ? (videoLoaded ? 'This server lists no subtitles for this title. Another server may.' : 'The subtitles appear here once the film starts.') : undefined}
                   onPick={(i) => { pickServer(i); strip.close(); }}>
                   {pointerOffered && !(clean.state === 'ready' && clean.url) && (
                     <button type="button" onClick={() => { strip.close(); setPointerOn(true); }} tabIndex={0} data-tv-focusable

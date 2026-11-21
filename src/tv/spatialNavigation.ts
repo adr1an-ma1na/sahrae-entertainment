@@ -249,6 +249,19 @@ function syncRing() {
   }
 }
 
+/**
+ * syncRing at the next frame, once however often it is asked for. It measures the
+ * page, and called from every change to the page (a player or a row arriving is
+ * hundreds of changes) it made the browser lay the page out again and again
+ * mid-change, a pause on a TV opening and closing a film (owner, 2026-11-21).
+ */
+let ringSyncQueued = false;
+function queueRingSync() {
+  if (ringSyncQueued) return;
+  ringSyncQueued = true;
+  requestAnimationFrame(() => { ringSyncQueued = false; syncRing(); });
+}
+
 function clearHighlight() {
   document.querySelectorAll('.' + FOCUS_CLASS).forEach((n) => n.classList.remove(FOCUS_CLASS));
   hideRing();
@@ -641,7 +654,7 @@ export function initSpatialNavigation() {
   const observer = new MutationObserver(() => {
     invalidateFocusCache();
     if (!tvMode) return;
-    syncRing();
+    queueRingSync();
     const target = document.querySelector<HTMLElement>('[data-tv-autofocus]');
     if (target && !autoFocused.has(target) && isElementVisible(target)) {
       autoFocused.add(target);
@@ -655,7 +668,7 @@ export function initSpatialNavigation() {
     }
   });
   observer.observe(document.body, { childList: true, subtree: true });
-  window.addEventListener('resize', () => { invalidateFocusCache(); syncRing(); });
+  window.addEventListener('resize', () => { invalidateFocusCache(); queueRingSync(); });
   // Anything else that scrolls under the ring takes it along.
   let scrollPending = false;
   window.addEventListener('scroll', () => {
@@ -665,7 +678,7 @@ export function initSpatialNavigation() {
   }, { capture: true, passive: true });
   // A control can fade away or be covered with nothing else changing (the bar
   // over a film hiding itself), and no event says so.
-  window.setInterval(() => { if (tvMode && ringOn && !gliding && !document.hidden) syncRing(); }, 300);
+  window.setInterval(() => { if (tvMode && ringOn && !gliding && !document.hidden) queueRingSync(); }, 300);
   // The ring has to live inside the browser's full screen while there is one.
   document.addEventListener('fullscreenchange', () => { if (ring && ringOn) { ringElement(); syncRing(); } });
 

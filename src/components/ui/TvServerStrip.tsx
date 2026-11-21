@@ -95,7 +95,7 @@ function ChoiceRow({ title, icon, items, on, onPick, min = 2 }: { title: string;
   );
 }
 
-export function TvServerStrip({ servers, active, onPick, onFocusServer, choices, original, subSize, onSubs, onAudio, onSize, children }: {
+export function TvServerStrip({ servers, active, onPick, onFocusServer, choices, original, subSize, onSubs, onAudio, onSize, boost, subsNote, children }: {
   servers: StripServer[];
   /** Index in `servers` of the one playing. */
   active: number;
@@ -111,6 +111,13 @@ export function TvServerStrip({ servers, active, onPick, onFocusServer, choices,
   onSubs?: (id: number) => void;
   onAudio?: (id: number) => void;
   onSize?: (size: SubSize) => void;
+  /**
+   * Volume boost, here as well as on the player's bar (owner, 2026-11-21: Up on the
+   * remote should bring the boost and the subtitles with the servers). 1 is normal.
+   */
+  boost?: { value: number; ok: boolean | null; onPick: (g: number) => void };
+  /** Said in the Subtitles row when the server lists none (Sahrae reaches the player but found none). */
+  subsNote?: string;
   /** Anything else offered on the strip, after the servers. */
   children?: ReactNode;
 }) {
@@ -143,6 +150,17 @@ export function TvServerStrip({ servers, active, onPick, onFocusServer, choices,
       {choices && choices.subs.length > 0 && (
         <ChoiceRow title="Subtitles" icon={<Subtitles className="w-4 h-4" />} min={1}
           items={[{ id: -1, label: 'Off' }, ...choices.subs]} on={choices.subsOn} onPick={onSubs || choices.pickSubs} />
+      )}
+      {subsNote && !(choices && choices.subs.length > 0) && (
+        <div className="mt-2">
+          <p className="flex items-center gap-2 mb-1 text-xs font-bold uppercase tracking-[0.2em] text-zinc-300"><Subtitles className="w-4 h-4" /> Subtitles</p>
+          <p className="py-2 px-1 text-base text-zinc-300">{subsNote}</p>
+        </div>
+      )}
+      {boost && (
+        <ChoiceRow title={boost.ok === false ? "Volume boost · this server's sound cannot be boosted" : 'Volume boost'} icon={<Volume2 className="w-4 h-4" />} min={1}
+          items={[1, 1.5, 2, 3].map((g) => ({ id: Math.round(g * 100), label: g === 1 ? 'Normal' : `${g * 100}%` }))}
+          on={Math.round(boost.value * 100)} onPick={(id) => boost.onPick(id / 100)} />
       )}
       {choices && choices.subs.length > 0 && choices.subsOn >= 0 && onSize && (
         <ChoiceRow title="Subtitle size" icon={<Subtitles className="w-4 h-4" />}

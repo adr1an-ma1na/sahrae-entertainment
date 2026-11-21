@@ -12,6 +12,7 @@ import MediaRow from './components/MediaRow';
 import Top10Row from './components/Top10Row';
 import MediaGrid from './components/MediaGrid';
 const PlayerModal = lazyView(() => import('./components/PlayerModal'));
+import { openPlayer, closePlayer, usePlayerConfig, usePlayerOpen } from './services/playerStore';
 import RemotePanel from './components/RemotePanel';
 import QuickPick from './components/QuickPick';
 import TasteCard from './components/TasteCard';
@@ -71,6 +72,27 @@ import Illustration from './components/ui/Illustration';
 import { LuxHeader, LuxGlow, LuxSeg } from './components/ui/Lux';
 import { crumb } from './services/bootCrumbs';
 import { lazyView, preloadViews } from './services/lazyView';
+
+/** The film player, on its own: it alone re-renders as it opens and closes. */
+function PlayerHost() {
+  const c = usePlayerConfig();
+  // Once opened it stays mounted (closed), so the next film opens without loading it again.
+  const opened = useRef(false);
+  if (c.isOpen) opened.current = true;
+  if (!c.isOpen && !opened.current) return null;
+  return (
+    <Suspense fallback={null}>
+      <PlayerModal isOpen={c.isOpen} mediaId={c.mediaId} mediaType={c.mediaType} startInInfo={c.startInInfo}
+        initialSeason={c.initialSeason} initialEpisode={c.initialEpisode} playTrailer={c.playTrailer} onClose={closePlayer} />
+    </Suspense>
+  );
+}
+
+/** Flow Channels pauses its preview while the player is open. */
+function FlowChannelsHost({ onPlay }: { onPlay: (id: number, type: 'movie' | 'tv') => void }) {
+  const open = usePlayerOpen();
+  return <FlowChannelsView onPlay={onPlay} paused={open} />;
+}
 
 export default function App() {
   const { user, activeProfile, loading: authLoading } = useAuth();
@@ -158,18 +180,8 @@ export default function App() {
   const { progress, removeProgress } = useWatchProgress();
   const { theme, toggleTheme } = useTheme();
 
-  // Player state
-  const [playerConfig, setPlayerConfig] = useState<{
-    isOpen: boolean;
-    mediaId: number | null;
-    mediaType: 'movie' | 'tv' | null;
-    startInInfo?: boolean;
-    initialSeason?: number;
-    initialEpisode?: number;
-    playTrailer?: boolean;
-  }>({ isOpen: false, mediaId: null, mediaType: null, startInInfo: false });
-  const playerOpened = useRef(false);
-  if (playerConfig.isOpen) playerOpened.current = true;
+  // Player state lives in services/playerStore.ts (PlayerHost below): opening or
+  // closing the player no longer re-renders this whole screen.
 
   const [initialLoadError, setInitialLoadError] = useState<boolean>(false);
 
@@ -228,9 +240,6 @@ export default function App() {
     setTasteGenres(genres); setAppOnboarded(true);
   };
 
-  const handleClosePlayer = useCallback(() => {
-    setPlayerConfig({ isOpen: false, mediaId: null, mediaType: null, startInInfo: false });
-  }, []);
 
   /**
    * Load the Home screen in two waves, and never throw away work that succeeded.
@@ -529,10 +538,11 @@ export default function App() {
     return true;
   });
 
-  const handlePlay = (id: number, type: 'movie' | 'tv', startInInfo: boolean = true, playTrailer: boolean = false, season?: number, episode?: number) => {
+  // The same function on every render, so a shelf is not redrawn for a new onPlay.
+  const handlePlay = useCallback((id: number, type: 'movie' | 'tv', startInInfo: boolean = true, playTrailer: boolean = false, season?: number, episode?: number) => {
     haptics.press();
-    setPlayerConfig({ isOpen: true, mediaId: id, mediaType: type, startInInfo, initialSeason: season, initialEpisode: episode, playTrailer });
-  };
+    openPlayer({ mediaId: id, mediaType: type, startInInfo, initialSeason: season, initialEpisode: episode, playTrailer });
+  }, []);
 
   const renderContent = () => {
     // `loading` tracks the TMDB catalog fetch. Destinations that don't read TMDB
@@ -626,7 +636,7 @@ export default function App() {
       case 'series':
         return <DiscoveryView type="tv" genres={tvGenres} onPlay={handlePlay} inList={(id) => myList.some((m) => m.id === id)} onToggleList={toggleMyList} />;
       case 'channels':
-        return <FlowChannelsView onPlay={handlePlay} paused={playerConfig.isOpen} />;
+        return <FlowChannelsHost onPlay={handlePlay} />;
       case 'mylist':
         return myList.length === 0 ? (
           <EmptyState icon={Heart} illustration="list" title="Your list is empty"
@@ -859,16 +869,7 @@ export default function App() {
           </main>
         </div>
 
-        {(playerConfig.isOpen || playerOpened.current) && <Suspense fallback={null}><PlayerModal
-          isOpen={playerConfig.isOpen}
-          mediaId={playerConfig.mediaId}
-          mediaType={playerConfig.mediaType}
-          startInInfo={playerConfig.startInInfo}
-          initialSeason={playerConfig.initialSeason}
-          initialEpisode={playerConfig.initialEpisode}
-          playTrailer={playerConfig.playTrailer}
-          onClose={handleClosePlayer}
-        /></Suspense>}
+        <PlayerHost />
         
         {isTelevision() && <TvFocusPreview />}
         <GlobalAudioPlayer />
