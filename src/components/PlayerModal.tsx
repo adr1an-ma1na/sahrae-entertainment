@@ -34,6 +34,8 @@ import { t } from '../i18n';
 import { reportRoomNow } from '../services/room';
 import { useServerPool, fill as fillTemplate, label as poolLabel, type PoolServer, leadCount } from '../services/serverPool';
 import { useDataSaver, usePicture, announcePlayerSource, canCapVideo, estimateText } from '../services/dataSaver';
+import PlansSheet from './PlansSheet';
+import { plansDemoOn, hasDemoPass, grantDemoPass } from '../services/paywallDemo';
 import { isUhdLabel, crowdUhd, localUhd, keepUhd, uhdKeys, uhdMarker, seriesKey } from '../services/uhd';
 import { isBigScreen } from '../services/deviceTier';
 import { SUB_PARAM_SERVERS } from '../services/trackPrefs';
@@ -88,7 +90,15 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   const [details, setDetails] = useState<MediaDetails | null>(null);
   const [seasonDetails, setSeasonDetails] = useState<SeasonDetails | null>(null);
   const [similar, setSimilar] = useState<MediaItem[]>([]);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [isPlaying, setPlayingState] = useState(false);
+  // The paywall demonstration (website, ?plans=demo; services/paywallDemo.ts): every way
+  // a film starts goes through here, so without a plan chosen in this tab the plans show
+  // instead and nothing loads. Trailers stay free (they do not start a film).
+  const [showPlans, setShowPlans] = useState(false);
+  const setIsPlaying = (on: boolean) => {
+    if (on && plansDemoOn() && !hasDemoPass()) { setPlayingState(false); setShowPlans(true); return; }
+    setPlayingState(on);
+  };
   const [playingTrailer, setPlayingTrailer] = useState<string | null>(null);
   const [selectedServer, setSelectedServer] = useState(0);
   const [selectedSeason, setSelectedSeason] = useState(initialSeason || 1);
@@ -359,6 +369,7 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
     document.documentElement.classList.toggle('player-open', isOpen);
     return () => document.documentElement.classList.remove('player-open');
   }, [isOpen]);
+  useEffect(() => { if (!isOpen) setShowPlans(false); }, [isOpen]);
   // The page behind is skipped, not drawn, while the player is open (index.css); it keeps
   // its height, but should it not have been measured yet, its place is put back on close.
   useEffect(() => {
@@ -1414,6 +1425,10 @@ export default function PlayerModal({ isOpen, onClose, mediaId, mediaType, start
   return (
     <>
       <div id="player-modal-container" role="dialog" data-tv-layer className="fixed inset-0 z-[100] flex justify-center bg-black/60 backdrop-blur-sm overflow-y-auto scroll-smooth py-[5vh] px-4 custom-scrollbar" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+        {showPlans && (
+          <PlansSheet title={details?.title || details?.name} onClose={() => setShowPlans(false)}
+            onChosen={(t) => { grantDemoPass(t); setShowPlans(false); setIsPlaying(true); }} />
+        )}
         <div className="relative w-full max-w-[900px] bg-zinc-950 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300 ring-1 ring-zinc-800 h-fit">
           {!(isPlaying || playingTrailer) && <button onClick={onClose} data-tv-close className="absolute top-4 right-4 z-50 w-10 h-10 flex items-center justify-center bg-zinc-950/60 hover:bg-zinc-800 backdrop-blur rounded-full text-white ring-1 ring-white/20 transition-all">
             <X className="w-5 h-5"/>
